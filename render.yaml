@@ -14,15 +14,15 @@ services:
         sync: false
       - key: ENVIRONMENT
         value: production
-      - key: LAVALINK_URI
-        sync: false
-      - key: LAVALINK_PASSWORD
-        sync: false
-      - key: GEMINI_API_KEY
-        sync: false
-      - key: GEMINI_MODEL
-        value: gemini-3.8-flash
+      - key: BOT_PREFIX
+        value: "?"
       - key: LAVALINK_AUTO_DISCOVER
-        value: 1
+        value: "1"
       - key: LAVALINK_PUBLIC_LIST_URL
-        value: https://lavalink-list.ajieblogs.eu.org/All
+        value: "https://lavalink-list.ajieblogs.eu.org/All"
+      - key: LAVALINK_URI
+        value: "http://lava2.kasawa.pro:2334"
+      - key: LAVALINK_PASSWORD
+        value: "youshallnotpass"
+      - key: GEMINI_MODEL
+        value: "gemini-3.8-flash"
