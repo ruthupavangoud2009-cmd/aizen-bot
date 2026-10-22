@@ -1,0 +1,646 @@
+"""
+Kyoka Discord Bot - Discord Components V2 (Container Layout) Utility
+Implements Discord's new Container (type: 17) layout with embedded TextDisplays,
+Sections, Separators, and integrated Action Rows (Dropdowns/Buttons inside the card).
+"""
+
+from __future__ import annotations
+
+import logging
+from typing import Any
+import discord
+from discord.ext import commands
+
+from src.core.config import Config
+
+logger = logging.getLogger("Kyoka.Containers")
+
+
+class KyokaContainer:
+    """Builder for Discord Components V2 Container cards."""
+
+    def __init__(self, accent_color: int | None = None) -> None:
+        self.components: list[dict[str, Any]] = []
+
+    @property
+    def accent_color(self) -> None:
+        return None
+
+    @accent_color.setter
+    def accent_color(self, value: Any) -> None:
+        pass
+
+    def add_text(self, content: str) -> KyokaContainer:
+        """Add a TextDisplay component (type: 10) inside the container."""
+        self.components.append({
+            "type": 10,
+            "content": content,
+        })
+        return self
+
+    def add_section(
+        self,
+        content: str,
+        accessory: dict[str, Any] | None = None,
+    ) -> KyokaContainer:
+        """Add a Section component (type: 9) if accessory is present, otherwise TextDisplay (type: 10)."""
+        if not accessory:
+            return self.add_text(content)
+
+        section_data: dict[str, Any] = {
+            "type": 9,
+            "components": [
+                {
+                    "type": 10,
+                    "content": content,
+                }
+            ],
+            "accessory": accessory,
+        }
+        self.components.append(section_data)
+        return self
+
+    def add_separator(self, divider: bool = True) -> KyokaContainer:
+        """Add a visual Separator component (type: 14)."""
+        self.components.append({
+            "type": 14,
+            "divider": divider,
+        })
+        return self
+
+    def add_footer(self, text: str, icon_url: str | None = None) -> KyokaContainer:
+        """Add a footer."""
+        self.add_text(f"{text}")
+        return self
+
+    def add_field(self, name: str, value: str, inline: bool = False) -> KyokaContainer:
+        """Add a formatted field to the container."""
+        return self.add_text(f"**{name}**\n{value}")
+
+    def add_media(self, url: str) -> KyokaContainer:
+        """Add a full-width Media Gallery component (type: 12) inside the container."""
+        if not url or not str(url).strip():
+            return self
+        self.components.append({
+            "type": 12,
+            "items": [
+                {
+                    "media": {
+                        "url": str(url).strip()
+                    }
+                }
+            ]
+        })
+        return self
+
+    def add_image(self, url: str) -> KyokaContainer:
+        """Alias for add_media."""
+        return self.add_media(url)
+
+    def add_thumbnail(self, url: str) -> KyokaContainer:
+        """Add a thumbnail accessory or media."""
+        if not url or not str(url).strip():
+            return self
+        clean_url = str(url).strip()
+        # If there's an existing section/text component without accessory, attach to it
+        for comp in reversed(self.components):
+            if comp.get("type") == 10:  # upgrade TextDisplay to Section with accessory
+                content = comp.get("content", "")
+                idx = self.components.index(comp)
+                self.components[idx] = {
+                    "type": 9,
+                    "components": [{"type": 10, "content": content}],
+                    "accessory": {
+                        "type": 11,
+                        "media": {"url": clean_url}
+                    }
+                }
+                return self
+            elif comp.get("type") == 9 and "accessory" not in comp:
+                comp["accessory"] = {
+                    "type": 11,
+                    "media": {"url": clean_url}
+                }
+                return self
+
+        # Fallback: add a section with thumbnail
+        self.components.append({
+            "type": 9,
+            "components": [{"type": 10, "content": " "}],
+            "accessory": {
+                "type": 11,
+                "media": {"url": clean_url}
+            }
+        })
+        return self
+
+    def add_action_row(self, items: list[dict[str, Any]]) -> KyokaContainer:
+        """Add an Action Row (type: 1) containing Select Menus or Buttons inside the container."""
+        self.components.append({
+            "type": 1,
+            "components": items,
+        })
+        return self
+
+    def to_embed(self, content: str | None = None) -> discord.Embed:
+        """Convert container components into a standard discord.Embed for fallback compatibility."""
+        if hasattr(self, "_fallback_embed") and self._fallback_embed is not None:
+            return self._fallback_embed
+        embed = discord.Embed(
+            color=self.accent_color if self.accent_color is not None else None,
+        )
+        if content and str(content).strip():
+            embed.description = str(content).strip()
+        for comp in self.components:
+            ctype = comp.get("type")
+            if ctype == 10:  # TextDisplay
+                text = comp.get("content", "")
+                if text.startswith("-# "):
+                    embed.set_footer(text=text.replace("-# ", "").strip())
+                elif not embed.description:
+                    embed.description = text
+                else:
+                    embed.description += f"\n\n{text}"
+            elif ctype == 9:  # Section
+                sub_comps = comp.get("components", [])
+                for sc in sub_comps:
+                    text = sc.get("content", "")
+                    if not embed.description:
+                        embed.description = text
+                    else:
+                        embed.description += f"\n\n{text}"
+                acc = comp.get("accessory", {})
+                if acc.get("type") == 11 and "media" in acc:
+                    embed.set_thumbnail(url=acc["media"].get("url", ""))
+            elif ctype == 12:  # Media Gallery
+                items = comp.get("items", [])
+                if items and "media" in items[0]:
+                    embed.set_image(url=items[0]["media"].get("url", ""))
+        return embed
+
+    def build(self) -> discord.Embed:
+        """Compatibility method returning a discord.Embed representation."""
+        return self.to_embed()
+
+    def to_dict(self) -> dict[str, Any]:
+        """Serialize container to Discord API component structure."""
+        comps = list(self.components)
+        if not comps:
+            comps.append({"type": 10, "content": " "})
+        data: dict[str, Any] = {
+            "type": 17,
+            "components": comps,
+        }
+        if self.accent_color is not None:
+            data["accent_color"] = self.accent_color
+        return data
+
+def build_container_payload(
+    container: KyokaContainer | list[KyokaContainer],
+    view: discord.ui.View | None = None,
+    content: str | None = None,
+    allowed_mentions: discord.AllowedMentions | dict[str, Any] | None = None,
+    is_edit: bool = False,
+) -> dict[str, Any]:
+    """Generate the full Discord REST payload supporting single or multiple stacked containers with root-level controls."""
+    if isinstance(container, list):
+        container_list = container
+    else:
+        container_list = [container]
+
+    root_comps = []
+
+    # In Components V2 (flag 32768), traditional top-level 'content' is forbidden by Discord API.
+    # Any outer text / mention ping must be placed as a top-level TextDisplay component (type 10).
+    if content and str(content).strip():
+        root_comps.append({
+            "type": 10,
+            "content": str(content).strip(),
+        })
+
+    for c in container_list:
+        c_dict: dict[str, Any] = {
+            "type": 17,
+            "components": list(c.components),
+        }
+        if c.accent_color is not None:
+            c_dict["accent_color"] = c.accent_color
+
+        if not c_dict["components"]:
+            c_dict["components"] = [{"type": 10, "content": "\u200b"}]
+        else:
+            for comp in c_dict["components"]:
+                if comp.get("type") == 10 and (not comp.get("content") or not str(comp.get("content")).strip()):
+                    comp["content"] = "\u200b"
+                elif comp.get("type") == 9:
+                    for sub in comp.get("components", []):
+                        if sub.get("type") == 10 and (not sub.get("content") or not str(sub.get("content")).strip()):
+                            sub["content"] = "\u200b"
+
+        root_comps.append(c_dict)
+
+    # Place view action rows (builder buttons and dropdowns) directly INSIDE the container
+    if view is not None:
+        if hasattr(view, "to_container_components"):
+            view_comps = view.to_container_components()
+        else:
+            view_comps = view.to_components()
+        if view_comps:
+            if root_comps and root_comps[-1].get("type") == 17:
+                root_comps[-1]["components"].extend(view_comps)
+            else:
+                root_comps.extend(view_comps)
+
+    if allowed_mentions is not None:
+        if isinstance(allowed_mentions, discord.AllowedMentions):
+            mentions_payload = allowed_mentions.to_dict()
+        else:
+            mentions_payload = allowed_mentions
+    else:
+        # Default: allow parsing user mentions and replied user; suppress mass everyone/role pings
+        mentions_payload = {
+            "parse": ["users"],
+            "replied_user": True,
+        }
+
+    payload: dict[str, Any] = {
+        "components": root_comps[:5],  # Discord allows maximum 5 top-level items
+        "allowed_mentions": mentions_payload,
+    }
+    if not is_edit:
+        payload["flags"] = 32768  # IS_COMPONENTS_V2 (1 << 15) only valid on new message creation
+
+    return payload
+
+
+def _prepare_multipart_form(
+    payload: dict[str, Any],
+    file_list: list[discord.File],
+    wrapper: dict[str, Any] | None = None,
+) -> list[dict[str, Any]]:
+    """
+    Constructs compliant multipart form fields for Discord REST API file uploads.
+    Injects attachments metadata array into payload and attaches binary streams as files[i].
+    """
+    for f in file_list:
+        try:
+            f.reset()
+        except Exception:
+            pass
+
+    payload["attachments"] = [
+        {"id": i, "filename": f.filename}
+        for i, f in enumerate(file_list)
+    ]
+
+    top_json = wrapper if wrapper is not None else payload
+    if wrapper is not None and "data" in wrapper:
+        wrapper["data"] = payload
+
+    form: list[dict[str, Any]] = [
+        {"name": "payload_json", "value": discord.utils._to_json(top_json)}
+    ]
+    for i, f in enumerate(file_list):
+        form.append({
+            "name": f"files[{i}]",
+            "value": f.fp,
+            "filename": f.filename,
+            "content_type": "application/octet-stream",
+        })
+    return form
+
+
+async def send_container_response(
+    interaction_or_ctx: discord.Interaction | commands.Context | discord.abc.Messageable | discord.User | discord.Member,
+    container: KyokaContainer | list[KyokaContainer],
+    view: discord.ui.View | None = None,
+    ephemeral: bool = False,
+    content: str | None = None,
+    file: discord.File | None = None,
+    files: list[discord.File] | None = None,
+    allowed_mentions: discord.AllowedMentions | dict[str, Any] | None = None,
+) -> Any:
+    """Send or edit a message using Components V2 Container(s) with optional file attachments."""
+    # resolve hybrid context interaction if present
+    interaction = getattr(interaction_or_ctx, "interaction", None)
+    if interaction is not None:
+        target = interaction
+    else:
+        target = interaction_or_ctx
+
+    payload = build_container_payload(
+        container,
+        view=view,
+        content=content,
+        allowed_mentions=allowed_mentions,
+    )
+    file_list = [file] if file is not None else (files or [])
+
+    if isinstance(target, discord.Interaction):
+        interaction = target
+        bot = getattr(interaction, "client", getattr(interaction, "bot", None))
+        app_id = getattr(bot, "application_id", None) or (bot.user.id if bot and bot.user else None)
+        if ephemeral:
+            payload["flags"] |= 64  # EPHEMERAL
+
+        if interaction.response.is_done():
+            if file_list:
+                form = _prepare_multipart_form(payload, file_list)
+                msg_data = await bot.http.request(
+                    discord.http.Route(
+                        "POST",
+                        f"/webhooks/{app_id}/{interaction.token}",
+                    ),
+                    form=form,
+                    files=file_list,
+                )
+            else:
+                msg_data = await bot.http.request(
+                    discord.http.Route(
+                        "POST",
+                        f"/webhooks/{app_id}/{interaction.token}",
+                    ),
+                    json=payload,
+                )
+            if view and hasattr(bot, "_connection"):
+                msg_id = int(msg_data["id"]) if isinstance(msg_data, dict) and "id" in msg_data else None
+                state = getattr(bot, "_connection", None) or getattr(bot, "_state", None) or bot
+                if hasattr(state, "store_view"):
+                    state.store_view(view, msg_id)
+            return msg_data
+        else:
+            # Send initial response via raw interaction callback
+            if file_list:
+                form = _prepare_multipart_form(payload, file_list, wrapper={"type": 4, "data": payload})
+                res = await bot.http.request(
+                    discord.http.Route(
+                        "POST",
+                        f"/interactions/{interaction.id}/{interaction.token}/callback",
+                    ),
+                    form=form,
+                    files=file_list,
+                )
+            else:
+                res = await bot.http.request(
+                    discord.http.Route(
+                        "POST",
+                        f"/interactions/{interaction.id}/{interaction.token}/callback",
+                    ),
+                    json={"type": 4, "data": payload},
+                )
+            if view:
+                state = getattr(bot, "_connection", None) or getattr(bot, "_state", None) or bot
+                if hasattr(state, "store_view"):
+                    state.store_view(view)
+            return res
+    else:
+        obj = target
+
+        # Handle User / Member DMs
+        if isinstance(obj, (discord.User, discord.Member)):
+            dm = await obj.create_dm()
+            channel_id = dm.id
+            bot_instance = getattr(obj, "_state", None)
+            http_client = getattr(bot_instance, "http", None)
+        elif isinstance(obj, discord.abc.GuildChannel) or (isinstance(obj, discord.abc.Messageable) and hasattr(obj, "id") and not hasattr(obj, "channel")):
+            channel_id = obj.id
+            bot_instance = getattr(obj, "bot", getattr(obj, "_state", None))
+            http_client = getattr(bot_instance, "http", None) or getattr(getattr(obj, "_state", None), "http", None)
+        elif hasattr(obj, "channel"):
+            channel_id = obj.channel.id
+            bot_instance = getattr(obj, "bot", getattr(obj, "_state", None))
+            http_client = getattr(bot_instance, "http", None) or getattr(getattr(obj, "_state", None), "http", None)
+        else:
+            channel_id = int(obj)
+            bot_instance = getattr(obj, "bot", getattr(obj, "_state", None))
+            http_client = getattr(bot_instance, "http", None) or getattr(getattr(obj, "_state", None), "http", None)
+
+        # Direct bot channel message dispatch via raw Components V2 payload
+        try:
+            if file_list:
+                form = _prepare_multipart_form(payload, file_list)
+                msg_data = await http_client.request(
+                    discord.http.Route("POST", f"/channels/{channel_id}/messages"),
+                    form=form,
+                    files=file_list,
+                )
+            else:
+                msg_data = await http_client.request(
+                    discord.http.Route("POST", f"/channels/{channel_id}/messages"),
+                    json=payload,
+                )
+            if view and msg_data and isinstance(msg_data, dict) and "id" in msg_data:
+                msg_id = int(msg_data["id"])
+                if not getattr(view, "message_id", None):
+                    setattr(view, "message_id", msg_id)
+                if not getattr(view, "channel_id", None):
+                    setattr(view, "channel_id", channel_id)
+                state = getattr(bot_instance, "_connection", None) or getattr(bot_instance, "_state", None) or bot_instance
+                if hasattr(state, "store_view"):
+                    state.store_view(view, msg_id)
+
+            # Reconstruct discord.Message if state is accessible
+            if isinstance(msg_data, dict):
+                channel_obj = getattr(obj, "channel", obj if isinstance(obj, discord.abc.Messageable) else None)
+                state = getattr(bot_instance, "_connection", bot_instance)
+                if hasattr(state, "create_message") and channel_obj:
+                    try:
+                        return state.create_message(channel=channel_obj, data=msg_data)
+                    except Exception:
+                        pass
+            return msg_data
+        except discord.Forbidden:
+            raise
+        except discord.HTTPException as e:
+            if e.status == 429:
+                logger.error(f"Discord 429 Too Many Requests (Rate limit / Cloudflare): {e}")
+                raise
+            logger.warning(f"Raw Components V2 HTTP request failed ({e}), attempting standard send fallback...")
+            target_send = getattr(obj, "send", None) or getattr(getattr(obj, "channel", None), "send", None)
+            if target_send:
+                primary = container if isinstance(container, KyokaContainer) else container[0]
+                
+                # Extract link buttons from container into a fallback View if no view is provided
+                fallback_view = view
+                if fallback_view is None:
+                    container_list = container if isinstance(container, list) else [container]
+                    link_view = discord.ui.View(timeout=None)
+                    has_buttons = False
+                    for c in container_list:
+                        for comp in c.components:
+                            if comp.get("type") == 1:
+                                for item in comp.get("components", []):
+                                    if item.get("type") == 2 and item.get("style") == 5:
+                                        lbl = item.get("label", "Link")
+                                        u = item.get("url", "https://discord.com")
+                                        if u and u.startswith("http"):
+                                            link_view.add_item(discord.ui.Button(label=lbl, url=u, style=discord.ButtonStyle.link))
+                                            has_buttons = True
+                    if has_buttons:
+                        fallback_view = link_view
+
+                send_kwargs: dict[str, Any] = {
+                    "content": content,
+                    "embed": primary.to_embed(content=content),
+                    "view": fallback_view,
+                    "allowed_mentions": allowed_mentions or discord.AllowedMentions(users=True),
+                }
+                if file_list:
+                    if len(file_list) == 1:
+                        send_kwargs["file"] = file_list[0]
+                    else:
+                        send_kwargs["files"] = file_list
+
+                msg = await target_send(**send_kwargs)
+                if view and msg and hasattr(msg, "id"):
+                    setattr(view, "message_id", msg.id)
+                    setattr(view, "channel_id", getattr(msg.channel, "id", None))
+                    bot_instance = getattr(msg, "_state", None)
+                    if bot_instance and hasattr(bot_instance, "store_view"):
+                        bot_instance.store_view(view, msg.id)
+                return msg
+            raise
+
+
+async def edit_container_response(
+    interaction_or_msg: discord.Interaction | discord.Message,
+    container: KyokaContainer | list[KyokaContainer],
+    view: discord.ui.View | None = None,
+    file: discord.File | None = None,
+    files: list[discord.File] | None = None,
+    content: str | None = None,
+) -> None:
+    """Edit an existing Components V2 Container message safely with fallbacks, including files."""
+    payload = build_container_payload(container, view=view, is_edit=True, content=content)
+    payload.pop("flags", None)
+    file_list = [file] if file is not None else (files or [])
+
+    if isinstance(interaction_or_msg, discord.Message):
+        msg = interaction_or_msg
+        bot = getattr(msg, "bot", None) or getattr(getattr(msg, "_state", None), "client", None) or getattr(msg, "_state", None)
+        http_client = getattr(bot, "http", None)
+        if http_client:
+            try:
+                if file_list:
+                    form = _prepare_multipart_form(payload, file_list)
+                    await http_client.request(
+                        discord.http.Route(
+                            "PATCH",
+                            f"/channels/{msg.channel.id}/messages/{msg.id}",
+                        ),
+                        form=form,
+                        files=file_list,
+                    )
+                else:
+                    await http_client.request(
+                        discord.http.Route(
+                            "PATCH",
+                            f"/channels/{msg.channel.id}/messages/{msg.id}",
+                        ),
+                        json=payload,
+                    )
+                if view:
+                    state = getattr(bot, "_connection", None) or getattr(msg, "_state", None) or bot
+                    if hasattr(state, "store_view"):
+                        state.store_view(view, msg.id)
+                return
+            except Exception as e:
+                logger.error(f"Direct channel PATCH edit failed: {e}")
+                raise
+        return
+
+    interaction = interaction_or_msg
+    bot = interaction.client
+    app_id = (
+        getattr(interaction, "application_id", None)
+        or getattr(bot, "application_id", None)
+        or (bot.user.id if bot and bot.user else None)
+    )
+
+    # try interaction response callback (type 7 UPDATE_MESSAGE) if not done
+    try:
+        if not interaction.response.is_done():
+            if file_list:
+                form = _prepare_multipart_form(payload, file_list, wrapper={"type": 7, "data": payload})
+                await bot.http.request(
+                    discord.http.Route(
+                        "POST",
+                        f"/interactions/{interaction.id}/{interaction.token}/callback",
+                    ),
+                    form=form,
+                    files=file_list,
+                )
+            else:
+                await bot.http.request(
+                    discord.http.Route(
+                        "POST",
+                        f"/interactions/{interaction.id}/{interaction.token}/callback",
+                    ),
+                    json={"type": 7, "data": payload},  # 7 = UPDATE_MESSAGE
+                )
+            if view and hasattr(bot, "_connection"):
+                msg_id = interaction.message.id if interaction.message else None
+                bot._connection.store_view(view, msg_id)
+            return
+        else:
+            # if interaction is already done/deferred, edit original webhook message
+            if file_list:
+                form = _prepare_multipart_form(payload, file_list)
+                msg_data = await bot.http.request(
+                    discord.http.Route(
+                        "PATCH",
+                        f"/webhooks/{app_id}/{interaction.token}/messages/@original",
+                    ),
+                    form=form,
+                    files=file_list,
+                )
+            else:
+                msg_data = await bot.http.request(
+                    discord.http.Route(
+                        "PATCH",
+                        f"/webhooks/{app_id}/{interaction.token}/messages/@original",
+                    ),
+                    json=payload,
+                )
+            if view and hasattr(bot, "_connection"):
+                msg_id = None
+                if isinstance(msg_data, dict) and "id" in msg_data:
+                    msg_id = int(msg_data["id"])
+                elif interaction.message:
+                    msg_id = interaction.message.id
+                bot._connection.store_view(view, msg_id)
+            return
+    except Exception as e:
+        logger.warning(f"Interaction callback edit failed ({e}). Attempting channel PATCH fallback.")
+
+    # fallback to direct channel message edit if interaction expired
+    try:
+        if interaction.message and interaction.channel_id:
+            if file_list:
+                form = _prepare_multipart_form(payload, file_list)
+                await bot.http.request(
+                    discord.http.Route(
+                        "PATCH",
+                        f"/channels/{interaction.channel_id}/messages/{interaction.message.id}",
+                    ),
+                    form=form,
+                    files=file_list,
+                )
+            else:
+                await bot.http.request(
+                    discord.http.Route(
+                        "PATCH",
+                        f"/channels/{interaction.channel_id}/messages/{interaction.message.id}",
+                    ),
+                    json=payload,
+                )
+            if view and hasattr(bot, "_connection"):
+                bot._connection.store_view(view, interaction.message.id)
+    except Exception as e2:
+        logger.error(f"Fallback channel message edit also failed: {e2}")
+
+
+
+
+# Backward Compatibility Alias
+KyroContainer = KyokaContainer

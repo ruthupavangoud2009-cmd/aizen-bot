@@ -1,0 +1,455 @@
+"""
+Kyoka Discord Bot - Enterprise SaaS Help & Module Console
+Dynamic permission-aware help menu powered by Discord Components V2 Container Cards.
+Filters commands so users only see actions they have permission to execute.
+"""
+
+from __future__ import annotations
+
+import asyncio
+from typing import TYPE_CHECKING, Any
+import discord
+from discord.ext import commands
+
+from src.core.config import Config
+from src.core.context import CustomContext
+from src.utils.containers import KyokaContainer, send_container_response, edit_container_response
+from src.security.owner import is_primary_owner
+
+if TYPE_CHECKING:
+    from src.core.bot import KyokaBot
+
+
+class Help(commands.Cog):
+    """Enterprise SaaS Help & Module Console with dynamic permission filtering."""
+    category: str = "Moderation"
+
+    def __init__(self, bot: KyokaBot) -> None:
+        self.bot = bot
+
+    @staticmethod
+    def _can_run_command(cmd: commands.Command, ctx: CustomContext | None = None) -> bool:
+        """Hide hidden commands and reveal owner-restricted commands only to the primary owner."""
+        if getattr(cmd, "hidden", False):
+            return False
+
+        # OwnerSystem sends its dedicated help response privately; never list its commands here.
+        if getattr(getattr(cmd, "cog", None), "category", "").lower() in {"owner", "developer"}:
+            return False
+
+        cmd_name = getattr(cmd, "name", "")
+        owner_only = {"spam", "spamcancel", "guesshostadd", "guesshostremove", "guesshosts"}
+        if cmd_name.lower() in owner_only and (ctx is None or not is_primary_owner(getattr(ctx.author, "id", None))):
+            return False
+
+        return True
+
+    async def _get_visible_categories(self, ctx: CustomContext) -> dict[str, list[commands.Command]]:
+        """Group commands that the current user has permission to execute."""
+        categories: dict[str, list[commands.Command]] = {}
+
+        for cog_name, cog in self.bot.cogs.items():
+            if cog_name.lower() in ["errorhandler"]:
+                continue
+
+            category_name = getattr(cog, "category", cog_name)
+            if category_name.lower() == "owner":
+                continue
+            # Remove Developer module completely - owner only, never displayed in public help
+            if category_name.lower() == "developer":
+                continue
+
+            # Display-only rename: Security -> Antinuke (help embed only, cogs untouched)
+            if category_name.lower() == "security":
+                category_name = "Antinuke"
+
+            if category_name not in categories:
+                categories[category_name] = []
+
+            def _collect_all(cmd_obj: commands.Command) -> list[commands.Command]:
+                cmd_list = [cmd_obj]
+                if isinstance(cmd_obj, commands.Group):
+                    for sub_cmd in sorted(cmd_obj.commands, key=lambda s: s.qualified_name):
+                        cmd_list.extend(_collect_all(sub_cmd))
+                return cmd_list
+
+            for cmd in cog.get_commands():
+                for c in _collect_all(cmd):
+                    if self._can_run_command(c, ctx):
+                        if c not in categories[category_name]:
+                            categories[category_name].append(c)
+
+        # Ensure ordered display in dropdown: Antinuke, Moderation, Welcomer, Join to Create, Ticket, Audit Logs, Music, etc.
+        priority_order = ["Antinuke", "Moderation", "Welcomer", "Join to Create", "Ticket", "Audit Logs", "Music", "Premium"]
+        ordered_categories: dict[str, list[commands.Command]] = {}
+        for cat in priority_order:
+            if cat in categories and categories[cat]:
+                ordered_categories[cat] = categories[cat]
+        for cat, cmds in categories.items():
+            if cat not in ordered_categories and cmds:
+                ordered_categories[cat] = cmds
+
+        return ordered_categories
+
+    def _get_category_emoji(self, cat_name: str) -> str:
+        """Resolve custom application emoji for category header from assets/emoji and assets/emoji2."""
+        e_reg = self.bot.custom_emojis
+        mapping = {
+            "Antinuke": e_reg.get("antinuke_shield", e_reg.get("icon_shield", "")),
+            "Music": e_reg.get("music", e_reg.get("icon_music", e_reg.get("Music_Playing", ""))),
+            "Ticket": e_reg.get("icon_ticket", e_reg.get("ticket_support", e_reg.get("ticket", ""))),
+            "Welcomer": e_reg.get("icons_join", e_reg.get("icon_join", "")),
+            "Moderation": e_reg.get("icon_moderation", e_reg.get("icon_mod", e_reg.get("icons_staff", ""))),
+            "Premium": e_reg.get("verified_premium", e_reg.get("icon_premium", "")),
+            "Audit Logs": e_reg.get("icons_podcast", e_reg.get("icon_logging", "")),
+            "Join to Create": e_reg.get("icons_connect", e_reg.get("icons_channel", e_reg.get("icons_podcast", ""))),
+        }
+        return mapping.get(cat_name, e_reg.get("icon_moderation", ""))
+
+    def _get_category_select_emoji(self, cat_name: str) -> dict[str, Any] | None:
+        """Resolve emoji dict for Select Menu options."""
+        e_reg = self.bot.custom_emojis
+        mapping = {
+            "Antinuke": "antinuke_shield",
+            "Music": "music",
+            "Ticket": "icon_ticket",
+            "Welcomer": "icons_join",
+            "Moderation": "icon_moderation",
+            "Premium": "verified_premium",
+            "Audit Logs": "icons_podcast",
+            "Join to Create": "icons_connect",
+        }
+        emoji_name = mapping.get(cat_name, "icon_moderation")
+        emoji_data = e_reg.get_select_emoji(emoji_name, fallback_unicode=None)
+        if not emoji_data and cat_name == "Join to Create":
+            emoji_data = e_reg.get_select_emoji("icons_channel", fallback_unicode=None) or e_reg.get_select_emoji("icon_moderation", fallback_unicode=None)
+        return emoji_data
+
+    def _build_home_container(
+        self,
+        ctx: CustomContext,
+        visible_categories: dict[str, list[commands.Command]],
+        custom_id_prefix: str,
+        selected_val: str = "home",
+    ) -> KyokaContainer:
+        """Construct the Signature Kyoka SaaS Overview Card with Default Accent."""
+        guild = ctx.guild
+        author = ctx.author
+        current_prefix = self.bot.guild_mgr.get_prefix(guild.id if guild else None)
+        ws_ping = round(self.bot.latency * 1000) if self.bot.latency else 0
+        total_commands = sum(len(cmds) for cmds in visible_categories.values())
+        e_reg = self.bot.custom_emojis
+
+        # Custom folder emojis (no unicode fallbacks)
+        dot = e_reg.get("heart_dot", e_reg.get("icons_rightarrow", "-"))
+
+        # Default accent container (Dark Mode) - No avatar thumbnail
+        container = KyokaContainer(accent_color=None)
+        container.add_section(
+            content=(
+                f"**Hey, I'm {Config.BOT_NAME}**\n"
+                f"> Built for our community — keeping your server safe, active, and effortlessly connected."
+            )
+        )
+        container.add_separator(divider=True)
+
+        container.add_text(
+            f"{dot} **Latency:** `{ws_ping}ms`\n"
+            f"{dot} **Prefix:** `{current_prefix}` | **Slash:** `/`\n"
+            f"{dot} **Available Commands:** `{total_commands}`"
+        )
+        container.add_separator(divider=True)
+
+        # Dropdown Options (custom emojis only, clean labels)
+        home_emoji_data = e_reg.get_select_emoji("icon_home", fallback_unicode=None)
+        home_opt: dict[str, Any] = {
+            "label": "Home",
+            "value": "home",
+            "default": selected_val == "home",
+        }
+        if home_emoji_data:
+            home_opt["emoji"] = home_emoji_data
+
+        options = [home_opt]
+
+        for cat_name, cmds in visible_categories.items():
+            cat_opt: dict[str, Any] = {
+                "label": cat_name,
+                "value": cat_name.lower(),
+                "default": selected_val == cat_name.lower(),
+            }
+            cat_emoji_data = self._get_category_select_emoji(cat_name)
+            if cat_emoji_data:
+                cat_opt["emoji"] = cat_emoji_data
+            options.append(cat_opt)
+
+        container.add_action_row([
+            {
+                "type": 3,
+                "custom_id": f"{custom_id_prefix}:select_category",
+                "placeholder": "Select a module to view commands...",
+                "options": options,
+            }
+        ])
+
+        container.add_separator(divider=True)
+        container.add_text(f"-# **Requested by {author.display_name}**")
+        container.add_separator(divider=True)
+
+        buttons = []
+        if Config.INVITE_URL:
+            buttons.append({
+                "type": 2,
+                "style": 5,
+                "label": "Invite Kyoka",
+                "url": Config.INVITE_URL,
+            })
+        if Config.SUPPORT_URL:
+            buttons.append({
+                "type": 2,
+                "style": 5,
+                "label": "Support Server",
+                "url": Config.SUPPORT_URL,
+            })
+        if buttons:
+            container.add_action_row(buttons)
+
+        return container
+
+    def _build_category_container(
+        self,
+        ctx: CustomContext,
+        cat_name: str,
+        commands_list: list[commands.Command],
+        visible_categories: dict[str, list[commands.Command]],
+        custom_id_prefix: str,
+    ) -> KyokaContainer:
+        """Construct category command card with default accent and folder emojis."""
+        current_prefix = self.bot.guild_mgr.get_prefix(ctx.guild.id if ctx.guild else None)
+        cat_icon = self._get_category_emoji(cat_name)
+        e_reg = self.bot.custom_emojis
+        dot = e_reg.get("heart_dot", e_reg.get("icons_rightarrow", "-"))
+
+        container = KyokaContainer(accent_color=None)
+        cat_icon_prefix = f"{cat_icon} " if cat_icon else ""
+        container.add_section(
+            content=(
+                f"**{cat_icon_prefix}{cat_name} Commands**\n"
+                f"> Listing `{len(commands_list)}` accessible command(s) for your role in this server."
+            )
+        )
+        container.add_separator(divider=True)
+
+        if cat_name.lower() == "moderation":
+            priority_order = [
+                # Core Enforcement
+                "ban", "unban", "kick", "timeout", "mute", "unmute", "warn", "warnings", "delwarn",
+                # Channels & Cleanup
+                "lock", "unlock", "purge", "slowmode", "snipe", "snipeall", "clearsnipe", "clearsnipeall",
+                # Roles
+                "role", "roleall", "roleinfo", "listroles",
+                # Server Tools & Expressions
+                "emojis", "expressions", "stickers", "delemoji", "steal",
+                # Server Info & Utilities
+                "server", "serveravatar", "serverbanner", "serverinfo", "channelinfo", "membercount", "userinfo", "avatar", "banner", "profile",
+                # System / Bot Info & Settings
+                "prefix", "setprefix", "resetprefix", "botinfo", "stats", "ping", "invite", "help", "afk", "tech", "dev",
+                # Staff Directory & Logs
+                "modlog", "admins", "mods", "bots",
+            ]
+
+            def _sort_key(cmd: commands.Command) -> tuple[int, int, str]:
+                parts = cmd.qualified_name.lower().split()
+                root = parts[0]
+                is_sub = 1 if len(parts) > 1 else 0
+                try:
+                    p_idx = priority_order.index(root)
+                except ValueError:
+                    p_idx = 999
+                return (p_idx, is_sub, cmd.qualified_name.lower())
+
+            sorted_cmds = sorted(commands_list, key=_sort_key)
+        else:
+            def _gen_sort_key(cmd: commands.Command) -> tuple[str, int, str]:
+                parts = cmd.qualified_name.lower().split()
+                root = parts[0]
+                is_sub = 1 if len(parts) > 1 else 0
+                return (root, is_sub, cmd.qualified_name.lower())
+
+            sorted_cmds = sorted(commands_list, key=_gen_sort_key)
+
+        formatted_cmds = ", ".join([f"`{cmd.qualified_name}`" for cmd in sorted_cmds])
+        container.add_text(formatted_cmds)
+        container.add_separator(divider=True)
+
+        # Dropdown options (custom emojis only, clean labels)
+        home_emoji_data = e_reg.get_select_emoji("icon_home", fallback_unicode=None)
+        home_opt: dict[str, Any] = {
+            "label": "Home",
+            "value": "home",
+            "default": False,
+        }
+        if home_emoji_data:
+            home_opt["emoji"] = home_emoji_data
+
+        options = [home_opt]
+
+        for c_name, cmds in visible_categories.items():
+            cat_opt: dict[str, Any] = {
+                "label": c_name,
+                "value": c_name.lower(),
+                "default": c_name.lower() == cat_name.lower(),
+            }
+            cat_emoji_data = self._get_category_select_emoji(c_name)
+            if cat_emoji_data:
+                cat_opt["emoji"] = cat_emoji_data
+            options.append(cat_opt)
+
+        container.add_action_row([
+            {
+                "type": 3,
+                "custom_id": f"{custom_id_prefix}:select_category",
+                "placeholder": "Select a module to view commands...",
+                "options": options,
+            }
+        ])
+
+        container.add_separator(divider=True)
+        container.add_text(f"-# **Requested by {ctx.author.display_name}**")
+        container.add_separator(divider=True)
+
+        buttons = []
+        if Config.INVITE_URL:
+            buttons.append({
+                "type": 2,
+                "style": 5,
+                "label": "Invite Kyoka",
+                "url": Config.INVITE_URL,
+            })
+        if Config.SUPPORT_URL:
+            buttons.append({
+                "type": 2,
+                "style": 5,
+                "label": "Support Server",
+                "url": Config.SUPPORT_URL,
+            })
+        if buttons:
+            container.add_action_row(buttons)
+
+        return container
+
+    @commands.hybrid_command(
+        name="help",
+        aliases=["commands", "modules", "h"],
+        description="Display the Kyoka command directory tailored to your permissions.",
+    )
+    async def help_command(self, ctx: CustomContext, *, command_or_module: str | None = None) -> None:
+        """Interactive help menu filtered by user permissions."""
+        visible_categories = await self._get_visible_categories(ctx)
+
+        # direct command or module lookup
+        if command_or_module:
+            query = command_or_module.lower().strip()
+
+            target_cmd = self.bot.get_command(query)
+            if target_cmd and self._can_run_command(target_cmd, ctx):
+                current_prefix = self.bot.guild_mgr.get_prefix(ctx.guild.id if ctx.guild else None)
+                cat = getattr(target_cmd.cog, "category", "Moderation")
+                if cat.lower() == "security":
+                    cat = "Antinuke"
+                cat_icon = self._get_category_emoji(cat)
+                desc = target_cmd.description or target_cmd.help or "No detailed description available."
+                aliases = ", ".join([f"`{a}`" for a in target_cmd.aliases]) if target_cmd.aliases else "`None`"
+                usage = f"`{current_prefix}{target_cmd.qualified_name} {target_cmd.signature}`".strip()
+                e_reg = self.bot.custom_emojis
+                dot = e_reg.get("heart_dot", e_reg.get("icons_rightarrow", "-"))
+
+                container = KyokaContainer(accent_color=None)
+                cat_icon_prefix = f"{cat_icon} " if cat_icon else ""
+                container.add_section(
+                    content=(
+                        f"**{cat_icon_prefix}Command: `{target_cmd.name}`**\n"
+                        f"> {desc}"
+                    )
+                )
+                container.add_separator(divider=True)
+                container.add_text(
+                    f"{dot} **Usage:** `{usage}`\n"
+                    f"{dot} **Aliases:** {aliases} | **Category:** `{cat}`"
+                )
+                container.add_separator(divider=True)
+                container.add_text(f"-# Requested by {ctx.author.display_name}")
+                await send_container_response(ctx, container)
+                return
+
+            # Direct module / category lookup (e.g. ?help "join to create", ?help mod, ?help voice)
+            category_aliases = {
+                "jointocreate": "Join to Create",
+                "join to create": "Join to Create",
+                "join-to-create": "Join to Create",
+                "voice": "Join to Create",
+                "tempvoice": "Join to Create",
+                "mod": "Moderation",
+                "welcome": "Welcomer",
+                "security": "Antinuke",
+                "antinuke": "Antinuke",
+                "anti-nuke": "Antinuke",
+            }
+            target_cat_name = category_aliases.get(query)
+            if not target_cat_name:
+                target_cat_name = next((c for c in visible_categories.keys() if c.lower() == query), None)
+
+            if target_cat_name:
+                matched_cat = next((c for c in visible_categories.keys() if c.lower() == target_cat_name.lower()), None)
+                if matched_cat:
+                    custom_id_prefix = f"help_console:{ctx.author.id}:{ctx.guild.id if ctx.guild else 0}:{ctx.message.id if ctx.message else 0}"
+                    container = self._build_category_container(
+                        ctx, matched_cat, visible_categories[matched_cat], visible_categories, custom_id_prefix
+                    )
+                    await send_container_response(ctx, container)
+                    return
+
+        # main Help Console
+        custom_id_prefix = f"help_console:{ctx.author.id}:{ctx.guild.id if ctx.guild else 0}:{ctx.message.id if ctx.message else 0}"
+        container = self._build_home_container(ctx, visible_categories, custom_id_prefix)
+        await send_container_response(ctx, container)
+
+        def check(interaction: discord.Interaction) -> bool:
+            if not interaction.data:
+                return False
+            custom_id = interaction.data.get("custom_id", "")
+            return (
+                custom_id.startswith(f"{custom_id_prefix}:")
+                and interaction.user.id == ctx.author.id
+            )
+
+        while True:
+            try:
+                interaction: discord.Interaction = await self.bot.wait_for(
+                    "interaction", check=check, timeout=120.0
+                )
+                custom_id = interaction.data.get("custom_id", "")
+                action = custom_id.split(":")[-1]
+
+                # Select Menu Navigation
+                if action == "select_category":
+                    selected = interaction.data.get("values", ["home"])[0]
+                    if selected == "home":
+                        new_container = self._build_home_container(ctx, visible_categories, custom_id_prefix, "home")
+                    else:
+                        matched_cat = next((c for c in visible_categories.keys() if c.lower() == selected), None)
+                        if matched_cat:
+                            new_container = self._build_category_container(
+                                ctx, matched_cat, visible_categories[matched_cat], visible_categories, custom_id_prefix
+                            )
+                        else:
+                            new_container = self._build_home_container(ctx, visible_categories, custom_id_prefix, "home")
+
+                    await edit_container_response(interaction, new_container)
+
+            except asyncio.TimeoutError:
+                break
+
+
+async def setup(bot: KyokaBot) -> None:
+    await bot.add_cog(Help(bot))

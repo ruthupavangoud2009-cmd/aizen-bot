@@ -1,0 +1,873 @@
+from __future__ import annotations
+
+import asyncio
+import logging
+from typing import Any
+import asyncpg
+
+from src.database.base import BaseDatabase
+
+logger = logging.getLogger("Kyoka.Database.Postgres")
+
+
+class PostgresDatabase(BaseDatabase):
+    """PostgreSQL / Supabase async database connector with self-healing connection pool."""
+
+    def __init__(self, dsn: str) -> None:
+        self.dsn = dsn
+        self.pool: asyncpg.Pool | None = None
+        self._lock = asyncio.Lock()
+
+    async def _heal_pool(self) -> None:
+        """Self-healing connection pool reconnector with exponential backoff."""
+        async with self._lock:
+            if self.pool and not self.pool._closed:
+                try:
+                    async with self.pool.acquire(timeout=3) as conn:
+                        await conn.execute("SELECT 1;")
+                    return
+                except Exception:
+                    logger.warning("Database connection pool unhealthy. Cycling connection pool...")
+                    try:
+                        await self.pool.close()
+                    except Exception:
+                        pass
+                    self.pool = None
+
+            clean_dsn = self.dsn.replace("postgresql+asyncpg://", "postgresql://")
+            delays = [0.5, 1.0, 2.0, 4.0]
+            for attempt, delay in enumerate(delays, 1):
+                try:
+                    logger.info(f"Self-healing database pool reconnecting (attempt {attempt}/{len(delays)})...")
+                    self.pool = await asyncpg.create_pool(
+                        clean_dsn,
+                        min_size=2,
+                        max_size=10,
+                        command_timeout=30,
+                        statement_cache_size=0,
+                    )
+                    logger.info("Database pool self-healed and reconnected successfully.")
+                    return
+                except Exception as e:
+                    logger.warning(f"Reconnect attempt {attempt} failed: {e}. Retrying in {delay}s...")
+                    await asyncio.sleep(delay)
+
+            raise ConnectionError("Database pool could not be auto-healed after multiple backoff attempts.")
+
+    async def connect(self) -> None:
+        """Create an asynchronous PostgreSQL connection pool."""
+        try:
+            clean_dsn = self.dsn.replace("postgresql+asyncpg://", "postgresql://")
+            self.pool = await asyncpg.create_pool(
+                clean_dsn,
+                min_size=2,
+                max_size=10,
+                command_timeout=30,
+                statement_cache_size=0,
+            )
+            logger.info("Connected to PostgreSQL / Supabase cloud database pool.")
+            await self.initialize_tables()
+        except Exception as e:
+            logger.critical(f"Failed to connect to PostgreSQL / Supabase: {e}", exc_info=e)
+            raise
+
+    async def close(self) -> None:
+        """Close connection pool gracefully."""
+        if self.pool:
+            await self.pool.close()
+            logger.info("PostgreSQL database connection pool closed.")
+
+    async def initialize_tables(self) -> None:
+        """Initialize PostgreSQL schemas for Kyoka modules."""
+        queries = [
+            # Guild settings table
+            """
+            CREATE TABLE IF NOT EXISTS guild_settings (
+                guild_id BIGINT PRIMARY KEY,
+                prefix VARCHAR(10) DEFAULT '?',
+                language VARCHAR(10) DEFAULT 'en',
+                log_channel_id BIGINT,
+                mod_role_id BIGINT,
+                disabled_commands TEXT DEFAULT '',
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            );
+            """,
+            # System developers table
+            """
+            CREATE TABLE IF NOT EXISTS system_developers (
+                user_id BIGINT PRIMARY KEY,
+                added_by BIGINT,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            );
+            """,
+            # System global blacklists table
+            """
+            CREATE TABLE IF NOT EXISTS system_blacklists (
+                target_id BIGINT PRIMARY KEY,
+                target_type VARCHAR(20) DEFAULT 'user',
+                reason TEXT DEFAULT 'Violation of bot rules',
+                added_by BIGINT,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            );
+            """,
+            # System global state table
+            """
+            CREATE TABLE IF NOT EXISTS system_state (
+                key VARCHAR(100) PRIMARY KEY,
+                value TEXT
+            );
+            """,
+            # System No-Prefix persistent authorized dispatchers
+            """
+            CREATE TABLE IF NOT EXISTS system_no_prefix (
+                user_id BIGINT PRIMARY KEY,
+                added_by BIGINT,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            );
+            """,
+            # Global Blacklist persistent table
+            """
+            CREATE TABLE IF NOT EXISTS system_blacklists (
+                target_id BIGINT PRIMARY KEY,
+                target_type VARCHAR(16) DEFAULT 'user',
+                reason TEXT,
+                added_by BIGINT,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            );
+            """,
+            # User profiles / Economy table
+            """
+            CREATE TABLE IF NOT EXISTS user_profiles (
+                user_id BIGINT,
+                guild_id BIGINT,
+                balance BIGINT DEFAULT 0,
+                bank BIGINT DEFAULT 0,
+                xp BIGINT DEFAULT 0,
+                level INT DEFAULT 1,
+                PRIMARY KEY (user_id, guild_id)
+            );
+            """,
+            # Server modular audit logging channels
+            """
+            CREATE TABLE IF NOT EXISTS guild_logs (
+                guild_id BIGINT PRIMARY KEY,
+                all_channel_id BIGINT,
+                mod_channel_id BIGINT,
+                message_channel_id BIGINT,
+                member_channel_id BIGINT,
+                server_channel_id BIGINT,
+                voice_channel_id BIGINT
+            );
+            """,
+            # Premium License Keys table
+            """
+            CREATE TABLE IF NOT EXISTS premium_keys (
+                key VARCHAR(64) PRIMARY KEY,
+                duration_days INT NOT NULL,
+                target_type VARCHAR(20) DEFAULT 'guild',
+                created_by BIGINT NOT NULL,
+                is_used BOOLEAN DEFAULT FALSE,
+                redeemed_by BIGINT,
+                redeemed_target_id BIGINT,
+                redeemed_at TIMESTAMP,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            );
+            """,
+            # Active Guild/Server Premium table
+            """
+            CREATE TABLE IF NOT EXISTS guild_premium (
+                guild_id BIGINT PRIMARY KEY,
+                tier VARCHAR(50) DEFAULT 'pro',
+                activated_by BIGINT,
+                key_used VARCHAR(64),
+                expires_at TIMESTAMP,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            );
+            """,
+            # Active User/Personal Premium table
+            """
+            CREATE TABLE IF NOT EXISTS user_premium (
+                user_id BIGINT PRIMARY KEY,
+                tier VARCHAR(50) DEFAULT 'pro',
+                key_used VARCHAR(64),
+                expires_at TIMESTAMP,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            );
+            """,
+            # Customer Lifetime Analytics & Repeat Buyers table
+            """
+            CREATE TABLE IF NOT EXISTS premium_customers (
+                target_id BIGINT PRIMARY KEY,
+                target_type VARCHAR(20) DEFAULT 'user',
+                total_redemptions INT DEFAULT 1,
+                total_days_purchased INT DEFAULT 0,
+                first_redeemed_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                last_redeemed_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            );
+            """,
+            # Custom Components V2 Embed / Container Templates table
+            """
+            CREATE TABLE IF NOT EXISTS server_embeds (
+                id SERIAL PRIMARY KEY,
+                guild_id BIGINT NOT NULL,
+                embed_name VARCHAR(64) NOT NULL,
+                container_payload TEXT NOT NULL,
+                created_by BIGINT NOT NULL,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                UNIQUE(guild_id, embed_name)
+            );
+            """,
+            # Live Interactive Messages for Dropdown Page Switchers
+            """
+            CREATE TABLE IF NOT EXISTS interactive_cards (
+                guild_id BIGINT NOT NULL,
+                message_id BIGINT NOT NULL,
+                template_name VARCHAR(64),
+                card_payload TEXT NOT NULL,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                PRIMARY KEY (guild_id, message_id)
+            );
+            """,
+            # Server Auto-Events (Welcome, Leave, Boost) binding table
+            """
+            CREATE TABLE IF NOT EXISTS server_events (
+                guild_id BIGINT NOT NULL,
+                event_type VARCHAR(32) NOT NULL,
+                channel_id BIGINT,
+                embed_name VARCHAR(64),
+                message_content TEXT,
+                is_enabled BOOLEAN DEFAULT TRUE,
+                dm_enabled BOOLEAN DEFAULT FALSE,
+                dm_embed_name VARCHAR(64),
+                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                PRIMARY KEY (guild_id, event_type)
+            );
+            """,
+            # Modular Ticket Panels configuration table
+            """
+            CREATE TABLE IF NOT EXISTS ticket_panels (
+                id SERIAL PRIMARY KEY,
+                guild_id BIGINT NOT NULL,
+                panel_name VARCHAR(64) NOT NULL,
+                embed_name VARCHAR(64) NOT NULL,
+                channel_id BIGINT NOT NULL,
+                message_id BIGINT NOT NULL,
+                category_id BIGINT,
+                support_role_id BIGINT,
+                log_channel_id BIGINT,
+                naming_format VARCHAR(64) DEFAULT 'ticket-{count}',
+                button_label VARCHAR(64) DEFAULT 'Create Ticket',
+                button_style INT DEFAULT 1,
+                button_emoji VARCHAR(64),
+                created_by BIGINT NOT NULL,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                UNIQUE(guild_id, panel_name)
+            );
+            """,
+            # Active Open/Closed Tickets tracking table
+            """
+            CREATE TABLE IF NOT EXISTS active_tickets (
+                id SERIAL PRIMARY KEY,
+                guild_id BIGINT NOT NULL,
+                panel_id INT REFERENCES ticket_panels(id) ON DELETE CASCADE,
+                channel_id BIGINT NOT NULL UNIQUE,
+                user_id BIGINT NOT NULL,
+                ticket_number INT NOT NULL,
+                claimed_by BIGINT,
+                status VARCHAR(20) DEFAULT 'open',
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                closed_at TIMESTAMP,
+                closed_by BIGINT
+            );
+            """,
+            # Guild Sequential Ticket Number Counter table
+            """
+            CREATE TABLE IF NOT EXISTS guild_ticket_counters (
+                guild_id BIGINT PRIMARY KEY,
+                total_tickets INT DEFAULT 0
+            );
+            """,
+            # User Music Taste & Listening History table
+            """
+            CREATE TABLE IF NOT EXISTS user_music_history (
+                id SERIAL PRIMARY KEY,
+                user_id BIGINT NOT NULL,
+                guild_id BIGINT,
+                track_title VARCHAR(255) NOT NULL,
+                artist VARCHAR(255) NOT NULL,
+                genre VARCHAR(100) DEFAULT 'general',
+                source VARCHAR(50) DEFAULT 'bot',
+                play_count INT DEFAULT 1,
+                last_played_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                UNIQUE(user_id, track_title, artist)
+            );
+            """,
+            # Guild Music & Autoplay Configuration table
+            """
+            CREATE TABLE IF NOT EXISTS guild_music_settings (
+                guild_id BIGINT PRIMARY KEY,
+                autoplay BOOLEAN DEFAULT FALSE,
+                autoplay_mode VARCHAR(20) DEFAULT 'smart',
+                default_volume INT DEFAULT 100,
+                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            );
+            """,
+            # User Custom Playlists & Liked Songs table
+            """
+            CREATE TABLE IF NOT EXISTS user_playlists (
+                id SERIAL PRIMARY KEY,
+                user_id BIGINT NOT NULL,
+                playlist_name VARCHAR(100) NOT NULL,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                UNIQUE(user_id, playlist_name)
+            );
+            """,
+            # User Playlist Tracks table
+            """
+            CREATE TABLE IF NOT EXISTS user_playlist_tracks (
+                id SERIAL PRIMARY KEY,
+                playlist_id INT REFERENCES user_playlists(id) ON DELETE CASCADE,
+                title VARCHAR(255) NOT NULL,
+                author VARCHAR(255) NOT NULL,
+                duration INT DEFAULT 0,
+                url TEXT NOT NULL,
+                added_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            );
+            """,
+            # User Playlist Tracks index on foreign key
+            """
+            CREATE INDEX IF NOT EXISTS idx_user_playlist_tracks_plid ON user_playlist_tracks(playlist_id);
+            """,
+            # Guild Member Warnings table
+            """
+            CREATE TABLE IF NOT EXISTS guild_warns (
+                id SERIAL PRIMARY KEY,
+                guild_id BIGINT NOT NULL,
+                user_id BIGINT NOT NULL,
+                moderator_id BIGINT NOT NULL,
+                reason TEXT DEFAULT 'No reason provided',
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            );
+            """,
+            # Guild Auto-Role table
+            """
+            CREATE TABLE IF NOT EXISTS guild_autoroles (
+                guild_id BIGINT PRIMARY KEY,
+                role_id BIGINT,
+                human_role_id BIGINT,
+                bot_role_id BIGINT,
+                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            );
+            """,
+            """
+            ALTER TABLE guild_autoroles ADD COLUMN IF NOT EXISTS human_role_id BIGINT;
+            """,
+            """
+            ALTER TABLE guild_autoroles ADD COLUMN IF NOT EXISTS bot_role_id BIGINT;
+            """,
+            # Guild 24/7 Voice Stay Mode table
+            """
+            CREATE TABLE IF NOT EXISTS guild_music_247 (
+                guild_id BIGINT PRIMARY KEY,
+                is_247 BOOLEAN DEFAULT FALSE
+            );
+            """,
+            # Guild Ghost-Ping Settings table
+            """
+            CREATE TABLE IF NOT EXISTS guild_ghostping_settings (
+                guild_id BIGINT PRIMARY KEY,
+                is_enabled BOOLEAN DEFAULT TRUE,
+                channel_id BIGINT
+            );
+            """,
+            # User AFK table
+            """
+            CREATE TABLE IF NOT EXISTS user_afk (
+                user_id BIGINT,
+                guild_id BIGINT,
+                reason TEXT DEFAULT 'AFK',
+                nickname_changed BOOLEAN DEFAULT FALSE,
+                original_nickname VARCHAR(64),
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                PRIMARY KEY (user_id, guild_id)
+            );
+            """,
+            # Guild Server Snapshots for Disaster Recovery & Nuke Rollback
+            """
+            CREATE TABLE IF NOT EXISTS guild_server_snapshots (
+                guild_id BIGINT PRIMARY KEY,
+                snapshot_data JSONB NOT NULL,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                created_by BIGINT
+            );
+            """,
+            # Guild Anonymous Confession Settings
+            """
+            CREATE TABLE IF NOT EXISTS guild_confession_settings (
+                guild_id BIGINT PRIMARY KEY,
+                channel_id BIGINT,
+                counter INT DEFAULT 0,
+                is_enabled BOOLEAN DEFAULT TRUE
+            );
+            """,
+            # User AFK Voice Mail & Notes Inbox
+            """
+            CREATE TABLE IF NOT EXISTS user_afk_notes (
+                id SERIAL PRIMARY KEY,
+                target_user_id BIGINT NOT NULL,
+                sender_id BIGINT NOT NULL,
+                sender_name VARCHAR(64) NOT NULL,
+                guild_id BIGINT NOT NULL,
+                note TEXT NOT NULL,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            );
+            """,
+            # Guild Tech Intelligence Feed Configuration
+            """
+            CREATE TABLE IF NOT EXISTS guild_tech_news (
+                guild_id BIGINT PRIMARY KEY,
+                channel_id BIGINT NOT NULL,
+                categories TEXT DEFAULT 'all',
+                thread_enabled BOOLEAN DEFAULT FALSE,
+                mode VARCHAR(20) DEFAULT 'live',
+                alert_role_id BIGINT,
+                last_digest_date VARCHAR(10),
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            );
+            """,
+            """
+            ALTER TABLE guild_tech_news ADD COLUMN IF NOT EXISTS mode VARCHAR(20) DEFAULT 'live';
+            """,
+            """
+            ALTER TABLE guild_tech_news ADD COLUMN IF NOT EXISTS alert_role_id BIGINT;
+            """,
+            """
+            ALTER TABLE guild_tech_news ADD COLUMN IF NOT EXISTS last_digest_date VARCHAR(10);
+            """,
+            # Dispatched Tech Intelligence Articles Registry for Deduplication
+            """
+            CREATE TABLE IF NOT EXISTS tech_news_history (
+                article_hash VARCHAR(64) PRIMARY KEY,
+                source VARCHAR(32) NOT NULL,
+                category VARCHAR(32) NOT NULL,
+                title TEXT NOT NULL,
+                url TEXT NOT NULL,
+                is_critical BOOLEAN DEFAULT FALSE,
+                dispatched_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            );
+            """,
+            """
+            ALTER TABLE tech_news_history ADD COLUMN IF NOT EXISTS is_critical BOOLEAN DEFAULT FALSE;
+            """,
+            """
+            ALTER TABLE tech_news_history ADD COLUMN IF NOT EXISTS title_hash VARCHAR(64);
+            """,
+            """
+            ALTER TABLE tech_news_history ADD COLUMN IF NOT EXISTS entity_hash VARCHAR(64);
+            """,
+            # Guild Developer Opportunities Feed Configuration
+            """
+            CREATE TABLE IF NOT EXISTS guild_dev_pulse (
+                guild_id BIGINT PRIMARY KEY,
+                channel_id BIGINT NOT NULL,
+                categories TEXT DEFAULT 'all',
+                thread_enabled BOOLEAN DEFAULT FALSE,
+                mode VARCHAR(20) DEFAULT 'live',
+                alert_role_id BIGINT,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            );
+            """,
+            # Dispatched Developer Opportunities Registry for Deduplication
+            """
+            CREATE TABLE IF NOT EXISTS dev_pulse_history (
+                item_hash VARCHAR(64) PRIMARY KEY,
+                source VARCHAR(32) NOT NULL,
+                category VARCHAR(32) NOT NULL,
+                title TEXT NOT NULL,
+                url TEXT NOT NULL,
+                title_hash VARCHAR(64),
+                entity_hash VARCHAR(64),
+                dispatched_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            );
+            """,
+            """
+            ALTER TABLE dev_pulse_history ADD COLUMN IF NOT EXISTS title_hash VARCHAR(64);
+            """,
+            """
+            ALTER TABLE dev_pulse_history ADD COLUMN IF NOT EXISTS entity_hash VARCHAR(64);
+            """,
+            """
+            CREATE INDEX IF NOT EXISTS idx_tech_news_title_hash ON tech_news_history(title_hash);
+            """,
+            """
+            CREATE INDEX IF NOT EXISTS idx_tech_news_entity_hash ON tech_news_history(entity_hash);
+            """,
+            """
+            CREATE INDEX IF NOT EXISTS idx_dev_pulse_title_hash ON dev_pulse_history(title_hash);
+            """,
+            """
+            CREATE INDEX IF NOT EXISTS idx_dev_pulse_entity_hash ON dev_pulse_history(entity_hash);
+            """,
+            """
+            ALTER TABLE guild_tech_news ADD COLUMN IF NOT EXISTS cadence VARCHAR(32) DEFAULT 'hourly';
+            """,
+            """
+            ALTER TABLE guild_tech_news ADD COLUMN IF NOT EXISTS last_dispatch_ts TIMESTAMP;
+            """,
+            """
+            ALTER TABLE guild_dev_pulse ADD COLUMN IF NOT EXISTS cadence VARCHAR(32) DEFAULT 'hourly';
+            """,
+            """
+            ALTER TABLE guild_dev_pulse ADD COLUMN IF NOT EXISTS last_dispatch_ts TIMESTAMP;
+            """,
+            # Community Projects Showcase Registry
+            """
+            CREATE TABLE IF NOT EXISTS community_projects (
+                id SERIAL PRIMARY KEY,
+                guild_id BIGINT NOT NULL,
+                user_id BIGINT NOT NULL,
+                title VARCHAR(120) NOT NULL,
+                description TEXT NOT NULL,
+                demo_url TEXT NOT NULL,
+                image_url TEXT,
+                message_id BIGINT,
+                channel_id BIGINT,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            );
+            """,
+            """
+            CREATE TABLE IF NOT EXISTS community_project_upvotes (
+                project_id INT REFERENCES community_projects(id) ON DELETE CASCADE,
+                user_id BIGINT NOT NULL,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                PRIMARY KEY (project_id, user_id)
+            );
+            """,
+            # Real-Time Cloud Infrastructure Outages Tracking Registry for Self-Healing Embeds
+            """
+            CREATE TABLE IF NOT EXISTS active_tech_incidents (
+                incident_id VARCHAR(64) NOT NULL,
+                guild_id BIGINT NOT NULL,
+                channel_id BIGINT NOT NULL,
+                message_id BIGINT NOT NULL,
+                provider VARCHAR(32) NOT NULL,
+                title TEXT NOT NULL,
+                status VARCHAR(32) NOT NULL,
+                impact VARCHAR(32) DEFAULT 'minor',
+                url TEXT NOT NULL,
+                started_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                resolved_at TIMESTAMP,
+                last_updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                PRIMARY KEY (incident_id, guild_id)
+            );
+            """,
+            # Critical Zero-Day CVEs and Supply Chain Threat Alerts Registry
+            """
+            CREATE TABLE IF NOT EXISTS tech_cve_history (
+                cve_id VARCHAR(64) PRIMARY KEY,
+                title TEXT NOT NULL,
+                severity VARCHAR(32) NOT NULL,
+                cvss_score FLOAT DEFAULT 9.0,
+                affected_package VARCHAR(120),
+                dispatched_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            );
+            """,
+            # Major Runtimes and Frameworks Release Radar Registry
+            """
+            CREATE TABLE IF NOT EXISTS tech_releases_history (
+                release_id VARCHAR(120) PRIMARY KEY,
+                project VARCHAR(64) NOT NULL,
+                tag_name VARCHAR(64) NOT NULL,
+                dispatched_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            );
+            """,
+            # Dynamic Temp Voice Channels Configuration
+            """
+            CREATE TABLE IF NOT EXISTS guild_temp_voice_settings (
+                guild_id BIGINT PRIMARY KEY,
+                category_id BIGINT NOT NULL,
+                master_channel_id BIGINT NOT NULL,
+                interface_channel_id BIGINT,
+                interface_message_id BIGINT,
+                default_name_format VARCHAR(100) DEFAULT '{user}''s Room',
+                default_user_limit INT DEFAULT 0,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            );
+            """,
+            """
+            ALTER TABLE guild_temp_voice_settings ADD COLUMN IF NOT EXISTS interface_channel_id BIGINT;
+            """,
+            """
+            ALTER TABLE guild_temp_voice_settings ADD COLUMN IF NOT EXISTS interface_message_id BIGINT;
+            """,
+            # Active Temp Voice Channels Tracking for Persistence & Cleanup
+            """
+            CREATE TABLE IF NOT EXISTS active_temp_voice_channels (
+                channel_id BIGINT PRIMARY KEY,
+                guild_id BIGINT NOT NULL,
+                owner_id BIGINT NOT NULL,
+                control_message_id BIGINT,
+                is_locked BOOLEAN DEFAULT FALSE,
+                is_hidden BOOLEAN DEFAULT FALSE,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            );
+            """,
+            # Sticky Messages Configuration & State
+            """
+            CREATE TABLE IF NOT EXISTS guild_sticky_messages (
+                channel_id BIGINT PRIMARY KEY,
+                guild_id BIGINT NOT NULL,
+                content TEXT NOT NULL,
+                embed_title VARCHAR(256),
+                embed_color VARCHAR(16),
+                last_message_id BIGINT,
+                is_enabled BOOLEAN DEFAULT TRUE,
+                created_by BIGINT,
+                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            );
+            """,
+            # Reaction Flag Translator Configuration
+            """
+            CREATE TABLE IF NOT EXISTS guild_translator_settings (
+                guild_id BIGINT PRIMARY KEY,
+                is_enabled BOOLEAN DEFAULT TRUE,
+                reaction_enabled BOOLEAN DEFAULT TRUE,
+                target_mode VARCHAR(16) DEFAULT 'ephemeral',
+                disabled_channels BIGINT[] DEFAULT '{}',
+                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            );
+            """,
+            # Dynamic Role Shortcuts Configuration
+            """
+            CREATE TABLE IF NOT EXISTS guild_role_shortcuts (
+                guild_id BIGINT NOT NULL,
+                shortcut_name VARCHAR(64) NOT NULL,
+                role_id BIGINT NOT NULL,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                PRIMARY KEY (guild_id, shortcut_name)
+            );
+            """,
+            # Antinuke Core Settings table
+            """
+            CREATE TABLE IF NOT EXISTS antinuke_settings (
+                guild_id BIGINT PRIMARY KEY,
+                enabled BOOLEAN DEFAULT FALSE,
+                log_channel_id BIGINT,
+                punishment VARCHAR(20) DEFAULT 'strip_roles',
+                vanity_protection BOOLEAN DEFAULT TRUE,
+                everyone_protection BOOLEAN DEFAULT TRUE,
+                role_protection BOOLEAN DEFAULT TRUE,
+                channel_protection BOOLEAN DEFAULT TRUE,
+                ban_protection BOOLEAN DEFAULT TRUE,
+                kick_protection BOOLEAN DEFAULT TRUE,
+                bot_protection BOOLEAN DEFAULT TRUE,
+                webhook_protection BOOLEAN DEFAULT TRUE,
+                prune_protection BOOLEAN DEFAULT TRUE,
+                automod_protection BOOLEAN DEFAULT TRUE,
+                integration_protection BOOLEAN DEFAULT TRUE,
+                emoji_protection BOOLEAN DEFAULT TRUE,
+                guild_update_protection BOOLEAN DEFAULT TRUE,
+                channel_create_protection BOOLEAN DEFAULT TRUE,
+                channel_delete_protection BOOLEAN DEFAULT TRUE,
+                channel_update_protection BOOLEAN DEFAULT TRUE,
+                role_create_protection BOOLEAN DEFAULT TRUE,
+                role_delete_protection BOOLEAN DEFAULT TRUE,
+                role_update_protection BOOLEAN DEFAULT TRUE,
+                webhook_create_protection BOOLEAN DEFAULT TRUE,
+                webhook_delete_protection BOOLEAN DEFAULT TRUE,
+                member_role_protection BOOLEAN DEFAULT TRUE,
+                sticker_protection BOOLEAN DEFAULT TRUE,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            );
+            """,
+            # Migrations for existing antinuke_settings table
+            "ALTER TABLE antinuke_settings ADD COLUMN IF NOT EXISTS channel_create_protection BOOLEAN DEFAULT TRUE;",
+            "ALTER TABLE antinuke_settings ADD COLUMN IF NOT EXISTS channel_delete_protection BOOLEAN DEFAULT TRUE;",
+            "ALTER TABLE antinuke_settings ADD COLUMN IF NOT EXISTS channel_update_protection BOOLEAN DEFAULT TRUE;",
+            "ALTER TABLE antinuke_settings ADD COLUMN IF NOT EXISTS role_create_protection BOOLEAN DEFAULT TRUE;",
+            "ALTER TABLE antinuke_settings ADD COLUMN IF NOT EXISTS role_delete_protection BOOLEAN DEFAULT TRUE;",
+            "ALTER TABLE antinuke_settings ADD COLUMN IF NOT EXISTS role_update_protection BOOLEAN DEFAULT TRUE;",
+            "ALTER TABLE antinuke_settings ADD COLUMN IF NOT EXISTS webhook_create_protection BOOLEAN DEFAULT TRUE;",
+            "ALTER TABLE antinuke_settings ADD COLUMN IF NOT EXISTS webhook_delete_protection BOOLEAN DEFAULT TRUE;",
+            "ALTER TABLE antinuke_settings ADD COLUMN IF NOT EXISTS member_role_protection BOOLEAN DEFAULT TRUE;",
+            "ALTER TABLE antinuke_settings ADD COLUMN IF NOT EXISTS sticker_protection BOOLEAN DEFAULT TRUE;",
+            # Antinuke Whitelist and Extra Owners table
+            """
+            CREATE TABLE IF NOT EXISTS antinuke_whitelist (
+                guild_id BIGINT NOT NULL,
+                user_id BIGINT NOT NULL,
+                is_extra_owner BOOLEAN DEFAULT FALSE,
+                is_full BOOLEAN DEFAULT TRUE,
+                scope TEXT DEFAULT '',
+                added_by BIGINT NOT NULL,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                PRIMARY KEY (guild_id, user_id)
+            );
+            """,
+            # Antinuke Role Whitelist table (any member holding a whitelisted role is immune)
+            """
+            CREATE TABLE IF NOT EXISTS antinuke_role_whitelist (
+                guild_id BIGINT NOT NULL,
+                role_id BIGINT NOT NULL,
+                is_full BOOLEAN DEFAULT TRUE,
+                scope TEXT DEFAULT '',
+                added_by BIGINT NOT NULL,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                PRIMARY KEY (guild_id, role_id)
+            );
+            """,
+            # Antinuke Incident & Attack History table
+            """
+            CREATE TABLE IF NOT EXISTS antinuke_incident_logs (
+                id SERIAL PRIMARY KEY,
+                guild_id BIGINT NOT NULL,
+                action VARCHAR(100) NOT NULL,
+                perpetrator_id BIGINT NOT NULL,
+                perpetrator_tag VARCHAR(100) NOT NULL,
+                punishment VARCHAR(50) NOT NULL,
+                mitigation TEXT NOT NULL,
+                details TEXT DEFAULT '',
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            );
+            """,
+            "CREATE INDEX IF NOT EXISTS idx_antinuke_incident_logs_guild ON antinuke_incident_logs(guild_id, created_at DESC);",
+            # Guild Media-Only Channels table
+            """
+            CREATE TABLE IF NOT EXISTS guild_media_channels (
+                guild_id BIGINT NOT NULL,
+                channel_id BIGINT NOT NULL,
+                added_by BIGINT,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                PRIMARY KEY (guild_id, channel_id)
+            );
+            """,
+            # Giveaways Management tables
+            """
+            CREATE TABLE IF NOT EXISTS giveaways (
+                id SERIAL PRIMARY KEY,
+                guild_id BIGINT NOT NULL,
+                channel_id BIGINT NOT NULL,
+                message_id BIGINT NOT NULL UNIQUE,
+                host_id BIGINT NOT NULL,
+                prize VARCHAR(255) NOT NULL,
+                winner_count INT DEFAULT 1,
+                ends_at TIMESTAMP NOT NULL,
+                required_role_id BIGINT,
+                is_ended BOOLEAN DEFAULT FALSE,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            );
+            """,
+            """
+            CREATE TABLE IF NOT EXISTS giveaway_participants (
+                giveaway_id INT NOT NULL REFERENCES giveaways(id) ON DELETE CASCADE,
+                user_id BIGINT NOT NULL,
+                joined_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                PRIMARY KEY (giveaway_id, user_id)
+            );
+            """,
+            "CREATE INDEX IF NOT EXISTS idx_giveaways_active ON giveaways(guild_id, is_ended, ends_at);",
+            # Owner security audit trail; contains IDs/actions only, never credentials.
+            "CREATE TABLE IF NOT EXISTS kyoka_audit_log (id BIGSERIAL PRIMARY KEY, actor_id BIGINT NOT NULL, action VARCHAR(80) NOT NULL, target_id BIGINT, occurred_at TIMESTAMPTZ NOT NULL, outcome VARCHAR(24) NOT NULL, details VARCHAR(500) DEFAULT '')",
+            "CREATE INDEX IF NOT EXISTS idx_kyoka_audit_recent ON kyoka_audit_log(occurred_at DESC)",
+            # Premium lifecycle history.
+            "CREATE TABLE IF NOT EXISTS kyoka_premium_history (id BIGSERIAL PRIMARY KEY, scope VARCHAR(16) NOT NULL, target_id BIGINT NOT NULL, tier VARCHAR(16) NOT NULL, action VARCHAR(24) NOT NULL, actor_id BIGINT NOT NULL, expires_at TIMESTAMPTZ, note VARCHAR(500) DEFAULT '', occurred_at TIMESTAMPTZ NOT NULL)",
+            "ALTER TABLE guild_premium ADD COLUMN IF NOT EXISTS status VARCHAR(16) NOT NULL DEFAULT 'active'",
+            "ALTER TABLE guild_premium ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP",
+            "ALTER TABLE guild_premium ADD COLUMN IF NOT EXISTS activated_by BIGINT",
+            "ALTER TABLE user_premium ADD COLUMN IF NOT EXISTS status VARCHAR(16) NOT NULL DEFAULT 'active'",
+            "ALTER TABLE user_premium ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP",
+            "ALTER TABLE user_premium ADD COLUMN IF NOT EXISTS activated_by BIGINT",
+        ]
+        if not self.pool or self.pool._closed:
+            await self._heal_pool()
+        async with self.pool.acquire() as conn:
+            for query in queries:
+                await conn.execute(query)
+        logger.info("PostgreSQL database schemas verified successfully.")
+
+    def _convert_query(self, query: str) -> str:
+        """Convert SQLite-specific query syntax to standard PostgreSQL."""
+        converted = query
+        if "INSERT OR IGNORE INTO" in converted:
+            converted = converted.replace("INSERT OR IGNORE INTO", "INSERT INTO")
+            if "ON CONFLICT" not in converted:
+                converted = converted.rstrip(";") + " ON CONFLICT DO NOTHING;"
+
+        if "?" not in converted:
+            return converted
+
+        parts = converted.split("?")
+        result = []
+        for i, part in enumerate(parts[:-1]):
+            result.append(part)
+            result.append(f"${i + 1}")
+        result.append(parts[-1])
+        return "".join(result)
+
+    async def execute(self, query: str, *args: Any) -> None:
+        """Execute a query with automatic connection recovery and exponential retry."""
+        pg_query = self._convert_query(query)
+        delays = [0.2, 0.5, 1.5]
+        for attempt, delay in enumerate(delays):
+            try:
+                if not self.pool or self.pool._closed:
+                    await self._heal_pool()
+                async with self.pool.acquire(timeout=10) as conn:
+                    await conn.execute(pg_query, *args)
+                return
+            except (asyncpg.PostgresConnectionError, asyncpg.InterfaceError, asyncio.TimeoutError, ConnectionResetError, OSError) as e:
+                logger.warning(f"Database transient error on execute (attempt {attempt+1}): {e}. Retrying in {delay}s...")
+                await asyncio.sleep(delay)
+                await self._heal_pool()
+
+        # Final attempt
+        if not self.pool or self.pool._closed:
+            await self._heal_pool()
+        async with self.pool.acquire(timeout=10) as conn:
+            await conn.execute(pg_query, *args)
+
+    async def fetch_one(self, query: str, *args: Any) -> dict[str, Any] | None:
+        """Fetch a single record with self-healing retry resilience."""
+        pg_query = self._convert_query(query)
+        delays = [0.2, 0.5, 1.5]
+        for attempt, delay in enumerate(delays):
+            try:
+                if not self.pool or self.pool._closed:
+                    await self._heal_pool()
+                async with self.pool.acquire(timeout=10) as conn:
+                    row = await conn.fetchrow(pg_query, *args)
+                    return dict(row) if row else None
+            except (asyncpg.PostgresConnectionError, asyncpg.InterfaceError, asyncio.TimeoutError, ConnectionResetError, OSError) as e:
+                logger.warning(f"Database transient error on fetch_one (attempt {attempt+1}): {e}. Retrying in {delay}s...")
+                await asyncio.sleep(delay)
+                await self._heal_pool()
+
+        # Final attempt
+        if not self.pool or self.pool._closed:
+            await self._heal_pool()
+        async with self.pool.acquire(timeout=10) as conn:
+            row = await conn.fetchrow(pg_query, *args)
+            return dict(row) if row else None
+
+    async def fetch_all(self, query: str, *args: Any) -> list[dict[str, Any]]:
+        """Fetch multiple records with self-healing retry resilience."""
+        pg_query = self._convert_query(query)
+        delays = [0.2, 0.5, 1.5]
+        for attempt, delay in enumerate(delays):
+            try:
+                if not self.pool or self.pool._closed:
+                    await self._heal_pool()
+                async with self.pool.acquire(timeout=10) as conn:
+                    rows = await conn.fetch(pg_query, *args)
+                    return [dict(r) for r in rows]
+            except (asyncpg.PostgresConnectionError, asyncpg.InterfaceError, asyncio.TimeoutError, ConnectionResetError, OSError) as e:
+                logger.warning(f"Database transient error on fetch_all (attempt {attempt+1}): {e}. Retrying in {delay}s...")
+                await asyncio.sleep(delay)
+                await self._heal_pool()
+
+        # Final attempt
+        if not self.pool or self.pool._closed:
+            await self._heal_pool()
+        async with self.pool.acquire(timeout=10) as conn:
+            rows = await conn.fetch(pg_query, *args)
+            return [dict(r) for r in rows]

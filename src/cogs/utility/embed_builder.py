@@ -1,0 +1,2116 @@
+"""
+Kyoka Discord Bot - Advanced Dual Embed & Card Builder
+Top Container: Real-time Live Preview Card.
+Bottom Container: 5-Step Control Dashboard with full editing capabilities.
+Includes Discohook/JSON/HTML raw import, dynamic variable engine, FAQ dropdowns, and button rows.
+"""
+
+from __future__ import annotations
+
+import json
+import logging
+import re
+from typing import Any, TYPE_CHECKING
+import discord
+from discord.ext import commands
+
+from src.core.context import CustomContext
+from src.utils.containers import (
+    KyokaContainer,
+    send_container_response,
+    edit_container_response,
+    build_container_payload,
+)
+from src.utils.image_tools import create_slim_banner, download_image_bytes
+
+if TYPE_CHECKING:
+    from src.core.bot import KyokaBot
+
+logger = logging.getLogger("Kyoka.EmbedBuilder")
+
+
+# ─── Dynamic Variable Parser ──────────────────────────────────────────────────
+
+def apply_placeholders(
+    text: str | None,
+    user: discord.Member | discord.User | None,
+    guild: discord.Guild | None,
+    channel: discord.abc.GuildChannel | discord.Thread | discord.abc.Messageable | None = None,
+    bot: KyokaBot | None = None,
+) -> str:
+    """Replace comprehensive dynamic template variables in text."""
+    if not text:
+        return ""
+
+    now = discord.utils.utcnow()
+    replacements: dict[str, str] = {
+        # Timestamps
+        "{timestamp}": f"<t:{int(now.timestamp())}:f>",
+        "{timestamp.short_datetime}": f"<t:{int(now.timestamp())}:f>",
+        "{timestamp.long_datetime}": f"<t:{int(now.timestamp())}:F>",
+        "{timestamp.short_date}": f"<t:{int(now.timestamp())}:d>",
+        "{timestamp.long_date}": f"<t:{int(now.timestamp())}:D>",
+        "{timestamp.short_time}": f"<t:{int(now.timestamp())}:t>",
+        "{timestamp.long_time}": f"<t:{int(now.timestamp())}:T>",
+        "{timestamp.relative}": f"<t:{int(now.timestamp())}:R>",
+        "{relative_time}": f"<t:{int(now.timestamp())}:R>",
+        "{date}": now.strftime("%Y-%m-%d"),
+        "{time}": now.strftime("%H:%M:%S UTC"),
+        "{unix}": str(int(now.timestamp())),
+    }
+
+    if user:
+        u_mention = user.mention
+        created_ts = int(user.created_at.timestamp())
+        replacements.update({
+            "@{user.mention}": u_mention,
+            "@{member.mention}": u_mention,
+            "<@{user.mention}>": u_mention,
+            "<@{member.mention}>": u_mention,
+            "<@{user.id}>": u_mention,
+            "<@{member.id}>": u_mention,
+            "@{user.id}": u_mention,
+            "@{member.id}": u_mention,
+            "<@{user}>": u_mention,
+            "<@{member}>": u_mention,
+            "@{user}": u_mention,
+            "@{member}": u_mention,
+            "@{mention}": u_mention,
+            "{user.mention}": u_mention,
+            "{member.mention}": u_mention,
+            "{user_mention}": u_mention,
+            "{member_mention}": u_mention,
+            "{user}": u_mention,
+            "{member}": u_mention,
+            "{mention}": u_mention,
+            "{user.name}": user.name,
+            "{user.display_name}": user.display_name,
+            "{user.id}": str(user.id),
+            "{avatar}": str(user.display_avatar.url),
+            "{user.avatar}": str(user.display_avatar.url),
+            "{user.avatar_url}": str(user.display_avatar.url),
+            "{user.default_avatar_url}": str(user.default_avatar.url),
+            "{user.created_at}": user.created_at.strftime("%Y-%m-%d"),
+            "{user.created_at_timestamp}": f"<t:{created_ts}:R>",
+            "{user.bot}": str(user.bot),
+        })
+        if isinstance(user, discord.Member):
+            joined_ts = int(user.joined_at.timestamp()) if user.joined_at else 0
+            replacements.update({
+                "{user.joined_at}": user.joined_at.strftime("%Y-%m-%d") if user.joined_at else "N/A",
+                "{user.joined_at_timestamp}": f"<t:{joined_ts}:R>" if joined_ts else "N/A",
+                "{user.top_role}": user.top_role.name if user.top_role else "None",
+                "{user.top_role_mention}": user.top_role.mention if user.top_role else "None",
+                "{user.roles_count}": str(len(user.roles) - 1),
+                "{user.color}": str(user.color),
+            })
+
+    if guild:
+        guild_created_ts = int(guild.created_at.timestamp())
+        m_cnt = guild.member_count or 0
+        m_fmt = f"{m_cnt:,}"
+        n = m_cnt
+        if 11 <= (n % 100) <= 13:
+            sfx = "th"
+        else:
+            sfx = {1: "st", 2: "nd", 3: "rd"}.get(n % 10, "th")
+        ord_val = f"{n:,}{sfx}"
+
+        replacements.update({
+            "{server}": guild.name,
+            "{server.name}": guild.name,
+            "{server.id}": str(guild.id),
+            "{count}": m_fmt,
+            "{member_count}": m_fmt,
+            "{members}": m_fmt,
+            "{count.ordinal}": ord_val,
+            "{server.members}": str(m_cnt),
+            "{server.member_count}": str(m_cnt),
+            "{server.icon}": str(guild.icon.url) if guild.icon else "",
+            "{server.icon_url}": str(guild.icon.url) if guild.icon else "",
+            "{server.banner}": str(guild.banner.url) if guild.banner else "",
+            "{server.banner_url}": str(guild.banner.url) if guild.banner else "",
+            "{server.splash}": str(guild.splash.url) if guild.splash else "",
+            "{server.splash_url}": str(guild.splash.url) if guild.splash else "",
+            "{server.owner_id}": str(guild.owner_id),
+            "{server.created_at}": guild.created_at.strftime("%Y-%m-%d"),
+            "{server.created_at_timestamp}": f"<t:{guild_created_ts}:R>",
+            "{server.boost_count}": str(guild.premium_subscription_count or 0),
+            "{server.boosts}": str(guild.premium_subscription_count or 0),
+            "{server.boost_tier}": str(guild.premium_tier),
+            "{server.tier}": str(guild.premium_tier),
+            "{server.roles_count}": str(len(guild.roles)),
+            "{server.channels_count}": str(len(guild.channels)),
+        })
+        if guild.owner:
+            replacements.update({
+                "{server.owner}": guild.owner.display_name,
+                "{server.owner.name}": guild.owner.name,
+                "{server.owner.mention}": guild.owner.mention,
+            })
+
+    if channel:
+        replacements.update({
+            "{channel}": getattr(channel, "mention", f"#{channel}"),
+            "{channel.name}": getattr(channel, "name", str(channel)),
+            "{channel.id}": str(getattr(channel, "id", 0)),
+            "{channel.mention}": getattr(channel, "mention", f"#{channel}"),
+            "{channel.topic}": getattr(channel, "topic", "") or "",
+        })
+
+    if bot and bot.user:
+        replacements.update({
+            "{bot}": bot.user.mention,
+            "{bot.name}": bot.user.name,
+            "{bot.id}": str(bot.user.id),
+            "{bot.avatar}": str(bot.user.display_avatar.url),
+            "{bot.avatar_url}": str(bot.user.display_avatar.url),
+            "{bot.prefix}": bot.guild_mgr.get_prefix(guild.id if guild else None) if hasattr(bot, "guild_mgr") else "?",
+            "{bot.ping}": f"{round(bot.latency * 1000)}ms" if bot.latency else "0ms",
+            "{bot.latency}": f"{round(bot.latency * 1000)}ms" if bot.latency else "0ms",
+            "{bot.guilds_count}": str(len(bot.guilds)),
+        })
+
+    result = text
+    for key, val in replacements.items():
+        result = result.replace(key, str(val))
+
+    if user:
+        result = re.sub(r"(?i)(?<!<)@(?:user|member)\b", user.mention, result)
+        result = re.sub(r"@+<@!?(\d+)>", r"<@\1>", result)
+        result = re.sub(r"<+@*<@!?(\d+)>*>", r"<@\1>", result)
+
+    return result
+
+
+def convert_html_to_markdown(text: str) -> str:
+    """Convert basic HTML tags to Discord Markdown format."""
+    if not text:
+        return ""
+    t = text
+    t = re.sub(r"<blockquote>(.*?)</blockquote>", r"> \1\n", t, flags=re.IGNORECASE | re.DOTALL)
+    t = re.sub(r"<(?:b|strong)>(.*?)</(?:b|strong)>", r"**\1**", t, flags=re.IGNORECASE | re.DOTALL)
+    t = re.sub(r"<(?:i|em)>(.*?)</(?:i|em)>", r"*\1*", t, flags=re.IGNORECASE | re.DOTALL)
+    t = re.sub(r"<u>(.*?)</u>", r"__\1__", t, flags=re.IGNORECASE | re.DOTALL)
+    t = re.sub(r"<(?:s|strike|del)>(.*?)</(?:s|strike|del)>", r"~~\1~~", t, flags=re.IGNORECASE | re.DOTALL)
+    t = re.sub(r'<a\s+href=["\'](.*?)["\']>(.*?)</a>', r"[\2](\1)", t, flags=re.IGNORECASE | re.DOTALL)
+    t = re.sub(r"<code>(.*?)</code>", r"`\1`", t, flags=re.IGNORECASE | re.DOTALL)
+    t = re.sub(r"<br\s*/?>", "\n", t, flags=re.IGNORECASE)
+    t = re.sub(r"<p>(.*?)</p>", r"\1\n", t, flags=re.IGNORECASE | re.DOTALL)
+    return t
+
+
+def clean_description_markdown(text: str) -> str:
+    """Ensure Discord blockquote (>) and markdown syntax renders properly."""
+    if not text:
+        return ""
+    lines = text.split("\n")
+    fixed_lines = []
+    for line in lines:
+        # If user wrote '>text' without space, convert to '> text' so Discord recognizes blockquote
+        if re.match(r"^>([^\s>].*)$", line):
+            fixed_lines.append(f"> {line[1:]}")
+        else:
+            fixed_lines.append(line)
+    return "\n".join(fixed_lines)
+
+
+def parse_markdown_link(text: str | None) -> tuple[str | None, str | None]:
+    """Extract [Label](url) into (Label, URL)."""
+    if not text:
+        return None, None
+    m = re.match(r"^\[(.*?)\]\((https?://[^\s]+)\)$", text.strip())
+    if m:
+        return m.group(1), m.group(2)
+    return text.strip(), None
+
+
+def format_title_line(text: str, url: str | None = None) -> str:
+    """Format title text preserving blockquotes, headers, and custom markdown without unwanted bolding."""
+    if not text:
+        return ""
+    if url and url.startswith("http"):
+        return f"**[{text}]({url})**"
+    stripped = text.strip()
+    if stripped.startswith(("#", ">", "-#", "*", "_", "`")):
+        return text
+    return f"**{text}**"
+
+
+# ─── Data Model ───────────────────────────────────────────────────────────────
+
+class ContainerDraft:
+    """Modular data model for custom Components V2 container cards."""
+
+    def __init__(self) -> None:
+        self.author_name: str | None = None
+        self.author_icon_url: str | None = None
+        self.author_url: str | None = None
+
+        self.title: str | None = "Kyoka Custom Card"
+        self.title_url: str | None = None
+
+        self.description: str | None = "This is your live Components V2 preview. Edit options below to customize."
+
+        self.fields: list[dict[str, str]] = []  # [{"name": "...", "value": "..."}]
+
+        self.top_image_url: str | None = None
+        self.thumbnail_url: str | None = None
+        self.image_url: str | None = None
+
+        self.footer_text: str | None = None
+        self.footer_icon_url: str | None = None
+        self.divider_line: bool = True
+        self.timestamp: bool = False
+
+        self.accent_hex: str | None = None
+        self.buttons: list[dict[str, str]] = []  # [{"label": "...", "url": "..."}]
+        self.modules: list[dict[str, Any]] = []  # [{"id": "mod_0", "label": "...", "description": "...", "page_title": "...", "content": "..."}]
+
+    def get_accent_int(self) -> int | None:
+        if not self.accent_hex or self.accent_hex.strip().lower() in ["none", "dark", "default"]:
+            return None
+        clean = self.accent_hex.strip().lstrip("#")
+        try:
+            return int(clean, 16)
+        except ValueError:
+            return None
+
+    def to_container(
+        self,
+        active_module_id: str | None = None,
+        user: discord.Member | discord.User | None = None,
+        guild: discord.Guild | None = None,
+        channel: discord.abc.GuildChannel | discord.Thread | discord.abc.Messageable | None = None,
+        bot: KyokaBot | None = None,
+        default_avatar: str | None = None,
+        include_controls: bool = True,
+    ) -> KyokaContainer:
+        """Convert draft into a Discord Components V2 KyokaContainer with dynamic module page support."""
+        container = KyokaContainer(accent_color=self.get_accent_int())
+
+        def parse(t: str | None) -> str:
+            if not t:
+                return ""
+            return apply_placeholders(t, user=user, guild=guild, channel=channel, bot=bot)
+
+        # Check for active module page
+        active_mod: dict[str, Any] | None = None
+        if active_module_id and active_module_id not in ["home", "mod_home"]:
+            for idx, m in enumerate(self.modules):
+                if m.get("id") == active_module_id or f"mod_{idx}" == active_module_id or m.get("label") == active_module_id:
+                    active_mod = m
+                    break
+
+        if active_mod:
+            # ─── ACTIVE MODULE SUB-PAGE VIEW (Clean Standalone) ───────────────
+            page_title = active_mod.get("page_title") or active_mod.get("label") or "Page"
+            page_title_parsed = parse(page_title)
+            formatted_title = format_title_line(page_title_parsed)
+            page_content_parsed = clean_description_markdown(parse(active_mod.get("content", "")))
+
+            # Thumbnail for module if set, else fallback to global thumbnail
+            mod_thumb = active_mod.get("thumbnail_url") or self.thumbnail_url or self.author_icon_url
+            mod_thumb_parsed = parse(mod_thumb)
+            accessory_dict = None
+            if mod_thumb_parsed and mod_thumb_parsed.startswith("http"):
+                accessory_dict = {
+                    "type": 11,
+                    "media": {"url": mod_thumb_parsed},
+                }
+
+            if self.divider_line:
+                container.add_section(content=formatted_title, accessory=accessory_dict)
+                if page_content_parsed:
+                    container.add_separator(divider=True)
+                    container.add_text(page_content_parsed)
+            else:
+                combined = f"{formatted_title}\n{page_content_parsed}" if page_content_parsed else formatted_title
+                container.add_section(content=combined, accessory=accessory_dict)
+
+        else:
+            # ─── BASE OVERVIEW VIEW ──────────────────────────────────────────
+            # top Header Banner Image (If set, placed at the VERY TOP of the card)
+            top_banner_url = parse(self.top_image_url)
+            if top_banner_url and top_banner_url.startswith("http"):
+                container.components.append({
+                    "type": 12,
+                    "items": [{"media": {"url": top_banner_url}}],
+                })
+                if self.divider_line:
+                    container.add_separator(divider=True)
+
+            author_raw = parse(self.author_name)
+            author_text, author_url_extracted = parse_markdown_link(author_raw)
+            final_author_url = self.author_url or author_url_extracted
+
+            title_raw = parse(self.title)
+            title_text, title_url_extracted = parse_markdown_link(title_raw)
+            final_title_url = self.title_url or title_url_extracted
+
+            desc_text = clean_description_markdown(parse(self.description))
+
+            thumb_url = parse(self.thumbnail_url or self.author_icon_url)
+            accessory_dict = None
+            if thumb_url and thumb_url.startswith("http"):
+                accessory_dict = {
+                    "type": 11,
+                    "media": {"url": thumb_url},
+                }
+
+            top_lines = []
+            if author_text and title_text:
+                if final_author_url and final_author_url.startswith("http"):
+                    top_lines.append(f"-# **[{author_text}]({final_author_url})**")
+                else:
+                    top_lines.append(f"-# **{author_text}**" if not author_text.startswith(("#", ">", "-#", "*", "_", "`")) else author_text)
+                top_lines.append(format_title_line(title_text, final_title_url))
+            elif author_text:
+                if final_author_url and final_author_url.startswith("http"):
+                    top_lines.append(f"**[{author_text}]({final_author_url})**")
+                else:
+                    top_lines.append(f"**{author_text}**" if not author_text.startswith(("#", ">", "-#", "*", "_", "`")) else author_text)
+            elif title_text:
+                top_lines.append(format_title_line(title_text, final_title_url))
+
+            if top_lines:
+                top_header_content = "\n".join(top_lines)
+                container.add_section(content=top_header_content, accessory=accessory_dict)
+            elif accessory_dict:
+                container.add_section(content="\u200b", accessory=accessory_dict)
+
+            if desc_text:
+                if container.components and self.divider_line:
+                    container.add_separator(divider=True)
+                container.add_text(desc_text)
+
+            # Custom Fields (Only on Main Overview)
+            if self.fields:
+                field_lines = []
+                for f in self.fields:
+                    f_name = parse(f.get("name", ""))
+                    f_val = parse(f.get("value", ""))
+                    if f_name and f_val:
+                        field_lines.append(f"**{f_name}**\n{f_val}")
+                    elif f_name:
+                        field_lines.append(f"**{f_name}**")
+                    elif f_val:
+                        field_lines.append(f_val)
+
+                if field_lines:
+                    if container.components and self.divider_line:
+                        container.add_separator(divider=True)
+                    container.add_text("\n\n".join(field_lines))
+
+            # Large Banner Image (Only on Main Overview)
+            banner_url = parse(self.image_url)
+            if banner_url and banner_url.startswith("http"):
+                if container.components and self.divider_line:
+                    container.add_separator(divider=True)
+                container.components.append({
+                    "type": 12,
+                    "items": [{"media": {"url": banner_url}}],
+                })
+
+        # Footer Subtext (Only on Main Overview, NOT on Module Sub-Pages)
+        if not active_mod:
+            footer_raw = parse(self.footer_text)
+            footer_parts = []
+            if footer_raw:
+                footer_parts.append(footer_raw)
+            if self.timestamp:
+                import datetime
+                now_str = datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
+                footer_parts.append(now_str)
+
+            if footer_parts:
+                if container.components and self.divider_line:
+                    container.add_separator(divider=True)
+                container.add_text(f"-# {' • '.join(footer_parts)}")
+
+        # ─── SHARED CONTROLS (Modules Dropdown & Buttons at the bottom) ─────
+
+        # Dropdown Module Switcher (Always inside the card container)
+        if self.modules:
+            select_opts = [
+                {
+                    "label": "Main Overview",
+                    "value": "mod_home",
+                    "description": "Return to original card overview",
+                    "default": (active_mod is None),
+                }
+            ]
+            for idx, mod in enumerate(self.modules[:24]):
+                mod_id = mod.get("id", f"mod_{idx}")
+                is_selected = (active_mod is not None and active_mod.get("id") == mod_id)
+                select_opts.append({
+                    "label": parse(mod.get("label", f"Page {idx + 1}"))[:100],
+                    "value": mod_id,
+                    "description": parse(mod.get("description", ""))[:100] if mod.get("description") else None,
+                    "default": is_selected,
+                })
+            container.add_action_row([
+                {
+                    "type": 3,
+                    "custom_id": "card_module_select",
+                    "placeholder": "Select a module / page...",
+                    "options": select_opts,
+                }
+            ])
+
+        # Link Buttons Row (Always at the very bottom of the card)
+        if self.buttons:
+            btn_comps = []
+            for b in self.buttons[:5]:
+                btn_comps.append({
+                    "type": 2,
+                    "style": 5,  # Link URL Button
+                    "label": parse(b.get("label", "Link")),
+                    "url": parse(b.get("url", "https://discord.com")),
+                })
+            container.add_action_row(btn_comps)
+
+        if not container.components:
+            container.add_text("*Empty card preview. Use the controls below to add content.*")
+
+        container._fallback_embed = self.to_embed(
+            active_module_id=active_module_id,
+            user=user,
+            guild=guild,
+            channel=channel,
+            bot=bot,
+            default_avatar=default_avatar,
+        )
+
+        return container
+
+    def to_embed(
+        self,
+        active_module_id: str | None = None,
+        user: discord.Member | discord.User | None = None,
+        guild: discord.Guild | None = None,
+        channel: discord.abc.GuildChannel | discord.Thread | discord.abc.Messageable | None = None,
+        bot: KyokaBot | None = None,
+        default_avatar: str | None = None,
+    ) -> discord.Embed:
+        """Convert draft into a standard rich discord.Embed with full formatting."""
+        def parse(t: str | None) -> str:
+            if not t:
+                return ""
+            return apply_placeholders(t, user=user, guild=guild, channel=channel, bot=bot)
+
+        active_mod: dict[str, Any] | None = None
+        if active_module_id and active_module_id not in ["home", "mod_home"]:
+            for idx, m in enumerate(self.modules):
+                if m.get("id") == active_module_id or f"mod_{idx}" == active_module_id or m.get("label") == active_module_id:
+                    active_mod = m
+                    break
+
+        accent = self.get_accent_int()
+        embed = discord.Embed(color=accent if accent is not None else None)
+
+        if active_mod:
+            page_title = active_mod.get("page_title") or active_mod.get("label") or "Page"
+            embed.title = parse(page_title)
+            embed.description = clean_description_markdown(parse(active_mod.get("content", "")))
+        else:
+            author_raw = parse(self.author_name)
+            author_text, author_url_extracted = parse_markdown_link(author_raw)
+            final_author_url = self.author_url or author_url_extracted
+            author_icon = parse(self.author_icon_url)
+            if author_text:
+                embed.set_author(
+                    name=author_text,
+                    url=final_author_url if (final_author_url and final_author_url.startswith("http")) else None,
+                    icon_url=author_icon if (author_icon and author_icon.startswith("http")) else None,
+                )
+
+            title_raw = parse(self.title)
+            title_text, title_url_extracted = parse_markdown_link(title_raw)
+            final_title_url = self.title_url or title_url_extracted
+            if title_text:
+                embed.title = title_text
+                if final_title_url and final_title_url.startswith("http"):
+                    embed.url = final_title_url
+
+            embed.description = clean_description_markdown(parse(self.description))
+
+            if self.fields:
+                for f in self.fields:
+                    fn = parse(f.get("name", ""))
+                    fv = parse(f.get("value", ""))
+                    if fn and fv:
+                        embed.add_field(name=fn, value=fv, inline=False)
+
+            banner_url = parse(self.image_url)
+            if banner_url and banner_url.startswith("http"):
+                embed.set_image(url=banner_url)
+
+        thumb_url = parse(self.thumbnail_url or self.author_icon_url)
+        if thumb_url and thumb_url.startswith("http"):
+            embed.set_thumbnail(url=thumb_url)
+
+        footer_raw = parse(self.footer_text)
+        footer_icon = parse(self.footer_icon_url)
+        if footer_raw:
+            embed.set_footer(
+                text=footer_raw,
+                icon_url=footer_icon if (footer_icon and footer_icon.startswith("http")) else None,
+            )
+        if self.timestamp:
+            import datetime
+            embed.timestamp = datetime.datetime.now(datetime.timezone.utc)
+
+        return embed
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "author_name": self.author_name,
+            "author_icon_url": self.author_icon_url,
+            "author_url": self.author_url,
+            "title": self.title,
+            "title_url": self.title_url,
+            "description": self.description,
+            "fields": self.fields,
+            "top_image_url": self.top_image_url,
+            "thumbnail_url": self.thumbnail_url,
+            "image_url": self.image_url,
+            "footer_text": self.footer_text,
+            "footer_icon_url": self.footer_icon_url,
+            "divider_line": self.divider_line,
+            "timestamp": self.timestamp,
+            "accent_hex": self.accent_hex,
+            "buttons": self.buttons,
+            "modules": self.modules,
+        }
+
+    @classmethod
+    def from_dict(cls, data: dict[str, Any]) -> ContainerDraft:
+        draft = cls()
+        draft.author_name = data.get("author_name")
+        draft.author_icon_url = data.get("author_icon_url")
+        draft.author_url = data.get("author_url")
+        draft.title = data.get("title")
+        draft.title_url = data.get("title_url")
+        draft.description = data.get("description")
+        draft.fields = data.get("fields", [])
+        draft.top_image_url = data.get("top_image_url") or data.get("top_banner_url")
+        draft.thumbnail_url = data.get("thumbnail_url")
+        draft.image_url = data.get("image_url") or data.get("banner_url") or data.get("bottom_image_url")
+        draft.footer_text = data.get("footer_text")
+        draft.footer_icon_url = data.get("footer_icon_url")
+        draft.divider_line = data.get("divider_line", True)
+        draft.timestamp = bool(data.get("timestamp", False))
+        draft.accent_hex = data.get("accent_hex")
+        draft.buttons = data.get("buttons", [])
+        draft.modules = data.get("modules") or data.get("faq_options") or []
+        return draft
+
+    @classmethod
+    def from_raw_payload(cls, raw: str) -> ContainerDraft:
+        """Parse raw JSON (Discohook, standard Discord Embed, or internal dict) and HTML."""
+        cleaned = raw.strip()
+        draft = cls()
+
+        try:
+            parsed_json = json.loads(cleaned)
+            if isinstance(parsed_json, dict):
+                # Check for Discohook / Standard Embed format: {"embeds": [{...}]}
+                if "embeds" in parsed_json and isinstance(parsed_json["embeds"], list) and parsed_json["embeds"]:
+                    emb = parsed_json["embeds"][0]
+                    draft.title = emb.get("title")
+                    draft.description = convert_html_to_markdown(emb.get("description", ""))
+                    draft.title_url = emb.get("url")
+                    if "author" in emb:
+                        draft.author_name = emb["author"].get("name")
+                        draft.author_icon_url = emb["author"].get("icon_url")
+                        draft.author_url = emb["author"].get("url")
+                    if "thumbnail" in emb:
+                        draft.thumbnail_url = emb["thumbnail"].get("url")
+                    if "image" in emb:
+                        draft.image_url = emb["image"].get("url")
+                    if "top_image" in emb:
+                        draft.top_image_url = emb["top_image"].get("url")
+                    if "footer" in emb:
+                        draft.footer_text = emb["footer"].get("text")
+                        draft.footer_icon_url = emb["footer"].get("icon_url")
+                    if "color" in emb:
+                        draft.accent_hex = f"#{emb['color']:06x}"
+                    if "fields" in emb and isinstance(emb["fields"], list):
+                        draft.fields = [{"name": f.get("name", ""), "value": convert_html_to_markdown(f.get("value", ""))} for f in emb["fields"]]
+                    return draft
+
+                if "title" in parsed_json or "description" in parsed_json or "fields" in parsed_json or "modules" in parsed_json:
+                    return cls.from_dict(parsed_json)
+        except Exception:
+            pass
+
+        # Plain text / HTML fallback
+        draft.description = convert_html_to_markdown(cleaned)
+        return draft
+
+
+# ─── Modals (5-Step Focused Inputs) ──────────────────────────────────────────
+
+class ContentModal(discord.ui.Modal, title="Step 1: Content & Theme"):
+    def __init__(self, view: EmbedBuilderView) -> None:
+        super().__init__()
+        self.view_ref = view
+
+        self.title_input = discord.ui.TextInput(
+            label="Title",
+            placeholder="Card title headline or [Title](https://...)",
+            default=self.view_ref.draft.title or "",
+            max_length=256,
+            required=False,
+        )
+        self.author_input = discord.ui.TextInput(
+            label="Author Name",
+            placeholder="Author name or [Author Name](https://...)",
+            default=self.view_ref.draft.author_name or "",
+            max_length=256,
+            required=False,
+        )
+        self.author_icon_input = discord.ui.TextInput(
+            label="Author Icon / Avatar URL",
+            placeholder="https://.../icon.png or {user.avatar}",
+            default=self.view_ref.draft.author_icon_url or "",
+            max_length=500,
+            required=False,
+        )
+        self.desc_input = discord.ui.TextInput(
+            label="Description",
+            style=discord.TextStyle.paragraph,
+            placeholder="Main description text, [rules](url), {user}, {server}...",
+            default=self.view_ref.draft.description or "",
+            max_length=4000,
+            required=False,
+        )
+        self.accent_input = discord.ui.TextInput(
+            label="Accent Color",
+            placeholder="#00FF66, #5865F2, or 'none'",
+            default=self.view_ref.draft.accent_hex or "none",
+            max_length=20,
+            required=False,
+        )
+
+        self.add_item(self.title_input)
+        self.add_item(self.author_input)
+        self.add_item(self.author_icon_input)
+        self.add_item(self.desc_input)
+        self.add_item(self.accent_input)
+
+    async def on_submit(self, interaction: discord.Interaction) -> None:
+        t = str(self.title_input.value).strip()
+        a = str(self.author_input.value).strip()
+        ai = str(self.author_icon_input.value).strip()
+        d = str(self.desc_input.value).strip()
+        ac = str(self.accent_input.value).strip()
+
+        self.view_ref.draft.title = t if t else None
+        self.view_ref.draft.author_name = a if a else None
+        self.view_ref.draft.author_icon_url = ai if ai else None
+        self.view_ref.draft.description = d if d else None
+        self.view_ref.draft.accent_hex = None if ac.lower() in ["none", "dark", "default", ""] else ac
+
+        await self.view_ref.update_view(interaction)
+
+
+class VisualsModal(discord.ui.Modal, title="Step 2: Images & Footer"):
+    def __init__(self, view: EmbedBuilderView) -> None:
+        super().__init__()
+        self.view_ref = view
+
+        self.top_banner_input = discord.ui.TextInput(
+            label="Top Banner URL (Header Image)",
+            placeholder="https://example.com/header.png or {server.banner_url}",
+            default=self.view_ref.draft.top_image_url or "",
+            required=False,
+        )
+        self.bottom_banner_input = discord.ui.TextInput(
+            label="Bottom Banner URL (Image)",
+            placeholder="https://example.com/banner.png or empty to remove",
+            default=self.view_ref.draft.image_url or "",
+            required=False,
+        )
+        self.thumb_input = discord.ui.TextInput(
+            label="Thumbnail URL (Top-Right Icon)",
+            placeholder="https://example.com/thumb.png or {user.avatar_url}",
+            default=self.view_ref.draft.thumbnail_url or "",
+            required=False,
+        )
+        self.footer_input = discord.ui.TextInput(
+            label="Footer Subtext",
+            placeholder="Footer text or {server.name}...",
+            default=self.view_ref.draft.footer_text or "",
+            max_length=1000,
+            required=False,
+        )
+        self.footer_icon_input = discord.ui.TextInput(
+            label="Footer Icon URL",
+            placeholder="https://example.com/footer_icon.png or empty",
+            default=self.view_ref.draft.footer_icon_url or "",
+            required=False,
+        )
+
+        self.add_item(self.top_banner_input)
+        self.add_item(self.bottom_banner_input)
+        self.add_item(self.thumb_input)
+        self.add_item(self.footer_input)
+        self.add_item(self.footer_icon_input)
+
+    async def on_submit(self, interaction: discord.Interaction) -> None:
+        top_bn = str(self.top_banner_input.value).strip()
+        btm_bn = str(self.bottom_banner_input.value).strip()
+        th = str(self.thumb_input.value).strip()
+        ft = str(self.footer_input.value).strip()
+        fi = str(self.footer_icon_input.value).strip()
+
+        self.view_ref.draft.top_image_url = top_bn if top_bn.startswith("http") or "{" in top_bn else None
+        self.view_ref.draft.image_url = btm_bn if btm_bn.startswith("http") or "{" in btm_bn else None
+        self.view_ref.draft.thumbnail_url = th if th.startswith("http") or "{" in th else None
+        self.view_ref.draft.footer_text = ft if ft else None
+        self.view_ref.draft.footer_icon_url = fi if fi.startswith("http") or "{" in fi else None
+
+        await self.view_ref.update_view(interaction)
+
+
+class AddFieldModal(discord.ui.Modal):
+    def __init__(self, view: EmbedBuilderView, edit_idx: int | None = None) -> None:
+        title = f"Edit Field #{edit_idx + 1}" if edit_idx is not None else "Add Custom Field"
+        super().__init__(title=title)
+        self.view_ref = view
+        self.edit_idx = edit_idx
+
+        existing: dict[str, Any] = {}
+        if edit_idx is not None and 0 <= edit_idx < len(self.view_ref.draft.fields):
+            existing = self.view_ref.draft.fields[edit_idx]
+
+        self.name_input = discord.ui.TextInput(
+            label="Field Name",
+            placeholder="Section name or header...",
+            default=existing.get("name", ""),
+            max_length=256,
+            required=True,
+        )
+        self.value_input = discord.ui.TextInput(
+            label="Field Value",
+            style=discord.TextStyle.paragraph,
+            placeholder="Field description, details, or [links](url)...",
+            default=existing.get("value", ""),
+            max_length=1024,
+            required=True,
+        )
+
+        self.add_item(self.name_input)
+        self.add_item(self.value_input)
+
+    async def on_submit(self, interaction: discord.Interaction) -> None:
+        n = str(self.name_input.value).strip()
+        v = str(self.value_input.value).strip()
+        if n and v:
+            if self.edit_idx is not None and 0 <= self.edit_idx < len(self.view_ref.draft.fields):
+                self.view_ref.draft.fields[self.edit_idx] = {"name": n, "value": v}
+            else:
+                self.view_ref.draft.fields.append({"name": n, "value": v})
+        await self.view_ref.update_view(interaction)
+
+
+class AddButtonModal(discord.ui.Modal):
+    def __init__(self, view: EmbedBuilderView, edit_idx: int | None = None) -> None:
+        title = f"Edit Button #{edit_idx + 1}" if edit_idx is not None else "Add Link Button"
+        super().__init__(title=title)
+        self.view_ref = view
+        self.edit_idx = edit_idx
+
+        existing: dict[str, Any] = {}
+        if edit_idx is not None and 0 <= edit_idx < len(self.view_ref.draft.buttons):
+            existing = self.view_ref.draft.buttons[edit_idx]
+
+        self.label_input = discord.ui.TextInput(
+            label="Button Label",
+            placeholder="Visit Website, Join Server, Rules...",
+            default=existing.get("label", ""),
+            max_length=80,
+            required=True,
+        )
+        self.url_input = discord.ui.TextInput(
+            label="Destination URL",
+            placeholder="https://example.com or discord.gg/...",
+            default=existing.get("url", ""),
+            max_length=512,
+            required=True,
+        )
+
+        self.add_item(self.label_input)
+        self.add_item(self.url_input)
+
+    async def on_submit(self, interaction: discord.Interaction) -> None:
+        label = str(self.label_input.value).strip() or "Link"
+        url = str(self.url_input.value).strip()
+        if url:
+            if not url.startswith("http://") and not url.startswith("https://") and not url.startswith("discord://"):
+                url = f"https://{url}"
+            if self.edit_idx is not None and 0 <= self.edit_idx < len(self.view_ref.draft.buttons):
+                self.view_ref.draft.buttons[self.edit_idx] = {"label": label, "url": url}
+            else:
+                self.view_ref.draft.buttons.append({"label": label, "url": url})
+        await self.view_ref.update_view(interaction)
+
+
+class AddModuleModal(discord.ui.Modal):
+    def __init__(self, view: EmbedBuilderView, edit_idx: int | None = None) -> None:
+        title = f"Edit Module #{edit_idx + 1}" if edit_idx is not None else "Add Dropdown Module"
+        super().__init__(title=title)
+        self.view_ref = view
+        self.edit_idx = edit_idx
+
+        existing: dict[str, Any] = {}
+        if edit_idx is not None and 0 <= edit_idx < len(self.view_ref.draft.modules):
+            existing = self.view_ref.draft.modules[edit_idx]
+
+        self.label_input = discord.ui.TextInput(
+            label="Module Name (Label)",
+            placeholder="Server Rules, VIP Perks, Payment...",
+            default=existing.get("label", ""),
+            max_length=100,
+            required=True,
+        )
+        self.desc_input = discord.ui.TextInput(
+            label="Subtitle Description (Optional)",
+            placeholder="Brief note shown in dropdown list...",
+            default=existing.get("description", "") or "",
+            max_length=100,
+            required=False,
+        )
+        self.page_title_input = discord.ui.TextInput(
+            label="Page Card Title (Optional)",
+            placeholder="Headline on card when open (defaults to label)...",
+            default=existing.get("page_title", "") or "",
+            max_length=100,
+            required=False,
+        )
+        self.content_input = discord.ui.TextInput(
+            label="Page Content (Description)",
+            style=discord.TextStyle.paragraph,
+            placeholder="Full markdown text to display on card when selected...",
+            default=existing.get("content", ""),
+            max_length=2000,
+            required=True,
+        )
+
+        self.add_item(self.label_input)
+        self.add_item(self.desc_input)
+        self.add_item(self.page_title_input)
+        self.add_item(self.content_input)
+
+    async def on_submit(self, interaction: discord.Interaction) -> None:
+        label = str(self.label_input.value).strip()
+        desc = str(self.desc_input.value).strip()
+        page_title = str(self.page_title_input.value).strip()
+        content = str(self.content_input.value).strip()
+        if label and content:
+            mod_id = f"mod_{self.edit_idx}" if self.edit_idx is not None else f"mod_{len(self.view_ref.draft.modules)}"
+            mod_data = {
+                "id": mod_id,
+                "label": label,
+                "description": desc if desc else None,
+                "page_title": page_title if page_title else None,
+                "content": content,
+            }
+            if self.edit_idx is not None and 0 <= self.edit_idx < len(self.view_ref.draft.modules):
+                self.view_ref.draft.modules[self.edit_idx] = mod_data
+                self.view_ref.preview_module_id = mod_id
+            else:
+                self.view_ref.draft.modules.append(mod_data)
+                self.view_ref.preview_module_id = mod_id
+        await self.view_ref.update_view(interaction)
+
+
+class ModuleManagementPicker(discord.ui.View):
+    """Ephemeral picker to Add, Edit, or Delete dropdown modules."""
+    def __init__(self, parent_view: EmbedBuilderView) -> None:
+        super().__init__(timeout=60)
+        self.parent_view = parent_view
+
+        options = []
+        if len(self.parent_view.draft.modules) < 25:
+            options.append(discord.SelectOption(
+                label="Add New Module",
+                value="action_add",
+                description="Create a new dropdown page option",
+            ))
+
+        for i, mod in enumerate(self.parent_view.draft.modules):
+            options.append(discord.SelectOption(
+                label=f"Edit #{i+1}: {mod.get('label', 'Module')}"[:100],
+                value=f"edit_{i}",
+                description=f"Modify #{i+1} {mod.get('label', '')}"[:100],
+            ))
+
+        for i, mod in enumerate(self.parent_view.draft.modules):
+            options.append(discord.SelectOption(
+                label=f"Delete #{i+1}: {mod.get('label', 'Module')}"[:100],
+                value=f"delete_{i}",
+                description=f"Remove module #{i+1} permanently"[:100],
+            ))
+
+        if len(self.parent_view.draft.modules) > 1:
+            options.append(discord.SelectOption(
+                label="Clear All Modules",
+                value="action_clear_all",
+                description="Delete all dropdown modules",
+            ))
+
+        select = discord.ui.Select(
+            placeholder="Select a module to edit or delete...",
+            options=options[:25],
+        )
+        select.callback = self.on_select
+        self.add_item(select)
+
+    async def on_select(self, interaction: discord.Interaction) -> None:
+        select: discord.ui.Select = self.children[0]  # type: ignore
+        val = select.values[0]
+
+        if val == "action_add":
+            await interaction.response.send_modal(AddModuleModal(self.parent_view))
+        elif val.startswith("edit_"):
+            idx = int(val.replace("edit_", ""))
+            await interaction.response.send_modal(AddModuleModal(self.parent_view, edit_idx=idx))
+        elif val.startswith("delete_"):
+            idx = int(val.replace("delete_", ""))
+            if 0 <= idx < len(self.parent_view.draft.modules):
+                self.parent_view.draft.modules.pop(idx)
+                for new_i, m in enumerate(self.parent_view.draft.modules):
+                    m["id"] = f"mod_{new_i}"
+                if self.parent_view.preview_module_id == f"mod_{idx}":
+                    self.parent_view.preview_module_id = None
+                if not interaction.response.is_done():
+                    await interaction.response.edit_message(content=f"Module #{idx+1} deleted.", view=None)
+                await self.parent_view.update_view_channel_patch()
+        elif val == "action_clear_all":
+            self.parent_view.draft.modules.clear()
+            self.parent_view.preview_module_id = None
+            if not interaction.response.is_done():
+                await interaction.response.edit_message(content="All modules cleared.", view=None)
+            await self.parent_view.update_view_channel_patch()
+
+
+class ButtonManagementPicker(discord.ui.View):
+    """Ephemeral picker to Add, Edit, or Delete link buttons."""
+    def __init__(self, parent_view: EmbedBuilderView) -> None:
+        super().__init__(timeout=60)
+        self.parent_view = parent_view
+
+        options = []
+        if len(self.parent_view.draft.buttons) < 5:
+            options.append(discord.SelectOption(
+                label="Add New Button",
+                value="action_add",
+                description="Create a new link button",
+            ))
+
+        for i, btn in enumerate(self.parent_view.draft.buttons):
+            options.append(discord.SelectOption(
+                label=f"Edit #{i+1}: {btn.get('label', 'Link')}"[:100],
+                value=f"edit_{i}",
+                description=f"Modify #{i+1} URL/Label"[:100],
+            ))
+
+        for i, btn in enumerate(self.parent_view.draft.buttons):
+            options.append(discord.SelectOption(
+                label=f"Delete #{i+1}: {btn.get('label', 'Link')}"[:100],
+                value=f"delete_{i}",
+                description=f"Remove button #{i+1}"[:100],
+            ))
+
+        if len(self.parent_view.draft.buttons) > 1:
+            options.append(discord.SelectOption(
+                label="Clear All Buttons",
+                value="action_clear_all",
+                description="Remove all buttons",
+            ))
+
+        select = discord.ui.Select(
+            placeholder="Select a button to edit or delete...",
+            options=options[:25],
+        )
+        select.callback = self.on_select
+        self.add_item(select)
+
+    async def on_select(self, interaction: discord.Interaction) -> None:
+        select: discord.ui.Select = self.children[0]  # type: ignore
+        val = select.values[0]
+
+        if val == "action_add":
+            await interaction.response.send_modal(AddButtonModal(self.parent_view))
+        elif val.startswith("edit_"):
+            idx = int(val.replace("edit_", ""))
+            await interaction.response.send_modal(AddButtonModal(self.parent_view, edit_idx=idx))
+        elif val.startswith("delete_"):
+            idx = int(val.replace("delete_", ""))
+            if 0 <= idx < len(self.parent_view.draft.buttons):
+                self.parent_view.draft.buttons.pop(idx)
+                if not interaction.response.is_done():
+                    await interaction.response.edit_message(content=f"Button #{idx+1} deleted.", view=None)
+                await self.parent_view.update_view_channel_patch()
+        elif val == "action_clear_all":
+            self.parent_view.draft.buttons.clear()
+            if not interaction.response.is_done():
+                await interaction.response.edit_message(content="All buttons removed.", view=None)
+            await self.parent_view.update_view_channel_patch()
+
+
+class FieldManagementPicker(discord.ui.View):
+    """Ephemeral picker to Add, Edit, or Delete custom fields."""
+    def __init__(self, parent_view: EmbedBuilderView) -> None:
+        super().__init__(timeout=60)
+        self.parent_view = parent_view
+
+        options = []
+        if len(self.parent_view.draft.fields) < 25:
+            options.append(discord.SelectOption(
+                label="Add New Field",
+                value="action_add",
+                description="Add another structured section",
+            ))
+
+        for i, fld in enumerate(self.parent_view.draft.fields):
+            options.append(discord.SelectOption(
+                label=f"Edit #{i+1}: {fld.get('name', 'Field')}"[:100],
+                value=f"edit_{i}",
+                description=f"Modify field #{i+1}"[:100],
+            ))
+
+        for i, fld in enumerate(self.parent_view.draft.fields):
+            options.append(discord.SelectOption(
+                label=f"Delete #{i+1}: {fld.get('name', 'Field')}"[:100],
+                value=f"delete_{i}",
+                description=f"Remove field #{i+1}"[:100],
+            ))
+
+        if len(self.parent_view.draft.fields) > 1:
+            options.append(discord.SelectOption(
+                label="Clear All Fields",
+                value="action_clear_all",
+                description="Delete all fields",
+            ))
+
+        select = discord.ui.Select(
+            placeholder="Select a field to edit or delete...",
+            options=options[:25],
+        )
+        select.callback = self.on_select
+        self.add_item(select)
+
+    async def on_select(self, interaction: discord.Interaction) -> None:
+        select: discord.ui.Select = self.children[0]  # type: ignore
+        val = select.values[0]
+
+        if val == "action_add":
+            await interaction.response.send_modal(AddFieldModal(self.parent_view))
+        elif val.startswith("edit_"):
+            idx = int(val.replace("edit_", ""))
+            await interaction.response.send_modal(AddFieldModal(self.parent_view, edit_idx=idx))
+        elif val.startswith("delete_"):
+            idx = int(val.replace("delete_", ""))
+            if 0 <= idx < len(self.parent_view.draft.fields):
+                self.parent_view.draft.fields.pop(idx)
+                if not interaction.response.is_done():
+                    await interaction.response.edit_message(content=f"Field #{idx+1} deleted.", view=None)
+                await self.parent_view.update_view_channel_patch()
+        elif val == "action_clear_all":
+            self.parent_view.draft.fields.clear()
+            if not interaction.response.is_done():
+                await interaction.response.edit_message(content="All fields cleared.", view=None)
+            await self.parent_view.update_view_channel_patch()
+
+
+class SaveModal(discord.ui.Modal, title="Save Template"):
+    def __init__(self, view: EmbedBuilderView) -> None:
+        super().__init__()
+        self.view_ref = view
+
+        self.name_input = discord.ui.TextInput(
+            label="Template Name",
+            placeholder="welcome, rules, faq, announcement...",
+            default=self.view_ref.template_name or "",
+            max_length=32,
+            required=True,
+        )
+        self.add_item(self.name_input)
+
+    async def on_submit(self, interaction: discord.Interaction) -> None:
+        name = str(self.name_input.value).strip().lower()
+        clean_name = re.sub(r"[^a-zA-Z0-9_-]", "", name)
+        if not clean_name:
+            c = KyokaContainer()
+            c.add_section(content="**Template Error**\n> Please provide a valid template name (alphanumeric and hyphens only).")
+            await send_container_response(interaction, c, ephemeral=True)
+            return
+
+        if not interaction.guild_id:
+            c = KyokaContainer()
+            c.add_section(content="**Location Error**\n> Templates can only be saved inside a server.")
+            await send_container_response(interaction, c, ephemeral=True)
+            return
+
+        self.view_ref.template_name = clean_name
+        success = await self.view_ref.bot.embed_mgr.save_template(
+            guild_id=interaction.guild_id,
+            name=clean_name,
+            payload=self.view_ref.draft.to_dict(),
+            created_by=interaction.user.id,
+        )
+        if success:
+            await self.view_ref.update_view(interaction)
+        else:
+            c = KyokaContainer()
+            c.add_section(content=f"**Save Error**\n> Failed to save template `{clean_name}`.")
+            await send_container_response(interaction, c, ephemeral=True)
+
+
+class RawImportModal(discord.ui.Modal, title="Raw JSON / HTML Import"):
+    def __init__(self, view: EmbedBuilderView) -> None:
+        super().__init__()
+        self.view_ref = view
+        raw_json = json.dumps(self.view_ref.draft.to_dict(), indent=2)
+        if len(raw_json) > 3900:
+            raw_json = json.dumps(self.view_ref.draft.to_dict())
+
+        self.raw_input = discord.ui.TextInput(
+            label="Payload / Code",
+            style=discord.TextStyle.paragraph,
+            placeholder="Paste Discohook JSON, raw embed JSON, or HTML text...",
+            default=raw_json[:3950],
+            max_length=4000,
+            required=False,
+        )
+        self.add_item(self.raw_input)
+
+    async def on_submit(self, interaction: discord.Interaction) -> None:
+        raw = str(self.raw_input.value).strip()
+        if not raw:
+            c = KyokaContainer()
+            c.add_section(content="**Import Error**\n> No content provided.")
+            await send_container_response(interaction, c, ephemeral=True)
+            return
+
+        try:
+            self.view_ref.draft = ContainerDraft.from_raw_payload(raw)
+            await self.view_ref.update_view(interaction)
+        except Exception as e:
+            c = KyokaContainer()
+            c.add_section(content=f"**Import Error**\n> Failed to parse payload: `{e}`")
+            await send_container_response(interaction, c, ephemeral=True)
+
+
+# ─── Dual-Container View (Builder Dashboard) ──────────────────────────────────
+
+class EmbedBuilderView(discord.ui.View):
+    """5-Step builder control view."""
+    active_views: dict[int, EmbedBuilderView] = {}
+
+    SLIDES = [
+        ("content", "Step 1: Content & Theme", "Title, Author, Description, Accent Color"),
+        ("visuals", "Step 2: Images & Footer", "Thumbnail, Banner Image, Footer Text/Icon, Timestamp"),
+        ("fields", "Step 3: Custom Fields", "Add, edit, or remove structured fields (up to 25)"),
+        ("interactive", "Step 4: Buttons & Modules", "Interactive link buttons and FAQ dropdown sub-pages"),
+        ("dispatch", "Step 5: Dispatch & Raw", "Send to channel, Test in DM, Raw JSON import"),
+    ]
+
+    def __init__(
+        self,
+        bot: KyokaBot,
+        author: discord.User | discord.Member,
+        draft: ContainerDraft | None = None,
+        template_name: str | None = None,
+    ) -> None:
+        super().__init__(timeout=900)
+        self.bot: KyokaBot = bot
+        self.author: discord.User | discord.Member = author
+        self.draft: ContainerDraft = draft or ContainerDraft()
+        self.template_name: str | None = template_name
+        self.current_slide_idx: int = 0  # 0 to 4
+        self.preview_module_id: str | None = None
+        self.message_id: int | None = None
+        self.channel_id: int | None = None
+        self.guild_id: int | None = getattr(author, "guild", None).id if getattr(author, "guild", None) else None
+        self._setup_dynamic_buttons()
+
+    def _setup_dynamic_buttons(self) -> None:
+        self._sync_controls()
+
+    async def interaction_check(self, interaction: discord.Interaction) -> bool:
+        if interaction.message:
+            self.message_id = interaction.message.id
+            self.channel_id = interaction.channel_id
+        if interaction.guild_id:
+            self.guild_id = interaction.guild_id
+        if interaction.user.id != self.author.id:
+            c = KyokaContainer()
+            c.add_section(
+                content=f"**Access Denied**\n> Only {self.author.mention} can control this embed builder session."
+            )
+            await send_container_response(interaction, c, ephemeral=True)
+            return False
+        return True
+
+    def get_dual_containers(
+        self,
+        guild: discord.Guild | None,
+        channel: discord.abc.GuildChannel | discord.Thread | discord.abc.Messageable | None,
+    ) -> list[KyokaContainer]:
+        avatar_url = str(self.bot.user.display_avatar.url) if self.bot and self.bot.user else ""
+
+        # Top Container: Live Preview Card
+        top_container = self.draft.to_container(
+            active_module_id=self.preview_module_id,
+            user=self.author,
+            guild=guild,
+            channel=channel,
+            bot=self.bot,
+            default_avatar=avatar_url,
+            include_controls=False,
+        )
+
+        # Bottom Container: 5-Step Control Console
+        bottom_container = KyokaContainer(accent_color=None)
+        slide_key, slide_title, slide_desc = self.SLIDES[self.current_slide_idx]
+
+        bottom_container.add_section(
+            content=(
+                f"**Embed Builder Dashboard** • {slide_title}\n"
+                f"> {slide_desc}"
+            )
+        )
+        bottom_container.add_separator(divider=True)
+
+        if slide_key == "content":
+            t_disp = f"`{self.draft.title}`" if self.draft.title else "*None*"
+            a_disp = f"`{self.draft.author_name}`" if self.draft.author_name else "*None*"
+            d_disp = f"`{len(self.draft.description or '')} chars`" if self.draft.description else "*None*"
+            c_disp = f"`{self.draft.accent_hex}`" if self.draft.accent_hex else "*Dark (Default)*"
+            bottom_container.add_text(
+                f"**Title:** {t_disp} • **Author:** {a_disp}\n"
+                f"**Description:** {d_disp} • **Color:** {c_disp}"
+            )
+        elif slide_key == "visuals":
+            top_img_disp = "Set" if self.draft.top_image_url else "None"
+            btm_img_disp = "Set" if self.draft.image_url else "None"
+            th_disp = "Set" if self.draft.thumbnail_url else "None"
+            ft_disp = "Set" if self.draft.footer_text else "None"
+            div_disp = "Enabled" if self.draft.divider_line else "Disabled"
+            bottom_container.add_text(
+                f"**Top Banner:** `{top_img_disp}` • **Bottom Banner:** `{btm_img_disp}`\n"
+                f"**Thumbnail:** `{th_disp}` • **Footer:** `{ft_disp}` • **Divider:** `{div_disp}`"
+            )
+        elif slide_key == "fields":
+            count = len(self.draft.fields)
+            if count == 0:
+                bottom_container.add_text("**Fields (0/25):** No custom fields added.")
+            else:
+                names = [f"`#{i+1}: {f.get('name', '')[:16]}`" for i, f in enumerate(self.draft.fields[:6])]
+                extra_txt = f" *(+{count - 6} more)*" if count > 6 else ""
+                bottom_container.add_text(f"**Fields ({count}/25):** " + " , ".join(names) + extra_txt)
+        elif slide_key == "interactive":
+            m_count = len(self.draft.modules)
+            b_count = len(self.draft.buttons)
+            cur_view = "Main Overview"
+            if self.preview_module_id and self.preview_module_id.startswith("mod_"):
+                try:
+                    idx = int(self.preview_module_id.replace("mod_", ""))
+                    if 0 <= idx < len(self.draft.modules):
+                        cur_view = self.draft.modules[idx].get("label", f"Page {idx+1}")
+                except Exception:
+                    pass
+
+            b_names = [f"`{b.get('label', 'Link')}`" for b in self.draft.buttons[:5]]
+            b_str = " , ".join(b_names) if b_names else "*None*"
+
+            bottom_container.add_text(
+                f"**Viewing:** `{cur_view}`\n"
+                f"**Dropdown Modules ({m_count}/25):** {m_count} Sub-pages configured\n"
+                f"**Link Buttons ({b_count}/5):** {b_str}"
+            )
+        elif slide_key == "dispatch":
+            tmpl_name = f"`{self.template_name}`" if self.template_name else "*Unsaved*"
+            bottom_container.add_text(
+                f"**Template Name:** {tmpl_name}\n"
+                "Use the buttons below to dispatch this card to a server channel or test in DM."
+            )
+
+        bottom_container.add_separator(divider=True)
+        bottom_container.add_text(
+            f"-# Step {self.current_slide_idx + 1}/5 • Session for {self.author.display_name}!"
+        )
+        return [top_container, bottom_container]
+
+    def _sync_controls(self) -> None:
+        slide_key, _, _ = self.SLIDES[self.current_slide_idx]
+
+        for item in self.children:
+            if isinstance(item, discord.ui.Select) and item.custom_id == "select_slide":
+                for opt in item.options:
+                    opt.default = (opt.value == slide_key)
+            elif isinstance(item, discord.ui.Button):
+                if item.custom_id == "btn_action_1":
+                    if slide_key == "content":
+                        item.label = "Edit Content"
+                        item.disabled = False
+                    elif slide_key == "visuals":
+                        item.label = "Edit Visuals"
+                        item.disabled = False
+                    elif slide_key == "fields":
+                        item.label = "Add Field"
+                        item.disabled = (len(self.draft.fields) >= 25)
+                    elif slide_key == "interactive":
+                        item.label = "Add Module"
+                        item.disabled = (len(self.draft.modules) >= 25)
+                    elif slide_key == "dispatch":
+                        item.label = "Send Channel"
+                        item.disabled = False
+                elif item.custom_id == "btn_action_2":
+                    if slide_key == "content":
+                        item.label = "Clear Text"
+                        item.disabled = False
+                    elif slide_key == "visuals":
+                        item.label = "Toggle Line"
+                        item.disabled = False
+                    elif slide_key == "fields":
+                        item.label = "Manage Fields"
+                        item.disabled = (len(self.draft.fields) == 0)
+                    elif slide_key == "interactive":
+                        item.label = "Manage Modules"
+                        item.disabled = (len(self.draft.modules) == 0)
+                    elif slide_key == "dispatch":
+                        item.label = "Test DM"
+                        item.disabled = False
+                elif item.custom_id == "btn_action_3":
+                    if slide_key == "content":
+                        item.label = "Reset All"
+                        item.disabled = False
+                    elif slide_key == "visuals":
+                        item.label = "Clear Visuals"
+                        item.disabled = False
+                    elif slide_key == "fields":
+                        item.label = "Clear Fields"
+                        item.disabled = (len(self.draft.fields) == 0)
+                    elif slide_key == "interactive":
+                        item.label = "Add Button"
+                        item.disabled = (len(self.draft.buttons) >= 5)
+                    elif slide_key == "dispatch":
+                        item.label = "Raw JSON"
+                        item.disabled = False
+                elif item.custom_id == "btn_send":
+                    if slide_key == "interactive":
+                        item.label = "Manage Buttons"
+                        item.disabled = (len(self.draft.buttons) == 0)
+                    elif slide_key == "dispatch":
+                        item.label = "Save Template"
+                        item.disabled = False
+                    else:
+                        item.label = "Send Embed"
+                        item.disabled = False
+
+    async def update_view(self, interaction: discord.Interaction) -> None:
+        """Update the dual-container message and auto-save changes."""
+        self._sync_controls()
+
+        # Determine if interaction is ephemeral or modal from an ephemeral picker
+        is_ephemeral = bool(
+            interaction.message and self.message_id and interaction.message.id != self.message_id
+        ) or bool(
+            interaction.message and hasattr(interaction.message, "flags") and interaction.message.flags.ephemeral
+        )
+
+        if not is_ephemeral and interaction.message and not self.message_id:
+            self.message_id = interaction.message.id
+            self.channel_id = interaction.channel_id
+        if interaction.guild_id and not self.guild_id:
+            self.guild_id = interaction.guild_id
+        if self.message_id:
+            EmbedBuilderView.active_views[self.message_id] = self
+
+        if self.template_name and (interaction.guild_id or self.guild_id):
+            try:
+                gid = interaction.guild_id or self.guild_id or 0
+                await self.bot.embed_mgr.save_template(
+                    guild_id=gid,
+                    name=self.template_name,
+                    payload=self.draft.to_dict(),
+                    created_by=self.author.id,
+                )
+            except Exception as e:
+                logger.error(f"Failed to auto-save template '{self.template_name}': {e}")
+
+        guild = self.bot.get_guild(self.guild_id) if self.guild_id else (interaction.guild or getattr(self.author, "guild", None))
+        channel = self.bot.get_channel(self.channel_id) if self.channel_id else interaction.channel
+        containers = self.get_dual_containers(guild, channel)
+
+        updated_via_interaction = False
+        if not is_ephemeral and not interaction.response.is_done():
+            try:
+                await edit_container_response(interaction, containers, view=self)
+                updated_via_interaction = True
+            except Exception as err:
+                logger.warning(f"edit_container_response in update_view: {err}")
+
+        if not updated_via_interaction:
+            if not interaction.response.is_done():
+                try:
+                    await interaction.response.defer()
+                except Exception:
+                    pass
+
+            if self.channel_id and self.message_id:
+                try:
+                    payload = build_container_payload(containers, view=self)
+                    await self.bot.http.request(
+                        discord.http.Route("PATCH", f"/channels/{self.channel_id}/messages/{self.message_id}"),
+                        json=payload,
+                    )
+                except Exception as patch_err:
+                    logger.error(f"Direct channel PATCH failed for message {self.message_id}: {patch_err}")
+
+    async def update_view_channel_patch(self) -> None:
+        """Directly sync state to DB and PATCH the main builder message."""
+        self._sync_controls()
+        if self.template_name:
+            try:
+                gid = self.guild_id or (self.author.guild.id if hasattr(self.author, "guild") and self.author.guild else 0)
+                if gid:
+                    await self.bot.embed_mgr.save_template(
+                        guild_id=gid,
+                        name=self.template_name,
+                        payload=self.draft.to_dict(),
+                        created_by=self.author.id,
+                    )
+            except Exception as e:
+                logger.error(f"Failed to auto-save template '{self.template_name}': {e}")
+
+        guild = self.bot.get_guild(self.guild_id) if self.guild_id else (self.author.guild if hasattr(self.author, "guild") else None)
+        channel = self.bot.get_channel(self.channel_id) if self.channel_id else None
+        containers = self.get_dual_containers(guild, channel)
+
+        if self.channel_id and self.message_id:
+            try:
+                payload = build_container_payload(containers, view=self)
+                await self.bot.http.request(
+                    discord.http.Route("PATCH", f"/channels/{self.channel_id}/messages/{self.message_id}"),
+                    json=payload,
+                )
+            except Exception as patch_err:
+                logger.error(f"Failed to patch main builder message {self.message_id}: {patch_err}")
+
+    # ─── Dropdown: Direct Slide Selector ──────────────────────────────────────
+
+    @discord.ui.select(
+        placeholder="Jump to a step...",
+        custom_id="select_slide",
+        options=[
+            discord.SelectOption(label="Step 1: Content & Theme", value="content", description="Title, Author, Description, Color"),
+            discord.SelectOption(label="Step 2: Images & Footer", value="visuals", description="Thumbnail, Banner, Footer Text & Icon, Timestamp"),
+            discord.SelectOption(label="Step 3: Custom Fields", value="fields", description="Add, edit, or remove structured sections"),
+            discord.SelectOption(label="Step 4: Buttons & Modules", value="interactive", description="Manage link buttons and interactive dropdown modules"),
+            discord.SelectOption(label="Step 5: Dispatch & Raw", value="dispatch", description="Send to channel, Save template, Raw JSON import"),
+        ],
+        row=0,
+    )
+    async def select_slide(self, interaction: discord.Interaction, select: discord.ui.Select) -> None:
+        val = select.values[0]
+        for idx, (k, _, _) in enumerate(self.SLIDES):
+            if k == val:
+                self.current_slide_idx = idx
+                break
+        await self.update_view(interaction)
+
+    # ─── Action Buttons (Row 1) ──────────────────────────────────────────────
+
+    @discord.ui.button(label="Edit", style=discord.ButtonStyle.secondary, custom_id="btn_action_1", row=1)
+    async def btn_action_1(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+        slide_key, _, _ = self.SLIDES[self.current_slide_idx]
+
+        if slide_key == "content":
+            await interaction.response.send_modal(ContentModal(self))
+        elif slide_key == "visuals":
+            await interaction.response.send_modal(VisualsModal(self))
+        elif slide_key == "fields":
+            if len(self.draft.fields) >= 25:
+                c = KyokaContainer()
+                c.add_section(content="**Limit Reached**\n> Maximum 25 fields allowed.")
+                await send_container_response(interaction, c, ephemeral=True)
+                return
+            await interaction.response.send_modal(AddFieldModal(self))
+        elif slide_key == "interactive":
+            if len(self.draft.modules) >= 25:
+                c = KyokaContainer()
+                c.add_section(content="**Limit Reached**\n> Maximum 25 dropdown modules allowed.")
+                await send_container_response(interaction, c, ephemeral=True)
+                return
+            await interaction.response.send_modal(AddModuleModal(self))
+        elif slide_key == "dispatch":
+            await self._open_send_picker(interaction)
+
+    @discord.ui.button(label="Action 2", style=discord.ButtonStyle.secondary, custom_id="btn_action_2", row=1)
+    async def btn_action_2(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+        slide_key, _, _ = self.SLIDES[self.current_slide_idx]
+
+        if slide_key == "content":
+            self.draft.title = None
+            self.draft.author_name = None
+            self.draft.description = None
+            self.draft.accent_hex = None
+            await self.update_view(interaction)
+        elif slide_key == "visuals":
+            self.draft.divider_line = not self.draft.divider_line
+            await self.update_view(interaction)
+        elif slide_key == "fields":
+            if not self.draft.fields:
+                await interaction.response.send_modal(AddFieldModal(self))
+            else:
+                c = KyokaContainer()
+                c.add_section(content="**Field Management**\n> Select a field to edit or delete:")
+                await send_container_response(
+                    interaction,
+                    c,
+                    view=FieldManagementPicker(self),
+                    ephemeral=True,
+                )
+        elif slide_key == "interactive":
+            if not self.draft.modules:
+                await interaction.response.send_modal(AddModuleModal(self))
+            else:
+                c = KyokaContainer()
+                c.add_section(content="**Module Management**\n> Select a module to edit or delete:")
+                await send_container_response(
+                    interaction,
+                    c,
+                    view=ModuleManagementPicker(self),
+                    ephemeral=True,
+                )
+        elif slide_key == "dispatch":
+            await self._send_test_dm(interaction)
+
+    @discord.ui.button(label="Action 3", style=discord.ButtonStyle.secondary, custom_id="btn_action_3", row=1)
+    async def btn_action_3(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+        slide_key, _, _ = self.SLIDES[self.current_slide_idx]
+
+        if slide_key == "content":
+            self.draft = ContainerDraft()
+            await self.update_view(interaction)
+        elif slide_key == "visuals":
+            self.draft.thumbnail_url = None
+            self.draft.image_url = None
+            self.draft.footer_text = None
+            await self.update_view(interaction)
+        elif slide_key == "fields":
+            self.draft.fields.clear()
+            await self.update_view(interaction)
+        elif slide_key == "interactive":
+            if len(self.draft.buttons) >= 5:
+                c = KyokaContainer()
+                c.add_section(content="**Limit Reached**\n> Maximum 5 buttons allowed.")
+                await send_container_response(interaction, c, ephemeral=True)
+                return
+            await interaction.response.send_modal(AddButtonModal(self))
+        elif slide_key == "dispatch":
+            await interaction.response.send_modal(RawImportModal(self))
+
+    @discord.ui.button(label="Send Embed", style=discord.ButtonStyle.secondary, custom_id="btn_send", row=1)
+    async def btn_send(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+        slide_key, _, _ = self.SLIDES[self.current_slide_idx]
+        if slide_key == "interactive":
+            if not self.draft.buttons:
+                await interaction.response.send_modal(AddButtonModal(self))
+            else:
+                c = KyokaContainer()
+                c.add_section(content="**Button Management**\n> Select a button to edit or delete:")
+                await send_container_response(
+                    interaction,
+                    c,
+                    view=ButtonManagementPicker(self),
+                    ephemeral=True,
+                )
+        elif slide_key == "dispatch":
+            await interaction.response.send_modal(SaveModal(self))
+        else:
+            await self._open_send_picker(interaction)
+
+    async def _send_test_dm(self, interaction: discord.Interaction) -> None:
+        """Dispatch a live test copy of the embed container directly to user DM."""
+        container = self.draft.to_container(
+            user=self.author,
+            guild=interaction.guild,
+            bot=self.bot,
+        )
+        try:
+            dm_channel = self.author.dm_channel or await self.author.create_dm()
+            await send_container_response(dm_channel, container)
+            c = KyokaContainer()
+            c.add_section(content="**DM Dispatched**\n> Test embed dispatched to your DMs!")
+            await send_container_response(interaction, c, ephemeral=True)
+        except discord.Forbidden:
+            c = KyokaContainer()
+            c.add_section(content="**DM Failed**\n> Could not send DM. Please enable DMs from server members.")
+            await send_container_response(interaction, c, ephemeral=True)
+        except Exception as e:
+            c = KyokaContainer()
+            c.add_section(content=f"**DM Failed**\n> Failed to send DM: `{e}`")
+            await send_container_response(interaction, c, ephemeral=True)
+
+    async def _open_send_picker(self, interaction: discord.Interaction) -> None:
+        guild = interaction.guild
+        if not guild:
+            c = KyokaContainer()
+            c.add_section(content="**Environment Error**\n> Cannot send in direct messages.")
+            await send_container_response(interaction, c, ephemeral=True)
+            return
+
+        text_channels = [c for c in guild.text_channels if c.permissions_for(guild.me).send_messages][:25]
+        if not text_channels:
+            c = KyokaContainer()
+            c.add_section(content="**Channel Error**\n> No accessible text channels found.")
+            await send_container_response(interaction, c, ephemeral=True)
+            return
+
+        select_options = [
+            discord.SelectOption(
+                label=f"#{c.name}"[:100],
+                value=str(c.id),
+                description=f"Send embed to #{c.name}"[:100],
+            )
+            for c in text_channels
+        ]
+
+        class ChannelPicker(discord.ui.View):
+            def __init__(self, parent_view: EmbedBuilderView) -> None:
+                super().__init__(timeout=60)
+                self.parent_view = parent_view
+
+            @discord.ui.select(placeholder="Select target channel...", options=select_options)
+            async def select_channel(self, inter: discord.Interaction, sel: discord.ui.Select) -> None:
+                ch_id = int(sel.values[0])
+                target_ch = inter.guild.get_channel(ch_id) if inter.guild else None
+                if not target_ch or not isinstance(target_ch, discord.TextChannel):
+                    c = KyokaContainer()
+                    c.add_section(content="**Channel Error**\n> Target channel not found.")
+                    await send_container_response(inter, c, ephemeral=True)
+                    return
+
+                container = self.parent_view.draft.to_container(
+                    user=self.parent_view.author,
+                    guild=inter.guild,
+                    channel=target_ch,
+                    bot=self.parent_view.bot,
+                )
+                try:
+                    target_msg = await send_container_response(target_ch, container)
+                    msg_id = None
+                    if isinstance(target_msg, dict) and "id" in target_msg:
+                        msg_id = int(target_msg["id"])
+                    elif hasattr(target_msg, "id"):
+                        msg_id = int(target_msg.id)
+
+                    if msg_id:
+                        await self.parent_view.bot.embed_mgr.record_interactive_card(
+                            guild_id=inter.guild_id or 0,
+                            message_id=msg_id,
+                            template_name=self.parent_view.template_name,
+                            payload=self.parent_view.draft.to_dict(),
+                        )
+                    c = KyokaContainer()
+                    c.add_section(content=f"**Card Posted**\n> Card successfully posted to {target_ch.mention}.")
+                    await send_container_response(inter, c, ephemeral=True)
+                except Exception as e:
+                    logger.error(f"Failed to post container card: {e}", exc_info=e)
+                    c = KyokaContainer()
+                    c.add_section(content=f"**Dispatch Error**\n> Failed to post card: `{e}`")
+                    await send_container_response(inter, c, ephemeral=True)
+
+        c = KyokaContainer()
+        c.add_section(content="**Dispatch Card**\n> Select target channel to post card:")
+        await send_container_response(interaction, c, view=ChannelPicker(self), ephemeral=True)
+
+
+# ─── Cog Implementation ──────────────────────────────────────────────────────
+
+class EmbedBuilder(commands.Cog):
+    """Full-featured Discord Components V2 Embed & Container Builder."""
+    category: str = "Welcomer"
+
+    def __init__(self, bot: KyokaBot) -> None:
+        self.bot = bot
+
+    @commands.Cog.listener()
+    async def on_interaction(self, interaction: discord.Interaction) -> None:
+        """Handle persistent interactive card dropdown module switching and hub template picker."""
+        if not interaction.data:
+            return
+        custom_id = interaction.data.get("custom_id")
+        if custom_id not in ("card_module_select", "hub_select_template"):
+            return
+
+        guild = interaction.guild
+        message = interaction.message
+        if not guild or not message:
+            return
+
+        selected_vals = interaction.data.get("values", [])
+        if not selected_vals:
+            return
+
+        selected_id = selected_vals[0]
+
+        # Handle Hub Template Selection Dropdown
+        if custom_id == "hub_select_template":
+            template_name = selected_id
+            data = await self.bot.embed_mgr.get_template(interaction.guild_id or 0, template_name)
+            if not data:
+                c = KyokaContainer()
+                c.add_section(content=f"**Template Error**\n> Embed '{template_name}' not found.")
+                await send_container_response(interaction, c, ephemeral=True)
+                return
+
+            draft = ContainerDraft.from_dict(data)
+            view = EmbedBuilderView(self.bot, interaction.user, draft=draft, template_name=template_name)
+            containers = view.get_dual_containers(interaction.guild, interaction.channel)
+            msg_data = await send_container_response(interaction, containers, view=view)
+            msg_id = None
+            if isinstance(msg_data, dict) and "id" in msg_data:
+                msg_id = int(msg_data["id"])
+            elif hasattr(msg_data, "id"):
+                msg_id = int(msg_data.id)
+            if msg_id:
+                view.message_id = msg_id
+                view.channel_id = interaction.channel_id
+                EmbedBuilderView.active_views[msg_id] = view
+            return
+
+        # Case 1: Inside active EmbedBuilderView session (Live Preview Dropdown clicked)
+        if message.id in EmbedBuilderView.active_views:
+            active_view = EmbedBuilderView.active_views[message.id]
+            if interaction.user.id != active_view.author.id:
+                c = KyokaContainer()
+                c.add_section(content="**Access Denied**\n> Only the builder author can test the preview.")
+                await send_container_response(interaction, c, ephemeral=True)
+                return
+            active_view.preview_module_id = selected_id
+            await active_view.update_view(interaction)
+            return
+
+        # Case 2: On a posted channel card from database
+        card_data = await self.bot.embed_mgr.get_interactive_card(guild.id, message.id)
+        if card_data:
+            draft = ContainerDraft.from_dict(card_data)
+            avatar_url = str(self.bot.user.display_avatar.url) if self.bot and self.bot.user else ""
+            new_container = draft.to_container(
+                active_module_id=selected_id,
+                user=interaction.user,
+                guild=guild,
+                channel=interaction.channel,
+                bot=self.bot,
+                default_avatar=avatar_url,
+            )
+
+            await edit_container_response(interaction, new_container)
+        else:
+            if not interaction.response.is_done():
+                await interaction.response.defer()
+
+    @commands.hybrid_group(
+        name="embed",
+        aliases=["embedbuilder", "container", "card"],
+        description="Design, customize, preview, save, edit, and post Components V2 container cards.",
+        fallback="hub",
+    )
+    @commands.has_permissions(manage_messages=True)
+    async def embed_group(self, ctx: CustomContext) -> None:
+        """Launch the embed manager dashboard."""
+        prefix = self.bot.guild_mgr.get_prefix(ctx.guild.id)
+        templates = await self.bot.embed_mgr.list_templates(ctx.guild.id)
+        hub_container = KyokaContainer(accent_color=None)
+        hub_container.add_section(
+            content=(
+                "**Server Embed Manager**\n"
+                f"> Manage, design, and dispatch custom container cards for **{ctx.guild.name}**.\n"
+                f"> All embeds are saved and managed by their unique **Name**."
+            )
+        )
+        hub_container.add_separator(divider=True)
+
+        if templates:
+            t_lines = [f"`{t.get('embed_name')}`" for t in templates[:25]]
+            hub_container.add_text(
+                f"**Saved Embeds ({len(templates)}):** " + " , ".join(t_lines)
+            )
+        else:
+            hub_container.add_text(
+                "**Saved Embeds:** `None`"
+            )
+
+        hub_container.add_separator(divider=True)
+        hub_container.add_text(
+            f"`{prefix}embed create <name>` , `{prefix}embed edit <name>`\n"
+            f"`{prefix}embed show <name>` , `{prefix}embed delete <name>`\n"
+            f"`{prefix}embed send #channel <name>` , `{prefix}embed list`"
+        )
+        hub_container.add_separator(divider=True)
+        hub_container.add_text(f"-# Requested by {ctx.author.display_name}")
+
+        await send_container_response(ctx, hub_container)
+
+    @embed_group.command(
+        name="create",
+        description="Create a new named embed. Usage: ?embed create <name>",
+    )
+    @commands.has_permissions(manage_messages=True)
+    async def embed_create(self, ctx: CustomContext, *, name: str) -> None:
+        """Create a new named embed."""
+        clean_name = re.sub(r"[^a-zA-Z0-9_-]", "", name.lower())
+        if not clean_name:
+            await ctx.send_warning("Please provide a valid embed name (letters, numbers, hyphens). Example: `?embed create rules`")
+            return
+
+        existing = await self.bot.embed_mgr.get_template(ctx.guild.id, clean_name)
+        draft = ContainerDraft.from_dict(existing) if existing else ContainerDraft()
+
+        # Save initial template record
+        await self.bot.embed_mgr.save_template(
+            guild_id=ctx.guild.id,
+            name=clean_name,
+            payload=draft.to_dict(),
+            created_by=ctx.author.id,
+        )
+
+        view = EmbedBuilderView(self.bot, ctx.author, draft=draft, template_name=clean_name)
+        containers = view.get_dual_containers(ctx.guild, ctx.channel)
+        msg_data = await send_container_response(ctx, containers, view=view)
+        msg_id = None
+        if isinstance(msg_data, dict) and "id" in msg_data:
+            msg_id = int(msg_data["id"])
+        elif hasattr(msg_data, "id"):
+            msg_id = int(msg_data.id)
+        if msg_id:
+            view.message_id = msg_id
+            view.channel_id = ctx.channel.id
+            EmbedBuilderView.active_views[msg_id] = view
+
+    @embed_group.command(
+        name="edit",
+        description="Edit an existing named embed. Usage: ?embed edit <name>",
+    )
+    @commands.has_permissions(manage_messages=True)
+    async def embed_edit_template(self, ctx: CustomContext, *, name: str) -> None:
+        """Open the builder to edit a saved template."""
+        clean_name = re.sub(r"[^a-zA-Z0-9_-]", "", name.lower())
+        template_data = await self.bot.embed_mgr.get_template(ctx.guild.id, clean_name)
+        if not template_data:
+            await ctx.send_error(f"Embed template `{clean_name}` not found. Create it using `?embed create {clean_name}`.")
+            return
+
+        draft = ContainerDraft.from_dict(template_data)
+        view = EmbedBuilderView(self.bot, ctx.author, draft=draft, template_name=clean_name)
+        containers = view.get_dual_containers(ctx.guild, ctx.channel)
+        msg_data = await send_container_response(ctx, containers, view=view)
+        msg_id = None
+        if isinstance(msg_data, dict) and "id" in msg_data:
+            msg_id = int(msg_data["id"])
+        elif hasattr(msg_data, "id"):
+            msg_id = int(msg_data.id)
+        if msg_id:
+            view.message_id = msg_id
+            view.channel_id = ctx.channel.id
+            EmbedBuilderView.active_views[msg_id] = view
+
+    @embed_group.command(
+        name="show",
+        aliases=["view", "preview"],
+        description="Preview a saved embed card. Usage: ?embed show <name>",
+    )
+    @commands.has_permissions(manage_messages=True)
+    async def embed_show(self, ctx: CustomContext, *, name: str) -> None:
+        """View a live preview of a saved embed template."""
+        clean_name = re.sub(r"[^a-zA-Z0-9_-]", "", name.lower())
+        template_data = await self.bot.embed_mgr.get_template(ctx.guild.id, clean_name)
+        if not template_data:
+            await ctx.send_error(f"Embed template `{clean_name}` not found.")
+            return
+
+        draft = ContainerDraft.from_dict(template_data)
+        avatar_url = str(self.bot.user.display_avatar.url) if self.bot and self.bot.user else ""
+        container = draft.to_container(
+            user=ctx.author,
+            guild=ctx.guild,
+            channel=ctx.channel,
+            bot=self.bot,
+            default_avatar=avatar_url,
+        )
+        msg_data = await send_container_response(ctx, container)
+        msg_id = None
+        if isinstance(msg_data, dict) and "id" in msg_data:
+            msg_id = int(msg_data["id"])
+        elif hasattr(msg_data, "id"):
+            msg_id = int(msg_data.id)
+
+        if msg_id:
+            await self.bot.embed_mgr.record_interactive_card(
+                guild_id=ctx.guild.id,
+                message_id=msg_id,
+                template_name=clean_name,
+                payload=draft.to_dict(),
+            )
+
+    @embed_group.command(
+        name="send",
+        aliases=["post"],
+        description="Send a saved template to a channel. Usage: ?embed send [#channel] <name>",
+    )
+    @commands.has_permissions(manage_messages=True)
+    async def embed_send(
+        self, ctx: CustomContext, target_or_name: str, template_name: str | None = None
+    ) -> None:
+        """Send a saved template to a channel."""
+        target_channel: discord.abc.Messageable = ctx.channel
+        actual_name = target_or_name
+
+        if template_name is not None:
+            channel_converter = commands.TextChannelConverter()
+            try:
+                target_channel = await channel_converter.convert(ctx, target_or_name)
+            except Exception:
+                found = None
+                clean_id = re.sub(r"[<#>]", "", target_or_name)
+                if clean_id.isdigit() and ctx.guild:
+                    found = ctx.guild.get_channel(int(clean_id))
+                if not found and ctx.guild:
+                    found = discord.utils.get(ctx.guild.text_channels, name=target_or_name)
+                if found:
+                    target_channel = found
+                else:
+                    await ctx.send_error(f"Channel '{target_or_name}' not found.")
+                    return
+            actual_name = template_name
+
+        clean_name = re.sub(r"[^a-zA-Z0-9_-]", "", actual_name.lower())
+        template_data = await self.bot.embed_mgr.get_template(ctx.guild.id, clean_name)
+        if not template_data:
+            await ctx.send_error(f"Saved template '{clean_name}' not found.")
+            return
+
+        draft = ContainerDraft.from_dict(template_data)
+        avatar_url = str(self.bot.user.display_avatar.url) if self.bot and self.bot.user else ""
+        container = draft.to_container(
+            user=ctx.author,
+            guild=ctx.guild,
+            channel=target_channel,
+            bot=self.bot,
+            default_avatar=avatar_url,
+        )
+        try:
+            target_msg = await send_container_response(target_channel, container)
+            msg_id = None
+            if isinstance(target_msg, dict) and "id" in target_msg:
+                msg_id = int(target_msg["id"])
+            elif hasattr(target_msg, "id"):
+                msg_id = int(target_msg.id)
+
+            if msg_id:
+                await self.bot.embed_mgr.record_interactive_card(
+                    guild_id=ctx.guild.id,
+                    message_id=msg_id,
+                    template_name=clean_name,
+                    payload=draft.to_dict(),
+                )
+
+            ch_mention = getattr(target_channel, "mention", f"#{target_channel}")
+            resp_container = KyokaContainer(accent_color=None)
+            resp_container.add_section(
+                content=(
+                    "**Card Dispatched**\n"
+                    f"> Saved embed `{clean_name}` posted to {ch_mention}."
+                )
+            )
+            resp_container.add_separator(divider=True)
+            resp_container.add_text(f"-# Requested by {ctx.author.display_name}")
+            await send_container_response(ctx, resp_container)
+        except Exception as e:
+            logger.error(f"Failed to post embed template '{clean_name}': {e}", exc_info=e)
+            await ctx.send_error(f"Failed to post card: {e}")
+
+    @embed_group.command(
+        name="delete",
+        aliases=["remove"],
+        description="Delete a saved template. Usage: ?embed delete <name>",
+    )
+    @commands.has_permissions(manage_messages=True)
+    async def embed_delete(self, ctx: CustomContext, *, name: str) -> None:
+        """Delete a saved template."""
+        clean_name = re.sub(r"[^a-zA-Z0-9_-]", "", name.lower())
+        success = await self.bot.embed_mgr.delete_template(ctx.guild.id, clean_name)
+        container = KyokaContainer(accent_color=None)
+        if success:
+            container.add_section(
+                content=(
+                    "**Embed Deleted**\n"
+                    f"> Embed template `{clean_name}` has been removed from this server."
+                )
+            )
+        else:
+            container.add_section(
+                content=(
+                    "**Embed Not Found**\n"
+                    f"> Could not find or delete template `{clean_name}`."
+                )
+            )
+        container.add_separator(divider=True)
+        container.add_text(f"-# Requested by {ctx.author.display_name}")
+        await send_container_response(ctx, container)
+
+    @embed_group.command(
+        name="list",
+        aliases=["all", "templates"],
+        description="List all saved embeds in this server. Usage: ?embed list",
+    )
+    @commands.has_permissions(manage_messages=True)
+    async def embed_list(self, ctx: CustomContext) -> None:
+        """List all saved templates."""
+        templates = await self.bot.embed_mgr.list_templates(ctx.guild.id)
+        prefix = self.bot.guild_mgr.get_prefix(ctx.guild.id)
+        if not templates:
+            container = KyokaContainer(accent_color=None)
+            container.add_section(
+                content=(
+                    "**Saved Embed Templates**\n"
+                    f"> No saved embeds found in this server. Create one using `{prefix}embed create <name>`."
+                )
+            )
+            container.add_separator(divider=True)
+            container.add_text(f"-# Requested by {ctx.author.display_name}")
+            await send_container_response(ctx, container)
+            return
+
+        container = KyokaContainer(accent_color=None)
+        container.add_section(
+            content=(
+                "**Saved Embed Templates**\n"
+                f"> Listing `{len(templates)}` saved embed template(s) in this server."
+            )
+        )
+        container.add_separator(divider=True)
+
+        lines = []
+        for t in templates:
+            t_name = t.get("embed_name", "unknown")
+            created_at = str(t.get("created_at", ""))[:10]
+            lines.append(f"`{t_name}` (Created {created_at}) — `{prefix}embed edit {t_name}`")
+
+        container.add_text("\n".join(lines))
+        container.add_separator(divider=True)
+        container.add_text(f"-# Requested by {ctx.author.display_name}")
+        await send_container_response(ctx, container)
+
+
+async def setup(bot: KyokaBot) -> None:
+    await bot.add_cog(EmbedBuilder(bot))

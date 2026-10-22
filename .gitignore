@@ -1,0 +1,45 @@
+# Environment variables
+.env
+
+# Python Cache & Bytecode
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+
+# Virtual Environment
+venv/
+.venv/
+env/
+ENV/
+
+# Databases & Backups
+data/
+*.sqlite
+*.sqlite3
+*.db
+
+# Logs
+logs/
+*.log
+
+# IDE & OS files
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# Lavalink local server
+lavalink/
+*.jar
+
+# Temporary scratch
+scratch/
+
+# Website (local only, not pushed yet)
+website/
+
+.pytest_cache/
+*.rar
+

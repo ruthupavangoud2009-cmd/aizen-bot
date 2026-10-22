@@ -1,0 +1,460 @@
+"""
+Kyoka Discord Bot - AFK (Away From Keyboard) System
+High-performance in-memory cached AFK notifications with database persistence,
+smart mention notifications, nickname updates, and automatic status clearing.
+"""
+
+from __future__ import annotations
+
+import asyncio
+import datetime
+import logging
+import time
+from typing import TYPE_CHECKING, Optional, Any
+from dataclasses import dataclass
+
+import discord
+from discord import app_commands
+from discord.ext import commands
+
+from src.core.context import CustomContext
+from src.utils.containers import KyokaContainer, send_container_response
+
+if TYPE_CHECKING:
+    from src.core.bot import KyokaBot
+
+logger = logging.getLogger("Kyoka.Utility.AFK")
+
+
+@dataclass
+class AFKData:
+    """In-memory representation of an AFK user's state."""
+    user_id: int
+    guild_id: int
+    reason: str
+    created_at: datetime.datetime
+    nickname_changed: bool = False
+    original_nickname: Optional[str] = None
+
+
+def format_duration(seconds: float) -> str:
+    """Convert elapsed seconds into a human-readable string (e.g. '2h 15m 30s')."""
+    total = int(seconds)
+    if total < 60:
+        return f"{total}s"
+    minutes, secs = divmod(total, 60)
+    hours, minutes = divmod(minutes, 60)
+    days, hours = divmod(hours, 24)
+
+    parts = []
+    if days > 0:
+        parts.append(f"{days}d")
+    if hours > 0:
+        parts.append(f"{hours}h")
+    if minutes > 0:
+        parts.append(f"{minutes}m")
+    if secs > 0 and len(parts) < 2:
+        parts.append(f"{secs}s")
+    return " ".join(parts)
+
+
+class AFKNoteModal(discord.ui.Modal):
+    """Modal to leave a private note for an AFK user."""
+
+    def __init__(self, bot: KyokaBot, target_id: int, target_name: str, guild_id: int) -> None:
+        super().__init__(title=f"Note for {target_name[:20]}")
+        self.bot = bot
+        self.target_id = target_id
+        self.target_name = target_name
+        self.guild_id = guild_id
+
+        self.note_input = discord.ui.TextInput(
+            label="Your Message / Note",
+            style=discord.TextStyle.paragraph,
+            placeholder="Write a message to be delivered when they return...",
+            required=True,
+            max_length=250,
+        )
+        self.add_item(self.note_input)
+
+    async def on_submit(self, interaction: discord.Interaction) -> None:
+        note_text = self.note_input.value.strip()
+        if not note_text:
+            await interaction.response.send_message("Note cannot be empty.", ephemeral=True)
+            return
+
+        try:
+            await self.bot.db.execute(
+                """
+                INSERT INTO user_afk_notes (target_user_id, sender_id, sender_name, guild_id, note)
+                VALUES ($1, $2, $3, $4, $5);
+                """,
+                self.target_id,
+                interaction.user.id,
+                interaction.user.display_name,
+                self.guild_id,
+                note_text,
+            )
+            await interaction.response.send_message(
+                f"Your note for **{self.target_name}** has been saved! They will receive it as soon as they return.",
+                ephemeral=True,
+            )
+        except Exception as e:
+            logger.error(f"Failed to save AFK note: {e}")
+            await interaction.response.send_message("Failed to save note due to an internal error.", ephemeral=True)
+
+
+class AFKLeaveNoteView(discord.ui.View):
+    """Interactive button to leave a note for an AFK user."""
+
+    def __init__(self, bot: KyokaBot, target_id: int, target_name: str, guild_id: int) -> None:
+        super().__init__(timeout=300.0)
+        self.bot = bot
+        self.target_id = target_id
+        self.target_name = target_name
+        self.guild_id = guild_id
+
+    @discord.ui.button(label="Leave a Note", emoji="📝", style=discord.ButtonStyle.secondary, custom_id="afk_leave_note_btn")
+    async def leave_note_btn(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+        if interaction.user.id == self.target_id:
+            await interaction.response.send_message("You cannot leave a note for yourself.", ephemeral=True)
+            return
+        modal = AFKNoteModal(self.bot, self.target_id, self.target_name, self.guild_id)
+        await interaction.response.send_modal(modal)
+
+
+class AFKCog(commands.Cog, name="AFK"):
+    """Away From Keyboard (AFK) status management."""
+    category: str = "Moderation"
+
+    def __init__(self, bot: KyokaBot) -> None:
+        self.bot = bot
+        # In-memory fast cache: (user_id, guild_id) -> AFKData
+        self._afk_cache: dict[tuple[int, int], AFKData] = {}
+        # Mention notification cooldown: (guild_id, user_id, channel_id) -> last_notified_timestamp
+        self._mention_cooldowns: dict[tuple[int, int, int], float] = {}
+        self._loaded = False
+
+    async def cog_load(self) -> None:
+        """Load persistent AFK states from database into memory on cog startup."""
+        asyncio.create_task(self._load_afk_cache())
+
+    async def _load_afk_cache(self) -> None:
+        """Initialize AFK table and populate in-memory cache."""
+        try:
+            # Ensure table exists in case migration hasn't executed
+            await self.bot.db.execute(
+                """
+                CREATE TABLE IF NOT EXISTS user_afk (
+                    user_id BIGINT,
+                    guild_id BIGINT,
+                    reason TEXT DEFAULT 'AFK',
+                    nickname_changed BOOLEAN DEFAULT FALSE,
+                    original_nickname VARCHAR(64),
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    PRIMARY KEY (user_id, guild_id)
+                );
+                """
+            )
+            rows = await self.bot.db.fetch_all("SELECT * FROM user_afk;")
+            for row in rows:
+                user_id = int(row["user_id"])
+                guild_id = int(row["guild_id"])
+                raw_created = row.get("created_at")
+                if isinstance(raw_created, datetime.datetime):
+                    created_at = raw_created
+                elif isinstance(raw_created, str):
+                    try:
+                        created_at = datetime.datetime.fromisoformat(raw_created)
+                    except Exception:
+                        created_at = discord.utils.utcnow()
+                else:
+                    created_at = discord.utils.utcnow()
+
+                self._afk_cache[(user_id, guild_id)] = AFKData(
+                    user_id=user_id,
+                    guild_id=guild_id,
+                    reason=row.get("reason") or "AFK",
+                    created_at=created_at,
+                    nickname_changed=bool(row.get("nickname_changed", False)),
+                    original_nickname=row.get("original_nickname"),
+                )
+            self._loaded = True
+            logger.info(f"Loaded {len(self._afk_cache)} active AFK record(s) into memory cache.")
+        except Exception as e:
+            logger.error(f"Failed to load AFK cache: {e}", exc_info=e)
+
+    @commands.hybrid_command(
+        name="afk",
+        description="Set your AFK status with an optional reason.",
+    )
+    @app_commands.describe(reason="Reason for being AFK (optional)")
+    @commands.guild_only()
+    async def afk(
+        self,
+        ctx: CustomContext,
+        *,
+        reason: Optional[str] = None,
+    ) -> None:
+        """Set your AFK status in this server."""
+        if not ctx.guild:
+            return
+
+        final_reason = reason.strip() if reason and reason.strip() else "AFK"
+        if len(final_reason) > 250:
+            final_reason = final_reason[:247] + "..."
+
+        now = discord.utils.utcnow()
+        user_id = ctx.author.id
+        guild_id = ctx.guild.id
+        key = (user_id, guild_id)
+
+        # Handle Nickname update if permissions permit
+        nickname_changed = False
+        original_nickname: Optional[str] = None
+        new_nick: Optional[str] = None
+        if isinstance(ctx.author, discord.Member):
+            original_nickname = ctx.author.nick
+            # Check if bot can edit author's nickname
+            me = ctx.guild.me
+            can_manage = me.guild_permissions.manage_nicknames or me.guild_permissions.administrator
+            try:
+                is_higher = me.top_role > ctx.author.top_role
+            except Exception:
+                is_higher = False
+            is_owner = ctx.author.id == ctx.guild.owner_id
+
+            if can_manage and is_higher and not is_owner:
+                current_display = ctx.author.display_name
+                if not current_display.startswith("[AFK] "):
+                    new_nick = f"[AFK] {current_display}"[:32]
+                    nickname_changed = True
+                    async def _apply_afk_nick(member: discord.Member, target_nick: str) -> None:
+                        try:
+                            await member.edit(nick=target_nick, reason="Kyoka AFK Status Update")
+                        except Exception as e:
+                            logger.debug(f"Unable to update nickname for AFK user {member}: {e}")
+
+                    asyncio.create_task(_apply_afk_nick(ctx.author, new_nick))
+
+        # Update cache
+        afk_entry = AFKData(
+            user_id=user_id,
+            guild_id=guild_id,
+            reason=final_reason,
+            created_at=now,
+            nickname_changed=nickname_changed,
+            original_nickname=original_nickname,
+        )
+        self._afk_cache[key] = afk_entry
+
+        # Persist to database
+        try:
+            await self.bot.db.execute(
+                """
+                INSERT INTO user_afk (user_id, guild_id, reason, nickname_changed, original_nickname, created_at)
+                VALUES (?, ?, ?, ?, ?, ?)
+                ON CONFLICT (user_id, guild_id)
+                DO UPDATE SET
+                    reason = EXCLUDED.reason,
+                    nickname_changed = EXCLUDED.nickname_changed,
+                    original_nickname = EXCLUDED.original_nickname,
+                    created_at = EXCLUDED.created_at;
+                """,
+                user_id,
+                guild_id,
+                final_reason,
+                nickname_changed,
+                original_nickname,
+                now,
+            )
+        except Exception as e:
+            logger.error(f"Failed to persist AFK record for user {user_id}: {e}", exc_info=e)
+
+        # Dispatch confirmation container
+        e_reg = getattr(self.bot, "custom_emojis", None)
+        heart_dot = e_reg.get("heart_dot", "") if e_reg else ""
+        dot_str = f"{heart_dot} " if heart_dot else ""
+
+        nick_disp = new_nick if (nickname_changed and new_nick) else (ctx.author.display_name if isinstance(ctx.author, discord.Member) else ctx.author.name)
+
+        container = KyokaContainer(accent_color=None)
+        # Title: Username AFK (no @tag)
+        container.add_text(f"### {ctx.author.name} AFK")
+        container.add_separator(divider=True)
+
+        # Description: Reason, Nickname, Tag with heart_dot
+        body_lines = [
+            f"{dot_str}**Reason:** {final_reason}",
+            f"{dot_str}**Nickname:** `{nick_disp}`",
+            f"{dot_str}**Tag:** {ctx.author.mention}",
+        ]
+        container.add_section(content="\n".join(body_lines))
+
+        # User profile thumbnail
+        container.add_thumbnail(ctx.author.display_avatar.url)
+
+        # Divider & Requested by footer
+        container.add_separator(divider=True)
+        container.add_text(f"-# Requested by {ctx.author.name}")
+
+        await send_container_response(ctx, container)
+
+    @commands.Cog.listener()
+    async def on_message(self, message: discord.Message) -> None:
+        """Monitor messages for AFK authors returning or mentions of AFK members."""
+        if message.author.bot or not message.guild:
+            return
+
+        author_id = message.author.id
+        guild_id = message.guild.id
+        now = discord.utils.utcnow()
+        author_key = (author_id, guild_id)
+
+        # ----------------------------------------------------
+        # check if the message author was AFK (Welcome back)
+        # ----------------------------------------------------
+        if author_key in self._afk_cache:
+            # If this message is invoking the afk command, don't trigger welcome back
+            if message.content:
+                try:
+                    ctx = await self.bot.get_context(message)
+                    if ctx.valid and ctx.command and ctx.command.qualified_name == "afk":
+                        return
+                except Exception:
+                    pass
+
+            # Atomic pop: ensure welcome back only triggers once
+            afk_data = self._afk_cache.pop(author_key, None)
+            if not afk_data:
+                return
+
+            # Revert nickname in background without blocking welcome back response
+            if afk_data.nickname_changed and isinstance(message.author, discord.Member):
+                async def _revert_afk_nick(member: discord.Member, orig_nick: Optional[str]) -> None:
+                    try:
+                        curr = member.nick or ""
+                        if curr.startswith("[AFK] "):
+                            await member.edit(nick=orig_nick, reason="Kyoka AFK Status Removal")
+                    except Exception as e:
+                        logger.debug(f"Unable to revert nickname for {member}: {e}")
+
+                asyncio.create_task(_revert_afk_nick(message.author, afk_data.original_nickname))
+
+            # Remove from database in background
+            asyncio.create_task(
+                self.bot.db.execute(
+                    "DELETE FROM user_afk WHERE user_id = ? AND guild_id = ?;",
+                    author_id,
+                    guild_id,
+                )
+            )
+
+            # Check and deliver pending AFK notes / voice mails
+            pending_notes = []
+            try:
+                pending_notes = await self.bot.db.fetch_all(
+                    "SELECT sender_name, note, created_at FROM user_afk_notes WHERE target_user_id = $1 AND guild_id = $2 ORDER BY created_at ASC LIMIT 8;",
+                    author_id,
+                    guild_id,
+                )
+                if pending_notes:
+                    await self.bot.db.execute(
+                        "DELETE FROM user_afk_notes WHERE target_user_id = $1 AND guild_id = $2;",
+                        author_id,
+                        guild_id,
+                    )
+            except Exception as e:
+                logger.debug(f"Failed to fetch AFK notes: {e}")
+
+            # Send welcome back card immediately
+            e_reg = getattr(self.bot, "custom_emojis", None)
+            heart_dot = e_reg.get("heart_dot", "") if e_reg else ""
+            dot_str = f"{heart_dot} " if heart_dot else ""
+            elapsed_seconds = max((now - afk_data.created_at).total_seconds(), 0.0)
+            duration_str = format_duration(elapsed_seconds)
+
+            raw_reason = afk_data.reason.strip() if afk_data.reason else ""
+            reason_val = raw_reason if (raw_reason and raw_reason.lower() != "afk") else "None"
+
+            container = KyokaContainer(accent_color=None)
+            container.add_text(f"### Welcome Back, {message.author.name}!")
+            container.add_separator(divider=True)
+
+            body_lines = [
+                f"{dot_str}**Reason:** {reason_val}",
+                f"{dot_str}**AFK Removed:** `{duration_str}`",
+            ]
+
+            if pending_notes:
+                body_lines.append(f"{dot_str}**Notes:** {len(pending_notes)} Note{'s' if len(pending_notes) > 1 else ''}")
+                for n in pending_notes:
+                    s_name = n.get("sender_name", "Someone")
+                    note_msg = n.get("note", "")
+                    body_lines.append(f"> **{s_name}:** {note_msg}")
+            else:
+                body_lines.append(f"{dot_str}**Notes:** None")
+
+            container.add_section(content="\n".join(body_lines))
+            container.add_thumbnail(message.author.display_avatar.url)
+            container.add_separator(divider=True)
+            container.add_text(f"-# Welcome back {message.author.name}")
+
+            try:
+                await send_container_response(message.channel, container)
+            except Exception as e:
+                logger.debug(f"Failed to send AFK welcome back notice: {e}")
+
+        # ----------------------------------------------------
+        # check if any mentioned users are AFK
+        # ----------------------------------------------------
+        if message.mentions:
+            now_ts = time.time()
+            for mentioned_user in message.mentions:
+                if mentioned_user.id == author_id or mentioned_user.bot:
+                    continue
+
+                mentioned_key = (mentioned_user.id, guild_id)
+                if mentioned_key in self._afk_cache:
+                    cooldown_key = (guild_id, mentioned_user.id, message.channel.id)
+                    last_notified = self._mention_cooldowns.get(cooldown_key, 0.0)
+                    # 10s cooldown per AFK user per channel to prevent notification spam
+                    if now_ts - last_notified < 10.0:
+                        continue
+                    self._mention_cooldowns[cooldown_key] = now_ts
+
+                    target_afk = self._afk_cache[mentioned_key]
+                    e_reg = getattr(self.bot, "custom_emojis", None)
+                    heart_dot = e_reg.get("heart_dot", "") if e_reg else ""
+                    dot_str = f"{heart_dot} " if heart_dot else ""
+
+                    raw_reason = target_afk.reason.strip() if target_afk.reason else ""
+                    reason_val = raw_reason if (raw_reason and raw_reason.lower() != "afk") else "None"
+
+                    container = KyokaContainer(accent_color=None)
+                    container.add_text(f"### {mentioned_user.name}'s AFK")
+                    container.add_separator(divider=True)
+
+                    body_lines = [
+                        f"{dot_str}**Reason:** {reason_val}",
+                        f"{dot_str}**Went AFK:** <t:{int(target_afk.created_at.timestamp())}:R>",
+                        f"{dot_str}**Tag:** {mentioned_user.mention}",
+                    ]
+                    container.add_section(content="\n".join(body_lines))
+
+                    container.add_thumbnail(mentioned_user.display_avatar.url)
+
+                    container.add_separator(divider=True)
+                    container.add_text(f"-# Mentioned by {message.author.name}")
+                    container.add_separator(divider=True)
+
+                    view = AFKLeaveNoteView(self.bot, mentioned_user.id, mentioned_user.display_name, guild_id)
+                    try:
+                        await send_container_response(message.channel, container, view=view)
+                    except Exception as e:
+                        logger.debug(f"Failed to send AFK mention notification: {e}")
+
+
+async def setup(bot: KyokaBot) -> None:
+    """Load the AFKCog into KyokaBot."""
+    await bot.add_cog(AFKCog(bot))

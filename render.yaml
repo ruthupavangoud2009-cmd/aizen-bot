@@ -1,0 +1,28 @@
+services:
+  - type: web
+    name: kyoka-discord-bot
+    runtime: python
+    buildCommand: chmod +x build.sh && ./build.sh
+    startCommand: python src/main.py
+    plan: free
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.11.9
+      - key: DISCORD_TOKEN
+        sync: false
+      - key: DATABASE_URL
+        sync: false
+      - key: ENVIRONMENT
+        value: production
+      - key: LAVALINK_URI
+        sync: false
+      - key: LAVALINK_PASSWORD
+        sync: false
+      - key: GEMINI_API_KEY
+        sync: false
+      - key: GEMINI_MODEL
+        value: gemini-3.8-flash
+      - key: LAVALINK_AUTO_DISCOVER
+        value: 1
+      - key: LAVALINK_PUBLIC_LIST_URL
+        value: https://lavalink-list.ajieblogs.eu.org/All
