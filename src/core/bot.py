@@ -62,6 +62,8 @@ class KyokaBot(commands.Bot):
         intents.members = True
         intents.presences = True
 
+        proxy_url = os.getenv("DISCORD_PROXY", "").strip() or None
+
         super().__init__(
             command_prefix=get_prefix,
             intents=intents,
@@ -69,6 +71,7 @@ class KyokaBot(commands.Bot):
             case_insensitive=True,
             strip_after_prefix=True,
             status=discord.Status.dnd,
+            proxy=proxy_url,
             activity=discord.CustomActivity(
                 name=f"Listening to {Config.DEFAULT_PREFIX}help",
             ),

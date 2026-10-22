@@ -115,10 +115,11 @@ async def run_bot_loop() -> None:
                 )
 
                 if is_cloudflare_block:
-                    wait_time = 900.0  # 15 minutes — let Cloudflare IP ban expire
+                    wait_time = 120.0  # 2 minutes cooldown
                     logger.warning(
                         f"Cloudflare IP block detected on Render shared IP. "
-                        f"Cooling down for {wait_time/60:.0f} minutes before reconnecting..."
+                        f"Cooling down for {wait_time:.0f}s before reconnecting. "
+                        f"(TIP: Change Render service Region to Singapore or Frankfurt in Settings to get an unblocked IP instantly!)"
                     )
                 else:
                     wait_time = max(retry_after if retry_after else delay, 45.0)
