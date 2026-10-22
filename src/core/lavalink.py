@@ -91,14 +91,16 @@ def candidates() -> list[tuple[str, str]]:
     from src.core.config import Config
 
     result: list[tuple[str, str]] = []
-    primary = (Config.LAVALINK_URI or "").strip()
+    primary = (getattr(Config, "LAVALINK_URI", "") or "").strip()
+    password = getattr(Config, "LAVALINK_PASSWORD", "youshallnotpass") or "youshallnotpass"
     if primary:
-        result.append((primary, Config.LAVALINK_PASSWORD))
+        result.append((primary, password))
 
-    for raw in (Config.LAVALINK_FALLBACK_URIS or "").split(","):
+    fallback_str = getattr(Config, "LAVALINK_FALLBACK_URIS", "") or ""
+    for raw in fallback_str.split(","):
         uri = raw.strip()
         if uri and all(uri != known for known, _ in result):
-            result.append((uri, Config.LAVALINK_PASSWORD))
+            result.append((uri, password))
 
     return result
 
@@ -201,7 +203,7 @@ async def fetch_public_nodes(limit: int = 30) -> list[tuple[str, str]]:
     if _public_nodes_cache and now - _public_nodes_cache[0] < _PUBLIC_NODE_CACHE_TTL:
         return _public_nodes_cache[1][:limit]
 
-    url = (Config.LAVALINK_PUBLIC_LIST_URL or "").strip()
+    url = (getattr(Config, "LAVALINK_PUBLIC_LIST_URL", "https://lavalink-list.ajieblogs.eu.org/All") or "").strip()
     if not url:
         return []
 
@@ -516,7 +518,7 @@ async def connect_lavalink_node(
             return node
 
     # 3: community directory - only when it is enabled and no configured node worked
-    if allow_discovery and Config.LAVALINK_AUTO_DISCOVER:
+    if allow_discovery and getattr(Config, "LAVALINK_AUTO_DISCOVER", True):
         discovered = await discover_working_node()
         if discovered is not None:
             node = await _try(*discovered)

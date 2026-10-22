@@ -83,6 +83,12 @@ class Config:
     # Lavalink / Audio Settings
     LAVALINK_URI: str = os.getenv("LAVALINK_URI", "http://lava2.kasawa.pro:2334").strip()
     LAVALINK_PASSWORD: str = os.getenv("LAVALINK_PASSWORD", "youshallnotpass").strip()
+    LAVALINK_FALLBACK_URIS: str = os.getenv("LAVALINK_FALLBACK_URIS", "").strip()
+    LAVALINK_AUTO_DISCOVER: bool = os.getenv("LAVALINK_AUTO_DISCOVER", "1").lower() in ("1", "true", "yes")
+    LAVALINK_PUBLIC_LIST_URL: str = os.getenv(
+        "LAVALINK_PUBLIC_LIST_URL",
+        "https://lavalink-list.ajieblogs.eu.org/All"
+    ).strip()
 
     # Aesthetics
     COLORS: ThemeColors = ThemeColors()
