@@ -777,6 +777,22 @@ class PostgresDatabase(BaseDatabase):
             "ALTER TABLE user_premium ADD COLUMN IF NOT EXISTS status VARCHAR(16) NOT NULL DEFAULT 'active'",
             "ALTER TABLE user_premium ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP",
             "ALTER TABLE user_premium ADD COLUMN IF NOT EXISTS activated_by BIGINT",
+            # Reaction roles bindings (Carl-bot & Dyno style)
+            """
+            CREATE TABLE IF NOT EXISTS reaction_roles (
+                id BIGSERIAL PRIMARY KEY,
+                guild_id BIGINT NOT NULL,
+                channel_id BIGINT NOT NULL,
+                message_id BIGINT NOT NULL,
+                emoji VARCHAR(100) NOT NULL,
+                role_id BIGINT NOT NULL,
+                mode VARCHAR(20) DEFAULT 'normal',
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                CONSTRAINT uq_rr_msg_emoji UNIQUE (message_id, emoji)
+            );
+            """,
+            "CREATE INDEX IF NOT EXISTS idx_rr_msg ON reaction_roles (message_id);",
+            "CREATE INDEX IF NOT EXISTS idx_rr_guild ON reaction_roles (guild_id);",
         ]
         if not self.pool or self.pool._closed:
             await self._heal_pool()

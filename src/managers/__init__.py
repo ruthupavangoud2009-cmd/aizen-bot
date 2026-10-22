@@ -10,6 +10,7 @@ from src.managers.tech_realtime_manager import TechRealtimeManager
 from src.managers.temp_voice_manager import TempVoiceManager
 from src.managers.translator_manager import TranslatorManager
 from src.managers.sticky_manager import StickyManager
+from src.managers.reaction_role_manager import ReactionRoleManager
 
 __all__ = [
     "GuildManager",
@@ -24,4 +25,5 @@ __all__ = [
     "TempVoiceManager",
     "TranslatorManager",
     "StickyManager",
+    "ReactionRoleManager",
 ]

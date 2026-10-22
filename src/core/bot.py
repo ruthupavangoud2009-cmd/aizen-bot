@@ -106,6 +106,8 @@ class KyokaBot(commands.Bot):
         self.antinuke_mgr: AntinukeManager = AntinukeManager(self.db)
         self.media_mgr: MediaManager = MediaManager(self.db)
         self.giveaway_mgr: GiveawayManager = GiveawayManager(self.db)
+        from src.managers.reaction_role_manager import ReactionRoleManager
+        self.reaction_role_mgr: ReactionRoleManager = ReactionRoleManager(self.db)
         self.custom_emojis: EmojiRegistry = EmojiRegistry(self)
         self.no_prefix_users: set[int] = set()
         self.custom_status: str | None = None
@@ -190,6 +192,7 @@ class KyokaBot(commands.Bot):
         await self.antinuke_mgr.load_cache()
         await self.media_mgr.load_cache()
         await self.giveaway_mgr.load_cache()
+        await self.reaction_role_mgr.load_cache()
         await self.custom_emojis.load()
 
         # Load No-Prefix authorized users into memory

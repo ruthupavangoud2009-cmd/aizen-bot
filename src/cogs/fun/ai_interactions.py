@@ -3,11 +3,8 @@ from __future__ import annotations
 import asyncio
 import logging
 import os
-import re
 import time
 from collections import defaultdict, deque
-from typing import Any
-from urllib.parse import quote
 
 import aiohttp
 import discord
@@ -119,21 +116,23 @@ class AIInteractions(commands.Cog):
             for turn in history:
                 contents.append({"role": turn["role"], "parts": [{"text": turn["text"]}]})
             contents.append({"role": "user", "parts": [{"text": prompt[:4000]}]})
-            body = {"system_instruction": {"parts": [{"text": "You are KYŌKA, an original Aizen-inspired assistant: composed, clever, calm, occasionally dryly witty. Never claim to literally be Sosuke Aizen. Be useful and conversational."}]}, "contents": contents, "generationConfig": {"temperature": 0.8, "maxOutputTokens": 700}}
-            models_to_try: list[str] = []
-            env_model = os.getenv("GEMINI_MODEL", "gemini-3.5-flash-lite").strip().strip("/")
-            if env_model:
-                models_to_try.append(env_model)
-            for fallback in ("gemini-3.5-flash-lite", "gemini-3.5-flash", "gemini-flash-lite-latest", "gemini-flash-latest"):
-                if fallback not in models_to_try:
-                    models_to_try.append(fallback)
+            body = {
+                "system_instruction": {"parts": [{"text": "You are KYŌKA, an original Aizen-inspired assistant: composed, clever, calm, occasionally dryly witty. Never claim to literally be Sosuke Aizen. Be useful, punchy, concise, and conversational."}]},
+                "contents": contents,
+                "generationConfig": {"temperature": 0.7, "maxOutputTokens": 300}
+            }
+            # Prioritize ultra-fast gemini-3.5-flash-lite (responds in <1s)
+            models_to_try: list[str] = ["gemini-3.5-flash-lite", "gemini-3.5-flash", "gemini-flash-lite-latest"]
+            env_model = os.getenv("GEMINI_MODEL", "").strip().strip("/")
+            if env_model and env_model != "gemini-3.8-flash" and env_model not in models_to_try:
+                models_to_try.insert(0, env_model)
 
             answer = ""
             last_error: Exception | None = None
 
             for model in models_to_try:
                 url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent"
-                timeout = aiohttp.ClientTimeout(total=7)
+                timeout = aiohttp.ClientTimeout(total=3.5)
                 try:
                     async with self._session().post(url, params={"key": key}, json=body, timeout=timeout) as response:
                         if response.status == 200:
