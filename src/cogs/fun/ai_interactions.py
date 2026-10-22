@@ -120,38 +120,50 @@ class AIInteractions(commands.Cog):
                 contents.append({"role": turn["role"], "parts": [{"text": turn["text"]}]})
             contents.append({"role": "user", "parts": [{"text": prompt[:4000]}]})
             body = {"system_instruction": {"parts": [{"text": "You are KYŌKA, an original Aizen-inspired assistant: composed, clever, calm, occasionally dryly witty. Never claim to literally be Sosuke Aizen. Be useful and conversational."}]}, "contents": contents, "generationConfig": {"temperature": 0.8, "maxOutputTokens": 700}}
-            timeout = aiohttp.ClientTimeout(total=18)
-            model = os.getenv("GEMINI_MODEL", "gemini-3.8-flash").strip().strip("/")
-            if not re.fullmatch(r"[A-Za-z0-9._-]{1,100}", model):
-                raise RuntimeError("GEMINI_MODEL is invalid. Use a model ID such as gemini-3.8-flash.")
-            url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent"
-            async with self._session().post(url, params={"key": key}, json=body, timeout=timeout) as response:
-                if response.status != 200:
-                    if response.status in (401, 403):
-                        raise RuntimeError("Gemini rejected the API key. Check GEMINI_API_KEY.")
-                    if response.status == 429:
-                        raise RuntimeError("The AI service is rate-limited right now. Try again shortly.")
-                    if response.status == 404:
-                        raise RuntimeError(
-                            f"Gemini model '{model}' was not found or is unavailable to this API key. "
-                            "Set GEMINI_MODEL to a model enabled for your key (for example gemini-3.8-flash)."
-                        )
-                    if response.status == 400:
-                        try:
-                            detail = await response.json(content_type=None)
-                            code = detail.get("error", {}).get("message", "")
-                        except Exception:
-                            code = ""
-                        safe_code = str(code).replace(key, "[redacted]")[:240]
-                        raise RuntimeError(f"Gemini rejected the request (HTTP 400). Check model/API settings. {safe_code}")
-                    raise RuntimeError(f"The AI service returned HTTP {response.status}. Try again later.")
-                data = await response.json(content_type=None)
-            try:
-                answer = "".join(part.get("text", "") for part in data["candidates"][0]["content"]["parts"]).strip()
-            except (KeyError, IndexError, TypeError):
-                answer = ""
+            models_to_try: list[str] = []
+            env_model = os.getenv("GEMINI_MODEL", "gemini-3.5-flash-lite").strip().strip("/")
+            if env_model:
+                models_to_try.append(env_model)
+            for fallback in ("gemini-3.5-flash-lite", "gemini-3.5-flash", "gemini-flash-lite-latest", "gemini-flash-latest"):
+                if fallback not in models_to_try:
+                    models_to_try.append(fallback)
+
+            answer = ""
+            last_error: Exception | None = None
+
+            for model in models_to_try:
+                url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent"
+                timeout = aiohttp.ClientTimeout(total=7)
+                try:
+                    async with self._session().post(url, params={"key": key}, json=body, timeout=timeout) as response:
+                        if response.status == 200:
+                            data = await response.json(content_type=None)
+                            try:
+                                parts = data["candidates"][0]["content"]["parts"]
+                                answer = "".join(part.get("text", "") for part in parts).strip()
+                                if answer:
+                                    break
+                            except (KeyError, IndexError, TypeError):
+                                continue
+                        elif response.status in (401, 403):
+                            raise RuntimeError("Gemini rejected the API key. Please check GEMINI_API_KEY in Render.")
+                        else:
+                            log.debug("Gemini model %s returned status %s; trying next candidate...", model, response.status)
+                except asyncio.TimeoutError:
+                    log.debug("Gemini model %s timed out; trying next candidate...", model)
+                    continue
+                except RuntimeError:
+                    raise
+                except Exception as exc:
+                    last_error = exc
+                    log.debug("Gemini model %s error: %s; trying next candidate...", model, exc)
+                    continue
+
             if not answer:
-                raise RuntimeError("The AI service returned an empty response. Please try again.")
+                if last_error:
+                    raise last_error
+                raise RuntimeError("The AI service is currently unavailable. Please try again shortly.")
+
             history.append({"role": "user", "text": prompt[:4000]})
             history.append({"role": "model", "text": answer[:5000]})
             return answer

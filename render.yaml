@@ -25,4 +25,4 @@ services:
       - key: LAVALINK_PASSWORD
         value: "youshallnotpass"
       - key: GEMINI_MODEL
-        value: "gemini-3.8-flash"
+        value: "gemini-3.5-flash-lite"
