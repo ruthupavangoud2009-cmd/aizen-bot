@@ -5,6 +5,7 @@ services:
     buildCommand: chmod +x build.sh && ./build.sh
     startCommand: python src/main.py
     plan: free
+    region: singapore
     envVars:
       - key: PYTHON_VERSION
         value: 3.11.9
@@ -17,7 +18,7 @@ services:
       - key: BOT_PREFIX
         value: "+"
       - key: SYNC_COMMANDS_ON_STARTUP
-        value: "true"
+        value: "false"
       - key: LAVALINK_AUTO_DISCOVER
         value: "1"
       - key: LAVALINK_PUBLIC_LIST_URL
