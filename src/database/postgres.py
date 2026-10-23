@@ -1047,6 +1047,22 @@ class PostgresDatabase(BaseDatabase):
             );
             """,
             "CREATE INDEX IF NOT EXISTS idx_marriages_guild ON user_marriages(guild_id, user_id);",
+            # KYOKA 3.0 Automatic AI Channel Configurations
+            """
+            CREATE TABLE IF NOT EXISTS ai_channel_configs (
+                guild_id BIGINT NOT NULL,
+                channel_id BIGINT NOT NULL,
+                persona VARCHAR(32) NOT NULL DEFAULT 'aigf',
+                enabled BOOLEAN NOT NULL DEFAULT TRUE,
+                mention_only BOOLEAN NOT NULL DEFAULT FALSE,
+                cooldown_seconds INT NOT NULL DEFAULT 3,
+                send_gifs BOOLEAN NOT NULL DEFAULT TRUE,
+                configured_by BIGINT,
+                created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
+                PRIMARY KEY (guild_id, channel_id)
+            );
+            """,
+            "CREATE INDEX IF NOT EXISTS idx_ai_chan_cfg ON ai_channel_configs(channel_id, enabled);",
         ]
         if not self.pool or self.pool._closed:
             await self._heal_pool()
@@ -1141,3 +1157,73 @@ class PostgresDatabase(BaseDatabase):
         async with self.pool.acquire(timeout=10) as conn:
             rows = await conn.fetch(pg_query, *args)
             return [dict(r) for r in rows]
+
+    async def set_ai_channel(
+        self,
+        guild_id: int,
+        channel_id: int,
+        persona: str = "aigf",
+        enabled: bool = True,
+        mention_only: bool = False,
+        cooldown_seconds: int = 3,
+        send_gifs: bool = True,
+        configured_by: int | None = None,
+    ) -> None:
+        """Upsert automatic AI channel configuration."""
+        query = (
+            "INSERT INTO ai_channel_configs "
+            "(guild_id, channel_id, persona, enabled, mention_only, cooldown_seconds, send_gifs, configured_by, created_at) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP) "
+            "ON CONFLICT (guild_id, channel_id) DO UPDATE SET "
+            "persona = EXCLUDED.persona, "
+            "enabled = EXCLUDED.enabled, "
+            "mention_only = EXCLUDED.mention_only, "
+            "cooldown_seconds = EXCLUDED.cooldown_seconds, "
+            "send_gifs = EXCLUDED.send_gifs, "
+            "configured_by = EXCLUDED.configured_by;"
+        )
+        await self.execute(
+            query,
+            guild_id,
+            channel_id,
+            persona,
+            enabled,
+            mention_only,
+            cooldown_seconds,
+            send_gifs,
+            configured_by,
+        )
+
+    async def get_ai_channel(self, guild_id: int, channel_id: int) -> dict[str, Any] | None:
+        """Fetch automatic AI configuration for a specific channel."""
+        return await self.fetch_one(
+            "SELECT * FROM ai_channel_configs WHERE guild_id = ? AND channel_id = ?;",
+            guild_id,
+            channel_id,
+        )
+
+    async def get_all_ai_channels(self, guild_id: int | None = None) -> list[dict[str, Any]]:
+        """Fetch all active automatic AI channel configurations."""
+        if guild_id is not None:
+            return await self.fetch_all(
+                "SELECT * FROM ai_channel_configs WHERE guild_id = ? ORDER BY created_at DESC;",
+                guild_id,
+            )
+        return await self.fetch_all("SELECT * FROM ai_channel_configs ORDER BY created_at DESC;")
+
+    async def disable_ai_channel(self, guild_id: int, channel_id: int) -> None:
+        """Disable automatic AI responses in a channel without deleting configuration."""
+        await self.execute(
+            "UPDATE ai_channel_configs SET enabled = FALSE WHERE guild_id = ? AND channel_id = ?;",
+            guild_id,
+            channel_id,
+        )
+
+    async def remove_ai_channel(self, guild_id: int, channel_id: int) -> None:
+        """Permanently remove automatic AI channel configuration."""
+        await self.execute(
+            "DELETE FROM ai_channel_configs WHERE guild_id = ? AND channel_id = ?;",
+            guild_id,
+            channel_id,
+        )
+

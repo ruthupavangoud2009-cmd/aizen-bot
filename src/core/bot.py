@@ -91,6 +91,12 @@ class KyokaBot(commands.Bot):
             strip_after_prefix=True,
             status=discord.Status.dnd,
             proxy=proxy_url,
+            allowed_mentions=discord.AllowedMentions(
+                everyone=False,
+                roles=False,
+                users=True,
+                replied_user=True,
+            ),
             activity=discord.CustomActivity(
                 name=f"Listening to {Config.DEFAULT_PREFIX}help",
             ),

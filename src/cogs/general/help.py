@@ -26,133 +26,102 @@ class Help(commands.Cog):
     category: str = "General"
 
     CATEGORY_ORDER = [
-        "General",
-        "Fun",
-        "Anime Actions",
-        "Romance & Relationships",
-        "Adult Humor — Restricted",
-        "AI Companions",
-        "AI Chat",
-        "Games",
-        "Social & Profiles",
-        "Community & XP",
-        "Moderation",
-        "Tickets",
-        "Giveaways",
-        "Images & GIFs",
-        "Premium",
-        "Administration",
-        "Utility",
+        "⛩️・AIZEN AI SYSTEM",
+        "🛡️・MODERATION",
+        "🎫・TICKETS",
+        "🎉・GIVEAWAYS",
+        "📈・LEVELS & COMMUNITY",
+        "🖼️・IMAGES & GIFS",
+        "💬・SOCIAL & PROFILES",
+        "🎮・FUN & GAMES",
+        "💎・PREMIUM",
+        "⚙️・ADMINISTRATION",
+        "🔧・UTILITY",
     ]
 
     def __init__(self, bot: KyokaBot) -> None:
         self.bot = bot
 
     def _resolve_category(self, cmd: commands.Command) -> str:
-        """Resolve a command into one of the 17 standard KYOKA 3.0 help categories."""
+        """Resolve a command into one of the 11 clean Aizen Edition help categories."""
         name = cmd.name.lower()
         cog_cat = getattr(cmd.cog, "category", "").strip()
 
-        # 1. Adult Humor — Restricted
-        if cog_cat == "Adult Humor — Restricted" or name in (
-            "goon", "goonreaction", "fuck", "smash", "thirst", "downbad", "downbadcheck",
-            "hornybonk", "seduce", "spank", "wildreaction", "adultreaction", "simp",
-            "obsessed", "fantasize", "tease", "bedroomeyes", "caughtlacking", "rateattraction",
+        # 1. ⛩️・AIZEN AI SYSTEM (All AI features in one category)
+        if cog_cat in ("⛩️・AIZEN AI SYSTEM", "AI Companions", "AI & Chat", "AIInteractions") or name in (
+            "aigf", "aibaddie", "aispecial", "aiclearcompanion", "aichannel", "aidiag", "aistatus",
+            "ai", "chat", "askai", "aizenai", "aisetup", "aipersonality", "aiconfig", "aitest",
+            "aiclear", "aimodel", "aidebug", "girlfriend", "baddie", "specialai", "clearcompanion",
+            "setaichannel", "setcompanionchannel", "aichatsetup",
         ):
-            return "Adult Humor — Restricted"
+            return "⛩️・AIZEN AI SYSTEM"
 
-        # 2. AI Companions
-        if cog_cat == "AI Companions" or name in ("aigf", "aibaddie", "aispecial", "aiclearcompanion", "girlfriend", "baddie", "specialai", "clearcompanion"):
-            return "AI Companions"
+        # 2. 🛡️・MODERATION
+        if cog_cat.lower() in ("moderation", "mod") or name in (
+            "ban", "unban", "kick", "timeout", "untimeout", "warn", "warnings", "delwarn",
+            "purge", "lock", "unlock", "slowmode", "snipe", "snipeall", "clearsnipe", "clearsnipeall",
+            "modlog", "modlogs", "admins", "mods", "bots", "nuke",
+        ):
+            return "🛡️・MODERATION"
 
-        # 3. AI Chat
-        if cog_cat in ("AI & Chat", "AIInteractions") and name in ("ai", "chat", "askai", "aizenai", "aisetup", "aipersonality", "aiconfig", "aitest", "aiclear", "aistatus"):
-            return "AI Chat"
+        # 3. 🎫・TICKETS
+        if cog_cat.lower() in ("ticket", "tickets") or name.startswith("ticket") or name in ("panel", "claim", "close", "transcript"):
+            return "🎫・TICKETS"
 
-        # 4. Romance & Relationships
-        if cog_cat == "Romance & Relationships" or name in (
+        # 4. 🎉・GIVEAWAYS
+        if cog_cat.lower() in ("giveaway", "giveaways") or name in ("giveaway", "gstart", "gend", "greroll", "glist", "requirements"):
+            return "🎉・GIVEAWAYS"
+
+        # 5. 📈・LEVELS & COMMUNITY
+        if name in ("levels", "rank", "levelconfig", "activity", "leaderboard", "privacy", "diagnostics", "tech", "devpulse", "cve", "news") or cog_cat in ("Community & XP", "Intelligence"):
+            return "📈・LEVELS & COMMUNITY"
+
+        # 6. 🖼️・IMAGES & GIFS
+        if cog_cat == "Images & GIFs" or name in ("gif", "meme", "randomgif", "imagine", "steal", "emojis", "expressions", "stickers", "delemoji", "filter", "trigger"):
+            return "🖼️・IMAGES & GIFS"
+
+        # 7. 💬・SOCIAL & PROFILES
+        if cog_cat in ("Romance & Relationships", "Social & Profiles") or name in (
             "propose", "marry", "divorce", "breakup", "relationship", "couple", "marriage",
             "kiss", "makeout", "love", "crush", "date", "jealous", "flirt", "pickup",
             "compliment", "cuddle", "hug", "romance", "heartbreak", "reject", "confess",
             "rizz", "ship", "compatibility", "soulmate", "loveletter",
+            "avatar", "banner", "profile", "serveravatar", "serverbanner", "userinfo", "membercount", "bio",
         ):
-            return "Romance & Relationships"
+            return "💬・SOCIAL & PROFILES"
 
-        # 5. Anime Actions
-        if cog_cat == "Anime Actions" or name in (
+        # 8. 🎮・FUN & GAMES
+        if cog_cat in ("Games", "Fun", "Anime Actions", "Adult Humor — Restricted") or name in (
+            "bloxfruits", "bf", "bloxtrivia", "tod", "truthordare", "poll", "wordguess",
+            "wordgame", "dailychallenge", "dailyquest", "challenge", "rps", "trivia",
+            "guessanumber", "guessnumber", "guess", "guessstatus", "guesscancel", "guesshelp",
+            "8ball", "eightball", "coinflip", "flip", "dice", "roll", "choose", "rate",
+            "joke", "fact", "quote", "wyr", "truth", "dare", "roast", "funhelp",
             "punch", "blast", "animekick", "akick", "kickanime", "slap", "bonk", "pat", "poke",
             "bite", "yeet", "highfive", "stare", "scare", "laugh", "dance", "cry", "rage",
             "wave", "wink", "embarrass", "dramatic", "angry", "shy", "facepalm", "laughat",
             "crywith", "comfort", "cheer", "celebrate", "mock", "explode", "dodge", "flex",
             "scream", "sleep", "wake", "vibe", "reaction", "blush", "happy", "sleepy",
             "thumbsup", "shrug", "killme", "kill", "act",
+            "goon", "goonreaction", "fuck", "smash", "thirst", "downbad", "downbadcheck",
+            "hornybonk", "seduce", "spank", "wildreaction", "adultreaction", "simp",
+            "obsessed", "fantasize", "tease", "bedroomeyes", "caughtlacking", "rateattraction",
         ):
-            return "Anime Actions"
+            return "🎮・FUN & GAMES"
 
-        # 6. Games
-        if cog_cat == "Games" or name in (
-            "bloxfruits", "bf", "bloxtrivia", "tod", "truthordare", "poll", "wordguess",
-            "wordgame", "dailychallenge", "dailyquest", "challenge", "rps", "trivia",
-            "guessanumber", "guessnumber", "guess", "guessstatus", "guesscancel", "guesshelp",
-        ):
-            return "Games"
+        # 9. 💎・PREMIUM
+        if cog_cat == "Premium" or name in ("premium", "redeem", "tier", "license", "prime"):
+            return "💎・PREMIUM"
 
-        # 7. Fun
-        if cog_cat == "Fun" or name in (
-            "8ball", "eightball", "coinflip", "flip", "dice", "roll", "choose", "rate",
-            "joke", "fact", "quote", "wyr", "truth", "dare", "roast", "funhelp",
-        ):
-            return "Fun"
-
-        # 8. Images & GIFs
-        if name in ("gif", "meme", "randomgif", "imagine", "steal", "emojis", "expressions", "stickers", "delemoji"):
-            return "Images & GIFs"
-
-        # 9. Social & Profiles
-        if name in ("avatar", "banner", "profile", "serveravatar", "serverbanner", "userinfo", "membercount"):
-            return "Social & Profiles"
-
-        # 10. Community & XP
-        if name in ("levels", "rank", "levelconfig", "activity", "leaderboard", "privacy", "diagnostics"):
-            return "Community & XP"
-
-        # 11. Moderation
-        if cog_cat.lower() in ("moderation", "mod") or name in (
-            "ban", "unban", "kick", "timeout", "mute", "unmute", "warn", "warnings", "delwarn",
-            "purge", "lock", "unlock", "slowmode", "snipe", "snipeall", "clearsnipe", "clearsnipeall",
-            "modlog", "admins", "mods", "bots",
-        ):
-            return "Moderation"
-
-        # 12. Tickets
-        if cog_cat.lower() in ("ticket", "tickets") or name.startswith("ticket"):
-            return "Tickets"
-
-        # 13. Giveaways
-        if cog_cat.lower() in ("giveaway", "giveaways") or name in ("giveaway", "gstart", "gend", "greroll", "glist", "requirements"):
-            return "Giveaways"
-
-        # 14. Premium
-        if name in ("premium", "redeem", "tier", "license"):
-            return "Premium"
-
-        # 15. Administration
+        # 10. ⚙️・ADMINISTRATION
         if cog_cat.lower() in ("admin", "administration", "security", "antinuke", "config", "settings") or name in (
             "prefix", "setprefix", "resetprefix", "autorole", "welcome", "boost", "media",
-            "sticky", "antinuke", "whitelist", "extraowner", "logs", "config",
+            "sticky", "antinuke", "whitelist", "extraowner", "logs", "config", "disablecmd", "enablecmd",
         ):
-            return "Administration"
+            return "⚙️・ADMINISTRATION"
 
-        # 16. Utility
-        if cog_cat.lower() in ("utility", "util") or name in (
-            "afk", "voice", "tempvoice", "translate", "translator", "verify", "verification",
-            "reactionroles", "role", "roleall", "roleinfo", "listroles", "channelinfo",
-            "serverinfo", "server", "tech", "dev", "clear",
-        ):
-            return "Utility"
-
-        # 17. General
-        return "General"
+        # 11. 🔧・UTILITY
+        return "🔧・UTILITY"
 
     @staticmethod
     def _can_run_command(cmd: Any, ctx: CustomContext | None = None) -> bool:
@@ -236,23 +205,17 @@ class Help(commands.Cog):
         if not e_reg:
             return "•"
         mapping = {
-            "General": e_reg.get("icon_info", "ℹ️"),
-            "Fun": e_reg.get("icon_sparkles", "🎭"),
-            "Anime Actions": e_reg.get("icon_sparkles", "⚔️"),
-            "Romance & Relationships": e_reg.get("icon_heart", "💖"),
-            "Adult Humor — Restricted": e_reg.get("icon_fire", "🔞"),
-            "AI Companions": e_reg.get("icon_sparkles", "🤖"),
-            "AI Chat": e_reg.get("icon_sparkles", "💬"),
-            "Games": e_reg.get("icon_games", "🎮"),
-            "Social & Profiles": e_reg.get("icon_profile", "👤"),
-            "Community & XP": e_reg.get("icon_chart", "📈"),
-            "Moderation": e_reg.get("icon_moderation", "🔨"),
-            "Tickets": e_reg.get("icon_ticket", "🎫"),
-            "Giveaways": e_reg.get("discord_giveaway", "🎉"),
-            "Images & GIFs": e_reg.get("icon_image", "🖼️"),
-            "Premium": e_reg.get("verified_premium", "💎"),
-            "Administration": e_reg.get("icon_settings", "⚙️"),
-            "Utility": e_reg.get("icon_wrench", "🛠️"),
+            "⛩️・AIZEN AI SYSTEM": e_reg.get("icon_sparkles", "⛩️"),
+            "🛡️・MODERATION": e_reg.get("icon_moderation", "🛡️"),
+            "🎫・TICKETS": e_reg.get("icon_ticket", "🎫"),
+            "🎉・GIVEAWAYS": e_reg.get("discord_giveaway", "🎉"),
+            "📈・LEVELS & COMMUNITY": e_reg.get("icon_chart", "📈"),
+            "🖼️・IMAGES & GIFS": e_reg.get("icon_image", "🖼️"),
+            "💬・SOCIAL & PROFILES": e_reg.get("icon_heart", "💬"),
+            "🎮・FUN & GAMES": e_reg.get("icon_games", "🎮"),
+            "💎・PREMIUM": e_reg.get("verified_premium", "💎"),
+            "⚙️・ADMINISTRATION": e_reg.get("icon_settings", "⚙️"),
+            "🔧・UTILITY": e_reg.get("icon_wrench", "🔧"),
         }
         return mapping.get(cat_name, e_reg.get("icon_moderation", "•"))
 
@@ -262,23 +225,17 @@ class Help(commands.Cog):
         if not e_reg:
             return None
         mapping = {
-            "General": "icon_info",
-            "Fun": "icon_sparkles",
-            "Anime Actions": "icon_sparkles",
-            "Romance & Relationships": "icon_heart",
-            "Adult Humor — Restricted": "icon_fire",
-            "AI Companions": "icon_sparkles",
-            "AI Chat": "icon_sparkles",
-            "Games": "icon_games",
-            "Social & Profiles": "icon_profile",
-            "Community & XP": "icon_chart",
-            "Moderation": "icon_moderation",
-            "Tickets": "icon_ticket",
-            "Giveaways": "discord_giveaway",
-            "Images & GIFs": "icon_image",
-            "Premium": "verified_premium",
-            "Administration": "icon_settings",
-            "Utility": "icon_wrench",
+            "⛩️・AIZEN AI SYSTEM": "icon_sparkles",
+            "🛡️・MODERATION": "icon_moderation",
+            "🎫・TICKETS": "icon_ticket",
+            "🎉・GIVEAWAYS": "discord_giveaway",
+            "📈・LEVELS & COMMUNITY": "icon_chart",
+            "🖼️・IMAGES & GIFS": "icon_image",
+            "💬・SOCIAL & PROFILES": "icon_heart",
+            "🎮・FUN & GAMES": "icon_games",
+            "💎・PREMIUM": "verified_premium",
+            "⚙️・ADMINISTRATION": "icon_settings",
+            "🔧・UTILITY": "icon_wrench",
         }
         emoji_name = mapping.get(cat_name, "icon_moderation")
         return e_reg.get_select_emoji(emoji_name, fallback_unicode=None)
@@ -298,13 +255,13 @@ class Help(commands.Cog):
         total_commands = sum(len(cmds) for cmds in visible_categories.values())
         e_reg = self.bot.custom_emojis
 
-        dot = e_reg.get("heart_dot", e_reg.get("icons_rightarrow", "-"))
+        dot = e_reg.get("heart_dot", e_reg.get("icons_rightarrow", "•"))
 
         container = KyokaContainer(accent_color=None)
         container.add_section(
             content=(
-                f"**Hey, I'm {Config.BOT_NAME}**\n"
-                f"> Built for our community — keeping your server safe, active, and effortlessly connected."
+                f"**⛩️ Kyoka 3.0 — Aizen Edition**\n"
+                f"> Supreme server command, automatic AI companions, real moderation, and entertainment."
             )
         )
         container.add_separator(divider=True)

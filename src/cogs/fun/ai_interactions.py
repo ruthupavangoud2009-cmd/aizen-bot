@@ -52,7 +52,7 @@ class ConfirmAIResetView(discord.ui.View):
 
 class AIInteractions(commands.Cog):
     """Optional Gemini chat and real GIF-provider integrations."""
-    category = "AI & Chat"
+    category = "⛩️・AIZEN AI SYSTEM"
 
     def __init__(self, bot: commands.Bot):
         self.bot = bot
@@ -164,7 +164,7 @@ class AIInteractions(commands.Cog):
                 "contents": contents,
                 "generationConfig": {"temperature": 0.7, "maxOutputTokens": 300}
             }
-            models_to_try: list[str] = ["gemini-2.0-flash", "gemini-1.5-flash", "gemini-1.5-pro", "gemini-2.0-flash-exp"]
+            models_to_try: list[str] = ["gemini-flash-lite-latest", "gemini-3.8-flash", "gemini-2.5-flash", "gemini-flash-latest"]
             env_model = os.getenv("GEMINI_MODEL", "").strip().strip("/")
             if env_model and env_model not in models_to_try:
                 models_to_try.insert(0, env_model)
@@ -556,6 +556,10 @@ class AIInteractions(commands.Cog):
     @commands.Cog.listener()
     async def on_message(self, message: discord.Message):
         if message.author.bot or message.guild is None or not message.content.strip():
+            return
+        # If channel is managed by CompanionAI, let CompanionAI handle it
+        comp_cog = self.bot.get_cog("CompanionAI")
+        if comp_cog and message.channel.id in getattr(comp_cog, "_channel_configs", {}):
             return
         # Do not answer command messages, regardless of the configured prefix.
         try:

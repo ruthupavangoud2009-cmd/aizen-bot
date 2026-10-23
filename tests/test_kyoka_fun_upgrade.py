@@ -18,7 +18,7 @@ from src.security.owner import OWNER_ID
 # ─── 1. TEST HELP 17 CATEGORIES COVERAGE ─────────────────────────────────────
 
 @pytest.mark.asyncio
-async def test_help_17_categories_coverage():
+async def test_help_aizen_categories_coverage():
     from src.core.bot import KyokaBot
     from src.cogs.general.help import Help
 
@@ -30,13 +30,20 @@ async def test_help_17_categories_coverage():
     help_cog = bot.get_cog("Help")
     assert help_cog is not None
 
-    # Check 17 categories are explicitly defined in Help
-    assert len(Help.CATEGORY_ORDER) == 17
+    # Check 11 clean Aizen Edition categories are explicitly defined in Help
+    assert len(Help.CATEGORY_ORDER) == 11
     expected_categories = [
-        "General", "Fun", "Anime Actions", "Romance & Relationships",
-        "Adult Humor — Restricted", "AI Companions", "AI Chat", "Games",
-        "Social & Profiles", "Community & XP", "Moderation", "Tickets",
-        "Giveaways", "Images & GIFs", "Premium", "Administration", "Utility"
+        "⛩️・AIZEN AI SYSTEM",
+        "🛡️・MODERATION",
+        "🎫・TICKETS",
+        "🎉・GIVEAWAYS",
+        "📈・LEVELS & COMMUNITY",
+        "🖼️・IMAGES & GIFS",
+        "💬・SOCIAL & PROFILES",
+        "🎮・FUN & GAMES",
+        "💎・PREMIUM",
+        "⚙️・ADMINISTRATION",
+        "🔧・UTILITY",
     ]
     assert Help.CATEGORY_ORDER == expected_categories
 
@@ -46,10 +53,11 @@ async def test_help_17_categories_coverage():
     ctx.guild = MagicMock(id=12345)
 
     visible = await help_cog._get_visible_categories(ctx)
-    assert len(visible) >= 12  # Populated categories
+    assert len(visible) >= 8  # Populated categories
     # Verify core categories exist in visible categories
-    for cat in ["General", "Fun", "Anime Actions", "Romance & Relationships", "AI Companions", "AI Chat", "Games", "Moderation", "Tickets", "Giveaways", "Utility"]:
+    for cat in ["⛩️・AIZEN AI SYSTEM", "🛡️・MODERATION", "🎫・TICKETS", "🎉・GIVEAWAYS", "💬・SOCIAL & PROFILES", "🎮・FUN & GAMES", "🔧・UTILITY"]:
         assert cat in visible, f"Category '{cat}' should be present in visible categories"
+
 
 
 # ─── 2. TEST THREE DISTINCT AI COMPANION PERSONAS ────────────────────────────
@@ -213,4 +221,149 @@ def test_real_moderation_commands_intact():
     assert hasattr(kick_cog, "kick")
     # Verify real moderation ban is preserved
     assert hasattr(ban_cog, "ban")
+
+
+# ─── 7. TEST AUTOMATIC AI CHANNELS SETUP & PERSISTENCE ───────────────────────
+
+@pytest.mark.asyncio
+async def test_ai_channel_setup_and_persistence():
+    from src.cogs.fun.companion_ai import CompanionAI
+
+    mock_bot = MagicMock()
+    mock_bot.db = AsyncMock()
+    cog = CompanionAI(mock_bot)
+
+    guild = MagicMock(spec=discord.Guild)
+    guild.id = 88888
+    guild.name = "Aizen HQ"
+    guild.me = MagicMock()
+
+    channel = MagicMock(spec=discord.TextChannel)
+    channel.id = 77777
+    channel.name = "girlfriend-lounge"
+    channel.mention = "<#77777>"
+
+    # Mock permissions as valid
+    perms = MagicMock()
+    perms.send_messages = True
+    perms.embed_links = True
+    perms.read_messages = True
+    channel.permissions_for.return_value = perms
+
+    # Test Setup
+    embed = await cog._setup_channel(guild, channel, persona="aigf", user_id=12345)
+    assert "Automatic AI Channel Configured" in embed.title
+    assert 77777 in cog._channel_configs
+    assert cog._channel_configs[77777]["persona"] == "aigf"
+    mock_bot.db.set_ai_channel.assert_called_once()
+
+    # Test Status
+    status_embed = await cog._status_channel(guild, channel)
+    assert "girlfriend-lounge" in status_embed.title
+    assert "Active" in status_embed.fields[0].value
+
+    # Test Disable
+    disable_embed = await cog._disable_channel(guild, channel)
+    assert "Disabled" in disable_embed.title
+    assert cog._channel_configs[77777]["enabled"] is False
+    mock_bot.db.disable_ai_channel.assert_called_once_with(88888, 77777)
+
+    # Test Remove
+    remove_embed = await cog._remove_channel(guild, channel)
+    assert "Removed" in remove_embed.title
+    assert 77777 not in cog._channel_configs
+    mock_bot.db.remove_ai_channel.assert_called_once_with(88888, 77777)
+
+
+# ─── 8. TEST AUTOMATIC AI CHANNEL MESSAGE LISTENER ───────────────────────────
+
+@pytest.mark.asyncio
+async def test_ai_channel_on_message_listener_flow():
+    from src.cogs.fun.companion_ai import CompanionAI
+
+    mock_bot = MagicMock()
+    mock_bot.user.id = 99999
+    mock_bot.db = AsyncMock()
+    mock_bot.ai_mgr = AsyncMock()
+    mock_bot.ai_mgr.generate_persona_reply.return_value = "Hello darling, I missed you! 💖"
+    mock_bot.session = MagicMock()
+    mock_bot.session.closed = False
+
+    cog = CompanionAI(mock_bot)
+    cog._channel_configs[77777] = {
+        "guild_id": 88888,
+        "channel_id": 77777,
+        "persona": "aigf",
+        "enabled": True,
+        "mention_only": False,
+        "cooldown_seconds": 3,
+        "send_gifs": False,
+    }
+
+    # 1. Message from bot itself -> ignored
+    bot_msg = MagicMock(spec=discord.Message)
+    bot_msg.author.id = 99999
+    bot_msg.author.bot = True
+    await cog.on_message(bot_msg)
+    mock_bot.ai_mgr.generate_persona_reply.assert_not_called()
+
+    # 2. Normal user message in configured channel -> generates response
+    user_msg = MagicMock(spec=discord.Message)
+    user_msg.author.id = 55555
+    user_msg.author.bot = False
+    user_msg.webhook_id = None
+    user_msg.guild.id = 88888
+    user_msg.guild.name = "Aizen HQ"
+    user_msg.channel.id = 77777
+    user_msg.channel.name = "girlfriend-lounge"
+    user_msg.content = "How was your day?"
+    user_msg.mentions = []
+    user_msg.reference = None
+    user_msg.reply = AsyncMock()
+
+    # Context parser returns invalid (not a command)
+    mock_ctx = MagicMock()
+    mock_ctx.valid = False
+    mock_bot.get_context.return_value = mock_ctx
+
+    await cog.on_message(user_msg)
+    mock_bot.ai_mgr.generate_persona_reply.assert_called_once()
+    user_msg.reply.assert_called_once()
+
+
+# ─── 9. TEST GEMINI CONNECTIVITY DIAGNOSTICS ─────────────────────────────────
+
+@pytest.mark.asyncio
+async def test_gemini_connectivity_diagnostics_mocked():
+    from src.managers.ai_manager import AIManager
+
+    mock_db = AsyncMock()
+    ai_mgr = AIManager(mock_db)
+
+    mock_session = MagicMock()
+    mock_response = AsyncMock()
+    mock_response.status = 200
+
+    # Mock post context manager
+    mock_session.post.return_value.__aenter__.return_value = mock_response
+
+    with patch.dict(os.environ, {"GEMINI_API_KEY": "AIzaSyFakeKey123", "GEMINI_MODEL": "gemini-flash-lite-latest"}):
+        result = await ai_mgr.test_connectivity(mock_session)
+        assert result["ok"] is True
+        assert result["status"] == 200
+        assert result["model"] == "gemini-flash-lite-latest"
+        assert "latency_ms" in result
+
+
+# ─── 10. TEST BOT-WIDE DEFAULT ALLOWED MENTIONS ──────────────────────────────
+
+def test_bot_default_allowed_mentions_protection():
+    from src.core.bot import KyokaBot
+
+    bot = KyokaBot()
+    assert bot.allowed_mentions is not None
+    assert bot.allowed_mentions.everyone is False
+    assert bot.allowed_mentions.roles is False
+    assert bot.allowed_mentions.users is True
+
 

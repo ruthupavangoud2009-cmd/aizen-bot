@@ -1065,10 +1065,11 @@ async def test_ticket_closed_controls_and_reopen_logic():
 
 def test_gemini_active_models_configuration():
     from src.managers.ai_manager import AIManager
+    assert AIManager.DEFAULT_MODEL == "gemini-flash-lite-latest"
     for model in AIManager.FALLBACK_MODELS:
-        assert model in ("gemini-2.0-flash", "gemini-1.5-flash", "gemini-1.5-pro", "gemini-2.0-flash-exp")
-        assert "3.5" not in model
-        assert "2.5" not in model
+        assert model in ("gemini-flash-lite-latest", "gemini-3.8-flash", "gemini-2.5-flash", "gemini-flash-latest")
+        assert "exp" not in model
+        assert "1.5" not in model
 
 
 # ─────────────────────────────────────────────────────────────────────────────

@@ -150,7 +150,8 @@ class AIManager:
     Stores and isolates AI configuration per server, supports 10 distinct personality presets,
     custom prompt engineering, cooldowns, channels, and graceful failover cascades.
     """
-    FALLBACK_MODELS = ("gemini-2.0-flash", "gemini-1.5-flash", "gemini-1.5-pro", "gemini-2.0-flash-exp")
+    DEFAULT_MODEL = "gemini-flash-lite-latest"
+    FALLBACK_MODELS = ("gemini-flash-lite-latest", "gemini-3.8-flash", "gemini-2.5-flash", "gemini-flash-latest")
 
     def __init__(self, db: PostgresDatabase) -> None:
         self.db = db
@@ -410,12 +411,12 @@ class AIManager:
             candidate_models = []
             if env_model:
                 candidate_models.append(env_model)
-            for m in ("gemini-2.0-flash", "gemini-1.5-flash", "gemini-1.5-pro", "gemini-2.0-flash-exp"):
+            for m in self.FALLBACK_MODELS:
                 if m not in candidate_models:
                     candidate_models.append(m)
 
             last_error: Exception | None = None
-            timeout = aiohttp.ClientTimeout(total=25)
+            timeout = aiohttp.ClientTimeout(total=20)
 
             for model_name in candidate_models:
                 url = (
@@ -447,6 +448,12 @@ class AIManager:
                             raise RuntimeError("Invalid or unauthorized GEMINI_API_KEY. Please verify your API key in Render environment settings.")
                         elif response.status == 429:
                             raise RuntimeError("Gemini API rate limit exceeded. Please wait a moment before trying again.")
+                        elif response.status == 404:
+                            last_error = RuntimeError(f"AI model '{model_name}' not available (HTTP 404).")
+                            continue
+                        elif response.status == 400:
+                            last_error = RuntimeError(f"AI API rejected request (HTTP 400) for {model_name}.")
+                            continue
                         else:
                             last_error = RuntimeError(f"AI API error status {response.status} from {model_name}")
                 except (RuntimeError, asyncio.CancelledError):
@@ -549,6 +556,12 @@ class AIManager:
                             raise RuntimeError("Invalid or unauthorized GEMINI_API_KEY. Please verify your API key in Render environment settings.")
                         elif response.status == 429:
                             raise RuntimeError("Gemini API rate limit exceeded. Please wait a moment before trying again.")
+                        elif response.status == 404:
+                            last_error = RuntimeError(f"AI model '{model_name}' not available (HTTP 404).")
+                            continue
+                        elif response.status == 400:
+                            last_error = RuntimeError(f"AI API rejected request (HTTP 400) for {model_name}.")
+                            continue
                         else:
                             last_error = RuntimeError(f"AI API error status {response.status} from {model_name}")
                 except (RuntimeError, asyncio.CancelledError):
@@ -575,4 +588,76 @@ class AIManager:
                     self.history[k].clear()
                     cleared += 1
         return cleared
+
+    async def test_connectivity(self, session: aiohttp.ClientSession) -> dict[str, Any]:
+        """
+        Safely test connectivity to Google Gemini API without exposing secret tokens.
+        Reports provider, active model, latency, and status code.
+        """
+        key = os.getenv("GEMINI_API_KEY", "").strip()
+        if not key or key.lower().startswith("replace_"):
+            return {
+                "ok": False,
+                "error": "GEMINI_API_KEY is not configured in environment.",
+                "configured_model": os.getenv("GEMINI_MODEL", self.DEFAULT_MODEL),
+                "provider": "Google Gemini API",
+            }
+
+        env_model = os.getenv("GEMINI_MODEL", self.DEFAULT_MODEL).strip().strip("/")
+        candidate_models = [env_model]
+        for m in self.FALLBACK_MODELS:
+            if m not in candidate_models:
+                candidate_models.append(m)
+
+        timeout = aiohttp.ClientTimeout(total=8.0)
+        body = {"contents": [{"parts": [{"text": "Hello"}]}]}
+
+        for model_name in candidate_models:
+            url = (
+                f"https://generativelanguage.googleapis.com/v1beta/models/"
+                f"{model_name}:generateContent?key={key}"
+            )
+            start_t = time.monotonic()
+            try:
+                async with session.post(url, json=body, timeout=timeout) as response:
+                    latency_ms = round((time.monotonic() - start_t) * 1000, 1)
+                    if response.status == 200:
+                        return {
+                            "ok": True,
+                            "model": model_name,
+                            "configured_model": env_model,
+                            "status": 200,
+                            "latency_ms": latency_ms,
+                            "provider": "Google Gemini API (REST v1beta)",
+                        }
+                    elif response.status == 429:
+                        return {
+                            "ok": False,
+                            "model": model_name,
+                            "configured_model": env_model,
+                            "status": 429,
+                            "error": "Gemini API rate limit or quota exceeded.",
+                            "provider": "Google Gemini API",
+                        }
+                    elif response.status in (401, 403):
+                        return {
+                            "ok": False,
+                            "model": model_name,
+                            "configured_model": env_model,
+                            "status": response.status,
+                            "error": "Authentication failed (invalid key or forbidden).",
+                            "provider": "Google Gemini API",
+                        }
+                    elif response.status == 404:
+                        continue
+            except Exception:
+                continue
+
+        return {
+            "ok": False,
+            "model": env_model,
+            "configured_model": env_model,
+            "error": "Could not connect to any candidate Gemini models.",
+            "provider": "Google Gemini API",
+        }
 

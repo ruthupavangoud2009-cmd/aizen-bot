@@ -238,7 +238,7 @@ async def analyze_with_gemini(
         f'{{"is_meme": bool, "tldr": "string", "highlights": ["string", "string"], "why_it_matters": "string", "target_audience": "string"}}'
     )
 
-    models_to_try = ["gemini-2.0-flash", "gemini-1.5-flash", "gemini-1.5-pro", "gemini-2.0-flash-exp"]
+    models_to_try = [os.getenv("GEMINI_MODEL", "gemini-flash-lite-latest"), "gemini-flash-lite-latest", "gemini-3.8-flash", "gemini-2.5-flash"]
     headers = {
         "Content-Type": "application/json",
         "x-goog-api-key": api_key,
