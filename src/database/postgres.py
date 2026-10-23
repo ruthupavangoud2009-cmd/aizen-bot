@@ -1063,6 +1063,30 @@ class PostgresDatabase(BaseDatabase):
             );
             """,
             "CREATE INDEX IF NOT EXISTS idx_ai_chan_cfg ON ai_channel_configs(channel_id, enabled);",
+            # KYOKA 3.0 Community Suggestions Configuration & Submissions
+            """
+            CREATE TABLE IF NOT EXISTS guild_suggestions_settings (
+                guild_id BIGINT PRIMARY KEY,
+                channel_id BIGINT NOT NULL,
+                is_enabled BOOLEAN DEFAULT TRUE,
+                created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
+            );
+            """,
+            """
+            CREATE TABLE IF NOT EXISTS guild_suggestions (
+                id SERIAL PRIMARY KEY,
+                guild_id BIGINT NOT NULL,
+                user_id BIGINT NOT NULL,
+                channel_id BIGINT NOT NULL,
+                message_id BIGINT,
+                content TEXT NOT NULL,
+                status VARCHAR(20) DEFAULT 'pending',
+                upvotes INT DEFAULT 0,
+                downvotes INT DEFAULT 0,
+                created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
+            );
+            """,
+            "CREATE INDEX IF NOT EXISTS idx_suggestions_guild ON guild_suggestions(guild_id);",
         ]
         if not self.pool or self.pool._closed:
             await self._heal_pool()

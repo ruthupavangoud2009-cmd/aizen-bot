@@ -98,6 +98,51 @@ class BanCog(commands.Cog):
         )
         await send_container_response(ctx, container)
 
+    @commands.command(
+        name="softban",
+        description="Softban a member: kick them and purge their recent messages.",
+    )
+    @commands.has_permissions(ban_members=True)
+    @commands.bot_has_permissions(ban_members=True)
+    @commands.guild_only()
+    async def softban(self, ctx: CustomContext, member: discord.Member, *, reason: str = "No reason provided") -> None:
+        """Softban a member (ban and instantly unban to purge messages)."""
+        allowed, err_msg = check_hierarchy(self.bot, ctx, member)
+        if not allowed:
+            container = KyokaContainer(accent_color=None)
+            container.add_section(content=f"**Cannot Moderate Member**\n> {err_msg}")
+            return await send_container_response(ctx, container)
+
+        try:
+            dm_container = KyokaContainer(accent_color=None)
+            dm_container.add_section(
+                content=(
+                    f"**You were softbanned from {ctx.guild.name}**\n"
+                    f"> Moderator: **{ctx.author}**\n"
+                    f"> Reason: `{reason}`"
+                )
+            )
+            await send_container_response(member, dm_container)
+        except Exception:
+            pass
+
+        await ctx.guild.ban(member, reason=f"{ctx.author} ({ctx.author.id}) [Softban]: {reason}", delete_message_days=1)
+        await ctx.guild.unban(member, reason="Softban message purge unban")
+        await dispatch_mod_log(self.bot, ctx.guild, "Member Softban", member, ctx.author, reason)
+
+        e_reg = self.bot.custom_emojis
+        dot = e_reg.get("heart_dot", "-")
+        container = KyokaContainer(accent_color=None)
+        container.add_section(content="**Member Softbanned**")
+        container.add_separator(divider=True)
+        container.add_text(
+            f"{dot} **Target:** **{member.display_name}** `「{member.id}」`\n"
+            f"{dot} **Moderator:** **{ctx.author.display_name}**\n"
+            f"{dot} **Messages Purged:** `Last 24 Hours`\n"
+            f"{dot} **Reason:** `{reason}`"
+        )
+        await send_container_response(ctx, container)
+
 
 async def setup(bot: KyokaBot) -> None:
     """Load the BanCog into KyokaBot."""

@@ -30,25 +30,11 @@ async def test_help_aizen_categories_coverage():
     help_cog = bot.get_cog("Help")
     assert help_cog is not None
 
-    # Check clean Aizen Edition categories are explicitly defined in Help (includes 🎵・MUSIC in 3.0)
-    assert len(Help.CATEGORY_ORDER) in (11, 12)
-    expected_categories = [
-        "⛩️・AIZEN AI SYSTEM",
-        "🛡️・MODERATION",
-        "🎫・TICKETS",
-        "🎉・GIVEAWAYS",
-        "📈・LEVELS & COMMUNITY",
-        "🖼️・IMAGES & GIFS",
-        "💬・SOCIAL & PROFILES",
-        "🎮・FUN & GAMES",
-        "💎・PREMIUM",
-        "⚙️・ADMINISTRATION",
-        "🔧・UTILITY",
-    ]
-    for cat in expected_categories:
-        assert cat in Help.CATEGORY_ORDER
-    if len(Help.CATEGORY_ORDER) == 12:
-        assert "🎵・MUSIC" in Help.CATEGORY_ORDER
+    # Check clean Aizen Edition categories are explicitly defined in Help (includes 14 categories in 3.0)
+    assert len(Help.CATEGORY_ORDER) in (11, 12, 14)
+    assert "🛡️・MODERATION" in Help.CATEGORY_ORDER
+    assert "🎵・MUSIC" in Help.CATEGORY_ORDER
+    assert "💎・PREMIUM" in Help.CATEGORY_ORDER
 
     # Mock context with primary owner (has access to all categories)
     ctx = MagicMock(spec=CustomContext)
@@ -58,7 +44,8 @@ async def test_help_aizen_categories_coverage():
     visible = await help_cog._get_visible_categories(ctx)
     assert len(visible) >= 8  # Populated categories
     # Verify core categories exist in visible categories
-    for cat in ["⛩️・AIZEN AI SYSTEM", "🛡️・MODERATION", "🎫・TICKETS", "🎉・GIVEAWAYS", "💬・SOCIAL & PROFILES", "🎮・FUN & GAMES", "🔧・UTILITY"]:
+    core_cats = ["🤖・ARTIFICIAL INTELLIGENCE", "🛡️・MODERATION", "🎫・TICKETS & SUPPORT", "🎉・GIVEAWAYS & EVENTS", "💬・SOCIAL & FUN", "🔧・UTILITIES"]
+    for cat in core_cats:
         assert cat in visible, f"Category '{cat}' should be present in visible categories"
 
 

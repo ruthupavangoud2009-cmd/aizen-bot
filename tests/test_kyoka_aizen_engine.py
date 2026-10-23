@@ -254,22 +254,24 @@ def test_music_control_view_dj_role_and_voice_check():
 
 # ─── 5. TEST 12 HELP CATEGORIES & DEDICATED AI MODULE ─────────────────────────
 
-def test_help_category_order_has_12_categories_including_music():
-    """Verify Help.CATEGORY_ORDER contains all 12 designated categories including MUSIC."""
-    assert len(Help.CATEGORY_ORDER) == 12
+def test_help_category_order_has_14_categories_including_music():
+    """Verify Help.CATEGORY_ORDER contains all 14 designated categories."""
+    assert len(Help.CATEGORY_ORDER) == 14
     expected = [
-        "⛩️・AIZEN AI SYSTEM",
+        "🏠・GETTING STARTED",
+        "🤖・ARTIFICIAL INTELLIGENCE",
         "🛡️・MODERATION",
-        "🎫・TICKETS",
-        "🎉・GIVEAWAYS",
-        "📈・LEVELS & COMMUNITY",
-        "🖼️・IMAGES & GIFS",
-        "💬・SOCIAL & PROFILES",
-        "🎮・FUN & GAMES",
+        "👋・WELCOME & AUTOMOD",
+        "🎫・TICKETS & SUPPORT",
+        "🎉・GIVEAWAYS & EVENTS",
+        "⭐・LEVELS & COMMUNITY",
+        "🖼️・IMAGES & AVATARS",
         "🎵・MUSIC",
+        "💬・SOCIAL & FUN",
         "💎・PREMIUM",
-        "⚙️・ADMINISTRATION",
-        "🔧・UTILITY",
+        "⚙️・SERVER ADMINISTRATION",
+        "🔧・UTILITIES",
+        "👑・OWNER & DEVELOPER",
     ]
     assert Help.CATEGORY_ORDER == expected
 

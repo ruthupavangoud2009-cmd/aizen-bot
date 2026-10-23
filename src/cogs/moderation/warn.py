@@ -198,6 +198,82 @@ class WarnCog(commands.Cog):
         )
         await send_container_response(ctx, container)
 
+    @commands.command(
+        name="case",
+        description="Inspect a specific moderation warning case by its ID.",
+    )
+    @commands.has_permissions(moderate_members=True)
+    @commands.guild_only()
+    async def case(self, ctx: CustomContext, case_id: int) -> None:
+        """View warning case details."""
+        row = await self.bot.db.fetch_one(
+            "SELECT id, user_id, moderator_id, reason, created_at FROM guild_warns WHERE id = ? AND guild_id = ?;",
+            case_id,
+            ctx.guild.id,
+        )
+        if not row:
+            container = KyokaContainer(accent_color=None)
+            container.add_section(content=f"**Case Not Found**\n> No warning case `#{case_id}` exists in this server.")
+            return await send_container_response(ctx, container)
+
+        target = ctx.guild.get_member(row["user_id"])
+        target_name = target.display_name if target else f"User {row['user_id']}"
+        mod = ctx.guild.get_member(row["moderator_id"])
+        mod_name = mod.display_name if mod else f"Mod {row['moderator_id']}"
+
+        e_reg = self.bot.custom_emojis
+        dot = e_reg.get("heart_dot", "-")
+        container = KyokaContainer(accent_color=None)
+        container.add_section(content=f"**Moderation Case #{case_id}**")
+        container.add_separator(divider=True)
+        container.add_text(
+            f"{dot} **Target:** **{target_name}** `「{row['user_id']}」`\n"
+            f"{dot} **Moderator:** **{mod_name}** `「{row['moderator_id']}」`\n"
+            f"{dot} **Reason:** `{row['reason']}`\n"
+            f"{dot} **Logged At:** `{row.get('created_at', 'N/A')}`"
+        )
+        await send_container_response(ctx, container)
+
+    @commands.command(
+        name="clearwarnings",
+        aliases=["clearwarns"],
+        description="Clear all warning records for a member.",
+    )
+    @commands.has_permissions(moderate_members=True)
+    @commands.guild_only()
+    async def clearwarnings(self, ctx: CustomContext, member: discord.Member) -> None:
+        """Clear all warnings for a member."""
+        count_row = await self.bot.db.fetch_one(
+            "SELECT COUNT(*) as cnt FROM guild_warns WHERE guild_id = ? AND user_id = ?;",
+            ctx.guild.id,
+            member.id,
+        )
+        total = count_row["cnt"] if count_row else 0
+        if total == 0:
+            container = KyokaContainer(accent_color=None)
+            container.add_section(content=f"**No Warnings Found**\n> {member.mention} has zero recorded warnings.")
+            return await send_container_response(ctx, container)
+
+        await self.bot.db.execute(
+            "DELETE FROM guild_warns WHERE guild_id = ? AND user_id = ?;",
+            ctx.guild.id,
+            member.id,
+        )
+
+        await dispatch_mod_log(self.bot, ctx.guild, "Warnings Cleared", member, ctx.author, f"Cleared {total} warnings")
+
+        e_reg = self.bot.custom_emojis
+        dot = e_reg.get("heart_dot", "-")
+        container = KyokaContainer(accent_color=None)
+        container.add_section(content="**Warnings Cleared**")
+        container.add_separator(divider=True)
+        container.add_text(
+            f"{dot} **Target:** **{member.display_name}** `「{member.id}」`\n"
+            f"{dot} **Cleared Count:** `{total}` warning(s)\n"
+            f"{dot} **Moderator:** **{ctx.author.display_name}**"
+        )
+        await send_container_response(ctx, container)
+
 
 async def setup(bot: KyokaBot) -> None:
     """Load the WarnCog into KyokaBot."""

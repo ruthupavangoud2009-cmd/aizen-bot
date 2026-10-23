@@ -118,6 +118,102 @@ class LockCog(commands.Cog):
         )
         await send_container_response(ctx, container)
 
+    @commands.command(
+        name="hide",
+        description="Hide a channel from regular members by disabling view permissions.",
+    )
+    @commands.has_permissions(manage_channels=True)
+    @commands.bot_has_permissions(manage_channels=True)
+    @commands.guild_only()
+    async def hide(
+        self,
+        ctx: CustomContext,
+        channel: Optional[discord.TextChannel] = None,
+        *,
+        reason: str = "No reason provided",
+    ) -> None:
+        """Hide a channel from @everyone."""
+        target_channel = channel or ctx.channel
+        if not isinstance(target_channel, discord.TextChannel):
+            container = KyokaContainer(accent_color=None)
+            container.add_section(content="**Error**\n> Hide command only applies to text channels.")
+            return await send_container_response(ctx, container)
+
+        overwrite = target_channel.overwrites_for(ctx.guild.default_role)
+        overwrite.view_channel = False
+        overwrite.read_messages = False
+        await target_channel.set_permissions(ctx.guild.default_role, overwrite=overwrite, reason=f"{ctx.author}: {reason}")
+
+        await dispatch_mod_log(
+            self.bot,
+            ctx.guild,
+            "Channel Hide",
+            target=None,
+            moderator=ctx.author,
+            reason=reason,
+            channel=target_channel,
+        )
+
+        e_reg = self.bot.custom_emojis
+        dot = e_reg.get("heart_dot", "-")
+        container = KyokaContainer(accent_color=None)
+        container.add_section(content="**Channel Hidden**")
+        container.add_separator(divider=True)
+        container.add_text(
+            f"{dot} **Channel:** {target_channel.mention}\n"
+            f"{dot} **Moderator:** **{ctx.author.display_name}**\n"
+            f"{dot} **Reason:** `{reason}`"
+        )
+        await send_container_response(ctx, container)
+
+    @commands.command(
+        name="unhide",
+        description="Unhide a channel to make it visible to regular members again.",
+    )
+    @commands.has_permissions(manage_channels=True)
+    @commands.bot_has_permissions(manage_channels=True)
+    @commands.guild_only()
+    async def unhide(
+        self,
+        ctx: CustomContext,
+        channel: Optional[discord.TextChannel] = None,
+        *,
+        reason: str = "No reason provided",
+    ) -> None:
+        """Unhide a channel for @everyone."""
+        target_channel = channel or ctx.channel
+        if not isinstance(target_channel, discord.TextChannel):
+            container = KyokaContainer(accent_color=None)
+            container.add_section(content="**Error**\n> Unhide command only applies to text channels.")
+            return await send_container_response(ctx, container)
+
+        overwrite = target_channel.overwrites_for(ctx.guild.default_role)
+        overwrite.view_channel = None
+        overwrite.read_messages = None
+        await target_channel.set_permissions(ctx.guild.default_role, overwrite=overwrite, reason=f"{ctx.author}: {reason}")
+
+        await dispatch_mod_log(
+            self.bot,
+            ctx.guild,
+            "Channel Unhide",
+            target=None,
+            moderator=ctx.author,
+            reason=reason,
+            channel=target_channel,
+        )
+
+        e_reg = self.bot.custom_emojis
+        dot = e_reg.get("heart_dot", "-")
+        container = KyokaContainer(accent_color=None)
+        container.add_section(content="**Channel Unhidden**")
+        container.add_separator(divider=True)
+        container.add_text(
+            f"{dot} **Channel:** {target_channel.mention}\n"
+            f"{dot} **Moderator:** **{ctx.author.display_name}**\n"
+            f"{dot} **Reason:** `{reason}`"
+        )
+        await send_container_response(ctx, container)
+
 
 async def setup(bot: KyokaBot) -> None:
     """Load the LockCog into KyokaBot."""

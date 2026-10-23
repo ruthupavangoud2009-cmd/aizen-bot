@@ -65,6 +65,48 @@ class KickCog(commands.Cog):
         )
         await send_container_response(ctx, container)
 
+    @commands.command(
+        name="nick",
+        aliases=["nickname", "setnick"],
+        description="Change or reset a member's server nickname.",
+    )
+    @commands.has_permissions(manage_nicknames=True)
+    @commands.bot_has_permissions(manage_nicknames=True)
+    @commands.guild_only()
+    async def nick(self, ctx: CustomContext, member: discord.Member, *, nickname: str | None = None) -> None:
+        """Change or reset a member's nickname."""
+        allowed, err_msg = check_hierarchy(self.bot, ctx, member)
+        if not allowed:
+            container = KyokaContainer(accent_color=None)
+            container.add_section(content=f"**Cannot Moderate Member**\n> {err_msg}")
+            return await send_container_response(ctx, container)
+
+        old_nick = member.display_name
+        new_nick = nickname.strip() if nickname else None
+
+        try:
+            await member.edit(nick=new_nick, reason=f"{ctx.author} ({ctx.author.id}) changed nickname")
+        except discord.Forbidden:
+            container = KyokaContainer(accent_color=None)
+            container.add_section(content="**Permission Denied**\n> I lack the necessary permissions or role hierarchy to modify this user's nickname.")
+            return await send_container_response(ctx, container)
+
+        action_name = "Nickname Reset" if not new_nick else "Nickname Changed"
+        await dispatch_mod_log(self.bot, ctx.guild, action_name, member, ctx.author, f"From '{old_nick}' to '{new_nick or member.name}'")
+
+        e_reg = self.bot.custom_emojis
+        dot = e_reg.get("heart_dot", "-")
+        container = KyokaContainer(accent_color=None)
+        container.add_section(content=f"**{action_name}**")
+        container.add_separator(divider=True)
+        container.add_text(
+            f"{dot} **Target:** **{member.mention}** `「{member.id}」`\n"
+            f"{dot} **Previous Nick:** `{old_nick}`\n"
+            f"{dot} **New Nick:** `{new_nick or member.name}`\n"
+            f"{dot} **Moderator:** **{ctx.author.display_name}**"
+        )
+        await send_container_response(ctx, container)
+
 
 async def setup(bot: KyokaBot) -> None:
     """Load the KickCog into KyokaBot."""
