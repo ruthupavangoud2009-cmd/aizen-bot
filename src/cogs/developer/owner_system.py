@@ -44,21 +44,21 @@ class OwnerSystem(commands.Cog):
             else:
                 await ctx.send(text)
 
-    @commands.hybrid_command(name="owner", description="Show owner-only administration help.")
+    @commands.command(name="owner", description="Show owner-only administration help.")
     async def owner_help(self, ctx):
         if not await self._guard(ctx, "owner-help"): return
         prefix = Config.DEFAULT_PREFIX
         await self._reply(ctx, f"**KYOKA 2.0 owner commands**\nPrefix: `{prefix}`\n`{prefix}owner-botinfo`, `{prefix}owner-sync`, `{prefix}owner-reload <cog>`, `{prefix}owner-load <cog>`, `{prefix}owner-unload <cog>`, `{prefix}restart`, `{prefix}maintenance <on|off>`, `{prefix}health`, `{prefix}extensions`, `{prefix}database-status`, `{prefix}errors`\nPremium: `{prefix}owner-premium grant <user|server> <id> <premium|pro> <duration|lifetime>`, followed by `revoke`, `check`, `list`, `extend`, `info`, or `servers`. This owner-only response is sent privately.")
         await audit(self.bot, ctx.author.id, "owner-help", None, "success")
 
-    @commands.hybrid_command(name="owner-botinfo", description="Owner-only bot diagnostics.")
+    @commands.command(name="owner-botinfo", description="Owner-only bot diagnostics.")
     async def botinfo(self, ctx):
         if not await self._guard(ctx, "botinfo"): return
         latency = round(self.bot.latency * 1000) if self.bot.latency is not None else -1
         uptime = dt.timedelta(seconds=int((discord.utils.utcnow() - self.bot.start_time).total_seconds()))
         await self._reply(ctx, f"KYOKA `{Config.VERSION}`\nUptime: `{uptime}`\nLatency: `{latency} ms`\nHealth: `{'healthy' if not self.bot.is_closed() else 'closed'}`\nGuilds: `{len(self.bot.guilds)}`")
 
-    @commands.hybrid_command(name="owner-sync", description="Synchronize application commands.")
+    @commands.command(name="owner-sync", description="Synchronize application commands.")
     async def sync(self, ctx):
         if not await self._guard(ctx, "sync"): return
         try:
@@ -103,14 +103,14 @@ class OwnerSystem(commands.Cog):
             await audit(self.bot, ctx.author.id, f"extension-{action}", None, "failed", ext)
             await self._reply(ctx, f"Extension {action} failed. Check the application logs.")
 
-    @commands.hybrid_command(name="owner-reload", description="Safely reload an approved extension.")
+    @commands.command(name="owner-reload", description="Safely reload an approved extension.")
     async def reload_extension(self, ctx, *, cog: str): await self._extension_action(ctx, cog, "reload")
-    @commands.hybrid_command(name="owner-load", description="Load an approved extension.")
+    @commands.command(name="owner-load", description="Load an approved extension.")
     async def load_extension(self, ctx, *, cog: str): await self._extension_action(ctx, cog, "load")
-    @commands.hybrid_command(name="owner-unload", description="Unload a nonessential extension.")
+    @commands.command(name="owner-unload", description="Unload a nonessential extension.")
     async def unload_extension(self, ctx, *, cog: str): await self._extension_action(ctx, cog, "unload")
 
-    @commands.hybrid_command(name="restart", description="Request a controlled host restart.")
+    @commands.command(name="restart", description="Request a controlled host restart.")
     async def restart(self, ctx):
         if not await self._guard(ctx, "restart-request"): return
         # Host process managers (Render, systemd, Docker) restart on process exit; do not exit without explicit opt-in.
@@ -122,7 +122,7 @@ class OwnerSystem(commands.Cog):
         await self._reply(ctx, "Restart requested; KYOKA will reconnect through its existing supervisor loop.")
         await self.bot.close()
 
-    @commands.hybrid_command(name="maintenance", description="Toggle maintenance mode.")
+    @commands.command(name="maintenance", description="Toggle maintenance mode.")
     async def maintenance(self, ctx, mode: str):
         if not await self._guard(ctx, "maintenance-toggle"): return
         mode = mode.lower().strip()
@@ -136,7 +136,7 @@ class OwnerSystem(commands.Cog):
             await audit(self.bot, ctx.author.id, "maintenance-toggle", None, "failed", mode)
             await self._reply(ctx, "Could not update maintenance mode; database operation failed.")
 
-    @commands.hybrid_command(name="health", description="Show safe operational health.")
+    @commands.command(name="health", description="Show safe operational health.")
     async def health(self, ctx):
         if not await self._guard(ctx, "health"): return
         db_ok = False
@@ -144,7 +144,7 @@ class OwnerSystem(commands.Cog):
         except Exception: pass
         await self._reply(ctx, f"Gateway: `{'connected' if self.bot.is_ready() else 'not ready'}`\nDatabase: `{'healthy' if db_ok else 'unavailable'}`\nExtensions loaded: `{len(self.bot.extensions)}`")
 
-    @commands.hybrid_command(name="extensions", description="List loaded and failed extensions.")
+    @commands.command(name="extensions", description="List loaded and failed extensions.")
     async def extensions(self, ctx):
         if not await self._guard(ctx, "extensions-list"): return
         loaded = sorted(self.bot.extensions)
@@ -153,14 +153,14 @@ class OwnerSystem(commands.Cog):
         body += f"\n\n**Failed extensions ({len(failed)})**\n" + ("\n".join(f"• `{name}` — `{reason}`" for name, reason in failed[:20]) or "None")
         await self._reply(ctx, body[:1800])
 
-    @commands.hybrid_command(name="database-status", description="Show database connectivity without credentials.")
+    @commands.command(name="database-status", description="Show database connectivity without credentials.")
     async def database_status(self, ctx):
         if not await self._guard(ctx, "database-status"): return
         try: await self.bot.db.fetch_one("SELECT 1 AS ok"); result = "connected"
         except Exception: result = "unavailable"
         await self._reply(ctx, f"Database: `{result}`. Credentials are never displayed.")
 
-    @commands.hybrid_command(name="errors", description="Show a limited recent error summary.")
+    @commands.command(name="errors", description="Show a limited recent error summary.")
     async def errors(self, ctx):
         if not await self._guard(ctx, "errors-summary"): return
         try:
@@ -169,10 +169,11 @@ class OwnerSystem(commands.Cog):
         except Exception: msg = "Recent error summary is unavailable. Check application logs."
         await self._reply(ctx, msg[:1800])
 
-    @commands.hybrid_group(name="owner-premium", description="Owner-only manual premium management.", invoke_without_command=True)
+    @commands.group(name="owner-premium", description="Owner-only manual premium management.", invoke_without_command=True)
     async def owner_premium(self, ctx):
         if not await self._guard(ctx, "premium-help"): return
         await self._reply(ctx, "Use `owner-premium grant|revoke|check|list|extend|info|servers`. Grant syntax: `owner-premium grant <user|server> <ID> <premium|pro> <30d|lifetime>`.")
+
 
     @owner_premium.command(name="grant", description="Manually grant user or server premium.")
     async def premium_grant(self, ctx, scope: str, target_id: str, tier: str, duration: str, *, note: str = ""):

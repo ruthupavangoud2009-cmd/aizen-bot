@@ -149,6 +149,64 @@ class TicketInsideControlsView(discord.ui.View):
         )
 
 
+class TicketClosedControlsView(discord.ui.View):
+    """
+    Persistent Ticket King-style closed ticket controls.
+    Offers staff and users Reopen, Transcript, and Permanent Delete actions.
+    """
+
+    def __init__(self, cog: TicketSystem) -> None:
+        super().__init__(timeout=None)
+        self.cog = cog
+
+    @discord.ui.button(
+        label="Reopen Ticket",
+        style=discord.ButtonStyle.success,
+        custom_id="ticket_ctrl_reopen",
+        emoji="🔓",
+        row=0,
+    )
+    async def btn_reopen(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+        await self.cog.execute_ticket_reopen(interaction)
+
+    @discord.ui.button(
+        label="Transcript",
+        style=discord.ButtonStyle.secondary,
+        custom_id="ticket_ctrl_closed_transcript",
+        emoji="📄",
+        row=0,
+    )
+    async def btn_transcript(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+        if not isinstance(interaction.channel, (discord.TextChannel, discord.Thread)):
+            return
+        await interaction.response.defer(ephemeral=True)
+        ticket = await self.cog.bot.ticket_mgr.get_ticket(interaction.channel_id)
+        file = await generate_html_transcript(interaction.channel, ticket, bot=self.cog.bot)
+        t_card = KyokaContainer()
+        t_card.add_section(content="**Ticket Transcript**\n> Here is the saved HTML transcript for this ticket:")
+        await send_container_response(interaction, t_card, file=file, ephemeral=True)
+
+    @discord.ui.button(
+        label="Delete Ticket",
+        style=discord.ButtonStyle.danger,
+        custom_id="ticket_ctrl_delete",
+        emoji="🗑️",
+        row=0,
+    )
+    async def btn_delete(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+        if not (interaction.user.guild_permissions.manage_channels or interaction.user.guild_permissions.administrator):
+            return await interaction.response.send_message("Only staff members with Manage Channels can delete tickets.", ephemeral=True)
+        del_card = KyokaContainer(accent_color=15548997)
+        del_card.add_section(content="**Deleting Ticket**\n> This ticket channel will be permanently deleted in 5 seconds...")
+        await send_container_response(interaction, del_card)
+        await asyncio.sleep(5)
+        try:
+            await interaction.channel.delete(reason=f"Ticket deleted by {interaction.user}")
+        except Exception as e:
+            logger.debug(f"Notice deleting channel: {e}")
+
+
+
 # ─── SLIDE-BASED TICKET DASHBOARD SETUP WIZARD ───────────────────────────────
 
 class TicketSetupWizard(discord.ui.View):
@@ -586,8 +644,9 @@ class TicketSystem(commands.Cog):
 
     def __init__(self, bot: KyokaBot) -> None:
         self.bot = bot
-        # Register persistent inside-ticket view
+        # Register persistent inside-ticket views (active and closed controls)
         self.bot.add_view(TicketInsideControlsView(self))
+        self.bot.add_view(TicketClosedControlsView(self))
 
     # ─── PERSISTENT BUTTON INTERACTION LISTENER ───────────────────────────────
 
@@ -898,12 +957,104 @@ class TicketSystem(commands.Cog):
         # Update database record
         await self.bot.ticket_mgr.close_ticket(channel.id, closer.id)
 
-        # Delete channel after short countdown
-        await asyncio.sleep(5)
-        try:
-            await channel.delete(reason=f"Ticket closed by {closer.name}: {reason}")
-        except Exception as del_err:
-            logger.error(f"Failed to delete closed ticket channel {channel.id}: {del_err}")
+        # Lock channel permissions so creator cannot send messages anymore
+        if user_id:
+            creator_member = guild.get_member(user_id)
+            if creator_member:
+                try:
+                    await channel.set_permissions(
+                        creator_member,
+                        view_channel=True,
+                        send_messages=False,
+                        reason=f"Ticket closed by {closer}",
+                    )
+                except Exception as perm_err:
+                    logger.debug(f"Could not lock permissions for creator: {perm_err}")
+
+        # Display Ticket King-style closed control panel with Reopen, Transcript, and Delete buttons
+        t_num_int = int(ticket_num) if str(ticket_num).isdigit() else 1
+        closed_card = KyokaContainer(accent_color=15548997)  # Red
+        arrow = self.bot.custom_emojis.get("icons_rightarrow", "›")
+        closed_card.add_section(
+            content=(
+                f"**Ticket #{t_num_int:04d} Closed**\n"
+                f"> Closed by {closer.mention} (`{reason}`).\n"
+                f"> Staff can manage this ticket with the controls below or permanently delete it."
+            )
+        )
+        closed_card.add_separator(divider=True)
+        closed_card.add_text(
+            f"{arrow} **Transcript:** Dispatched to creator DM and log channel.\n"
+            f"{arrow} **Controls:** Click **Reopen** to reactivate or **Delete** to permanently purge."
+        )
+        await send_container_response(channel, closed_card, view=TicketClosedControlsView(self))
+
+    async def execute_ticket_reopen(
+        self,
+        interaction_or_ctx: discord.Interaction | CustomContext,
+    ) -> None:
+        """Reopen a closed ticket channel and restore messaging permissions."""
+        guild = interaction_or_ctx.guild
+        channel = interaction_or_ctx.channel
+        reopener = interaction_or_ctx.user if isinstance(interaction_or_ctx, discord.Interaction) else interaction_or_ctx.author
+
+        if not guild or not isinstance(channel, (discord.TextChannel, discord.Thread)):
+            return
+
+        ticket = await self.bot.ticket_mgr.get_ticket(channel.id)
+        if not ticket:
+            ticket = await self.bot.db.fetch_one("SELECT * FROM active_tickets WHERE channel_id = $1;", channel.id)
+
+        if not ticket:
+            err_card = KyokaContainer()
+            err_card.add_section(content="**Ticket Error**\n> This channel is not a recognized ticket channel.")
+            if isinstance(interaction_or_ctx, discord.Interaction):
+                await send_container_response(interaction_or_ctx, err_card, ephemeral=True)
+            else:
+                await interaction_or_ctx.send_error("This channel is not a recognized ticket channel.")
+            return
+
+        if ticket.get("status") == "open":
+            err_card = KyokaContainer()
+            err_card.add_section(content="**Already Open**\n> This ticket is already active and open.")
+            if isinstance(interaction_or_ctx, discord.Interaction):
+                await send_container_response(interaction_or_ctx, err_card, ephemeral=True)
+            else:
+                await interaction_or_ctx.send_warning("This ticket is already open.")
+            return
+
+        # Restore permissions for ticket creator
+        user_id = ticket.get("user_id")
+        if user_id:
+            user = guild.get_member(user_id)
+            if user:
+                try:
+                    await channel.set_permissions(
+                        user,
+                        view_channel=True,
+                        send_messages=True,
+                        attach_files=True,
+                        embed_links=True,
+                        read_message_history=True,
+                        reason=f"Ticket reopened by {reopener}",
+                    )
+                except Exception as perm_err:
+                    logger.debug(f"Could not restore permissions for creator: {perm_err}")
+
+        await self.bot.ticket_mgr.reopen_ticket(channel.id)
+
+        t_num = ticket.get("ticket_number", 1)
+        t_num_int = int(t_num) if str(t_num).isdigit() else 1
+        reopen_card = KyokaContainer(accent_color=5763719)  # Green
+        reopen_card.add_section(
+            content=(
+                f"**Ticket Reopened • #{t_num_int:04d}**\n"
+                f"> This ticket was reopened by {reopener.mention}.\n"
+                f"> Creator access has been restored."
+            )
+        )
+        await send_container_response(channel, reopen_card, view=TicketInsideControlsView(self))
+
 
     # ─── TICKET COMMANDS ──────────────────────────────────────────────────────
 
@@ -1087,32 +1238,60 @@ class TicketSystem(commands.Cog):
         await send_container_response(ctx, container)
 
     @ticket_group.command(
-        name="delete",
-        description="Delete a configured ticket panel. Usage: ?ticket delete <panel_name>",
+        name="reopen",
+        description="Reopen a closed ticket channel.",
     )
-    @commands.has_permissions(manage_guild=True)
-    async def ticket_delete_panel(self, ctx: CustomContext, panel_name: str) -> None:
-        """Delete a ticket panel."""
-        clean_name = panel_name.lower().strip()
-        existing = await self.bot.ticket_mgr.get_panel(ctx.guild.id, clean_name)
-        if not existing:
-            await ctx.send_error(f"Panel `{clean_name}` not found. Use `?ticket list` to see configured panels.")
+    @commands.has_permissions(manage_messages=True)
+    async def ticket_reopen_cmd(self, ctx: CustomContext) -> None:
+        """Command to reopen closed ticket channel."""
+        await self.execute_ticket_reopen(ctx)
+
+    @ticket_group.command(
+        name="delete",
+        description="Delete a configured panel or purge the current ticket channel. Usage: ?ticket delete [panel_name]",
+    )
+    @commands.has_permissions(manage_channels=True)
+    async def ticket_delete_cmd(self, ctx: CustomContext, panel_name: str | None = None) -> None:
+        """Delete a ticket panel or delete current ticket channel."""
+        if panel_name:
+            clean_name = panel_name.lower().strip()
+            existing = await self.bot.ticket_mgr.get_panel(ctx.guild.id, clean_name)
+            if not existing:
+                await ctx.send_error(f"Panel `{clean_name}` not found. Use `?ticket list` to see configured panels.")
+                return
+
+            ch_id = existing.get("channel_id")
+            msg_id = existing.get("message_id")
+            if ch_id and msg_id:
+                try:
+                    ch = ctx.guild.get_channel(ch_id)
+                    if isinstance(ch, discord.TextChannel):
+                        msg = await ch.fetch_message(msg_id)
+                        await msg.delete()
+                except Exception:
+                    pass
+
+            await self.bot.ticket_mgr.delete_panel(ctx.guild.id, clean_name)
+            await ctx.send_success(f"Ticket panel `{clean_name}` has been deleted.", title="Panel Deleted")
             return
 
-        # Attempt to delete deployed message if possible
-        ch_id = existing.get("channel_id")
-        msg_id = existing.get("message_id")
-        if ch_id and msg_id:
-            try:
-                ch = ctx.guild.get_channel(ch_id)
-                if isinstance(ch, discord.TextChannel):
-                    msg = await ch.fetch_message(msg_id)
-                    await msg.delete()
-            except Exception:
-                pass
+        # No panel name passed: check if running inside a ticket channel to delete it
+        ticket = await self.bot.ticket_mgr.get_ticket(ctx.channel.id)
+        if not ticket:
+            ticket = await self.bot.db.fetch_one("SELECT * FROM active_tickets WHERE channel_id = $1;", ctx.channel.id)
 
-        await self.bot.ticket_mgr.delete_panel(ctx.guild.id, clean_name)
-        await ctx.send_success(f"Ticket panel `{clean_name}` has been deleted.", title="Panel Deleted")
+        if ticket:
+            del_card = KyokaContainer(accent_color=15548997)
+            del_card.add_section(content="**Deleting Ticket**\n> This ticket channel will be permanently deleted in 5 seconds...")
+            await send_container_response(ctx, del_card)
+            await asyncio.sleep(5)
+            try:
+                await ctx.channel.delete(reason=f"Ticket deleted by {ctx.author}")
+            except Exception as e:
+                logger.debug(f"Could not delete channel: {e}")
+            return
+        await ctx.send_warning("Specify a panel name (`?ticket delete <panel_name>`) or use this command inside a ticket channel.")
+
 
     @ticket_group.command(name="unclaim", description="Release claim on the current active ticket.")
     @commands.has_permissions(manage_messages=True)

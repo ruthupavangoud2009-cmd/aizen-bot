@@ -154,7 +154,7 @@ async def analyze_opportunity_with_gemini(
         f'{{"is_valid": bool, "summary": "string", "highlights": ["string", "string"], "difficulty": "string", "why_it_matters": "string"}}'
     )
 
-    models_to_try = ["gemini-3.5-flash-lite", "gemini-3.5-flash", "gemini-flash-lite-latest", "gemini-flash-latest"]
+    models_to_try = ["gemini-2.0-flash", "gemini-1.5-flash", "gemini-1.5-pro", "gemini-2.0-flash-exp"]
     headers = {
         "Content-Type": "application/json",
         "x-goog-api-key": api_key,

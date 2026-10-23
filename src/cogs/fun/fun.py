@@ -13,6 +13,7 @@ from discord.ext import commands
 
 from src.core.context import CustomContext
 from src.security.owner import is_primary_owner
+from src.managers.gif_manager import GIFManager
 
 SUPPORT_URL = "https://discord.gg/5DBQTQJa9"
 logger = logging.getLogger("Kyoka.Fun")
@@ -36,6 +37,7 @@ class Fun(commands.Cog):
 
     def __init__(self, bot: commands.Bot):
         self.bot = bot
+        self.gif_mgr = GIFManager()
         self.games: dict[int, dict[str, Any]] = {}
         self._guess_attempts_by_channel: dict[int, set[int]] = {}
         self._guess_locks: dict[int, asyncio.Lock] = {}
@@ -120,21 +122,21 @@ class Fun(commands.Cog):
         if member.id == ctx.author.id:
             await ctx.send("Choose another member for this playful action.")
             return
+
+        session = getattr(self.bot, "session", None)
+        gif_url = await self.gif_mgr.get_action_gif(action, session=session)
+
+        embed = discord.Embed(
+            description=f"{emoji} **{member.mention} has been {action} by {ctx.author.mention} {ending}**",
+            color=0x7C3AED,
+        )
+        if gif_url:
+            embed.set_image(url=gif_url)
+
         await ctx.send(
-            f"{emoji} **{member.mention} has been {action} by {ctx.author.mention} {ending}**",
+            embed=embed,
             allowed_mentions=discord.AllowedMentions(users=[member, ctx.author], roles=False, everyone=False),
         )
-        gif_cog = self.bot.get_cog("AIInteractions")
-        if gif_cog is not None:
-            query = {"slapped": "anime slap", "hugged": "anime hug", "patted": "anime head pat", "kissed": "anime kiss", "bonked": "anime bonk", "cuddled": "anime cuddle", "poked": "anime poke", "high-fived": "anime high five", "defeated": "anime dramatic battle"}.get(action, f"anime {action}")
-            try:
-                gif_url = await gif_cog.get_gif(query)
-                if gif_url:
-                    embed = discord.Embed(color=0x7C3AED)
-                    embed.set_image(url=gif_url)
-                    await ctx.send(embed=embed)
-            except Exception:
-                logger.debug("GIF enhancement failed for action %s", action)
 
     @commands.command(name="slap", help="Aizen gives someone an anime-style slap.")
     async def slap(self, ctx: CustomContext, member: discord.Member | None = None):
@@ -172,6 +174,34 @@ class Fun(commands.Cog):
     async def kill(self, ctx: CustomContext, member: discord.Member | None = None):
         await self._target_action(
             ctx, member, "defeated", "⚔️", "in a fictional anime duel. Respawn and try again!"
+        )
+
+    @commands.hybrid_command(
+        name="fuck",
+        help="Playfully dominate someone in a suggestive anime couple interaction (consenting fictional roleplay, non-explicit).",
+    )
+    async def fuck(self, ctx: CustomContext, member: discord.Member | None = None):
+        """Playful intimate anime couple interaction."""
+        if member is None:
+            return await ctx.send(f"Please mention someone. Example: `{ctx.prefix}fuck @user`")
+        if member.bot:
+            return await ctx.send("Keep the roleplay between human members.")
+        if member.id == ctx.author.id:
+            return await ctx.send("Choose another member for this playful interaction.")
+
+        session = getattr(self.bot, "session", None)
+        gif_url = await self.gif_mgr.get_action_gif("intimate_couple", session=session)
+
+        embed = discord.Embed(
+            description=f"💖 **{member.mention} got intimately dominated by {ctx.author.mention}!**",
+            color=0xEC4899,
+        )
+        if gif_url:
+            embed.set_image(url=gif_url)
+
+        await ctx.send(
+            embed=embed,
+            allowed_mentions=discord.AllowedMentions(users=[member, ctx.author], roles=False, everyone=False),
         )
 
     @commands.command(name="compliment", help="Give someone a friendly compliment.")
@@ -630,13 +660,59 @@ class Fun(commands.Cog):
         dares = ["Describe your day using only three emojis.", "Give someone in the server a sincere compliment.", "Type your next message like a dramatic anime narrator.", "Share a song you never get tired of."]
         await ctx.send(f"🎭 **Dare:** {random.choice(dares)}")
 
-    @commands.command(name="premium", help="Learn how to request Aizen Premium.")
+    @commands.hybrid_command(name="premium", help="View your personal and server premium subscription standing.")
     async def premium(self, ctx: CustomContext):
-        embed = discord.Embed(title="💎 KYOKA 2.0 Premium", description="Premium access is granted manually. Ask the team in the support server for details; never share your password, token, or payment credentials with anyone.", color=0x7C3AED)
-        embed.add_field(name="Request Premium", value=f"[Join the support server]({SUPPORT_URL})", inline=True)
-        embed.add_field(name="Support server", value=f"[Join support]({SUPPORT_URL})", inline=True)
-        embed.set_footer(text="Made by Aizen")
+        prem_mgr = getattr(self.bot, "premium_mgr", None)
+        user_info = prem_mgr.get_user_info(ctx.author.id) if prem_mgr else {"is_premium": False, "tier": "Free", "remaining_str": "N/A"}
+        guild_info = prem_mgr.get_guild_info(ctx.guild.id) if prem_mgr and ctx.guild else {"is_premium": False, "tier": "Free", "remaining_str": "N/A"}
+
+        u_badge = "👑 Prime Active" if user_info.get("is_premium") else "Standard Free"
+        g_badge = "💎 Server Boosted" if guild_info.get("is_premium") else "Standard Free"
+
+        embed = discord.Embed(
+            title="💎 KYOKA 3.0 Prime & Premium Suite",
+            description="High-performance priority processing, unlimited AI presets, and premium canvas profiles.",
+            color=0x7C3AED,
+        )
+        embed.add_field(
+            name="Your Account Standing",
+            value=f"• Status: **{u_badge}**\n• Tier: `{user_info['tier']}`\n• Expiry: `{user_info['remaining_str']}`",
+            inline=False,
+        )
+        if ctx.guild:
+            embed.add_field(
+                name=f"Server Standing • {ctx.guild.name}",
+                value=f"• Status: **{g_badge}**\n• Tier: `{guild_info['tier']}`\n• Expiry: `{guild_info['remaining_str']}`",
+                inline=False,
+            )
+        embed.add_field(
+            name="Redeem License Key",
+            value=f"Have a key? Use `{ctx.prefix}redeem <key>` to activate instantly.",
+            inline=False,
+        )
+        embed.set_footer(text="KYOKA Studio • Powered by Aizen")
         await ctx.send(embed=embed)
+
+    @commands.hybrid_command(name="redeem", help="Redeem a KYOKA license key for yourself or this server.")
+    async def redeem(self, ctx: CustomContext, key: str, target: str = "guild"):
+        prem_mgr = getattr(self.bot, "premium_mgr", None)
+        if not prem_mgr:
+            return await ctx.send("Premium manager is currently unavailable.")
+
+        clean_type = "user" if target.lower() in ("user", "self", "me") else "guild"
+        target_id = ctx.author.id if clean_type == "user" else (ctx.guild.id if ctx.guild else ctx.author.id)
+
+        res = await prem_mgr.redeem_key(key, ctx.author.id, target_id, target_type=clean_type)
+        if not res.get("success"):
+            return await ctx.send(f"❌ {res.get('error', 'Failed to redeem key.')}")
+
+        expiry_str = f"<t:{int(res['expires_at'].timestamp())}:f>" if res.get("expires_at") else "Lifetime / Permanent"
+        await ctx.send(
+            f"✅ **Key Redeemed Successfully!**\n"
+            f"> Target: `{clean_type.title()} ID {target_id}`\n"
+            f"> Duration: **{res.get('duration_text', 'Active')}**\n"
+            f"> Access valid until: {expiry_str}"
+        )
 
     @commands.command(name="funhelp", help="Quick guide to fun commands.")
     async def funhelp(self, ctx: CustomContext):

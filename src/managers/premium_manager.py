@@ -137,6 +137,10 @@ class PremiumManager:
         if not user_id:
             return False
 
+        from src.security.owner import is_primary_owner
+        if is_primary_owner(user_id):
+            return True
+
         data = self._user_cache.get(user_id)
         if not data:
             return False
@@ -187,7 +191,24 @@ class PremiumManager:
 
     def get_user_info(self, user_id: int | None) -> dict[str, Any]:
         """Get detailed premium information for a user account."""
-        if not user_id or not self.is_user_premium(user_id):
+        if not user_id:
+            return {
+                "is_premium": False,
+                "tier": "Free",
+                "expires_at": None,
+                "remaining_str": "N/A",
+            }
+
+        from src.security.owner import is_primary_owner
+        if is_primary_owner(user_id):
+            return {
+                "is_premium": True,
+                "tier": "Prime Lifetime (Owner)",
+                "expires_at": None,
+                "remaining_str": "Lifetime / Permanent",
+            }
+
+        if not self.is_user_premium(user_id):
             return {
                 "is_premium": False,
                 "tier": "Free",

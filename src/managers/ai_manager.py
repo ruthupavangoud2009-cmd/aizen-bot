@@ -117,6 +117,7 @@ class AIManager:
     Stores and isolates AI configuration per server, supports 10 distinct personality presets,
     custom prompt engineering, cooldowns, channels, and graceful failover cascades.
     """
+    FALLBACK_MODELS = ("gemini-2.0-flash", "gemini-1.5-flash", "gemini-1.5-pro", "gemini-2.0-flash-exp")
 
     def __init__(self, db: PostgresDatabase) -> None:
         self.db = db
@@ -372,21 +373,16 @@ class AIManager:
                 },
             }
 
-            models_to_try = [
-                os.getenv("GEMINI_MODEL", "gemini-3.5-flash-lite").strip(),
-                "gemini-2.5-flash",
-                "gemini-1.5-flash",
-            ]
-            # Deduplicate while preserving order
-            seen = set()
+            env_model = os.getenv("GEMINI_MODEL", "").strip().strip("/")
             candidate_models = []
-            for m in models_to_try:
-                if m and m not in seen:
+            if env_model:
+                candidate_models.append(env_model)
+            for m in ("gemini-2.0-flash", "gemini-1.5-flash", "gemini-1.5-pro", "gemini-2.0-flash-exp"):
+                if m not in candidate_models:
                     candidate_models.append(m)
-                    seen.add(m)
 
             last_error: Exception | None = None
-            timeout = aiohttp.ClientTimeout(total=20)
+            timeout = aiohttp.ClientTimeout(total=25)
 
             for model_name in candidate_models:
                 url = (
@@ -414,8 +410,14 @@ class AIManager:
                                     history.append({"role": "user", "text": prompt[:3000]})
                                     history.append({"role": "model", "text": text})
                                     return text
+                        elif response.status in (401, 403):
+                            raise RuntimeError("Invalid or unauthorized GEMINI_API_KEY. Please verify your API key in Render environment settings.")
+                        elif response.status == 429:
+                            raise RuntimeError("Gemini API rate limit exceeded. Please wait a moment before trying again.")
                         else:
-                            last_error = RuntimeError(f"AI API error status {response.status}")
+                            last_error = RuntimeError(f"AI API error status {response.status} from {model_name}")
+                except (RuntimeError, asyncio.CancelledError):
+                    raise
                 except Exception as e:
                     last_error = e
                     continue

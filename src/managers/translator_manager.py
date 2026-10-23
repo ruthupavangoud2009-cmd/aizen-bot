@@ -257,7 +257,7 @@ class TranslatorManager:
                 }
                 async with aiohttp.ClientSession() as gemini_session:
                     async with gemini_session.post(
-                        "https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash-lite:generateContent",
+                        "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent",
                         json=payload,
                         headers=headers,
                         timeout=aiohttp.ClientTimeout(total=5.0),

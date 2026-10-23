@@ -256,3 +256,19 @@ class TicketManager:
         if channel_id in self._active_tickets_cache:
             del self._active_tickets_cache[channel_id]
         return True
+
+    async def reopen_ticket(self, channel_id: int) -> bool:
+        """Mark a closed ticket as open again."""
+        await self.db.execute(
+            """
+            UPDATE active_tickets
+            SET status = 'open', closed_at = NULL, closed_by = NULL
+            WHERE channel_id = $1;
+            """,
+            channel_id,
+        )
+        row = await self.db.fetch_one("SELECT * FROM active_tickets WHERE channel_id = $1;", channel_id)
+        if row:
+            self._active_tickets_cache[channel_id] = row
+        return True
+

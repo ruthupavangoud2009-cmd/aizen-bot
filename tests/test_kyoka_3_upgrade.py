@@ -928,3 +928,194 @@ async def test_on_message_dispatch_prefix_and_noprefix_end_to_end():
     assert invoked[3] == ("ping", "", 777)
 
 
+# ─────────────────────────────────────────────────────────────────────────────
+# 17. TEST LEVELING MANAGER MATH & XP COOLDOWN
+# ─────────────────────────────────────────────────────────────────────────────
+
+@pytest.mark.asyncio
+async def test_leveling_manager_math_and_cooldown():
+    from src.managers.leveling_manager import LevelingManager, xp_for_level, total_xp_for_level, level_from_total_xp
+    mock_db = AsyncMock()
+    mgr = LevelingManager(mock_db)
+
+    # 1. Level math
+    assert xp_for_level(1) == 155
+    assert total_xp_for_level(1) == 0
+    assert total_xp_for_level(2) == 155
+    assert level_from_total_xp(0) == (1, 0, 155)
+    assert level_from_total_xp(50) == (1, 50, 155)
+    assert level_from_total_xp(155) == (2, 0, 220)
+
+    # 2. Awarding message XP with cooldown
+    mock_db.fetch_one.return_value = None
+    awarded, new_total_xp, new_level, leveled_up = await mgr.award_message_xp(guild_id=1, user_id=42)
+    assert awarded is True
+    assert 15 <= new_total_xp <= 25
+    assert new_level == 1
+
+    # Rapid second message within 60s cooldown -> awarded is False
+    awarded2, _, _, _ = await mgr.award_message_xp(guild_id=1, user_id=42)
+    assert awarded2 is False
+
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# 18. TEST RANK CARD CANVAS GENERATION & PNG INTEGRITY
+# ─────────────────────────────────────────────────────────────────────────────
+
+def test_rank_card_canvas_generation():
+    from src.utils.canvas import render_rank_card
+    buf = render_rank_card(
+        avatar_bytes=None,
+        username="TestUser",
+        display_name="KyokaTester",
+        rank=1,
+        level=5,
+        current_xp=120,
+        needed_xp=250,
+        total_xp=1450,
+        accent_color=0x7C3AED,
+    )
+    png_bytes = buf.getvalue()
+    assert len(png_bytes) > 1000
+    assert png_bytes[:8] == b"\x89PNG\r\n\x1a\n"
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# 19. TEST PREMIUM OWNER BYPASS & LICENSE REDEMPTION
+# ─────────────────────────────────────────────────────────────────────────────
+
+@pytest.mark.asyncio
+async def test_premium_owner_bypass_and_redemption():
+    from src.managers.premium_manager import PremiumManager
+    from src.security.owner import OWNER_ID
+    mock_db = AsyncMock()
+    mgr = PremiumManager(mock_db)
+
+    # Owner is always Prime Lifetime
+    assert mgr.is_user_premium(OWNER_ID) is True
+    info = mgr.get_user_info(OWNER_ID)
+    assert info["is_premium"] is True
+    assert "Lifetime" in info["remaining_str"]
+
+    # Other user is not premium by default
+    assert mgr.is_user_premium(123456789) is False
+
+    # Key redemption
+    mock_db.fetch_one.return_value = {
+        "key": "TEST-KEY-123",
+        "duration_days": 30,
+        "target_type": "user",
+        "is_used": False,
+    }
+    redemption = await mgr.redeem_key("TEST-KEY-123", redeemer_id=999, target_id=999, target_type="user")
+    assert redemption["success"] is True
+    assert "30" in redemption["duration_text"]
+
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# 20. TEST GIF MANAGER POOLS & RECENT AVOIDANCE
+# ─────────────────────────────────────────────────────────────────────────────
+
+@pytest.mark.asyncio
+async def test_gif_manager_pools_and_recent_avoidance():
+    from src.managers.gif_manager import GIFManager
+    mgr = GIFManager()
+
+    # Verify action pools exist
+    assert "slapped" in mgr.curated
+    assert "intimate_couple" in mgr.curated
+    assert len(mgr.curated["intimate_couple"]) >= 8
+
+    # Fetch multiple GIFs, ensure HTTPS URLs
+    gif1 = await mgr.get_action_gif("intimate_couple")
+    gif2 = await mgr.get_action_gif("intimate_couple")
+    assert gif1.startswith("https://")
+    assert gif2.startswith("https://")
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# 21. TEST TICKET CLOSED CONTROLS & REOPEN LOGIC
+# ─────────────────────────────────────────────────────────────────────────────
+
+@pytest.mark.asyncio
+async def test_ticket_closed_controls_and_reopen_logic():
+    from src.cogs.ticket.ticket_system import TicketClosedControlsView
+    from src.managers.ticket_manager import TicketManager
+
+    mock_cog = MagicMock()
+    view = TicketClosedControlsView(mock_cog)
+    btn_ids = [btn.custom_id for btn in view.children]
+    assert "ticket_ctrl_reopen" in btn_ids
+    assert "ticket_ctrl_closed_transcript" in btn_ids
+    assert "ticket_ctrl_delete" in btn_ids
+
+    mock_db = AsyncMock()
+    mock_db.fetch_one.return_value = {"channel_id": 9999, "status": "open"}
+    t_mgr = TicketManager(mock_db)
+    reopened = await t_mgr.reopen_ticket(9999)
+    assert reopened is True
+    assert 9999 in t_mgr._active_tickets_cache
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# 22. TEST ACTIVE GEMINI AI MODELS CONFIGURATION
+# ─────────────────────────────────────────────────────────────────────────────
+
+def test_gemini_active_models_configuration():
+    from src.managers.ai_manager import AIManager
+    for model in AIManager.FALLBACK_MODELS:
+        assert model in ("gemini-2.0-flash", "gemini-1.5-flash", "gemini-1.5-pro", "gemini-2.0-flash-exp")
+        assert "3.5" not in model
+        assert "2.5" not in model
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# 23. TEST FUCK ACTION COMMAND PLAYFUL ROLEPLAY
+# ─────────────────────────────────────────────────────────────────────────────
+
+@pytest.mark.asyncio
+async def test_fuck_command_validation():
+    from src.cogs.fun.fun import Fun
+    mock_bot = MagicMock()
+    fun_cog = Fun(mock_bot)
+
+    ctx = MagicMock(spec=CustomContext)
+    ctx.prefix = "+"
+    ctx.author.id = 100
+    ctx.author.mention = "<@100>"
+    ctx.send = AsyncMock()
+
+    # 1. No target provided
+    await fun_cog.fuck.callback(fun_cog, ctx, None)
+    assert "Please mention someone" in ctx.send.call_args[0][0]
+
+    # 2. Bot target
+    bot_target = MagicMock(spec=discord.Member)
+    bot_target.bot = True
+    await fun_cog.fuck.callback(fun_cog, ctx, bot_target)
+    assert "Keep the roleplay between human members" in ctx.send.call_args[0][0]
+
+    # 3. Self target
+    self_target = MagicMock(spec=discord.Member)
+    self_target.bot = False
+    self_target.id = 100
+    await fun_cog.fuck.callback(fun_cog, ctx, self_target)
+    assert "Choose another member" in ctx.send.call_args[0][0]
+
+    # 4. Valid target
+    human_target = MagicMock(spec=discord.Member)
+    human_target.bot = False
+    human_target.id = 200
+    human_target.mention = "<@200>"
+    await fun_cog.fuck.callback(fun_cog, ctx, human_target)
+    kwargs = ctx.send.call_args[1]
+    embed = kwargs.get("embed")
+    assert embed is not None
+    assert "got intimately dominated by" in embed.description
+    assert embed.image.url.startswith("https://")
+
+
+
+

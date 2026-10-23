@@ -130,6 +130,8 @@ class KyokaBot(commands.Bot):
         self.giveaway_mgr: GiveawayManager = GiveawayManager(self.db)
         self.activity_mgr: ActivityManager = ActivityManager(self.db)
         self.ai_mgr: AIManager = AIManager(self.db)
+        from src.managers.leveling_manager import LevelingManager
+        self.leveling_mgr: LevelingManager = LevelingManager(self.db)
         from src.managers.reaction_role_manager import ReactionRoleManager
         self.reaction_role_mgr: ReactionRoleManager = ReactionRoleManager(self.db)
         self.custom_emojis: EmojiRegistry = EmojiRegistry(self)
@@ -187,22 +189,45 @@ class KyokaBot(commands.Bot):
             await send_bot_mention_card(self, message)
             return
 
-        # Record qualifying message activity in the background (non-blocking & fail-safe)
-        if message.guild and hasattr(self, "activity_mgr"):
-            try:
-                asyncio.create_task(
-                    self.activity_mgr.record_message(
-                        message.guild.id,
-                        message.author.id,
-                        message.channel.id,
-                        len(message.content),
+        # Record qualifying message activity & progression in background (non-blocking & fail-safe)
+        if message.guild:
+            if hasattr(self, "activity_mgr"):
+                try:
+                    asyncio.create_task(
+                        self.activity_mgr.record_message(
+                            message.guild.id,
+                            message.author.id,
+                            message.channel.id,
+                            len(message.content),
+                        )
                     )
-                )
-            except Exception as e:
-                logger.debug(f"Activity logging notice: {e}")
+                except Exception as e:
+                    logger.debug(f"Activity logging notice: {e}")
+
+            if hasattr(self, "leveling_mgr"):
+                try:
+                    asyncio.create_task(self._process_message_xp(message))
+                except Exception as e:
+                    logger.debug(f"Leveling XP notice: {e}")
 
         # Dispatch prefix & no-prefix commands with complete safety
         await self.process_commands(message)
+
+    async def _process_message_xp(self, message: discord.Message) -> None:
+        """Process XP gain and optional level-up alerts safely in the background."""
+        try:
+            is_opt = self.activity_mgr.is_opted_out(message.author.id) if hasattr(self, "activity_mgr") else False
+            awarded, new_xp, new_lvl, leveled_up = await self.leveling_mgr.award_message_xp(
+                message.guild.id, message.author.id, is_opted_out=is_opt
+            )
+            if leveled_up and message.guild:
+                cfg = self.leveling_mgr.get_guild_settings(message.guild.id)
+                if cfg.get("announce", True):
+                    ch = message.guild.get_channel(cfg.get("channel_id") or message.channel.id)
+                    if ch:
+                        await ch.send(f"🎉 Congratulations {message.author.mention}, you leveled up to **Level {new_lvl}**!")
+        except Exception as e:
+            logger.debug(f"Background XP processing notice: {e}")
 
     async def on_command(self, ctx: commands.Context) -> None:
         """Log command execution details safely (never logging sensitive credentials)."""
@@ -241,6 +266,7 @@ class KyokaBot(commands.Bot):
         await self.giveaway_mgr.load_cache()
         await self.activity_mgr.load_cache()
         await self.ai_mgr.load_cache()
+        await self.leveling_mgr.load_cache()
         await self.reaction_role_mgr.load_cache()
         await self.custom_emojis.load()
 

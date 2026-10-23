@@ -269,3 +269,159 @@ def render_profile_card(
     im.save(out, format="PNG", optimize=True)
     out.seek(0)
     return out
+
+
+def render_rank_card(
+    avatar_bytes: bytes | None,
+    username: str,
+    display_name: str,
+    rank: int,
+    level: int,
+    current_xp: int,
+    needed_xp: int,
+    total_xp: int,
+    accent_color: tuple[int, int, int] | None = None,
+) -> io.BytesIO | None:
+    """
+    Render a high-resolution, anti-aliased Glassmorphic Level/Rank Card (900x260px).
+    Features ambient blurred backdrop, glowing neon avatar ring, rank badges,
+    and a sleek progress bar with percentage indicator.
+    """
+    if not HAS_PIL:
+        return None
+
+    w, h = 900, 260
+    if isinstance(accent_color, int):
+        accent_rgb = ((accent_color >> 16) & 0xFF, (accent_color >> 8) & 0xFF, accent_color & 0xFF)
+    elif isinstance(accent_color, (tuple, list)) and len(accent_color) >= 3:
+        accent_rgb = (int(accent_color[0]), int(accent_color[1]), int(accent_color[2]))
+    else:
+        accent_rgb = (124, 58, 237)      # Royal Purple / Violet (#7C3AED)
+    accent_secondary = (59, 130, 246)     # Electric Blue (#3B82F6)
+
+    # 1. Base Canvas
+    im = Image.new("RGBA", (w, h), (12, 15, 24, 255))
+
+    # Ambient Backdrop from Avatar
+    if avatar_bytes:
+        try:
+            av_raw = Image.open(io.BytesIO(avatar_bytes)).convert("RGBA")
+            bg_ambient = av_raw.resize((w + 80, h + 80), Image.Resampling.BILINEAR)
+            bg_ambient = bg_ambient.filter(ImageFilter.GaussianBlur(radius=36))
+            bg_ambient = bg_ambient.crop((40, 40, 40 + w, 40 + h))
+            darkener = Image.new("RGBA", (w, h), (10, 13, 22, 225))
+            im = Image.alpha_composite(bg_ambient, darkener)
+        except Exception:
+            av_raw = None
+    else:
+        av_raw = None
+
+    # Ambient glow
+    glow_layer = Image.new("RGBA", (w, h), (0, 0, 0, 0))
+    glow_draw = ImageDraw.Draw(glow_layer)
+    glow_draw.ellipse([(20, -10), (280, 250)], fill=(accent_rgb[0], accent_rgb[1], accent_rgb[2], 40))
+    glow_layer = glow_layer.filter(ImageFilter.GaussianBlur(radius=25))
+    im = Image.alpha_composite(im, glow_layer)
+
+    draw = ImageDraw.Draw(im, "RGBA")
+
+    # Outer Glass Borders
+    draw.rounded_rectangle([(6, 6), (w - 7, h - 7)], radius=20, outline=(40, 48, 68, 160), width=1)
+    draw.rounded_rectangle([(8, 8), (w - 9, h - 9)], radius=18, fill=(13, 17, 28, 170), outline=(255, 255, 255, 20), width=1)
+
+    # Top Horizon Line
+    draw.rounded_rectangle([(25, 8), (w - 25, 10)], radius=1, fill=(accent_rgb[0], accent_rgb[1], accent_rgb[2], 220))
+
+    # Avatar (Circle crop with glowing border)
+    av_size = 110
+    av_x, av_y = 36, 40
+
+    draw.ellipse([(av_x - 4, av_y - 4), (av_x + av_size + 4, av_y + av_size + 4)], outline=(accent_rgb[0], accent_rgb[1], accent_rgb[2], 80), width=3)
+    draw.ellipse([(av_x - 2, av_y - 2), (av_x + av_size + 2, av_y + av_size + 2)], outline=accent_rgb, width=2)
+
+    if av_raw:
+        try:
+            av = av_raw.resize((av_size * 4, av_size * 4), Image.Resampling.LANCZOS)
+            mask = Image.new("L", (av_size * 4, av_size * 4), 0)
+            mdraw = ImageDraw.Draw(mask)
+            mdraw.ellipse([(0, 0), (av_size * 4, av_size * 4)], fill=255)
+            av_circle = Image.new("RGBA", (av_size * 4, av_size * 4), (0, 0, 0, 0))
+            av_circle.paste(av, (0, 0), mask)
+            av_final = av_circle.resize((av_size, av_size), Image.Resampling.LANCZOS)
+            im.paste(av_final, (av_x, av_y), av_final)
+        except Exception:
+            draw.ellipse([(av_x, av_y), (av_x + av_size, av_y + av_size)], fill=(28, 33, 48, 255))
+    else:
+        draw.ellipse([(av_x, av_y), (av_x + av_size, av_y + av_size)], fill=(28, 33, 48, 255))
+
+    # Typography
+    font_name = get_font(24, bold=True)
+    font_tag = get_font(15, bold=False)
+    font_badge = get_font(13, bold=True)
+    font_num = get_font(26, bold=True)
+    font_xp = get_font(14, bold=True)
+    font_sub = get_font(11, bold=False)
+
+    text_x = av_x + av_size + 26
+    name_y = 42
+
+    # Display Name & Tag
+    clean_disp = display_name[:20]
+    draw.text((text_x, name_y), clean_disp, fill=(255, 255, 255, 255), font=font_name)
+    tag_str = f"@{username[:22]}"
+    draw.text((text_x, name_y + 32), tag_str, fill=(148, 163, 184, 255), font=font_tag)
+
+    # Rank & Level Badges on Right side
+    badge_right = w - 40
+    # Level display
+    lvl_str = f"LEVEL {level}"
+    lvl_len = draw.textlength(lvl_str, font=font_num)
+    draw.text((badge_right - lvl_len, name_y), lvl_str, fill=(255, 255, 255, 255), font=font_num)
+
+    # Rank display
+    rank_str = f"RANK #{rank}"
+    rank_len = draw.textlength(rank_str, font=font_badge)
+    r_pill_w = int(rank_len) + 24
+    r_pill_x = int(badge_right - lvl_len - 16 - r_pill_w)
+    draw.rounded_rectangle([(r_pill_x, name_y + 4), (r_pill_x + r_pill_w, name_y + 30)], radius=8, fill=(24, 30, 48, 220), outline=accent_rgb, width=1)
+    draw.text((r_pill_x + 12, name_y + 8), rank_str, fill=(226, 232, 240, 255), font=font_badge)
+
+    # XP Text (Right above progress bar)
+    prog_pct = min(1.0, max(0.0, current_xp / max(1, needed_xp)))
+    pct_text = f"{int(prog_pct * 100)}%"
+    xp_str = f"{current_xp:,} / {needed_xp:,} XP ({pct_text})"
+    xp_len = draw.textlength(xp_str, font=font_xp)
+    bar_y = 175
+    draw.text((w - 40 - xp_len, bar_y - 24), xp_str, fill=(255, 255, 255, 255), font=font_xp)
+
+    total_xp_str = f"Total XP: {total_xp:,}"
+    draw.text((text_x, bar_y - 24), total_xp_str, fill=(148, 163, 184, 255), font=font_xp)
+
+    # Progress Bar (Large, Rounded, Gradient-fill with Glow)
+    bar_x = text_x
+    bar_w = w - 40 - bar_x
+    bar_h = 18
+
+    # Background Track
+    draw.rounded_rectangle([(bar_x, bar_y), (bar_x + bar_w, bar_y + bar_h)], radius=9, fill=(24, 30, 46, 240), outline=(50, 60, 84, 180), width=1)
+
+    # Filled portion
+    fill_w = max(18, int(bar_w * prog_pct)) if prog_pct > 0.02 else (10 if prog_pct > 0 else 0)
+    if fill_w > 0:
+        draw.rounded_rectangle([(bar_x, bar_y), (bar_x + fill_w, bar_y + bar_h)], radius=9, fill=accent_rgb)
+        # Inner gloss line
+        if fill_w > 20:
+            draw.rounded_rectangle([(bar_x + 2, bar_y + 2), (bar_x + fill_w - 2, bar_y + 5)], radius=2, fill=(255, 255, 255, 90))
+
+    # Bottom Branding & Footer
+    draw.line([(36, h - 36), (w - 36, h - 36)], fill=(255, 255, 255, 14), width=1)
+    draw.text((36, h - 26), "KYOKA PROGRESSION // LEVEL & ACTIVITY METRICS", fill=(100, 116, 139, 220), font=font_sub)
+    status_str = f"TOP {max(1, rank)} IN SERVER"
+    s_len = draw.textlength(status_str, font=font_sub)
+    draw.text((w - 36 - s_len, h - 26), status_str, fill=(accent_secondary[0], accent_secondary[1], accent_secondary[2], 230), font=font_sub)
+
+    out = io.BytesIO()
+    im.save(out, format="PNG", optimize=True)
+    out.seek(0)
+    return out
+

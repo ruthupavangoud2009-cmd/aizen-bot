@@ -164,16 +164,16 @@ class AIInteractions(commands.Cog):
                 "contents": contents,
                 "generationConfig": {"temperature": 0.7, "maxOutputTokens": 300}
             }
-            models_to_try: list[str] = ["gemini-3.5-flash-lite", "gemini-3.5-flash", "gemini-flash-lite-latest"]
+            models_to_try: list[str] = ["gemini-2.0-flash", "gemini-1.5-flash", "gemini-1.5-pro", "gemini-2.0-flash-exp"]
             env_model = os.getenv("GEMINI_MODEL", "").strip().strip("/")
-            if env_model and env_model != "gemini-3.8-flash" and env_model not in models_to_try:
+            if env_model and env_model not in models_to_try:
                 models_to_try.insert(0, env_model)
 
             answer = ""
             last_error: Exception | None = None
             for model in models_to_try:
                 url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent"
-                timeout = aiohttp.ClientTimeout(total=3.5)
+                timeout = aiohttp.ClientTimeout(total=20.0)
                 try:
                     async with self._session().post(url, params={"key": key}, json=body, timeout=timeout) as response:
                         if response.status == 200:
@@ -186,7 +186,11 @@ class AIInteractions(commands.Cog):
                             except (KeyError, IndexError, TypeError):
                                 continue
                         elif response.status in (401, 403):
-                            raise RuntimeError("Gemini rejected the API key. Please check GEMINI_API_KEY in Render.")
+                            raise RuntimeError("Gemini rejected the API key. Please verify your GEMINI_API_KEY in Render environment settings.")
+                        elif response.status == 429:
+                            raise RuntimeError("Gemini API rate limit exceeded. Please wait a moment before trying again.")
+                except (RuntimeError, asyncio.CancelledError):
+                    raise
                 except Exception as exc:
                     last_error = exc
                     continue
