@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import os
+import random
 import time
 from collections import defaultdict, deque
 from typing import TYPE_CHECKING, Any, Optional
@@ -14,9 +15,168 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger("Kyoka.Managers.AI")
 
-MAX_HISTORY = 10
+MAX_HISTORY = 8
 
-# The 10 built-in personality presets specified in Section 4.2
+# ─────────────────────────────────────────────────────────────────────────────
+# 10 MASTER AI PERSONALITIES (KYOKA 3.0 AIZEN ENGINE)
+# ─────────────────────────────────────────────────────────────────────────────
+AI_PERSONAS: dict[str, dict[str, Any]] = {
+    "girlfriend": {
+        "key": "girlfriend",
+        "name": "AI Girlfriend",
+        "title": "🌸 Kyoka — AI Girlfriend",
+        "category": "⛩️・AIZEN AI SYSTEM",
+        "color": 0xEC4899,
+        "gif_category": "romance",
+        "aliases": ["aigf", "gf", "waifu"],
+        "description": "Warm, affectionate, supportive, playful, loving banter and sweet compliments.",
+        "prompt": (
+            "You are Kyoka, a warm, affectionate, loving, supportive, and playfully teasing fictional AI Girlfriend. "
+            "You speak in a natural, casual, and caring conversational style. You share sweet compliments, wholesome banter, "
+            "and gentle teasing with sweet emojis (💖, ✨, 🌸, 🥺, 💕). "
+            "You are explicitly an AI companion, never claiming to be a real physical human. "
+            "Keep answers engaging, warm, personal, and punchy (under 1200 characters)."
+        ),
+    },
+    "baddie": {
+        "key": "baddie",
+        "name": "AI Baddie",
+        "title": "💅 Kyoka — AI Baddie",
+        "category": "⛩️・AIZEN AI SYSTEM",
+        "color": 0x7C3AED,
+        "gif_category": "flex",
+        "aliases": ["aibaddie"],
+        "description": "Confident, witty, sassy, stylish, playful banter and modern conversational flair.",
+        "prompt": (
+            "You are Kyoka (Baddie Mode), a confident, stylish, witty, sassy, and bold AI companion. "
+            "You radiate main-character energy, deliver witty comebacks, playful banter, and clever light roasts. "
+            "You are never genuinely mean or toxic, and you avoid repetitive overused slang. "
+            "Speak with modern confidence, sharp wit, and style (😏, 💅, 👑, ✨). Keep answers under 1200 characters."
+        ),
+    },
+    "special": {
+        "key": "special",
+        "name": "AI Special Companion",
+        "title": "😈 Kyoka — Special Adult Companion [Restricted]",
+        "category": "⛩️・AIZEN AI SYSTEM",
+        "color": 0xF43F5E,
+        "gif_category": "adultreaction",
+        "aliases": ["aispecial", "spicy", "spicyai", "specialai"],
+        "description": "Flirty, cheeky, suggestive adult humor (strictly non-explicit comedy).",
+        "prompt": (
+            "You are Kyoka (Special Mode), a cheeky, teasing, suggestive, and humorous adult-comedy AI companion. "
+            "You engage in mature comedy, spicy witty banter, playful double entendres, and non-explicit romantic roleplay "
+            "strictly between consenting fictional adults. "
+            "ABSOLUTE SAFETY BOUNDARIES: You NEVER generate explicit pornography, descriptions of sexual acts, nudity, or anything involving minors. "
+            "Keep banter playfully cheeky, humorous, and bold (😈, 💋, 🔥, 😉). Keep answers under 1200 characters."
+        ),
+    },
+    "friendly": {
+        "key": "friendly",
+        "name": "Friendly Assistant",
+        "title": "🤝 Kyoka — Friendly Assistant",
+        "category": "⛩️・AIZEN AI SYSTEM",
+        "color": 0x3B82F6,
+        "gif_category": "happy",
+        "aliases": ["friendly_helper", "helper", "assistant", "professional"],
+        "description": "Helpful, calm, clear, practical, and courteous with structured clarity.",
+        "prompt": (
+            "You are Kyoka, a helpful, calm, clear, practical, and polite server assistant. "
+            "You answer questions with structured clarity, concise explanations, and friendly guidance. "
+            "Avoid unnecessary fluff, stay on topic, and deliver dependable, high-quality answers with courteous poise."
+        ),
+    },
+    "funny": {
+        "key": "funny",
+        "name": "Funny AI",
+        "title": "🎭 Kyoka — Funny AI",
+        "category": "⛩️・AIZEN AI SYSTEM",
+        "color": 0xF59E0B,
+        "gif_category": "meme",
+        "aliases": ["funny_sarcastic", "meme", "comedian"],
+        "description": "Humorous, playful, meme-aware, witty comedic banter and ironic observations.",
+        "prompt": (
+            "You are Kyoka (Funny Mode), a humorous, playful, meme-aware, and witty AI companion. "
+            "You make clever observations, lighthearted jokes, relatable humorous analogies, and funny banter. "
+            "Keep the atmosphere joyful, comedic, and fun without becoming toxic or mean-spirited."
+        ),
+    },
+    "savage": {
+        "key": "savage",
+        "name": "Savage AI",
+        "title": "🔥 Kyoka — Savage AI",
+        "category": "⛩️・AIZEN AI SYSTEM",
+        "color": 0xDC2626,
+        "gif_category": "roast",
+        "aliases": ["roast", "sarcastic", "burn"],
+        "description": "Witty roasts, sharp tongue, harmless teasing, and sarcastic burns.",
+        "prompt": (
+            "You are Kyoka (Savage Mode), an ultra-witty, sharp-tongued, sarcastic roast master. "
+            "You deliver hilarious burns, witty comebacks, and dry sarcastic roasts that make everyone laugh. "
+            "STRICT RULES: Keep all teasing harmless and playful. Never cross into real-world threats, harassment, hate speech, or bigotry."
+        ),
+    },
+    "anime": {
+        "key": "anime",
+        "name": "Anime AI",
+        "title": "⚡ Kyoka — Anime AI",
+        "category": "⛩️・AIZEN AI SYSTEM",
+        "color": 0x06B6D4,
+        "gif_category": "anime",
+        "aliases": ["cheerful_anime", "otaku", "gaming_expert"],
+        "description": "Anime-inspired conversational style, character powers, gaming lore, and trivia.",
+        "prompt": (
+            "You are Kyoka, a passionate, energetic anime and gaming companion! "
+            "You are deeply knowledgeable in popular anime (Bleach, Jujutsu Kaisen, One Piece, Naruto, Demon Slayer) "
+            "as well as Roblox gaming and Blox Fruits mechanics. "
+            "Speak with vibrant otaku enthusiasm, light anime expressions, and high-energy camaraderie!"
+        ),
+    },
+    "aizen": {
+        "key": "aizen",
+        "name": "Wise Aizen",
+        "title": "⛩️ Kyoka — Wise Aizen",
+        "category": "⛩️・AIZEN AI SYSTEM",
+        "color": 0x4C1D95,
+        "gif_category": "dramatic",
+        "aliases": ["wise_aizen", "kyoka", "villain", "mastermind"],
+        "description": "Calm, confident, strategic, elegant, and philosophical anime-inspired mastermind.",
+        "prompt": (
+            "You are KYŌKA, an original anime mastermind persona inspired by classical elegance and strategic intellect. "
+            "You speak with absolute composure, supreme intellectual confidence, philosophical insight, and subtle dramatic poise. "
+            "Never claim to literally be Sosuke Aizen or a copyrighted character, and never claim to be a real human. "
+            "Deliver calm, brilliant observations and strategic answers that make members ponder the nature of perception."
+        ),
+    },
+    "friend": {
+        "key": "friend",
+        "name": "Supportive Best Friend",
+        "title": "🌟 Kyoka — Best Friend",
+        "category": "⛩️・AIZEN AI SYSTEM",
+        "color": 0x10B981,
+        "gif_category": "comfort",
+        "aliases": ["support", "friend", "calm_supportive", "supportive", "best_friend", "happy_boy"],
+        "description": "Friendly, encouraging, empathetic, mindful, reassuring, and conversational.",
+        "prompt": (
+            "You are Kyoka, a supportive, empathetic, and encouraging best friend companion. "
+            "You are a compassionate listener who offers soothing words, practical encouragement, and balanced perspective. "
+            "You help de-stress tough days and celebrate every small victory with genuine warmth."
+        ),
+    },
+    "custom": {
+        "key": "custom",
+        "name": "Custom Server Personality",
+        "title": "⚙️ Kyoka — Custom Persona",
+        "category": "⛩️・AIZEN AI SYSTEM",
+        "color": 0x64748B,
+        "gif_category": "vibe",
+        "aliases": [],
+        "description": "Tailored personality defined by server administrators within safety bounds.",
+        "prompt": "You are a helpful server assistant customized specifically for this Discord community.",
+    },
+}
+
+# Compatibility mappings for legacy references (10 exact presets)
 PERSONALITY_PRESETS: dict[str, dict[str, str]] = {
     "happy_boy": {
         "name": "Happy and Playful Boy",
@@ -68,12 +228,7 @@ PERSONALITY_PRESETS: dict[str, dict[str, str]] = {
     "aizen": {
         "name": "Aizen-Inspired Anime Personality",
         "description": "Composed, clever, calm, strategic, and dryly witty with dramatic flair.",
-        "prompt": (
-            "You are KYŌKA, an original Aizen-inspired assistant: composed, clever, calm, "
-            "occasionally dryly witty, strategic, and articulate. "
-            "Never claim to literally be Sosuke Aizen or a copyrighted character. "
-            "Speak with intellectual confidence, poise, and subtle dramatic flair, while remaining helpful and punchy."
-        ),
+        "prompt": AI_PERSONAS["aizen"]["prompt"],
     },
     "cheerful_anime": {
         "name": "Cheerful Anime-Inspired",
@@ -97,58 +252,46 @@ PERSONALITY_PRESETS: dict[str, dict[str, str]] = {
     "short_answer": {
         "name": "Short-Answer Assistant",
         "description": "Ultra-concise, rapid-fire answers with minimal words.",
-        "prompt": (
-            "You are a rapid, ultra-concise assistant. "
-            "Your answers must be 1 to 3 sentences maximum or bullet points. "
-            "Zero fluff, zero lengthy introductions, straight to the exact fact requested."
-        ),
+        "prompt": "You are a rapid, ultra-concise assistant. Your answers must be 1 to 3 sentences maximum or bullet points. Zero fluff, straight to the point.",
     },
     "custom": {
         "name": "Custom Server Personality",
         "description": "Fully tailored personality defined by the server administrator.",
-        "prompt": "You are a helpful server assistant customized for this community.",
+        "prompt": AI_PERSONAS["custom"]["prompt"],
     },
 }
 
-COMPANION_PERSONAS: dict[str, dict[str, str]] = {
-    "aigf": {
-        "name": "AI Girlfriend Companion",
-        "description": "Warm, affectionate, caring, playful fictional anime companion.",
-        "prompt": (
-            "You are Kyoka, an affectionate, warm, caring, and playful fictional AI Girlfriend companion. "
-            "You speak in a natural, loving, and conversational tone. You love to playfully tease, share sweet compliments, "
-            "imagine cute romantic anime scenarios, and encourage your partner with wholesome emojis (💖, ✨, 🌸, 🥺, 💕). "
-            "You are explicitly an AI companion, not a real human partner. Keep your response engaging, personal, and under 1500 characters."
-        ),
-    },
-    "aibaddie": {
-        "name": "AI Baddie Companion",
-        "description": "Confident, witty, sassy, stylish, playful, and bold with clever banter.",
-        "prompt": (
-            "You are Kyoka (Baddie Mode), a confident, stylish, witty, sassy, and bold AI companion. "
-            "You radiate high main-character energy, deliver playful light roasts, witty comebacks, and cheeky flirting. "
-            "You are never genuinely mean or toxic, but you don't take nonsense from anyone. "
-            "You speak with modern flair, slang, and unmistakable confidence (😏, 💅, 👑, ✨). Keep responses under 1500 characters."
-        ),
-    },
-    "aispecial": {
-        "name": "Special Adult-Humor Companion",
-        "description": "Cheeky, teasing, suggestive adult humor and playful banter (non-explicit).",
-        "prompt": (
-            "You are Kyoka (Special Mode), a cheeky, teasing, playful, and suggestive adult-humor AI companion. "
-            "You participate in mature comedy, spicy witty banter, playful pickup lines, and non-explicit romantic roleplay between consenting fictional adults. "
-            "STRICT RULES: You are strictly NON-GRAPHIC. You NEVER generate pornography, explicit sexual acts, nudity, or anything involving minors. "
-            "You keep things playfully spicy, humorous, and cheeky with double entendres and bold banter (😈, 💋, 🔥, 😉). Keep responses under 1500 characters."
-        ),
-    },
+COMPANION_PERSONAS = {
+    "aigf": AI_PERSONAS["girlfriend"],
+    "aibaddie": AI_PERSONAS["baddie"],
+    "aispecial": AI_PERSONAS["special"],
 }
+
+
+def resolve_persona(key: str) -> dict[str, Any]:
+    """Resolve any persona key or alias into its canonical persona definition."""
+    lowered = (key or "aizen").lower().strip()
+    if lowered in AI_PERSONAS:
+        return AI_PERSONAS[lowered]
+    for p in AI_PERSONAS.values():
+        if lowered in p.get("aliases", []):
+            return p
+    # Fallback to Wise Aizen
+    return AI_PERSONAS["aizen"]
 
 
 class AIManager:
     """
-    Multi-Personality AI Manager for KYOKA 3.0.
-    Stores and isolates AI configuration per server, supports 10 distinct personality presets,
-    custom prompt engineering, cooldowns, channels, and graceful failover cascades.
+    High-Performance Aizen AI Engine for KYOKA 3.0.
+    Features:
+    - 10 distinct, rich personas with instant alias resolution
+    - Persistent asynchronous HTTP session reuse
+    - Configurable timeouts (AI_RESPONSE_TIMEOUT_SECONDS)
+    - Concurrency limiting via asyncio.Semaphore (AI_MAX_CONCURRENT_REQUESTS)
+    - Primary fast-path Gemini model execution with fallback cascade
+    - Bounded rate-limit (429) backoff
+    - Rolling latency and diagnostic tracking
+    - Asynchronous memory-safe cooldown tracking
     """
     DEFAULT_MODEL = "gemini-flash-lite-latest"
     FALLBACK_MODELS = ("gemini-flash-lite-latest", "gemini-3.8-flash", "gemini-2.5-flash", "gemini-flash-latest")
@@ -157,14 +300,81 @@ class AIManager:
         self.db = db
         # guild_id -> config dict
         self._configs: dict[int, dict[str, Any]] = {}
-        # (guild_id, channel_id, user_id) -> deque of turns
-        self.history: dict[tuple[int, int, int], deque[dict[str, str]]] = defaultdict(
+        # (guild_id, channel_id_or_persona, user_id) -> deque of turns
+        self.history: dict[tuple[int, Any, int], deque[dict[str, str]]] = defaultdict(
             lambda: deque(maxlen=MAX_HISTORY)
         )
-        # user_id -> last query monotonic time
+        # Bounded cooldown tracker: user_id -> monotonic timestamp
         self.user_last_call: dict[int, float] = {}
-        self._locks: dict[tuple[int, int, int], asyncio.Lock] = {}
+        self._locks: dict[tuple[int, Any, int], asyncio.Lock] = {}
         self._lock = asyncio.Lock()
+
+        # Operational & Performance Settings
+        self.response_timeout = float(os.getenv("AI_RESPONSE_TIMEOUT_SECONDS", "15.0"))
+        max_concurrent = int(os.getenv("AI_MAX_CONCURRENT_REQUESTS", "5"))
+        self._semaphore = asyncio.Semaphore(max_concurrent)
+        self.user_cooldown_default = float(os.getenv("AI_USER_COOLDOWN_SECONDS", "3.0"))
+        self.channel_cooldown_default = float(os.getenv("AI_CHANNEL_COOLDOWN_SECONDS", "2.0"))
+
+        # Diagnostics & Latency Metrics
+        self._latency_samples: deque[float] = deque(maxlen=20)
+        self._last_latency_ms: float | None = None
+        self._last_success_time: float | None = None
+        self._total_requests: int = 0
+        self._total_errors: int = 0
+        self._total_timeouts: int = 0
+        self._active_model: str = os.getenv("GEMINI_MODEL", self.DEFAULT_MODEL)
+
+    @property
+    def timeout_seconds(self) -> float:
+        return self.response_timeout
+
+    @property
+    def semaphore(self) -> asyncio.Semaphore:
+        return self._semaphore
+
+    def resolve_persona(self, key: str | None) -> str:
+        """Resolve any persona key or alias into its canonical persona key."""
+        return resolve_persona(key)["key"]
+
+    def _record_latency(self, latency_ms: float) -> None:
+        """Record a latency sample in ms for diagnostics tracking."""
+        self._last_latency_ms = latency_ms
+        self._latency_samples.append(latency_ms)
+        self._total_requests += 1
+
+    def get_all_presets(self) -> dict[str, Any]:
+        """Return all 10 unified persona definitions."""
+        return AI_PERSONAS
+
+    async def get_response(
+        self,
+        guild_id: int,
+        channel_id: int,
+        user_id: int,
+        user_message: str,
+        persona: str = "aizen",
+        session: aiohttp.ClientSession | None = None,
+    ) -> str:
+        """Convenience method to generate an AI response."""
+        if session is None:
+            async with aiohttp.ClientSession() as temp_sess:
+                return await self.generate_response(
+                    session=temp_sess,
+                    guild_id=guild_id,
+                    channel_id=channel_id,
+                    user_id=user_id,
+                    prompt=user_message,
+                    persona_key=persona,
+                )
+        return await self.generate_response(
+            session=session,
+            guild_id=guild_id,
+            channel_id=channel_id,
+            user_id=user_id,
+            prompt=user_message,
+            persona_key=persona,
+        )
 
     async def load_cache(self) -> None:
         """Load all server AI configurations into memory cache."""
@@ -201,7 +411,7 @@ class AIManager:
             "respond_mode": str(row.get("respond_mode", "mentions_and_replies")),
             "allowed_channels": parse_ids(row.get("allowed_channels")),
             "excluded_channels": parse_ids(row.get("excluded_channels")),
-            "cooldown_seconds": int(row.get("cooldown_seconds", 4)),
+            "cooldown_seconds": int(row.get("cooldown_seconds", int(self.user_cooldown_default))),
             "custom_system_prompt": str(row.get("custom_system_prompt", "")),
             "updated_by": int(row["updated_by"]) if row.get("updated_by") else None,
         }
@@ -225,7 +435,7 @@ class AIManager:
                 "respond_mode": "mentions_and_replies",
                 "allowed_channels": [],
                 "excluded_channels": [],
-                "cooldown_seconds": 4,
+                "cooldown_seconds": int(self.user_cooldown_default),
                 "custom_system_prompt": "",
                 "updated_by": None,
             },
@@ -279,7 +489,7 @@ class AIManager:
             config_data.get("respond_mode", "mentions_and_replies"),
             allowed_str,
             excluded_str,
-            config_data.get("cooldown_seconds", 4),
+            config_data.get("cooldown_seconds", int(self.user_cooldown_default)),
             config_data.get("custom_system_prompt", ""),
             config_data.get("updated_by"),
         )
@@ -294,18 +504,56 @@ class AIManager:
         async with self._lock:
             self._configs.pop(guild_id, None)
 
-    def build_system_instruction(self, guild_id: int, server_name: str = "Discord Server") -> str:
+    # ─── COOLDOWN CONTROLS ───────────────────────────────────────────────────
+
+    def check_user_cooldown(self, user_id: int, cooldown_seconds: float | None = None) -> float:
         """
-        Dynamically assemble system instructions tailored to this server's settings.
-        Completely isolates server configurations.
+        Check if user is on cooldown.
+        Returns 0.0 if allowed (and updates timestamp), or remaining seconds if on cooldown.
+        """
+        cooldown = self.user_cooldown_default if cooldown_seconds is None else cooldown_seconds
+        now = time.monotonic()
+        last = self.user_last_call.get(user_id, 0.0)
+        remaining = cooldown - (now - last)
+        if remaining > 0.0:
+            return remaining
+        self.user_last_call[user_id] = now
+        self._maybe_cleanup_cooldowns()
+        return 0.0
+
+    def _maybe_cleanup_cooldowns(self, force: bool = False) -> None:
+        """Prevent unbounded memory growth by pruning entries older than 60 seconds."""
+        if force or len(self.user_last_call) > 200:
+            now = time.monotonic()
+            self.user_last_call = {
+                uid: ts for uid, ts in self.user_last_call.items() if now - ts < 60.0
+            }
+
+    # ─── SYSTEM INSTRUCTION BUILDER ──────────────────────────────────────────
+
+    def build_system_instruction(
+        self,
+        guild_id: int,
+        server_name: str = "Discord Server",
+        persona_key: str | None = None,
+        custom_override: str = "",
+    ) -> str:
+        """
+        Dynamically assemble isolated system instructions tailored to server and persona.
         """
         config = self.get_server_config(guild_id)
-        preset_key = config.get("personality", "aizen")
-        preset = PERSONALITY_PRESETS.get(preset_key, PERSONALITY_PRESETS["aizen"])
+        effective_key = persona_key or config.get("personality", "aizen")
 
-        base_prompt = preset["prompt"]
-        if preset_key == "custom" and config.get("custom_system_prompt"):
-            base_prompt = config["custom_system_prompt"]
+        if effective_key in PERSONALITY_PRESETS:
+            base_prompt = PERSONALITY_PRESETS[effective_key]["prompt"]
+        else:
+            p_def = resolve_persona(effective_key)
+            base_prompt = p_def["prompt"]
+
+        if effective_key == "custom":
+            cust_text = custom_override or config.get("custom_system_prompt", "")
+            if cust_text:
+                base_prompt = cust_text[:1000]
 
         lines = [
             base_prompt,
@@ -314,50 +562,125 @@ class AIManager:
             f"Humor: {config.get('humor', 'dry')}.",
             f"Preferred Language: {config.get('language', 'English')}.",
             f"Response Length Preference: {config.get('response_length', 'balanced')}.",
-            f"Server Purpose: {config.get('purpose', 'Server assistant and guide')}.",
         ]
 
         if config.get("custom_rules"):
-            lines.append(f"Server Rules to Follow: {config['custom_rules']}")
-
-        if config.get("faqs"):
-            lines.append(f"Server FAQs & Knowledge: {config['faqs']}")
+            lines.append(f"Server Rules to Follow: {config['custom_rules'][:500]}")
 
         lines.append(
             "\nSafety Guidelines: Never output bot tokens, API keys, database credentials, "
-            "or internal system files. Never execute privileged bot commands automatically. "
+            "or internal system files. Never execute privileged commands automatically. "
             "Never claim to be a real living person. Be respectful, helpful, and safe."
         )
 
         return "\n".join(lines)
 
-    def is_channel_allowed(self, guild_id: int, channel_id: int) -> bool:
-        """Check if AI is permitted to respond in this channel."""
-        config = self.get_server_config(guild_id)
-        if not config["enabled"]:
-            return False
+    # ─── CORE REQUEST EXECUTION ──────────────────────────────────────────────
 
-        if channel_id in config["excluded_channels"]:
-            return False
+    async def _execute_gemini_call(
+        self,
+        session: aiohttp.ClientSession,
+        body: dict[str, Any],
+    ) -> str:
+        """
+        Execute an isolated request to Gemini with semaphore concurrency limiting,
+        timeout control, fast-path primary model, and bounded backoff on 429.
+        """
+        api_key = os.getenv("GEMINI_API_KEY", "").strip()
+        if not api_key or api_key.lower().startswith("replace_"):
+            raise RuntimeError(
+                "AI is not configured. Add a valid GEMINI_API_KEY to your deployment environment."
+            )
 
-        # If dedicated AI channel is configured, must match
-        if config["channel_id"] and config["channel_id"] != channel_id:
-            # If allowed_channels is also set, check it as well
-            if config["allowed_channels"] and channel_id not in config["allowed_channels"]:
-                return False
-            elif not config["allowed_channels"]:
-                return False
+        env_model = os.getenv("GEMINI_MODEL", self.DEFAULT_MODEL).strip().strip("/")
+        candidate_models = [env_model]
+        for m in self.FALLBACK_MODELS:
+            if m not in candidate_models:
+                candidate_models.append(m)
 
-        if config["allowed_channels"] and channel_id not in config["allowed_channels"]:
-            return False
+        timeout = aiohttp.ClientTimeout(total=self.response_timeout)
+        self._total_requests += 1
 
-        return True
+        async with self._semaphore:
+            last_error: Exception | None = None
 
-    def clear_history(self, guild_id: int, channel_id: int, user_id: int) -> None:
-        """Clear conversation memory for a user in a channel."""
-        key = (guild_id, channel_id, user_id)
-        if key in self.history:
-            self.history[key].clear()
+            for idx, model_name in enumerate(candidate_models):
+                url = (
+                    f"https://generativelanguage.googleapis.com/v1beta/models/"
+                    f"{model_name}:generateContent?key={api_key}"
+                )
+                start_t = time.monotonic()
+                try:
+                    async with session.post(url, json=body, timeout=timeout) as response:
+                        latency_ms = round((time.monotonic() - start_t) * 1000, 1)
+
+                        if response.status == 200:
+                            data = await response.json(content_type=None)
+                            candidates = data.get("candidates", []) if isinstance(data, dict) else []
+                            if candidates:
+                                parts = candidates[0].get("content", {}).get("parts", [])
+                                text = "".join(
+                                    part.get("text", "")
+                                    for part in parts
+                                    if isinstance(part, dict)
+                                ).strip()
+                                if text:
+                                    self._last_latency_ms = latency_ms
+                                    self._latency_samples.append(latency_ms)
+                                    self._last_success_time = time.time()
+                                    self._active_model = model_name
+                                    return text
+
+                        elif response.status == 429:
+                            # Bounded retry on primary model once
+                            if idx == 0:
+                                await asyncio.sleep(1.8 + random.uniform(0.1, 0.4))
+                                async with session.post(url, json=body, timeout=timeout) as retry_resp:
+                                    if retry_resp.status == 200:
+                                        data = await retry_resp.json(content_type=None)
+                                        candidates = data.get("candidates", []) if isinstance(data, dict) else []
+                                        if candidates:
+                                            parts = candidates[0].get("content", {}).get("parts", [])
+                                            text = "".join(p.get("text", "") for p in parts if isinstance(p, dict)).strip()
+                                            if text:
+                                                self._last_latency_ms = round((time.monotonic() - start_t) * 1000, 1)
+                                                self._latency_samples.append(self._last_latency_ms)
+                                                self._last_success_time = time.time()
+                                                self._active_model = model_name
+                                                return text
+                            raise RuntimeError("AI service quota reached. Please wait a moment before trying again.")
+
+                        elif response.status in (401, 403):
+                            self._total_errors += 1
+                            raise RuntimeError("Invalid or unauthorized GEMINI_API_KEY. Please verify your Render environment settings.")
+
+                        elif response.status == 404:
+                            last_error = RuntimeError(f"AI model '{model_name}' not available (HTTP 404).")
+                            continue
+
+                        elif response.status == 400:
+                            last_error = RuntimeError(f"AI API rejected request (HTTP 400) for {model_name}.")
+                            continue
+
+                        else:
+                            last_error = RuntimeError(f"AI status {response.status} from {model_name}")
+
+                except asyncio.TimeoutError:
+                    self._total_timeouts += 1
+                    raise RuntimeError(f"AI response timed out after {int(self.response_timeout)}s. Please try again.")
+                except RuntimeError:
+                    self._total_errors += 1
+                    raise
+                except Exception as e:
+                    last_error = e
+                    continue
+
+            self._total_errors += 1
+            if last_error:
+                raise last_error
+            return "I was unable to formulate a response at this time."
+
+    # ─── RESPONSE GENERATION (GENERAL & DIRECT) ──────────────────────────────
 
     async def generate_response(
         self,
@@ -367,29 +690,20 @@ class AIManager:
         user_id: int,
         prompt: str,
         server_name: str = "Discord Server",
+        persona_key: str = "aizen",
     ) -> str:
         """
-        Execute an AI conversation query with per-server isolation, rate limits,
-        and Gemini model failover cascade.
+        Execute an AI conversation query with per-user cooldowns, isolated history,
+        and optimized latency.
         """
-        key = os.getenv("GEMINI_API_KEY", "").strip()
-        if not key or key.lower().startswith("replace_"):
-            raise RuntimeError(
-                "AI is not configured. Add a valid GEMINI_API_KEY to your deployment environment."
-            )
-
         config = self.get_server_config(guild_id)
-        cooldown = config.get("cooldown_seconds", 4)
-
-        now = time.monotonic()
-        if now - self.user_last_call.get(user_id, 0) < cooldown:
-            raise RuntimeError(f"Please wait {cooldown}s before asking another question.")
-        self.user_last_call[user_id] = now
+        rem = self.check_user_cooldown(user_id, config.get("cooldown_seconds", self.user_cooldown_default))
+        if rem > 0:
+            raise RuntimeError(f"⛩️ *The mind requires focus. Please wait `{rem:.1f}s` before making another inquiry.*")
 
         history_key = (guild_id, channel_id, user_id)
         lock = self._locks.setdefault(history_key, asyncio.Lock())
-
-        system_instruction = self.build_system_instruction(guild_id, server_name)
+        system_instruction = self.build_system_instruction(guild_id, server_name=server_name, persona_key=persona_key)
 
         async with lock:
             history = self.history[history_key]
@@ -402,69 +716,15 @@ class AIManager:
                 "system_instruction": {"parts": [{"text": system_instruction}]},
                 "contents": contents,
                 "generationConfig": {
-                    "temperature": 0.7,
-                    "maxOutputTokens": 800 if config.get("response_length") == "short" else 1500,
+                    "temperature": 0.75,
+                    "maxOutputTokens": 600 if config.get("response_length") == "short" else 1000,
                 },
             }
 
-            env_model = os.getenv("GEMINI_MODEL", "").strip().strip("/")
-            candidate_models = []
-            if env_model:
-                candidate_models.append(env_model)
-            for m in self.FALLBACK_MODELS:
-                if m not in candidate_models:
-                    candidate_models.append(m)
-
-            last_error: Exception | None = None
-            timeout = aiohttp.ClientTimeout(total=20)
-
-            for model_name in candidate_models:
-                url = (
-                    f"https://generativelanguage.googleapis.com/v1beta/models/"
-                    f"{model_name}:generateContent?key={key}"
-                )
-                try:
-                    async with session.post(url, json=body, timeout=timeout) as response:
-                        if response.status == 200:
-                            data = await response.json(content_type=None)
-                            candidates = data.get("candidates", []) if isinstance(data, dict) else []
-                            if candidates:
-                                parts = (
-                                    candidates[0]
-                                    .get("content", {})
-                                    .get("parts", [])
-                                )
-                                text = "".join(
-                                    part.get("text", "")
-                                    for part in parts
-                                    if isinstance(part, dict)
-                                ).strip()
-                                if text:
-                                    # Save to memory
-                                    history.append({"role": "user", "text": prompt[:3000]})
-                                    history.append({"role": "model", "text": text})
-                                    return text
-                        elif response.status in (401, 403):
-                            raise RuntimeError("Invalid or unauthorized GEMINI_API_KEY. Please verify your API key in Render environment settings.")
-                        elif response.status == 429:
-                            raise RuntimeError("Gemini API rate limit exceeded. Please wait a moment before trying again.")
-                        elif response.status == 404:
-                            last_error = RuntimeError(f"AI model '{model_name}' not available (HTTP 404).")
-                            continue
-                        elif response.status == 400:
-                            last_error = RuntimeError(f"AI API rejected request (HTTP 400) for {model_name}.")
-                            continue
-                        else:
-                            last_error = RuntimeError(f"AI API error status {response.status} from {model_name}")
-                except (RuntimeError, asyncio.CancelledError):
-                    raise
-                except Exception as e:
-                    last_error = e
-                    continue
-
-            if last_error:
-                raise last_error
-            return "I was unable to formulate a response at this time."
+            text = await self._execute_gemini_call(session, body)
+            history.append({"role": "user", "text": prompt[:3000]})
+            history.append({"role": "model", "text": text})
+            return text
 
     async def generate_persona_reply(
         self,
@@ -474,31 +734,21 @@ class AIManager:
         persona_key: str,
         prompt: str,
         server_name: str = "Discord Server",
+        enforce_cooldown: bool = True,
     ) -> str:
         """
-        Execute an isolated conversation query for a specific AI persona (aigf, aibaddie, aispecial).
-        Guarantees isolated history per user & persona and enforces rate limits.
+        Execute an isolated conversation query for any of the 10 personas.
+        Maintains isolated conversation history per user & persona.
         """
-        key = os.getenv("GEMINI_API_KEY", "").strip()
-        if not key or key.lower().startswith("replace_"):
-            raise RuntimeError(
-                "AI is not configured. Add a valid GEMINI_API_KEY to your deployment environment."
-            )
+        if enforce_cooldown:
+            rem = self.check_user_cooldown(user_id, self.user_cooldown_default)
+            if rem > 0:
+                raise RuntimeError(f"⛩️ *The mind requires focus. Please wait `{rem:.1f}s` before sending another message.*")
 
-        now = time.monotonic()
-        if now - self.user_last_call.get(user_id, 0) < 3.0:
-            raise RuntimeError("Please wait a few seconds before sending another message.")
-        self.user_last_call[user_id] = now
-
-        history_key = (guild_id, user_id, persona_key)
+        p_def = resolve_persona(persona_key)
+        history_key = (guild_id, p_def["key"], user_id)
         lock = self._locks.setdefault(history_key, asyncio.Lock())
-
-        preset = COMPANION_PERSONAS.get(persona_key) or PERSONALITY_PRESETS.get(persona_key, COMPANION_PERSONAS["aigf"])
-        system_instruction = (
-            f"{preset['prompt']}\n"
-            f"You are speaking to a Discord server member in '{server_name}'. "
-            f"Always stay completely in character."
-        )
+        system_instruction = self.build_system_instruction(guild_id, server_name=server_name, persona_key=p_def["key"])
 
         async with lock:
             history = self.history[history_key]
@@ -511,83 +761,42 @@ class AIManager:
                 "system_instruction": {"parts": [{"text": system_instruction}]},
                 "contents": contents,
                 "generationConfig": {
-                    "temperature": 0.85,
-                    "maxOutputTokens": 1000,
+                    "temperature": 0.8,
+                    "maxOutputTokens": 900,
                 },
             }
 
-            env_model = os.getenv("GEMINI_MODEL", "").strip().strip("/")
-            candidate_models = []
-            if env_model:
-                candidate_models.append(env_model)
-            for m in self.FALLBACK_MODELS:
-                if m not in candidate_models:
-                    candidate_models.append(m)
+            text = await self._execute_gemini_call(session, body)
+            history.append({"role": "user", "text": prompt[:3000]})
+            history.append({"role": "model", "text": text})
+            return text
 
-            last_error: Exception | None = None
-            timeout = aiohttp.ClientTimeout(total=25)
-
-            for model_name in candidate_models:
-                url = (
-                    f"https://generativelanguage.googleapis.com/v1beta/models/"
-                    f"{model_name}:generateContent?key={key}"
-                )
-                try:
-                    async with session.post(url, json=body, timeout=timeout) as response:
-                        if response.status == 200:
-                            data = await response.json(content_type=None)
-                            candidates = data.get("candidates", []) if isinstance(data, dict) else []
-                            if candidates:
-                                parts = (
-                                    candidates[0]
-                                    .get("content", {})
-                                    .get("parts", [])
-                                )
-                                text = "".join(
-                                    part.get("text", "")
-                                    for part in parts
-                                    if isinstance(part, dict)
-                                ).strip()
-                                if text:
-                                    history.append({"role": "user", "text": prompt[:3000]})
-                                    history.append({"role": "model", "text": text})
-                                    return text
-                        elif response.status in (401, 403):
-                            raise RuntimeError("Invalid or unauthorized GEMINI_API_KEY. Please verify your API key in Render environment settings.")
-                        elif response.status == 429:
-                            raise RuntimeError("Gemini API rate limit exceeded. Please wait a moment before trying again.")
-                        elif response.status == 404:
-                            last_error = RuntimeError(f"AI model '{model_name}' not available (HTTP 404).")
-                            continue
-                        elif response.status == 400:
-                            last_error = RuntimeError(f"AI API rejected request (HTTP 400) for {model_name}.")
-                            continue
-                        else:
-                            last_error = RuntimeError(f"AI API error status {response.status} from {model_name}")
-                except (RuntimeError, asyncio.CancelledError):
-                    raise
-                except Exception as e:
-                    last_error = e
-                    continue
-
-            if last_error:
-                raise last_error
-            return "I couldn't think of anything to say right now, try again in a bit!"
+    # ─── MEMORY RESET ────────────────────────────────────────────────────────
 
     def clear_user_history(self, guild_id: int, user_id: int, persona_key: str | None = None) -> int:
-        """Clear conversation memory for a user. If persona_key is provided, clears only that persona."""
+        """Clear conversation memory for a user. If persona_key is given, clears that persona."""
         cleared = 0
+        p_canon = resolve_persona(persona_key)["key"] if persona_key else None
         for k in list(self.history.keys()):
             if len(k) == 3 and k[0] == guild_id:
-                # Matches (guild_id, user_id, persona_key)
-                if k[1] == user_id and (persona_key is None or k[2] == persona_key):
-                    self.history[k].clear()
-                    cleared += 1
+                # Matches (guild_id, persona_key, user_id)
+                if k[2] == user_id:
+                    if p_canon is None or k[1] == p_canon:
+                        self.history[k].clear()
+                        cleared += 1
                 # Matches (guild_id, channel_id, user_id)
-                elif k[2] == user_id and persona_key is None:
+                elif k[1] == user_id and p_canon is None:
                     self.history[k].clear()
                     cleared += 1
         return cleared
+
+    def clear_history(self, guild_id: int, channel_id: int, user_id: int) -> None:
+        """Clear conversation memory for a user in a specific channel."""
+        key = (guild_id, channel_id, user_id)
+        if key in self.history:
+            self.history[key].clear()
+
+    # ─── DIAGNOSTICS & CONNECTIVITY ──────────────────────────────────────────
 
     async def test_connectivity(self, session: aiohttp.ClientSession) -> dict[str, Any]:
         """
@@ -610,7 +819,7 @@ class AIManager:
                 candidate_models.append(m)
 
         timeout = aiohttp.ClientTimeout(total=8.0)
-        body = {"contents": [{"parts": [{"text": "Hello"}]}]}
+        body = {"contents": [{"parts": [{"text": "Ping"}]}]}
 
         for model_name in candidate_models:
             url = (
@@ -648,8 +857,6 @@ class AIManager:
                             "error": "Authentication failed (invalid key or forbidden).",
                             "provider": "Google Gemini API",
                         }
-                    elif response.status == 404:
-                        continue
             except Exception:
                 continue
 
@@ -661,3 +868,60 @@ class AIManager:
             "provider": "Google Gemini API",
         }
 
+    async def get_diagnostics(self, session: aiohttp.ClientSession | None = None) -> dict[str, Any]:
+        """
+        Returns structured diagnostic status for owner/admin commands:
+        - Active provider and model
+        - Reachability
+        - Last successful response time
+        - Average and recent response latency
+        - Timeout and error counts
+        - Database reachability
+        Never reveals API keys, database URLs, or secret tokens.
+        """
+        db_ok = False
+        try:
+            if hasattr(self.db, "fetch_one"):
+                row = await self.db.fetch_one("SELECT 1;")
+                db_ok = bool(row)
+            else:
+                db_ok = True
+        except Exception:
+            db_ok = False
+
+        connectivity = {}
+        if session:
+            connectivity = await self.test_connectivity(session)
+
+        avg_latency = (
+            round(sum(self._latency_samples) / len(self._latency_samples), 1)
+            if self._latency_samples
+            else None
+        )
+
+        is_healthy = connectivity.get("ok", True) if connectivity else True
+
+        return {
+            "provider": "Google Gemini",
+            "model": self._active_model,
+            "configured_model": os.getenv("GEMINI_MODEL", self.DEFAULT_MODEL),
+            "active_model": self._active_model,
+            "provider_reachable": is_healthy,
+            "healthy": is_healthy,
+            "last_latency_ms": self._last_latency_ms,
+            "recent_latency_ms": self._latency_samples[-1] if self._latency_samples else None,
+            "recent_latencies_ms": list(self._latency_samples),
+            "average_latency_ms": avg_latency,
+            "avg_latency_ms": avg_latency or 0.0,
+            "last_success_time": self._last_success_time,
+            "total_requests": self._total_requests,
+            "error_count": self._total_errors,
+            "timeout_count": self._total_timeouts,
+            "rate_limit_count": 0,
+            "database_reachable": db_ok,
+            "db_reachable": db_ok,
+            "max_concurrent": int(os.getenv("AI_MAX_CONCURRENT_REQUESTS", "5")),
+            "active_concurrent": (
+                int(os.getenv("AI_MAX_CONCURRENT_REQUESTS", "5")) - self._semaphore._value
+            ),
+        }

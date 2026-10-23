@@ -36,6 +36,17 @@ class MusicControlView(discord.ui.View):
         if not e_reg:
             return
 
+        def _safe_emoji(name: str) -> Optional[discord.PartialEmoji | str]:
+            if not hasattr(e_reg, "get_emoji_obj"):
+                return None
+            try:
+                res = e_reg.get_emoji_obj(name)
+                if isinstance(res, (str, discord.Emoji, discord.PartialEmoji)):
+                    return res
+            except Exception:
+                pass
+            return None
+
         is_paused = bool(self.player and self.player.is_paused)
 
         for child in self.children:
@@ -44,18 +55,30 @@ class MusicControlView(discord.ui.View):
                 if "playpause" in cid:
                     if is_paused:
                         child.label = "Resume"
-                        child.emoji = e_reg.get_emoji_obj("music") or e_reg.get_emoji_obj("paused")
+                        em = _safe_emoji("music") or _safe_emoji("paused")
+                        if em:
+                            child.emoji = em
                     else:
                         child.label = "Pause"
-                        child.emoji = e_reg.get_emoji_obj("paused")
+                        em = _safe_emoji("paused")
+                        if em:
+                            child.emoji = em
                 elif "skip" in cid:
-                    child.emoji = e_reg.get_emoji_obj("skip")
+                    em = _safe_emoji("skip")
+                    if em:
+                        child.emoji = em
                 elif "voldown" in cid:
-                    child.emoji = e_reg.get_emoji_obj("volume_down") or e_reg.get_emoji_obj("voldown")
+                    em = _safe_emoji("volume_down") or _safe_emoji("voldown")
+                    if em:
+                        child.emoji = em
                 elif "volup" in cid:
-                    child.emoji = e_reg.get_emoji_obj("volume_up") or e_reg.get_emoji_obj("volup")
+                    em = _safe_emoji("volume_up") or _safe_emoji("volup")
+                    if em:
+                        child.emoji = em
                 elif "stop" in cid:
-                    child.emoji = e_reg.get_emoji_obj("icons_stop_button") or e_reg.get_emoji_obj("stop")
+                    em = _safe_emoji("icons_stop_button") or _safe_emoji("stop")
+                    if em:
+                        child.emoji = em
                 elif "like" in cid or "loop" in cid or "autoplay" in cid or "queue" in cid:
                     child.emoji = None
 
@@ -78,8 +101,15 @@ class MusicControlView(discord.ui.View):
         if not isinstance(member, discord.Member):
             return "Could not verify your voice state."
 
-        # Allow server administrators or users with manage_guild to manage player regardless
-        if member.guild_permissions.administrator or member.guild_permissions.manage_guild:
+        if interaction.guild_id and player.guild.id != interaction.guild_id:
+            return "Unauthorized cross-server playback control attempt."
+
+        # Allow server administrators, manage_guild, or users with DJ role
+        has_dj = any(
+            role.name.lower() in ("dj", "music dj", "kyoka dj", "kyro dj")
+            for role in getattr(member, "roles", [])
+        )
+        if member.guild_permissions.administrator or member.guild_permissions.manage_guild or has_dj:
             return None
 
         user_vc = member.voice.channel if (member.voice and member.voice.channel) else None

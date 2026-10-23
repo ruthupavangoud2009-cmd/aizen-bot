@@ -501,9 +501,9 @@ class AIInteractions(commands.Cog):
     async def aitest(self, ctx: CustomContext, *, message: str = "Introduce yourself and say hello!"):
         await self._send_ai(ctx, message)
 
-    @commands.command(name="ai", aliases=["chat", "askai", "aizenai"], help="Ask KYŌKA a question using Gemini AI.")
-    async def ai(self, ctx: CustomContext, *, message: str = ""):
-        await self._send_ai(ctx, message)
+    # Note: Master +ai group with all subcommands (personalities, setup, etc.)
+    # is registered in CompanionAI (src/cogs/fun/companion_ai.py)
+
 
     @commands.command(name="aiclear", help="Clear your private KYŌKA conversation history.")
     async def aiclear(self, ctx: CustomContext):

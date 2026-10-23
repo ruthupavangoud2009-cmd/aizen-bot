@@ -28,3 +28,11 @@ services:
         value: "youshallnotpass"
       - key: GEMINI_MODEL
         value: "gemini-flash-lite-latest"
+      - key: AI_RESPONSE_TIMEOUT_SECONDS
+        value: "15"
+      - key: AI_USER_COOLDOWN_SECONDS
+        value: "3"
+      - key: AI_CHANNEL_COOLDOWN_SECONDS
+        value: "2"
+      - key: AI_MAX_CONCURRENT_REQUESTS
+        value: "5"

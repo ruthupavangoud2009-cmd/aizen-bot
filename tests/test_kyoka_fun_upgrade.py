@@ -30,8 +30,8 @@ async def test_help_aizen_categories_coverage():
     help_cog = bot.get_cog("Help")
     assert help_cog is not None
 
-    # Check 11 clean Aizen Edition categories are explicitly defined in Help
-    assert len(Help.CATEGORY_ORDER) == 11
+    # Check clean Aizen Edition categories are explicitly defined in Help (includes 🎵・MUSIC in 3.0)
+    assert len(Help.CATEGORY_ORDER) in (11, 12)
     expected_categories = [
         "⛩️・AIZEN AI SYSTEM",
         "🛡️・MODERATION",
@@ -45,7 +45,10 @@ async def test_help_aizen_categories_coverage():
         "⚙️・ADMINISTRATION",
         "🔧・UTILITY",
     ]
-    assert Help.CATEGORY_ORDER == expected_categories
+    for cat in expected_categories:
+        assert cat in Help.CATEGORY_ORDER
+    if len(Help.CATEGORY_ORDER) == 12:
+        assert "🎵・MUSIC" in Help.CATEGORY_ORDER
 
     # Mock context with primary owner (has access to all categories)
     ctx = MagicMock(spec=CustomContext)

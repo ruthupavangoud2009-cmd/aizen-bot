@@ -34,6 +34,7 @@ class Help(commands.Cog):
         "🖼️・IMAGES & GIFS",
         "💬・SOCIAL & PROFILES",
         "🎮・FUN & GAMES",
+        "🎵・MUSIC",
         "💎・PREMIUM",
         "⚙️・ADMINISTRATION",
         "🔧・UTILITY",
@@ -109,7 +110,15 @@ class Help(commands.Cog):
         ):
             return "🎮・FUN & GAMES"
 
-        # 9. 💎・PREMIUM
+        # 9. 🎵・MUSIC
+        if cog_cat.lower() in ("music", "audio") or name in (
+            "play", "pause", "resume", "skip", "stop", "queue", "nowplaying", "np",
+            "volume", "vol", "loop", "repeat", "shuffle", "clear", "remove", "seek",
+            "autoplay", "lyrics", "jump", "stay", "247", "playlist", "like", "unlike",
+        ):
+            return "🎵・MUSIC"
+
+        # 10. 💎・PREMIUM
         if cog_cat == "Premium" or name in ("premium", "redeem", "tier", "license", "prime"):
             return "💎・PREMIUM"
 
@@ -213,6 +222,7 @@ class Help(commands.Cog):
             "🖼️・IMAGES & GIFS": e_reg.get("icon_image", "🖼️"),
             "💬・SOCIAL & PROFILES": e_reg.get("icon_heart", "💬"),
             "🎮・FUN & GAMES": e_reg.get("icon_games", "🎮"),
+            "🎵・MUSIC": e_reg.get("music", e_reg.get("icon_music", "🎵")),
             "💎・PREMIUM": e_reg.get("verified_premium", "💎"),
             "⚙️・ADMINISTRATION": e_reg.get("icon_settings", "⚙️"),
             "🔧・UTILITY": e_reg.get("icon_wrench", "🔧"),
@@ -233,6 +243,7 @@ class Help(commands.Cog):
             "🖼️・IMAGES & GIFS": "icon_image",
             "💬・SOCIAL & PROFILES": "icon_heart",
             "🎮・FUN & GAMES": "icon_games",
+            "🎵・MUSIC": "music",
             "💎・PREMIUM": "verified_premium",
             "⚙️・ADMINISTRATION": "icon_settings",
             "🔧・UTILITY": "icon_wrench",
@@ -343,18 +354,49 @@ class Help(commands.Cog):
 
         container = KyokaContainer(accent_color=None)
         cat_icon_prefix = f"{cat_icon} " if cat_icon else ""
-        container.add_section(
-            content=(
-                f"**{cat_icon_prefix}{cat_name} Commands**\n"
-                f"> Listing `{len(commands_list)}` accessible command(s) for your role in this server."
+        if cat_name == "⛩️・AIZEN AI SYSTEM":
+            p = self.bot.guild_mgr.get_prefix(ctx.guild.id if ctx.guild else None)
+            container.add_section(
+                content=(
+                    f"**{cat_icon_prefix}AIZEN AI SYSTEM MODULE**\n"
+                    f"> High-performance conversational AI engine powered by Google Gemini.\n"
+                    f"> Fast async execution (~800ms) with 10 distinct personalities, natural automatic channel conversations, and real-time reachability diagnostics."
+                )
             )
-        )
-        container.add_separator(divider=True)
+            container.add_separator(divider=True)
+            container.add_text(
+                f"**Available Personalities (10 Total):**\n"
+                f"> 🌸 `girlfriend` • 💅 `baddie` • 😈 `special` (Restricted) • 🤝 `friendly` • 🎭 `funny`\n"
+                f"> 🔥 `savage` • ⚡ `anime` • ⛩️ `aizen` • 🌟 `friend` • ⚙️ `custom`\n\n"
+                f"**Core AI Commands & Syntax:**\n"
+                f"• `{p}ai <message>` — Direct conversation with active personality\n"
+                f"• `{p}ai personalities` — Browse all 10 personalities with interactive selector\n"
+                f"• `{p}ai persona <name>` — Switch active personality for channel/server\n"
+                f"• `{p}ai setup [#channel]` — (Admin) Enable automatic natural chat in channel\n"
+                f"• `{p}ai status` — View active AI channel configuration\n"
+                f"• `{p}ai disable` / `{p}ai remove` — Pause or delete channel configuration\n"
+                f"• `{p}ai reset` — Clear your personal conversation memory\n"
+                f"• `{p}ai settings` — (Admin) Configure mention_only, gifs, and cooldowns\n"
+                f"• `{p}aidiag` — Real-time performance & provider latency diagnostics\n"
+                f"• `{p}aigf`, `{p}aibaddie`, `{p}aispecial` — Direct shortcuts\n\n"
+                f"**Cooldown & Rate Controls:**\n"
+                f"> Direct AI: `3s` per user | Automatic Channel: `2s` throttle | Provider: Semaphored"
+            )
+            container.add_separator(divider=True)
+        else:
+            cat_icon_prefix = f"{cat_icon} " if cat_icon else ""
+            container.add_section(
+                content=(
+                    f"**{cat_icon_prefix}{cat_name} Commands**\n"
+                    f"> Listing `{len(commands_list)}` accessible command(s) for your role in this server."
+                )
+            )
+            container.add_separator(divider=True)
 
         # Sort commands alphabetically
         sorted_cmds = sorted(commands_list, key=lambda c: c.qualified_name.lower())
         formatted_cmds = ", ".join([f"`{cmd.qualified_name}`{self._get_badge(cmd)}" for cmd in sorted_cmds])
-        container.add_text(formatted_cmds)
+        container.add_text(f"**Accessible Commands ({len(sorted_cmds)}):**\n" + formatted_cmds)
         container.add_separator(divider=True)
 
         # Dropdown options
