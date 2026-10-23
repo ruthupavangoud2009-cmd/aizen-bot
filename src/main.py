@@ -119,7 +119,7 @@ async def run_bot_loop() -> None:
                     logger.warning(
                         f"Cloudflare IP block detected on Render shared IP. "
                         f"Cooling down for {wait_time:.0f}s before reconnecting. "
-                        f"(TIP: Change Render service Region to Singapore or Frankfurt in Settings to get an unblocked IP instantly!)"
+                        f"(TIP: Change Render service Region to Singapore, Ohio, or Oregon in Settings to get an unblocked IP instantly!)"
                     )
                 else:
                     wait_time = max(retry_after if retry_after else delay, 45.0)
