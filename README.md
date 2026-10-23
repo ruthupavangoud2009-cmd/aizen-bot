@@ -161,14 +161,109 @@ Create `.env` based on `.env.example`:
 BOT_TOKEN=your_discord_bot_token_here
 DATABASE_URL=postgresql://postgres.xxxx:password@aws-0-region.pooler.supabase.com:6543/postgres
 DEFAULT_PREFIX=?
-ENVIRONMENT=DEVELOPMENT
+ENVIRONMENT=PRODUCTION
 PORT=8080
+
+# (Optional) Cloudflare / Datacenter Outage Proxy
+# DISCORD_PROXY=http://username:password@ip:port
+
+# (Optional) Configurable Aizen Themed Artwork & GIF URLs
+# KYOKA_BANNER_URL=https://assets.example.com/aizen_banner.webp
+# KYOKA_HELP_GIF_URL=https://assets.example.com/aizen_help.gif
+# KYOKA_WELCOME_IMAGE_URL=https://assets.example.com/aizen_welcome.webp
+# KYOKA_LEVELUP_IMAGE_URL=https://assets.example.com/aizen_levelup.webp
+# KYOKA_DEFAULT_THUMBNAIL_URL=https://assets.example.com/aizen_thumbnail.webp
+# KYOKA_AIZEN_AVATAR_URL=https://assets.example.com/aizen_avatar.webp
 ```
 
 ### 4. Run the Bot
 ```bash
 python -m src.main
 ```
+
+### 5. Running Automated Tests
+```bash
+# Run the complete test suite (134 automated unit & integration tests)
+pytest -v
+
+# Run only the Aizen UI and design system tests
+pytest tests/test_aizen_ui.py -v
+
+# Run help command tests
+pytest tests/test_help_module_repair.py -v
+```
+
+---
+
+## 🎨 Aizen Visual Identity & UI Design System
+
+KYOKA 3.0 features a centralized, modular Aizen design framework located in `src/utils/ui.py` and `src/core/config.py`:
+
+- **Aizen Color Palette (`AizenPalette`)**:
+  - `PRIMARY`: Midnight Royal Violet (`0x7C3AED` / `8141549`)
+  - `DARK`: Void Black (`0x0D0B18`)
+  - `ACCENT`: Soul Society Silver (`0xE2E8F0`)
+  - `CRIMSON`: Bankai Crimson (`0xDC2626`)
+  - `SUCCESS`: Emerald (`0x10B981`)
+  - `WARNING`: Amber Gold (`0xF59E0B`)
+  - `INFO`: Cyan Blue (`0x3B82F6`)
+- **Configurable Asset Registry (`AizenAssets`)**:
+  - Centralized in `src.core.config.AizenAssets` with graceful fallbacks.
+  - Can be customized via environment variables (`KYOKA_BANNER_URL`, `KYOKA_HELP_GIF_URL`, etc.) without touching code.
+- **Unified Embed Factory (`KyokaEmbed`)**:
+  - Pre-styled embed builders: `standard()`, `success()`, `error()`, `warning()`, `info()`, `loading()`, and `denied()`.
+  - Built-in ASCII visual progress bar generator: `KyokaEmbed.progress_bar(current, total, length=12)`.
+- **Interactive Paginator (`KyokaPaginator`)**:
+  - Author-isolated, multi-page component view with `First`, `Prev`, `Page Counter`, `Next`, `Last`, and `Close` buttons.
+  - Automatically disables on interaction timeout (default 180 seconds).
+
+---
+
+## 🧩 Extending KYOKA: Adding Modules & Commands
+
+### How to Add a New Cog / Module
+1. Create your cog file in the appropriate directory under `src/cogs/` (e.g. `src/cogs/utility/my_feature.py`).
+2. Subclass `commands.Cog`:
+```python
+import discord
+from discord.ext import commands
+from src.utils.ui import KyokaEmbed
+
+class MyFeature(commands.Cog, name="Utility"):
+    """Description for this module category in help."""
+    def __init__(self, bot):
+        self.bot = bot
+
+    @commands.command(name="mycommand", help="Description of what mycommand does.")
+    async def my_command(self, ctx: commands.Context):
+        embed = KyokaEmbed.success(
+            title="Action Complete",
+            description="Command executed smoothly under Aizen's will.",
+            author=ctx.author
+        )
+        await ctx.send(embed=embed)
+
+async def setup(bot):
+    await bot.add_cog(MyFeature(bot))
+```
+3. Load the extension in `src/core/bot.py` or `src/main.py`.
+
+### Categorizing Commands in Help
+The help system dynamically groups commands by their cog's `category` attribute or cog name:
+- Set `category = "Moderation"` (or any of the 14 supported categories) on your cog class.
+- The help dropdown will automatically register your new command with pagination, alias discovery, and modal search indexing.
+
+---
+
+## 🔧 Troubleshooting & Common Issues
+
+| Issue / Error | Root Cause | Solution |
+|---|---|---|
+| **Cloudflare Rate Limit (HTTP 429)** | Render shared IP address is temporarily blocked by Discord Cloudflare edge. | Configure `DISCORD_PROXY=http://user:pass@ip:port` in `.env` using a clean datacenter proxy, or switch the Render service region (e.g., Frankfurt/Ohio). |
+| **`audioop` Deprecation Warning** | Python 3.11 built-in warning for planned 3.13 deprecation. | Safe to ignore on Python 3.11/3.12. |
+| **Opus Voice Not Loaded on Linux** | Missing native `libopus-dev` binary. | Handled automatically in `src/main.py` via dynamic library discovery (`libopus.so.0`). Ensure `apt-get install -y libopus-dev` if compiling custom containers. |
+| **Interaction Failed / Ephemeral Timeout** | Operation took longer than 3 seconds without deferring. | Use `await interaction.response.defer(thinking=True)` for slow operations. |
+| **Supabase Connection Limit** | Direct connection pool exhausted. | Use Supabase Transaction Pooler (port `6543`) in `DATABASE_URL` instead of direct session connection (port `5432`). |
 
 ---
 
@@ -367,7 +462,8 @@ KYOKA 3.0 reports real, transparent system performance:
 
 - **Permission-Aware Filtering**: Members only see commands they are authorized to run.
 - **Owner-Only Security**: Developer and owner-restricted commands (`eval`, `restart`, `maintenance`, etc.) are hidden from unauthorized users.
-- **Category Navigation**: Interactive select menu categorized into *General*, *Moderation*, *Anti-Nuke and Security*, *Verification*, *Tickets*, *Reaction Roles*, *Giveaways*, *AI & Community*, and *Configuration*.
+- **Category Navigation**: Interactive select menu categorized into 14 distinct modules including General, Moderation, Security, Verification, Tickets, Reaction Roles, Giveaways, AI, Configuration, and more.
+- **Interactive Command Search**: In-help modal search button (`🔍 Search`) enabling members to find commands by keywords with smart ranking.
 - **Command Lookup**: Detailed syntax, aliases, and usage examples via `+help <command>`.
 
 ---

@@ -17,6 +17,7 @@ from discord.ext import commands
 from src.core.config import Config
 from src.core.context import CustomContext
 from src.utils.containers import KyokaContainer, send_container_response, edit_container_response
+from src.utils.ui import KyokaEmbed, AizenPalette, AizenSymbols
 from src.security.owner import is_primary_owner
 from src.security.adult_guard import is_adult_authorized
 
@@ -112,8 +113,32 @@ class HelpCategorySelect(discord.ui.Select):
         await self.help_view.switch_category(interaction, selected)
 
 
+class HelpSearchModal(discord.ui.Modal, title="⛩️ Search Kyoka Commands"):
+    """Interactive modal allowing instant search across all registered commands."""
+    query_input = discord.ui.TextInput(
+        label="Command Name or Keyword",
+        placeholder="e.g. ban, ai, ticket, rank, music, remind...",
+        min_length=1,
+        max_length=50,
+        required=True,
+    )
+
+    def __init__(self, help_view: HelpView) -> None:
+        super().__init__()
+        self.help_view = help_view
+
+    async def on_submit(self, interaction: discord.Interaction) -> None:
+        query = self.query_input.value.strip().lower()
+        embed = self.help_view.cog.build_search_results_embed(
+            self.help_view.ctx,
+            self.help_view.visible_categories,
+            query,
+        )
+        await interaction.response.edit_message(embed=embed, view=self.help_view)
+
+
 class HelpView(discord.ui.View):
-    """Enterprise UI View providing category selection, pagination, and quick links."""
+    """Enterprise UI View providing category selection, pagination, search, and quick links."""
 
     def __init__(
         self,
@@ -147,7 +172,7 @@ class HelpView(discord.ui.View):
             )
         )
 
-        # Row 1: Back, Home, Next, Close
+        # Row 1: Back, Home, Next, Search, Close
         btn_back = discord.ui.Button(
             label="Back",
             emoji="◀️",
@@ -174,6 +199,15 @@ class HelpView(discord.ui.View):
         )
         btn_next.callback = self.btn_next_callback
         self.add_item(btn_next)
+
+        btn_search = discord.ui.Button(
+            label="Search",
+            emoji="🔍",
+            style=discord.ButtonStyle.secondary,
+            row=1,
+        )
+        btn_search.callback = self.btn_search_callback
+        self.add_item(btn_search)
 
         btn_close = discord.ui.Button(
             label="Close",
@@ -269,6 +303,10 @@ class HelpView(discord.ui.View):
             else:
                 new_cat = self.category_keys[0]
         await self.switch_category(interaction, new_cat)
+
+    async def btn_search_callback(self, interaction: discord.Interaction) -> None:
+        """Prompt command search modal."""
+        await interaction.response.send_modal(HelpSearchModal(self))
 
     async def btn_close_callback(self, interaction: discord.Interaction) -> None:
         """Close the help session gracefully."""
@@ -762,8 +800,9 @@ class Help(commands.Cog):
         total_commands = sum(len(cmds) for cmds in visible_categories.values())
 
         embed = discord.Embed(
-            title="⛩️ Kyoka 3.0 — Enterprise All-In-One Discord Bot",
+            title="⛩️ Kyoka 3.0 — The Perfect Control System",
             description=(
+                "*“Control the chaos. Command the impossible.”*\n\n"
                 "Welcome to **Kyoka 3.0**, high-performance Discord automation powered by "
                 "Google Gemini AI, real-time moderation, community progression, and entertainment.\n\n"
                 "### 🚀 Getting Started & Quick Setup\n"
@@ -775,6 +814,7 @@ class Help(commands.Cog):
                 f"• **Prefix Commands:** Use `{p}<command>` (e.g., `{p}ping`, `{p}ai hello`, `{p}help`)\n"
                 f"• **Slash Commands:** Type `/<command>` for Discord autocomplete and modal wizards\n"
                 f"• **Browse Categories:** Select any category from the dropdown below or use **◀️ Back / ▶️ Next**\n"
+                f"• **Instant Search:** Click **🔍 Search** below or type `{p}help <query>` to search all commands\n"
                 f"• **Command Manual:** Type `{p}help <command>` (e.g., `{p}help ban`, `{p}help ai`) for detailed syntax\n\n"
                 "### 🔒 Permission System\n"
                 "`[Public]` Available to all members • `[Mod]` Requires Kick/Ban/Timeout\n"
@@ -804,9 +844,84 @@ class Help(commands.Cog):
             inline=True,
         )
 
+        # Apply configurable Aizen artwork if available
+        assets = getattr(Config, "ASSETS", None)
+        banner_url = getattr(assets, "BANNER_URL", None) or getattr(Config, "AIZEN_IMAGE_URL", "")
+        if banner_url and banner_url.strip():
+            embed.set_image(url=banner_url.strip())
+
+        thumbnail_url = getattr(assets, "DEFAULT_THUMBNAIL_URL", "")
+        if thumbnail_url and thumbnail_url.strip():
+            embed.set_thumbnail(url=thumbnail_url.strip())
+
         embed.set_footer(
             text=f"Requested by {author.display_name} • Type {p}help <command> for syntax & examples",
             icon_url=author.display_avatar.url if author.display_avatar else None,
+        )
+        return embed
+
+    def build_search_results_embed(
+        self,
+        ctx: CustomContext,
+        visible_categories: dict[str, list[commands.Command]],
+        query: str,
+    ) -> discord.Embed:
+        """Construct interactive search results embed matching commands against user query."""
+        guild = ctx.guild
+        p = self.bot.guild_mgr.get_prefix(guild.id if guild else None)
+        clean_query = query.lower().strip()
+
+        matched: list[tuple[commands.Command, str]] = []
+        for cat_name, cmd_list in visible_categories.items():
+            for cmd in cmd_list:
+                cname = cmd.qualified_name.lower()
+                desc = (cmd.description or cmd.help or "").lower()
+                aliases = [a.lower() for a in getattr(cmd, "aliases", [])]
+                if clean_query == cname or clean_query in cname or any(clean_query in a for a in aliases) or clean_query in desc:
+                    matched.append((cmd, cat_name))
+
+        embed = discord.Embed(
+            title=f"🔍 Search Results for: `{clean_query}`",
+            color=0x2B0938,
+        )
+
+        if not matched:
+            embed.description = (
+                f"> No accessible commands matching **`{clean_query}`** were found.\n\n"
+                f"**Suggestions:**\n"
+                f"• Try a broader search term (e.g., `mod`, `role`, `ai`, `music`, `level`)\n"
+                f"• Use the dropdown category menu below to browse all available commands\n"
+                f"• Click **🏠 Home** to return to the main console overview"
+            )
+            embed.color = 0xED4245
+        else:
+            embed.description = f"Found **{len(matched)}** accessible command(s) matching `{clean_query}`:\n\n"
+            # Sort: exact name match first, then prefix match, then others
+            matched.sort(
+                key=lambda item: (
+                    0 if item[0].qualified_name.lower() == clean_query else (
+                        1 if item[0].qualified_name.lower().startswith(clean_query) else 2
+                    ),
+                    item[0].qualified_name.lower(),
+                )
+            )
+
+            for cmd, cat in matched[:10]:
+                badge = self._get_badge(cmd)
+                desc = (cmd.description or cmd.help or "No detailed description provided.").strip().split("\n")[0][:110]
+                sig = f" {cmd.signature}" if cmd.signature else ""
+                embed.add_field(
+                    name=f"`{p}{cmd.qualified_name}{sig}`{badge}",
+                    value=f"> {desc}\n> *Category: {cat}*",
+                    inline=False,
+                )
+
+            if len(matched) > 10:
+                embed.description += f"*(Showing top 10 of {len(matched)} matches. Refine your query for more precise results.)*\n\n"
+
+        embed.set_footer(
+            text=f"Requested by {ctx.author.display_name} • Type {p}help <command> for full manual",
+            icon_url=ctx.author.display_avatar.url if ctx.author.display_avatar else None,
         )
         return embed
 
