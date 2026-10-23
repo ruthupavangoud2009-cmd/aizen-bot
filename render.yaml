@@ -15,7 +15,9 @@ services:
       - key: ENVIRONMENT
         value: production
       - key: BOT_PREFIX
-        value: "?"
+        value: "+"
+      - key: SYNC_COMMANDS_ON_STARTUP
+        value: "true"
       - key: LAVALINK_AUTO_DISCOVER
         value: "1"
       - key: LAVALINK_PUBLIC_LIST_URL

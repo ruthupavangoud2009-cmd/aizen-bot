@@ -37,22 +37,37 @@ from src.utils.emojis import EmojiRegistry
 logger = logging.getLogger("Kyoka.Core")
 
 
-async def get_prefix(bot: KyokaBot, message: discord.Message) -> list[str] | str:
+async def get_prefix(bot: KyokaBot, message: discord.Message) -> list[str]:
     """
     Dynamic prefix resolver:
-    - Bot Owner, Developers & No-Prefix Authorized Users can use commands with NO prefix (e.g. 'ping', 'help') or normal prefixes.
-    - Regular members must use server prefix or bot mention.
+    - Supports configured guild prefix, default prefix ('+'), and legacy prefix ('?').
+    - Supports bot mentions (<@id>, <@!id>).
+    - Bot Owner, Developers & No-Prefix Authorized Users can also use commands with NO prefix.
     """
     guild_id = message.guild.id if message.guild else None
-    guild_prefix = bot.guild_mgr.get_prefix(guild_id)
+    guild_prefix = bot.guild_mgr.get_prefix(guild_id) if hasattr(bot, "guild_mgr") else Config.DEFAULT_PREFIX
+
+    # Collect all valid prefixes: guild-specific, default (+), and legacy (?)
+    prefixes: list[str] = []
+    for p in (guild_prefix, Config.DEFAULT_PREFIX, "+", "?"):
+        if p and p not in prefixes:
+            prefixes.append(p)
 
     # Check if author has No-Prefix authorization or is Owner/Developer
+    is_no_prefix = False
     if message.author:
         author_id = message.author.id
-        if author_id in getattr(bot, "no_prefix_users", set()) or bot.perm_mgr.is_developer_sync(author_id):
-            return commands.when_mentioned_or(guild_prefix, "")(bot, message)
+        if author_id in getattr(bot, "no_prefix_users", set()):
+            is_no_prefix = True
+        elif hasattr(bot, "perm_mgr") and bot.perm_mgr.is_developer_sync(author_id):
+            is_no_prefix = True
 
-    return commands.when_mentioned_or(guild_prefix)(bot, message)
+    if is_no_prefix and "" not in prefixes:
+        prefixes.append("")
+
+    if bot.user:
+        return commands.when_mentioned_or(*prefixes)(bot, message)
+    return prefixes
 
 
 class KyokaBot(commands.Bot):
@@ -78,6 +93,9 @@ class KyokaBot(commands.Bot):
                 name=f"Listening to {Config.DEFAULT_PREFIX}help",
             ),
         )
+
+        if Config.CLIENT_ID:
+            self._connection.application_id = Config.CLIENT_ID
 
         # Sole Database Driver (Supabase PostgreSQL)
         from src.database.postgres import PostgresDatabase
@@ -235,6 +253,29 @@ class KyokaBot(commands.Bot):
         # dynamically Load all Cogs
         await self._load_all_extensions()
 
+        # Slash Command Synchronization Strategy
+        if Config.DEV_GUILD_ID:
+            try:
+                dev_guild = discord.Object(id=Config.DEV_GUILD_ID)
+                self.tree.copy_global_to(guild=dev_guild)
+                synced_dev = await self.tree.sync(guild=dev_guild)
+                logger.info(
+                    f"Instant Dev Sync: Synced {len(synced_dev)} slash commands to DEV_GUILD_ID ({Config.DEV_GUILD_ID})."
+                )
+            except Exception as e:
+                logger.warning(f"DEV_GUILD_ID slash command sync failed: {e}")
+
+        if Config.SYNC_COMMANDS_ON_STARTUP:
+            try:
+                synced = await self.tree.sync()
+                logger.info(
+                    f"Global Slash Sync: Successfully synced {len(synced)} application/slash commands globally to Discord API."
+                )
+            except Exception as e:
+                logger.warning(f"Automatic global slash command sync failed: {e}")
+        else:
+            logger.info("Automatic global slash command sync on startup is disabled (set SYNC_COMMANDS_ON_STARTUP=true or use '+sync').")
+
         logger.info("Setup hook completed successfully.")
 
     async def _load_all_extensions(self) -> None:
@@ -317,15 +358,7 @@ class KyokaBot(commands.Bot):
         if not self._rotate_presence.is_running():
             self._rotate_presence.start()
 
-        # Auto sync global application commands tree with Discord only if explicitly enabled
-        if getattr(Config, "SYNC_COMMANDS_ON_STARTUP", False):
-            try:
-                synced = await self.tree.sync()
-                logger.info(f"Successfully synced {len(synced)} application/slash commands globally.")
-            except Exception as e:
-                logger.warning(f"Automatic command tree sync failed: {e}")
-        else:
-            logger.info("Skipping automatic slash command sync on startup (use '?sync' command if needed).")
+        logger.info("Presence locked to DND. Slash command tree initialized.")
 
     async def on_guild_join(self, guild: discord.Guild) -> None:
         """Fired when Kyoka is invited to a new server."""

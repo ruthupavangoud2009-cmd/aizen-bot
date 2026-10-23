@@ -17,7 +17,7 @@ class Sync(commands.Cog):
 
     @commands.command(
         name="sync",
-        description="Sync application commands globally and remove duplicate guild commands.",
+        description="Sync application commands globally or to the current guild.",
         hidden=True,
     )
     @is_owner()
@@ -27,9 +27,9 @@ class Sync(commands.Cog):
         """
         Clean & Sync slash commands.
         Usage:
-          ?sync         -> Eliminates 2-2 duplicate commands and syncs all slash commands globally.
-          ?sync clear   -> Clears guild-specific commands in this server.
-          ?sync guild   -> Forces instant guild-only copy.
+          +sync         -> Syncs all slash commands globally across Discord.
+          +sync guild   -> Forces instant guild-only copy to this server for immediate testing.
+          +sync clear   -> Clears guild-specific commands in this server.
         """
         scope_clean = scope.lower().strip()
         guild = ctx.guild
@@ -38,19 +38,25 @@ class Sync(commands.Cog):
             if guild:
                 self.bot.tree.copy_global_to(guild=guild)
                 synced_guild = await self.bot.tree.sync(guild=guild)
-                msg = f"Synced `{len(synced_guild)}` commands locally to **{guild.name}**."
+                msg = (
+                    f"Successfully synced `{len(synced_guild)}` slash commands to **{guild.name}**.\n"
+                    f"> (Instant propagation: visible in this server immediately!)"
+                )
             else:
-                msg = "Guild not found."
-        else:
-            # Default ?sync: clear local guild commands to eliminate duplicates, and sync global commands
+                msg = "Guild not found. Cannot perform guild sync in DM."
+        elif scope_clean == "clear":
             if guild:
                 self.bot.tree.clear_commands(guild=guild)
                 await self.bot.tree.sync(guild=guild)
-
+                msg = f"Cleared guild-specific commands in **{guild.name}**."
+            else:
+                msg = "Guild not found."
+        else:
+            # Default +sync: Global command sync
             synced_global = await self.bot.tree.sync()
             msg = (
                 f"Successfully synced `{len(synced_global)}` slash commands globally.\n"
-                f"> Removed 2-2 duplicate guild commands in **{guild.name if guild else 'this server'}**."
+                f"> (Note: Global Discord updates take 10-60 minutes to appear in client caches. Use `+sync guild` for instant testing in this server.)"
             )
 
         container = KyokaContainer(accent_color=None)

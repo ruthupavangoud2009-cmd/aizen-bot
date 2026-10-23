@@ -717,3 +717,126 @@ async def test_help_categories_and_owner_privacy():
     guess_cmd.cog = MagicMock()
     guess_cmd.cog.category = "Admin"
     assert cog_help._can_run_command(guess_cmd, ctx_owner) is True
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# 14. TEST PREFIX RESOLVER (+, ?, GUILD, MENTION, NO-PREFIX)
+# ─────────────────────────────────────────────────────────────────────────────
+
+@pytest.mark.asyncio
+async def test_prefix_resolver_resolves_plus_and_question():
+    from src.core.bot import get_prefix
+
+    mock_bot = MagicMock()
+    mock_bot.user = MagicMock(id=123456789)
+    mock_bot.guild_mgr.get_prefix.return_value = "+"
+    mock_bot.no_prefix_users = set()
+    mock_bot.perm_mgr.is_developer_sync.return_value = False
+
+    msg = MagicMock(spec=discord.Message)
+    msg.guild = MagicMock(id=111)
+    msg.author = MagicMock(id=222)
+
+    prefixes = await get_prefix(mock_bot, msg)
+    # Should include bot mention, '+', and '?'
+    assert "+" in prefixes
+    assert "?" in prefixes
+    assert "<@123456789> " in prefixes or "<@!123456789> " in prefixes
+
+
+@pytest.mark.asyncio
+async def test_prefix_resolver_safe_when_bot_user_none():
+    from src.core.bot import get_prefix
+
+    mock_bot = MagicMock()
+    mock_bot.user = None
+    mock_bot.guild_mgr.get_prefix.return_value = "+"
+    mock_bot.no_prefix_users = set()
+    mock_bot.perm_mgr.is_developer_sync.return_value = False
+
+    msg = MagicMock(spec=discord.Message)
+    msg.guild = MagicMock(id=111)
+    msg.author = MagicMock(id=222)
+
+    # Must NOT raise AttributeError: 'NoneType' object has no attribute 'id'
+    prefixes = await get_prefix(mock_bot, msg)
+    assert "+" in prefixes
+    assert "?" in prefixes
+
+
+@pytest.mark.asyncio
+async def test_prefix_context_resolution_for_plus_and_question():
+    from src.core.bot import KyokaBot
+
+    bot = KyokaBot()
+    bot._connection.user = MagicMock(id=999888777)
+    await bot._load_all_extensions()
+
+    # Test +ping
+    msg_plus = MagicMock(spec=discord.Message)
+    msg_plus.content = "+ping"
+    msg_plus.guild = MagicMock(id=1)
+    msg_plus.author = MagicMock(id=2)
+    msg_plus.channel = MagicMock()
+
+    ctx_plus = await bot.get_context(msg_plus)
+    assert ctx_plus.valid is True
+    assert ctx_plus.command is not None
+    assert ctx_plus.command.name == "ping"
+
+    # Test ?ping
+    msg_q = MagicMock(spec=discord.Message)
+    msg_q.content = "?ping"
+    msg_q.guild = MagicMock(id=1)
+    msg_q.author = MagicMock(id=2)
+    msg_q.channel = MagicMock()
+
+    ctx_q = await bot.get_context(msg_q)
+    assert ctx_q.valid is True
+    assert ctx_q.command is not None
+    assert ctx_q.command.name == "ping"
+
+    # Test +giveaway and +g
+    msg_gw = MagicMock(spec=discord.Message)
+    msg_gw.content = "+giveaway"
+    msg_gw.guild = MagicMock(id=1)
+    msg_gw.author = MagicMock(id=2)
+    msg_gw.channel = MagicMock()
+
+    ctx_gw = await bot.get_context(msg_gw)
+    assert ctx_gw.valid is True
+    assert ctx_gw.command is not None
+    assert ctx_gw.command.name == "giveaway"
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# 15. TEST SLASH COMMAND TREE REGISTRATION & SYNC INTEGRITY
+# ─────────────────────────────────────────────────────────────────────────────
+
+@pytest.mark.asyncio
+async def test_slash_command_tree_commands_registered():
+    from src.core.bot import KyokaBot
+
+    bot = KyokaBot()
+    bot._connection.user = MagicMock(id=999888777)
+    bot._connection.application_id = 999888777
+    await bot._load_all_extensions()
+
+    tree_commands = {cmd.name: cmd for cmd in bot.tree.get_commands()}
+    # Verify core slash commands exist in the tree
+    expected_slash = [
+        "help", "ping", "botinfo", "serverinfo", "userinfo",
+        "ban", "kick", "timeout", "unmute", "warn", "warnings", "delwarn",
+        "purge", "slowmode", "lock", "unlock",
+        "ticket", "verify", "giveaway", "requirements", "afk"
+    ]
+    for name in expected_slash:
+        assert name in tree_commands, f"Slash command '{name}' missing from CommandTree"
+
+    # Verify CommandTree sync call can be executed
+    bot._connection.http.bulk_upsert_global_commands = AsyncMock(return_value=[])
+    bot._connection.http._global_over = asyncio.Event()
+    bot._connection.http._global_over.set()
+    synced = await bot.tree.sync()
+    assert isinstance(synced, list)
+

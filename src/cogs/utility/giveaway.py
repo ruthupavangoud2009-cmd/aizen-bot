@@ -1385,6 +1385,105 @@ class Giveaways(commands.Cog):
         )
         await ctx.send(f"✅ Added requirement: At least **{message_count}** messages {clean}.")
 
+    # ─── PREFIX GROUP DISPATCHER (+giveaway / +g) ───────────────────────────
+
+    @commands.group(name="giveaway", aliases=["g"], invoke_without_command=True)
+    @commands.guild_only()
+    async def giveaway_prefix_group(self, ctx: CustomContext) -> None:
+        """KYOKA 3.0 Enterprise Giveaway prefix command hub."""
+        prefix = ctx.prefix or "+"
+        help_text = (
+            f"**🎉 KYOKA 3.0 Giveaway Commands**\n"
+            f"• `{prefix}gstart <time> [winners] <prize>` — Start a new giveaway\n"
+            f"• `{prefix}gend [message_id]` — End a giveaway early and pick winners\n"
+            f"• `{prefix}greroll [message_id] [winners]` — Draw replacement winners\n"
+            f"• `{prefix}glist` — List all active giveaways in this server\n"
+            f"• `{prefix}gpause [message_id]` — Pause countdown and entries\n"
+            f"• `{prefix}gresume [message_id]` — Resume a paused giveaway\n"
+            f"• `{prefix}gcancel [message_id]` — Cancel giveaway without winners\n"
+            f"• `{prefix}ginfo [message_id]` — Inspect giveaway details and entries\n"
+            f"• `{prefix}gcheck <@user> [message_id]` — Check user eligibility\n"
+            f"• `{prefix}gbonus <@role> <multiplier>` — Configure bonus multiplier\n"
+            f"• `{prefix}greq <daily|weekly> <messages>` — Set message requirement\n"
+            f"-# Also available via slash commands: `/giveaway create`"
+        )
+        await ctx.send(help_text)
+
+    @giveaway_prefix_group.command(name="start")
+    @commands.has_permissions(manage_messages=True)
+    @commands.guild_only()
+    async def prefix_gstart(self, ctx: CustomContext, duration: Optional[str] = None, arg2: Optional[str] = None, *, rest: Optional[str] = None) -> None:
+        """Start a giveaway: +giveaway start 1h 1 Nitro"""
+        await self.shortcut_gstart(ctx, duration, arg2, rest=rest)
+
+    @giveaway_prefix_group.command(name="end")
+    @commands.has_permissions(manage_messages=True)
+    @commands.guild_only()
+    async def prefix_gend(self, ctx: CustomContext, message_id: Optional[str] = None) -> None:
+        """End a giveaway: +giveaway end [message_id]"""
+        await self.shortcut_gend(ctx, message_id)
+
+    @giveaway_prefix_group.command(name="reroll")
+    @commands.has_permissions(manage_messages=True)
+    @commands.guild_only()
+    async def prefix_greroll(self, ctx: CustomContext, message_id: Optional[str] = None, winners: int = 1) -> None:
+        """Reroll winners: +giveaway reroll [message_id] [count]"""
+        await self.shortcut_greroll(ctx, message_id, winners)
+
+    @giveaway_prefix_group.command(name="list")
+    @commands.has_permissions(manage_messages=True)
+    @commands.guild_only()
+    async def prefix_glist(self, ctx: CustomContext) -> None:
+        """List active giveaways: +giveaway list"""
+        await self.shortcut_glist(ctx)
+
+    @giveaway_prefix_group.command(name="pause")
+    @commands.has_permissions(manage_messages=True)
+    @commands.guild_only()
+    async def prefix_gpause(self, ctx: CustomContext, message_id: Optional[str] = None) -> None:
+        """Pause a giveaway: +giveaway pause [message_id]"""
+        await self.shortcut_gpause(ctx, message_id)
+
+    @giveaway_prefix_group.command(name="resume")
+    @commands.has_permissions(manage_messages=True)
+    @commands.guild_only()
+    async def prefix_gresume(self, ctx: CustomContext, message_id: Optional[str] = None) -> None:
+        """Resume a giveaway: +giveaway resume [message_id]"""
+        await self.shortcut_gresume(ctx, message_id)
+
+    @giveaway_prefix_group.command(name="cancel")
+    @commands.has_permissions(manage_messages=True)
+    @commands.guild_only()
+    async def prefix_gcancel(self, ctx: CustomContext, message_id: Optional[str] = None, *, reason: str = "") -> None:
+        """Cancel a giveaway: +giveaway cancel [message_id]"""
+        await self.shortcut_gcancel(ctx, message_id, reason=reason)
+
+    @giveaway_prefix_group.command(name="info")
+    @commands.guild_only()
+    async def prefix_ginfo(self, ctx: CustomContext, message_id: Optional[str] = None) -> None:
+        """Inspect giveaway info: +giveaway info [message_id]"""
+        await self.shortcut_ginfo(ctx, message_id)
+
+    @giveaway_prefix_group.command(name="check")
+    @commands.guild_only()
+    async def prefix_gcheck(self, ctx: CustomContext, member: discord.Member, message_id: Optional[str] = None) -> None:
+        """Check member eligibility: +giveaway check @user [message_id]"""
+        await self.shortcut_gcheck(ctx, member, message_id)
+
+    @giveaway_prefix_group.command(name="bonus")
+    @commands.has_permissions(manage_guild=True)
+    @commands.guild_only()
+    async def prefix_gbonus(self, ctx: CustomContext, role: discord.Role, multiplier: float) -> None:
+        """Set role bonus multiplier: +giveaway bonus @VIP 2.0"""
+        await self.shortcut_gbonus(ctx, role, multiplier)
+
+    @giveaway_prefix_group.command(name="req")
+    @commands.has_permissions(manage_guild=True)
+    @commands.guild_only()
+    async def prefix_greq(self, ctx: CustomContext, period: str, message_count: int) -> None:
+        """Set message activity requirement: +giveaway req daily 20"""
+        await self.shortcut_greq(ctx, period, message_count)
+
 
 async def setup(bot: KyokaBot) -> None:
     await bot.add_cog(Giveaways(bot))

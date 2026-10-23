@@ -66,7 +66,7 @@ class Config:
     
     # Prefixes & Identity
     BOT_NAME: str = os.getenv("BOT_NAME", "KYOKA 3.0")
-    DEFAULT_PREFIX: str = os.getenv("BOT_PREFIX", "?")
+    DEFAULT_PREFIX: str = os.getenv("BOT_PREFIX", "+")
     
     # Environment & Dev Settings
     ENVIRONMENT: str = os.getenv("ENVIRONMENT", "development").lower()
@@ -74,7 +74,7 @@ class Config:
         int(os.getenv("DEV_GUILD_ID")) if os.getenv("DEV_GUILD_ID") else None
     )
     SYNC_COMMANDS_ON_STARTUP: bool = (
-        os.getenv("SYNC_COMMANDS_ON_STARTUP", "false").lower() in ("true", "1", "yes")
+        os.getenv("SYNC_COMMANDS_ON_STARTUP", "true").lower() in ("true", "1", "yes")
     )
     
     # PostgreSQL / Supabase Database Settings
