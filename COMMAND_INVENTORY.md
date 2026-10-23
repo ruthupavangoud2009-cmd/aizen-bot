@@ -273,12 +273,18 @@ Legacy `+` prefix commands (`+gstart`, `+gend`, `+greroll`, `+glist`, `+ai`, `+p
 | `src/cogs/ticket/ticket_system.py` | `ticket` | tickets, ticketpanel | Enterprise Ticket System management commands and interactive setup wizard. |
 | `src/cogs/ticket/ticket_system.py` | `setup` | — | Launch the interactive Slide Dashboard to configure and deploy a ticket panel. |
 | `src/cogs/ticket/ticket_system.py` | `close` | — | Close the active ticket channel with optional reason. |
-| `src/cogs/ticket/ticket_system.py` | `claim` | — | Claim the current active ticket. |
+| `src/cogs/ticket/ticket_system.py` | `claim` | — | Claim the current active ticket for staff handling. |
+| `src/cogs/ticket/ticket_system.py` | `unclaim` | — | Release your claim on the current ticket channel. |
+| `src/cogs/ticket/ticket_system.py` | `transfer` | — | Transfer active ticket claim to another staff member. |
 | `src/cogs/ticket/ticket_system.py` | `add` | — | Add a member to the current ticket channel. |
 | `src/cogs/ticket/ticket_system.py` | `remove` | — | Remove a member from the current ticket channel. |
-| `src/cogs/ticket/ticket_system.py` | `transcript` | — | Generate and download the HTML transcript of this ticket channel. |
+| `src/cogs/ticket/ticket_system.py` | `rename` | — | Rename the current ticket channel. Usage: +ticket rename <new_name> |
+| `src/cogs/ticket/ticket_system.py` | `priority` | — | Set ticket priority level (low, normal, high, urgent). |
+| `src/cogs/ticket/ticket_system.py` | `note` | — | Record an internal staff-only note on this ticket. |
+| `src/cogs/ticket/ticket_system.py` | `stats` | — | View server ticket resolution metrics and category distribution. |
+| `src/cogs/ticket/ticket_system.py` | `transcript` | — | Generate and download the secure HTML transcript of this ticket channel. |
 | `src/cogs/ticket/ticket_system.py` | `list` | — | List all active ticket panels configured in this server. |
-| `src/cogs/ticket/ticket_system.py` | `delete` | — | Delete a configured ticket panel. Usage: ?ticket delete <panel_name> |
+| `src/cogs/ticket/ticket_system.py` | `delete` | — | Delete a configured ticket panel. Usage: +ticket delete <panel_name> |
 | `src/cogs/utility/afk.py` | `afk` | — | Set your AFK status with an optional reason. |
 | `src/cogs/utility/dev_pulse.py` | `dev` | devpulse, opportunities, bounties, devjobs | Autonomous Developer Opportunities & Career Dashboard. |
 | `src/cogs/utility/embed_builder.py` | `embed` | embedbuilder, container, card | Design, customize, preview, save, edit, and post Components V2 container cards. |
@@ -315,10 +321,26 @@ Legacy `+` prefix commands (`+gstart`, `+gend`, `+greroll`, `+glist`, `+ai`, `+p
 | `src/cogs/utility/giveaway.py` | `end` | — | End an active giveaway now and pick winners. |
 | `src/cogs/utility/giveaway.py` | `reroll` | — | Pick new random winners from an ended giveaway. |
 | `src/cogs/utility/giveaway.py` | `list` | — | List all active giveaways currently running in this server. |
-| `src/cogs/utility/giveaway.py` | `gstart` | — | — |
-| `src/cogs/utility/giveaway.py` | `gend` | — | — |
-| `src/cogs/utility/giveaway.py` | `greroll` | — | — |
-| `src/cogs/utility/giveaway.py` | `glist` | — | — |
+| `src/cogs/utility/giveaway.py` | `gstart` | — | Launch a new giveaway with quick prefix parameters. |
+| `src/cogs/utility/giveaway.py` | `gend` | — | Conclude an active giveaway immediately via prefix. |
+| `src/cogs/utility/giveaway.py` | `greroll` | — | Reroll replacement winners for an ended giveaway. |
+| `src/cogs/utility/giveaway.py` | `glist` | — | List all running giveaways in this server. |
+| `src/cogs/utility/giveaway.py` | `gpause` | — | Freeze countdown and entries on an active giveaway. |
+| `src/cogs/utility/giveaway.py` | `gresume` | — | Unfreeze and resume countdown on a paused giveaway. |
+| `src/cogs/utility/giveaway.py` | `gcancel` | — | Terminate a running giveaway without drawing winners. |
+| `src/cogs/utility/giveaway.py` | `ginfo` | — | View detailed metadata and participants for a giveaway. |
+| `src/cogs/utility/giveaway.py` | `gcheck` | — | Test a member's eligibility against giveaway requirements. |
+| `src/cogs/utility/giveaway.py` | `gbonus` | — | Configure role-based bonus entries and multiplier stacking. |
+| `src/cogs/utility/giveaway.py` | `greq` | — | Configure required roles or message activity thresholds. |
+| `src/cogs/utility/reaction_roles.py` | `reactionrole` | rr | Enterprise reaction role and button panel manager. |
+| `src/cogs/utility/reaction_roles.py` | `setup` | — | Interactive guided wizard to build and publish a button role panel. |
+| `src/cogs/utility/reaction_roles.py` | `create` | — | Create an emoji-reaction based role panel. |
+| `src/cogs/utility/reaction_roles.py` | `button` | — | Create an interactive button role panel. |
+| `src/cogs/utility/reaction_roles.py` | `add` | — | Attach an emoji/button role mapping to an existing panel. |
+| `src/cogs/utility/reaction_roles.py` | `remove` | — | Remove a role mapping from a panel. |
+| `src/cogs/utility/reaction_roles.py` | `clear` | — | Clear all role bindings from a panel. |
+| `src/cogs/utility/reaction_roles.py` | `list` | — | List all active reaction/button role panels in the server. |
+| `src/cogs/utility/reaction_roles.py` | `modes` | — | View reaction role panel behavior modes (normal, unique, verify). |
 | `src/cogs/utility/snipe.py` | `snipe` | sn | View recently deleted messages in this channel. |
 | `src/cogs/utility/snipe.py` | `clearsnipe` | csnipe | Purge the deleted message snipe cache for this channel (or 'all' for entire server). |
 | `src/cogs/utility/snipe_all.py` | `snipeall` | sall, globalsnipe, serversnipe | Show recent deleted messages across all channels in the server. |
@@ -332,5 +354,20 @@ Legacy `+` prefix commands (`+gstart`, `+gend`, `+greroll`, `+glist`, `+ai`, `+p
 | `src/cogs/utility/temp_voice.py` | `j2c` | jointocreate, join-to-create | Setup Join-to-Create voice infrastructure with automated channel generator and control dashboard. |
 | `src/cogs/utility/translator.py` | `translate` | — | Translate any text into your chosen language |
 | `src/cogs/utility/translator.py` | `translator-settings` | — | Configure server translation settings |
-| `src/cogs/utility/verification.py` | `verify` | — | Configure or use KYOKA member verification |
-| `src/cogs/utility/verification.py` | `setup` | — | Create a verification panel and configure its verified role |
+| `src/cogs/utility/verification.py` | `verify` | — | Complete member verification or access verification configuration commands. |
+| `src/cogs/utility/verification.py` | `setup` | — | Interactive guided wizard to configure and deploy server gatekeeping verification. |
+| `src/cogs/utility/verification.py` | `role` | — | Set the role granted upon successful verification. |
+| `src/cogs/utility/verification.py` | `unverifiedrole` | — | Set the role assigned to unverified members upon joining. |
+| `src/cogs/utility/verification.py` | `channel` | — | Set the dedicated verification channel. |
+| `src/cogs/utility/verification.py` | `method` | — | Set verification challenge mode: button, rules, or math challenge. |
+| `src/cogs/utility/verification.py` | `enable` | — | Activate verification enforcement on join. |
+| `src/cogs/utility/verification.py` | `disable` | — | Deactivate verification enforcement. |
+| `src/cogs/utility/verification.py` | `panel` | — | Post or update the interactive verification panel card. |
+| `src/cogs/utility/verification.py` | `stats` | — | View server verification metrics and success rates. |
+| `src/cogs/utility/verification.py` | `user` | — | Inspect a member's verification status and history. |
+| `src/cogs/utility/verification.py` | `remove` | — | Revoke verified role from a user and return them to unverified status. |
+| `src/cogs/utility/verification.py` | `reset` | — | Reset server verification configuration to defaults. |
+| `src/cogs/fun/ai_interactions.py` | `ai` | ask, chat | Chat directly with Kyoka's configured AI personality. |
+| `src/cogs/fun/ai_interactions.py` | `aipersonality` | — | Select from 10 personality presets or configure custom persona instructions. |
+| `src/cogs/fun/ai_interactions.py` | `aiconfig` | — | View active server AI configuration, channel restrictions, and tone. |
+| `src/cogs/fun/ai_interactions.py` | `aitest` | — | Test sample prompt output against the active server personality. |

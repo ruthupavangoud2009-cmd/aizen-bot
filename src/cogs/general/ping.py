@@ -69,15 +69,23 @@ class Ping(commands.Cog):
             self._mention_ping_at[ctx.author.id] = now
             mentions = " ".join(target.mention for _ in range(count))
             return await ctx.send(f"🔔 **Aizen ping test ({count}/5):** {mentions}", allowed_mentions=discord.AllowedMentions(users=[target]))
-        # measure DB ping
-        start_db = time.perf_counter()
-        await self.bot.db.fetch_one("SELECT 1;")
-        db_latency = (time.perf_counter() - start_db) * 1000
+        cmd_start = time.perf_counter()
 
-        # measure Discord Websocket latency
-        ws_latency = self.bot.latency * 1000
+        # Measure DB ping with timeout resilience
+        db_str = "Offline"
+        if hasattr(self.bot, "db") and self.bot.db:
+            try:
+                start_db = time.perf_counter()
+                await asyncio.wait_for(self.bot.db.fetch_one("SELECT 1;"), timeout=2.0)
+                db_ms = (time.perf_counter() - start_db) * 1000
+                db_str = f"{db_ms:.2f}ms"
+            except Exception:
+                db_str = "Unavailable"
 
-        # calculate Uptime
+        # Measure Discord Websocket latency
+        ws_latency = (self.bot.latency * 1000) if self.bot.latency else 0.0
+
+        # Calculate Uptime
         now = discord.utils.utcnow()
         start = getattr(self.bot, "start_time", now)
         delta = int((now - start).total_seconds())
@@ -86,22 +94,23 @@ class Ping(commands.Cog):
         uptime_str = f"{hours}h {minutes}m {seconds}s" if hours else f"{minutes}m {seconds}s"
 
         shard_id = ctx.guild.shard_id if ctx.guild else 0
+        cmd_latency = (time.perf_counter() - cmd_start) * 1000
 
-        e_reg = self.bot.custom_emojis
-        dot = e_reg.get("heart_dot", e_reg.get("icons_rightarrow", "-"))
+        e_reg = getattr(self.bot, "custom_emojis", None)
+        dot = e_reg.get("heart_dot", e_reg.get("icons_rightarrow", "•")) if e_reg else "•"
 
         container = KyokaContainer(accent_color=None)
         container.add_section(
             content=(
-                f"**Kyoka Latency**\n"
-                f"> Current gateway latency, database response speed, and system uptime."
+                f"**Kyoka Latency & Performance**\n"
+                f"> Current gateway latency, command roundtrip, database response speed, and system uptime."
             )
         )
         container.add_separator(divider=True)
 
         container.add_text(
-            f"{dot} **Gateway:** `{ws_latency:.2f}ms` | **Database:** `{db_latency:.2f}ms`\n"
-            f"{dot} **Uptime:** `{uptime_str}` | **Shard:** `#{shard_id}`"
+            f"{dot} **Gateway:** `{ws_latency:.2f}ms` | **Command:** `{cmd_latency:.2f}ms`\n"
+            f"{dot} **Database:** `{db_str}` | **Uptime:** `{uptime_str}` | **Shard:** `#{shard_id}`"
         )
         container.add_separator(divider=True)
         container.add_text(f"-# Requested by {ctx.author.display_name}")

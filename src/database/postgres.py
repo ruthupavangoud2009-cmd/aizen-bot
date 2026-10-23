@@ -969,6 +969,65 @@ class PostgresDatabase(BaseDatabase):
                 updated_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
             );
             """,
+            # KYOKA 3.0 Enhanced Verification System Schemas
+            """
+            CREATE TABLE IF NOT EXISTS kyoka_verification_settings (
+                guild_id BIGINT PRIMARY KEY,
+                role_id BIGINT NOT NULL,
+                unverified_role_id BIGINT,
+                channel_id BIGINT,
+                log_channel_id BIGINT,
+                method VARCHAR(32) DEFAULT 'button',
+                enabled BOOLEAN DEFAULT TRUE,
+                timeout_seconds INT DEFAULT 300,
+                max_retries INT DEFAULT 3,
+                min_account_age_days INT DEFAULT 0,
+                panel_message_id BIGINT,
+                updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
+            );
+            """,
+            "ALTER TABLE kyoka_verification_settings ADD COLUMN IF NOT EXISTS unverified_role_id BIGINT;",
+            "ALTER TABLE kyoka_verification_settings ADD COLUMN IF NOT EXISTS channel_id BIGINT;",
+            "ALTER TABLE kyoka_verification_settings ADD COLUMN IF NOT EXISTS log_channel_id BIGINT;",
+            "ALTER TABLE kyoka_verification_settings ADD COLUMN IF NOT EXISTS method VARCHAR(32) DEFAULT 'button';",
+            "ALTER TABLE kyoka_verification_settings ADD COLUMN IF NOT EXISTS enabled BOOLEAN DEFAULT TRUE;",
+            "ALTER TABLE kyoka_verification_settings ADD COLUMN IF NOT EXISTS timeout_seconds INT DEFAULT 300;",
+            "ALTER TABLE kyoka_verification_settings ADD COLUMN IF NOT EXISTS max_retries INT DEFAULT 3;",
+            "ALTER TABLE kyoka_verification_settings ADD COLUMN IF NOT EXISTS min_account_age_days INT DEFAULT 0;",
+            "ALTER TABLE kyoka_verification_settings ADD COLUMN IF NOT EXISTS panel_message_id BIGINT;",
+            """
+            CREATE TABLE IF NOT EXISTS kyoka_verification_records (
+                id BIGSERIAL PRIMARY KEY,
+                guild_id BIGINT NOT NULL,
+                user_id BIGINT NOT NULL,
+                joined_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
+                verified_at TIMESTAMPTZ,
+                method VARCHAR(32) DEFAULT 'button',
+                status VARCHAR(32) DEFAULT 'pending',
+                failure_count INT DEFAULT 0,
+                moderator_id BIGINT,
+                updated_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
+            );
+            """,
+            "CREATE INDEX IF NOT EXISTS idx_v_records_guild ON kyoka_verification_records(guild_id, user_id);",
+            "CREATE INDEX IF NOT EXISTS idx_v_records_status ON kyoka_verification_records(guild_id, status);",
+            # KYOKA 3.0 Enhanced Ticket System Columns & Notes
+            "ALTER TABLE active_tickets ADD COLUMN IF NOT EXISTS category VARCHAR(64) DEFAULT 'General Support';",
+            "ALTER TABLE active_tickets ADD COLUMN IF NOT EXISTS priority VARCHAR(20) DEFAULT 'Normal';",
+            "ALTER TABLE active_tickets ADD COLUMN IF NOT EXISTS notes TEXT DEFAULT '';",
+            "ALTER TABLE active_tickets ADD COLUMN IF NOT EXISTS close_reason TEXT DEFAULT '';",
+            "ALTER TABLE ticket_panels ADD COLUMN IF NOT EXISTS categories_json TEXT DEFAULT '[]';",
+            "ALTER TABLE ticket_panels ADD COLUMN IF NOT EXISTS faq_text TEXT DEFAULT '';",
+            """
+            CREATE TABLE IF NOT EXISTS ticket_internal_notes (
+                id SERIAL PRIMARY KEY,
+                channel_id BIGINT NOT NULL,
+                author_id BIGINT NOT NULL,
+                note_text TEXT NOT NULL,
+                created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
+            );
+            """,
+            "CREATE INDEX IF NOT EXISTS idx_ticket_notes_ch ON ticket_internal_notes(channel_id);",
         ]
         if not self.pool or self.pool._closed:
             await self._heal_pool()

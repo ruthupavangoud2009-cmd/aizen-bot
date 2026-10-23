@@ -1,9 +1,11 @@
 from __future__ import annotations
 
+import asyncio
 import datetime
 from unittest.mock import AsyncMock, MagicMock
 import pytest
 import discord
+from discord.ext import commands
 
 from src.cogs.utility.giveaway import (
     Giveaways,
@@ -19,6 +21,7 @@ from src.managers.giveaway_manager import (
     ToggleResult,
     weighted_sample_without_replacement,
 )
+from src.core.context import CustomContext
 from src.managers.activity_manager import ActivityManager
 from src.managers.ai_manager import AIManager, PERSONALITY_PRESETS
 
@@ -548,3 +551,169 @@ async def test_authorization_and_legacy_prefix_commands():
     assert "gend" in legacy_gw_commands
     assert "greroll" in legacy_gw_commands
     assert "glist" in legacy_gw_commands
+    assert "gpause" in legacy_gw_commands
+    assert "gresume" in legacy_gw_commands
+    assert "gcancel" in legacy_gw_commands
+    assert "ginfo" in legacy_gw_commands
+    assert "gcheck" in legacy_gw_commands
+    assert "gbonus" in legacy_gw_commands
+    assert "greq" in legacy_gw_commands
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# 11. TEST VERIFICATION SYSTEM FLOW & PERMISSION CHECKS
+# ─────────────────────────────────────────────────────────────────────────────
+
+@pytest.mark.asyncio
+async def test_verification_system_flow():
+    from src.cogs.utility.verification import Verification
+
+    mock_bot = MagicMock()
+    mock_bot.db = AsyncMock()
+    mock_bot.guild_mgr.get_prefix.return_value = "+"
+
+    cog = Verification(mock_bot)
+
+    guild = MagicMock(spec=discord.Guild)
+    guild.id = 777
+    guild.name = "Test Guild"
+
+    verified_role = MagicMock(spec=discord.Role)
+    verified_role.id = 101
+    verified_role.name = "Verified"
+
+    unverified_role = MagicMock(spec=discord.Role)
+    unverified_role.id = 102
+    unverified_role.name = "Unverified"
+
+    bot_member = MagicMock(spec=discord.Member)
+    bot_member.guild_permissions.manage_roles = True
+    bot_member.top_role = MagicMock()
+    bot_member.top_role.__gt__ = lambda self, other: True
+    bot_member.top_role.__ge__ = lambda self, other: True
+    bot_member.top_role.__le__ = lambda self, other: False
+    bot_member.top_role.__lt__ = lambda self, other: False
+    guild.me = bot_member
+    guild.get_role.side_effect = lambda rid: verified_role if rid == 101 else (unverified_role if rid == 102 else None)
+
+    # 1. on_member_join assigns unverified role
+    mock_bot.db.fetch_one.return_value = {
+        "guild_id": 777,
+        "role_id": 101,
+        "unverified_role_id": 102,
+        "enabled": True,
+        "min_account_age_days": 0,
+    }
+
+    new_member = MagicMock(spec=discord.Member)
+    new_member.id = 8888
+    new_member.guild = guild
+    new_member.bot = False
+    new_member.created_at = datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(days=30)
+    new_member.add_roles = AsyncMock()
+    new_member.remove_roles = AsyncMock()
+    new_member.roles = [unverified_role]
+
+    await cog.on_member_join(new_member)
+    new_member.add_roles.assert_called_with(unverified_role, reason="KYOKA Verification: New member join")
+
+    # 2. handle_member_verified removes unverified, adds verified role
+    interaction = MagicMock(spec=discord.Interaction)
+    interaction.guild = guild
+    interaction.user = new_member
+    interaction.response = MagicMock()
+    interaction.response.send_message = AsyncMock()
+
+    await cog.handle_member_verified(interaction, method="button")
+    new_member.remove_roles.assert_called_with(unverified_role, reason="KYOKA Verification: Member verified")
+    new_member.add_roles.assert_called_with(verified_role, reason="KYOKA Verification: Completed via button")
+    assert interaction.response.send_message.called
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# 12. TEST PING RESILIENCE & GENUINE MEASUREMENTS
+# ─────────────────────────────────────────────────────────────────────────────
+
+@pytest.mark.asyncio
+async def test_ping_resilience_and_measurements():
+    from src.cogs.general.ping import Ping
+
+    mock_bot = MagicMock()
+    mock_bot.latency = 0.042  # 42ms
+    mock_bot.db = AsyncMock()
+    mock_bot.db.fetch_one.return_value = {"?column?": 1}
+    mock_bot.custom_emojis.get.return_value = "•"
+
+    cog = Ping(mock_bot)
+
+    ctx = MagicMock(spec=CustomContext)
+    ctx.guild = MagicMock(spec=discord.Guild)
+    ctx.guild.shard_id = 0
+    ctx.author.display_name = "Aizen"
+    mock_bot.http = AsyncMock()
+    mock_bot.http.request.return_value = {"id": "123"}
+    ctx.bot = mock_bot
+    ctx.channel = MagicMock(spec=discord.TextChannel)
+    ctx.channel.id = 999
+
+    # Call ping command with online DB
+    await cog.ping.callback(cog, ctx)
+    assert mock_bot.http.request.called
+    sent_payload = mock_bot.http.request.call_args[1].get("json") or {}
+    raw_text = str(sent_payload)
+    assert "Gateway:" in raw_text
+    assert "Database:" in raw_text
+    assert "42.00ms" in raw_text
+
+    # Call ping command with DB timeout / outage
+    mock_bot.db.fetch_one.side_effect = asyncio.TimeoutError("DB Timeout")
+    mock_bot.http.request.reset_mock()
+    await cog.ping.callback(cog, ctx)
+    assert mock_bot.http.request.called
+    sent_payload_2 = mock_bot.http.request.call_args[1].get("json") or {}
+    raw_text_2 = str(sent_payload_2)
+    assert "Unavailable" in raw_text_2
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# 13. TEST HELP CATEGORY DYNAMICS & OWNER COMMAND PRIVACY
+# ─────────────────────────────────────────────────────────────────────────────
+
+@pytest.mark.asyncio
+async def test_help_categories_and_owner_privacy():
+    from src.cogs.general.help import Help
+    from src.security.owner import OWNER_ID
+
+    mock_bot = MagicMock()
+    mock_bot.guild_mgr.get_prefix.return_value = "+"
+
+    cog_help = Help(mock_bot)
+
+    # 1. Non-owner cannot see Owner / Developer categories
+    regular_user = MagicMock(spec=discord.Member)
+    regular_user.id = 99999999
+    ctx_regular = MagicMock(spec=CustomContext)
+    ctx_regular.author = regular_user
+    ctx_regular.guild = MagicMock(spec=discord.Guild)
+
+    # Create dummy owner command
+    owner_cmd = MagicMock(spec=commands.Command)
+    owner_cmd.name = "eval"
+    owner_cmd.hidden = False
+    owner_cmd.cog = MagicMock()
+    owner_cmd.cog.category = "Developer"
+
+    assert cog_help._can_run_command(owner_cmd, ctx_regular) is False
+
+    # 2. Owner can see owner-restricted commands
+    owner_user = MagicMock(spec=discord.Member)
+    owner_user.id = OWNER_ID
+    ctx_owner = MagicMock(spec=CustomContext)
+    ctx_owner.author = owner_user
+
+    guess_cmd = MagicMock(spec=commands.Command)
+    guess_cmd.name = "spam"
+    guess_cmd.hidden = False
+    guess_cmd.cog = MagicMock()
+    guess_cmd.cog.category = "Admin"
+    assert cog_help._can_run_command(guess_cmd, ctx_owner) is True

@@ -449,7 +449,53 @@ class AIInteractions(commands.Cog):
         if not isinstance(channel, discord.TextChannel):
             return await ctx.send(f"Usage: `{ctx.prefix}aisetup #channel` or `{ctx.prefix}aisetup off`.")
         await self.bot.db.execute("INSERT INTO kyoka_ai_settings (guild_id, channel_id, updated_by) VALUES (?, ?, ?) ON CONFLICT (guild_id) DO UPDATE SET channel_id = EXCLUDED.channel_id, updated_by = EXCLUDED.updated_by, updated_at = CURRENT_TIMESTAMP;", ctx.guild.id, channel.id, ctx.author.id)
-        await ctx.send(f"🟣 Automatic AI conversation is now configured for {channel.mention}.")
+    @commands.command(name="aipersonality", aliases=["aipreset", "setpersonality"], help="Admin: Set the server's AI personality preset.")
+    @commands.guild_only()
+    @commands.has_guild_permissions(manage_guild=True)
+    async def aipersonality(self, ctx: CustomContext, *, preset: str = ""):
+        gid = ctx.guild.id
+        current = self.bot.ai_mgr.get_server_config(gid)
+        presets = self.bot.ai_mgr.get_all_presets()
+        if not preset.strip():
+            lines = [f"• `{k}` — **{v['name']}**: {v['description']}" for k, v in presets.items()]
+            return await ctx.send(
+                f"**Available Personality Presets (10 Total):**\n"
+                + "\n".join(lines)
+                + f"\n\nUsage: `{ctx.prefix}aipersonality <preset_name>`"
+            )
+
+        clean = preset.lower().strip().replace(" ", "_").replace("-", "_")
+        if clean not in presets:
+            return await ctx.send(f"❌ Unknown preset `{preset}`. Use `{ctx.prefix}aipersonality` to view all 10 presets.")
+
+        current["personality"] = clean
+        await self.bot.ai_mgr.save_server_config(gid, current)
+        await ctx.send(f"✅ Set AI personality to **{presets[clean]['name']}** for this server!")
+
+    @commands.command(name="aiconfig", aliases=["aiview", "aisettings"], help="View current server AI personality configuration.")
+    @commands.guild_only()
+    async def aiconfig(self, ctx: CustomContext):
+        gid = ctx.guild.id
+        cfg = self.bot.ai_mgr.get_server_config(gid)
+        p_name = cfg.get("personality", "aizen")
+        presets = self.bot.ai_mgr.get_all_presets()
+        disp = presets.get(p_name, {}).get("name", p_name.title())
+        ch = f"<#{cfg['channel_id']}>" if cfg.get("channel_id") else "`All / Mentions`"
+        status = "🟢 Enabled" if cfg.get("enabled", True) else "🔴 Disabled"
+        embed = discord.Embed(title=f"🤖 AI Personality Configuration • {ctx.guild.name}", color=PURPLE)
+        embed.add_field(name="Status", value=status, inline=True)
+        embed.add_field(name="Personality", value=disp, inline=True)
+        embed.add_field(name="Channel", value=ch, inline=True)
+        embed.add_field(name="Tone", value=str(cfg.get("tone", "composed")).title(), inline=True)
+        embed.add_field(name="Humor", value=str(cfg.get("humor", "dry")).title(), inline=True)
+        embed.add_field(name="Response Length", value=str(cfg.get("response_length", "balanced")).title(), inline=True)
+        embed.set_footer(text=f"Use {ctx.prefix}aipersonality <name> to switch presets")
+        await ctx.send(embed=embed)
+
+    @commands.command(name="aitest", help="Test current AI personality with a test message.")
+    @commands.guild_only()
+    async def aitest(self, ctx: CustomContext, *, message: str = "Introduce yourself and say hello!"):
+        await self._send_ai(ctx, message)
 
     @commands.command(name="ai", aliases=["chat", "askai", "aizenai"], help="Ask KYŌKA a question using Gemini AI.")
     async def ai(self, ctx: CustomContext, *, message: str = ""):

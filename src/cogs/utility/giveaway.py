@@ -1266,6 +1266,125 @@ class Giveaways(commands.Cog):
         lines = [f"• **{g['prize']}** in <#{g['channel_id']}> ({g['winner_count']} winners)" for g in active]
         await ctx.send("\n".join(lines))
 
+    @commands.command(name="gpause")
+    @commands.has_permissions(manage_messages=True)
+    @commands.guild_only()
+    async def shortcut_gpause(self, ctx: CustomContext, message_id: Optional[str] = None) -> None:
+        """Pause a giveaway via prefix command."""
+        mid = self._resolve_message_id(ctx.channel.id, message_id)
+        if not mid and ctx.message and ctx.message.reference:
+            mid = ctx.message.reference.message_id
+        if not mid:
+            return await ctx.send("Please provide or reply to the giveaway message ID.")
+        res = await self.bot.giveaway_mgr.pause_giveaway(mid, ctx.author.id)
+        if not res:
+            return await ctx.send("Could not pause giveaway. Verify it is active and not already paused.")
+        await ctx.send(f"⏸️ Paused giveaway **{res['prize']}**.")
+
+    @commands.command(name="gresume")
+    @commands.has_permissions(manage_messages=True)
+    @commands.guild_only()
+    async def shortcut_gresume(self, ctx: CustomContext, message_id: Optional[str] = None) -> None:
+        """Resume a paused giveaway via prefix command."""
+        mid = self._resolve_message_id(ctx.channel.id, message_id)
+        if not mid and ctx.message and ctx.message.reference:
+            mid = ctx.message.reference.message_id
+        if not mid:
+            return await ctx.send("Please provide or reply to the giveaway message ID.")
+        res = await self.bot.giveaway_mgr.resume_giveaway(mid, ctx.author.id)
+        if not res:
+            return await ctx.send("Could not resume giveaway. Verify it is paused.")
+        await ctx.send(f"▶️ Resumed giveaway **{res['prize']}**.")
+
+    @commands.command(name="gcancel")
+    @commands.has_permissions(manage_messages=True)
+    @commands.guild_only()
+    async def shortcut_gcancel(self, ctx: CustomContext, message_id: Optional[str] = None, *, reason: str = "") -> None:
+        """Cancel a giveaway without drawing winners."""
+        mid = self._resolve_message_id(ctx.channel.id, message_id)
+        if not mid and ctx.message and ctx.message.reference:
+            mid = ctx.message.reference.message_id
+        if not mid:
+            return await ctx.send("Please provide or reply to the giveaway message ID.")
+        res = await self.bot.giveaway_mgr.cancel_giveaway(mid, ctx.author.id, reason)
+        if not res:
+            return await ctx.send("Giveaway not found.")
+        await ctx.send(f"❌ Cancelled giveaway **{res['prize']}**.")
+
+    @commands.command(name="ginfo")
+    @commands.guild_only()
+    async def shortcut_ginfo(self, ctx: CustomContext, message_id: Optional[str] = None) -> None:
+        """View giveaway details via prefix command."""
+        mid = self._resolve_message_id(ctx.channel.id, message_id)
+        if not mid and ctx.message and ctx.message.reference:
+            mid = ctx.message.reference.message_id
+        if not mid:
+            return await ctx.send("Please provide or reply to the giveaway message ID.")
+        gw = self.bot.giveaway_mgr.get_giveaway_by_message_id(mid)
+        if not gw:
+            gw_row = await self.bot.db.fetch_one("SELECT * FROM giveaways WHERE message_id = $1;", mid)
+            if not gw_row:
+                return await ctx.send("Giveaway not found.")
+            gw = self.bot.giveaway_mgr._row_to_giveaway_dict(gw_row)
+        count = await self.bot.giveaway_mgr.get_participant_count(gw["id"])
+        status = "Paused" if gw.get("is_paused") else ("Ended" if gw.get("is_ended") else "Active")
+        await ctx.send(
+            f"**Giveaway Info (ID: `{gw['id']}`)**\n"
+            f"• Prize: **{gw['prize']}**\n"
+            f"• Winners: `{gw['winner_count']}`\n"
+            f"• Status: `{status}`\n"
+            f"• Participants: `{count}`"
+        )
+
+    @commands.command(name="gcheck")
+    @commands.guild_only()
+    async def shortcut_gcheck(self, ctx: CustomContext, member: discord.Member, message_id: Optional[str] = None) -> None:
+        """Check member eligibility via prefix command."""
+        mid = self._resolve_message_id(ctx.channel.id, message_id)
+        if not mid and ctx.message and ctx.message.reference:
+            mid = ctx.message.reference.message_id
+        if not mid:
+            return await ctx.send("Please provide or reply to the giveaway message ID.")
+        gw = self.bot.giveaway_mgr.get_giveaway_by_message_id(mid)
+        if not gw:
+            gw_row = await self.bot.db.fetch_one("SELECT * FROM giveaways WHERE message_id = $1;", mid)
+            if not gw_row:
+                return await ctx.send("Giveaway not found.")
+            gw = self.bot.giveaway_mgr._row_to_giveaway_dict(gw_row)
+        act_mgr = getattr(self.bot, "activity_mgr", None)
+        passed, breakdown = await self.bot.giveaway_mgr.check_member_eligibility(gw, member, act_mgr)
+        lines = [f"{'✅' if b['passed'] else '❌'} {b['type']}: {b['reason']}" for b in breakdown]
+        res_str = "**Eligible**" if passed else "**Not Eligible**"
+        await ctx.send(f"Eligibility for {member.mention}: {res_str}\n" + "\n".join(lines))
+
+    @commands.command(name="gbonus")
+    @commands.has_permissions(manage_guild=True)
+    @commands.guild_only()
+    async def shortcut_gbonus(self, ctx: CustomContext, role: discord.Role, multiplier: float) -> None:
+        """Configure role bonus multiplier via prefix command."""
+        await self.bot.giveaway_mgr.add_bonus_role(
+            guild_id=ctx.guild.id,
+            role_id=role.id,
+            multiplier=multiplier,
+        )
+        await ctx.send(f"✅ Configured **{multiplier}x** entry multiplier for {role.mention}.")
+
+    @commands.command(name="greq")
+    @commands.has_permissions(manage_guild=True)
+    @commands.guild_only()
+    async def shortcut_greq(self, ctx: CustomContext, period: str, message_count: int) -> None:
+        """Configure message activity requirement: +greq daily 10 or +greq weekly 100."""
+        clean = period.lower().strip()
+        if clean not in ("daily", "today", "weekly", "week"):
+            return await ctx.send("Choose `daily` or `weekly` for period.")
+        req_type = "messages_daily" if clean in ("daily", "today") else "messages_weekly"
+        await self.bot.giveaway_mgr.add_requirement(
+            guild_id=ctx.guild.id,
+            req_type=req_type,
+            req_value=str(message_count),
+        )
+        await ctx.send(f"✅ Added requirement: At least **{message_count}** messages {clean}.")
+
 
 async def setup(bot: KyokaBot) -> None:
     await bot.add_cog(Giveaways(bot))

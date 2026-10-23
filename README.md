@@ -297,22 +297,91 @@ KYOKA 3.0 structures its new slash interface into exactly 50 documented top-leve
 
 ---
 
+## 🎫 Premium Ticket System
+
+KYOKA 3.0 provides an enterprise ticket management suite with custom visual panels and HTML transcripts:
+
+- **Interactive Setup Wizard**: `+ticket setup` guides administrators through selecting a channel, naming, support roles, and category assignments.
+- **Inside-Ticket Controls**: Persistent buttons for closing, claiming, and downloading transcripts directly in the channel.
+- **Staff Commands**:
+  - `+ticket claim` / `+ticket unclaim`: Claim or release a ticket.
+  - `+ticket transfer <@staff>`: Hand off a ticket to another team member.
+  - `+ticket add <@user>` / `+ticket remove <@user>`: Manage ticket participants dynamically.
+  - `+ticket rename <new-name>`: Rename ticket channels seamlessly.
+  - `+ticket priority <low|normal|high|urgent>`: Set priority levels.
+  - `+ticket note <text>`: Record internal staff notes.
+  - `+ticket close [reason]`: Safely archive ticket, DM user with HTML transcript, and log to ticket log channel.
+  - `+ticket transcript`: Instant HTML transcript generation with attachments and participant timeline.
+  - `+ticket stats`: Real-time server ticket volume and resolution analytics.
+
+---
+
+## 🛡️ Discord-Style Server Verification System
+
+Real channel gatekeeping enforced through Discord role and permission hierarchies:
+
+- **Joining Flow**: Automatically assigns the configured `unverified` role upon join, restricting new members from viewing regular channels until verified.
+- **Verification Methods**:
+  - `Button`: Instant human click verification.
+  - `Rules`: Community rules agreement modal before granting access.
+  - `Challenge`: Arithmetic / anti-bot challenge modal with rate limits.
+- **Anti-Raid Protections**: Verification cooldowns, max retry limits, failure logging, and optional minimum account age thresholds.
+- **Commands**:
+  - `+verify setup <@verified_role> [@unverified_role] [#channel]`: Full guided setup.
+  - `+verify panel`: Deploy persistent verification card and button view.
+  - `+verify method <button|rules|challenge>`: Toggle verification challenges.
+  - `+verify stats`: Real-time pass/fail metrics and completion rates.
+  - `+verify user <@member>`: Staff manual verification bypass.
+  - `+verify remove <@member>`: Re-isolate member back to unverified.
+
+---
+
+## 🏷️ Easy Reaction Roles System
+
+Carl-bot & Dyno style reaction and button role portal:
+
+- **Beginner Guided Setup**: `+rr setup #channel @Role "Button Label"` creates a clean toggle button role immediately.
+- **Interactive Button Panels**: `+rr button #channel "Title" Label1=@Role1 Label2=@Role2`.
+- **Classic Emoji Panels**: `+rr create #channel "Title" 🎮=@Gamers 💻=@Devs`.
+- **Modes Supported**:
+  - `Normal`: Toggle on / toggle off.
+  - `Unique`: Radio button mode (only one role at a time; picking a new role strips the previous).
+  - `Verify`: One-way permanent claim.
+- **Management**: `+rr list`, `+rr remove <msg_id> <emoji>`, `+rr clear <msg_id>`.
+
+---
+
+## 🏓 Ping & Genuine Performance Diagnostics
+
+KYOKA 3.0 reports real, transparent system performance:
+
+- **Gateway Latency**: Measured directly from Discord WebSocket heartbeat (`bot.latency`).
+- **Command Roundtrip**: Exact execution time taken to compute and dispatch the response.
+- **Database Latency**: Fast, resilient `SELECT 1` ping with graceful offline detection.
+- **System Uptime & Shard Tracking**: Continuous process uptime metrics.
+- Usage: `+ping` or `/ping`.
+
+---
+
+## 📚 Complete Automatic Help System
+
+- **Permission-Aware Filtering**: Members only see commands they are authorized to run.
+- **Owner-Only Security**: Developer and owner-restricted commands (`eval`, `restart`, `maintenance`, etc.) are hidden from unauthorized users.
+- **Category Navigation**: Interactive select menu categorized into *General*, *Moderation*, *Anti-Nuke and Security*, *Verification*, *Tickets*, *Reaction Roles*, *Giveaways*, *AI & Community*, and *Configuration*.
+- **Command Lookup**: Detailed syntax, aliases, and usage examples via `+help <command>`.
+
+---
+
 ## 🛡️ Ownership & Branding
 
 - **Bot Name**: `KYOKA 3.0`
 - **Creator**: `Aizen`
 - **Primary Owner ID**: `1505515188991033409`
 - **Support Server**: `https://discord.gg/5DBQTQJa9`
-- **Framework**: `discord.py` with Components V2 cards
+- **Framework**: `discord.py 2.7+` with Components V2 cards
 - **Database**: `PostgreSQL` / `Supabase` with `asyncpg`
 
 ---
 <div align="center">
   <sub>Made by Aizen.</sub>
 </div>
-
-## KYOKA Verification Panel
-
-Server administrators with **Manage Server** can run `/verify setup` and choose the role members receive after clicking **Verify Me**. The bot needs **Manage Roles**, and KYOKA's highest role must be above the configured verification role. Verification settings are stored in PostgreSQL in `kyoka_verification_settings` and the button remains available after restarts.
-
-The server-join greeting thanks the server for inviting KYOKA and includes the support invite configured by `SUPPORT_URL` (defaults to `https://discord.gg/5DBQTQJa9`). Set `AIZEN_IMAGE_URL` in the deployment environment to use a preferred hosted Aizen-themed image URL. Prefix commands and existing slash commands are preserved; slash command availability still depends on the bot's application-command sync settings.

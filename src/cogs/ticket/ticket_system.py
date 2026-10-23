@@ -1114,6 +1114,102 @@ class TicketSystem(commands.Cog):
         await self.bot.ticket_mgr.delete_panel(ctx.guild.id, clean_name)
         await ctx.send_success(f"Ticket panel `{clean_name}` has been deleted.", title="Panel Deleted")
 
+    @ticket_group.command(name="unclaim", description="Release claim on the current active ticket.")
+    @commands.has_permissions(manage_messages=True)
+    async def ticket_unclaim_cmd(self, ctx: CustomContext) -> None:
+        """Command to release ticket claim."""
+        ticket = await self.bot.ticket_mgr.get_ticket(ctx.channel.id)
+        if not ticket:
+            return await ctx.send_error("This channel is not an active ticket channel.")
+        if not ticket.get("claimed_by"):
+            return await ctx.send_warning("This ticket is not currently claimed.")
+        await self.bot.db.execute("UPDATE active_tickets SET claimed_by = NULL WHERE channel_id = $1;", ctx.channel.id)
+        ticket["claimed_by"] = None
+        await ctx.send_success("Ticket claim released. Any staff member can now handle this ticket.")
+
+    @ticket_group.command(name="transfer", description="Transfer ticket handling to another staff member.")
+    @commands.has_permissions(manage_messages=True)
+    async def ticket_transfer_cmd(self, ctx: CustomContext, staff: discord.Member) -> None:
+        """Command to transfer ticket to another staff member."""
+        ticket = await self.bot.ticket_mgr.get_ticket(ctx.channel.id)
+        if not ticket:
+            return await ctx.send_error("This channel is not an active ticket channel.")
+        await self.bot.ticket_mgr.claim_ticket(ctx.channel.id, staff.id)
+        await ctx.send_success(f"Ticket transferred to {staff.mention}!")
+
+    @ticket_group.command(name="rename", description="Rename the current ticket channel.")
+    @commands.has_permissions(manage_channels=True)
+    async def ticket_rename_cmd(self, ctx: CustomContext, *, new_name: str) -> None:
+        """Command to rename current ticket channel."""
+        ticket = await self.bot.ticket_mgr.get_ticket(ctx.channel.id)
+        if not ticket or not isinstance(ctx.channel, discord.TextChannel):
+            return await ctx.send_error("This channel is not an active ticket channel.")
+        clean = new_name.lower().replace(" ", "-")[:100]
+        await ctx.channel.edit(name=clean, reason=f"Ticket renamed by {ctx.author}")
+        await ctx.send_success(f"Renamed ticket channel to `#{clean}`.")
+
+    @ticket_group.command(name="priority", description="Set ticket priority: Low, Normal, High, Urgent.")
+    @commands.has_permissions(manage_messages=True)
+    async def ticket_priority_cmd(self, ctx: CustomContext, level: str) -> None:
+        """Command to set ticket priority."""
+        ticket = await self.bot.ticket_mgr.get_ticket(ctx.channel.id)
+        if not ticket:
+            return await ctx.send_error("This channel is not an active ticket channel.")
+        clean = level.title()
+        if clean not in ("Low", "Normal", "High", "Urgent"):
+            return await ctx.send_error("Invalid priority. Choose: `Low`, `Normal`, `High`, or `Urgent`.")
+        await self.bot.db.execute("UPDATE active_tickets SET priority = $2 WHERE channel_id = $1;", ctx.channel.id, clean)
+        ticket["priority"] = clean
+        await ctx.send_success(f"Ticket priority set to **{clean}**.")
+
+    @ticket_group.command(name="note", description="Add an internal staff note to this ticket.")
+    @commands.has_permissions(manage_messages=True)
+    async def ticket_note_cmd(self, ctx: CustomContext, *, note: str) -> None:
+        """Command to record internal staff note."""
+        ticket = await self.bot.ticket_mgr.get_ticket(ctx.channel.id)
+        if not ticket:
+            return await ctx.send_error("This channel is not an active ticket channel.")
+        await self.bot.db.execute(
+            "INSERT INTO ticket_internal_notes (channel_id, author_id, note_text) VALUES ($1, $2, $3);",
+            ctx.channel.id,
+            ctx.author.id,
+            note,
+        )
+        await ctx.send_success("Internal staff note recorded.", title="Staff Note Added")
+
+    @ticket_group.command(name="stats", description="View server ticket statistics and resolution metrics.")
+    @commands.has_guild_permissions(manage_guild=True)
+    async def ticket_stats_cmd(self, ctx: CustomContext) -> None:
+        """Show ticket metrics and analytics."""
+        open_row = await self.bot.db.fetch_one(
+            "SELECT COUNT(*) as cnt FROM active_tickets WHERE guild_id = $1 AND status = 'open';",
+            ctx.guild.id,
+        )
+        closed_row = await self.bot.db.fetch_one(
+            "SELECT COUNT(*) as cnt FROM active_tickets WHERE guild_id = $1 AND status = 'closed';",
+            ctx.guild.id,
+        )
+        unclaimed_row = await self.bot.db.fetch_one(
+            "SELECT COUNT(*) as cnt FROM active_tickets WHERE guild_id = $1 AND status = 'open' AND claimed_by IS NULL;",
+            ctx.guild.id,
+        )
+        open_cnt = int(open_row["cnt"]) if open_row else 0
+        closed_cnt = int(closed_row["cnt"]) if closed_row else 0
+        unclaimed_cnt = int(unclaimed_row["cnt"]) if unclaimed_row else 0
+        tot = open_cnt + closed_cnt
+
+        c = KyokaContainer()
+        c.add_section(
+            content=(
+                f"📊 **Ticket System Analytics • {ctx.guild.name}**\n"
+                f"> Total Tickets: `{tot}`\n"
+                f"> Currently Open: `{open_cnt}`\n"
+                f"> Unclaimed: `{unclaimed_cnt}`\n"
+                f"> Successfully Closed: `{closed_cnt}`"
+            )
+        )
+        await send_container_response(ctx, c)
+
 
 async def setup(bot: KyokaBot) -> None:
     await bot.add_cog(TicketSystem(bot))

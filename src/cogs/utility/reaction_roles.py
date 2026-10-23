@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import logging
 import re
-from typing import Any
+from typing import Any, Optional
 import discord
 from discord.ext import commands
 
@@ -658,6 +658,61 @@ class ReactionRoles(commands.Cog, name="Reaction Roles"):
 
         msg = await channel.send(embed=embed, view=view)
         await ctx.send(f"✅ Interactive Button Role panel published in {channel.mention}! [Jump to Panel]({msg.jump_url})")
+
+    @reactionrole.command(name="setup", help="Interactive guided wizard to create a reaction/button role panel.")
+    @commands.guild_only()
+    @commands.has_guild_permissions(manage_roles=True)
+    async def rr_setup(
+        self,
+        ctx: CustomContext,
+        channel: Optional[discord.TextChannel] = None,
+        role: Optional[discord.Role] = None,
+        label: str = "Claim Role",
+    ) -> None:
+        """Guided beginner-friendly reaction role setup."""
+        target_ch = channel or ctx.channel
+        me = ctx.guild.me
+
+        if not me.guild_permissions.manage_roles:
+            return await ctx.send("❌ KYOKA requires the **Manage Roles** permission.")
+
+        if role:
+            if role >= me.top_role:
+                return await ctx.send(f"❌ Move KYOKA's highest role above {role.mention} in Server Settings -> Roles.")
+
+            # Create quick single-button or multi-button panel
+            view = PersistentRoleView()
+            view.add_item(PersistentRoleButton(role_id=role.id, label=label, mode="normal"))
+
+            embed = discord.Embed(
+                title=f"🎭 Role Assignment • {ctx.guild.name}",
+                description=f"Click the button below to claim or remove {role.mention}!",
+                color=PURPLE,
+            )
+            embed.set_footer(text="Click to toggle your role")
+
+            msg = await target_ch.send(embed=embed, view=view)
+            return await ctx.send(f"✅ Reaction role panel created in {target_ch.mention}! [Jump to Panel]({msg.jump_url})")
+
+        # Display the guided walkthrough
+        embed = discord.Embed(
+            title="🛠️ Reaction Roles Setup Guide",
+            description=(
+                f"**Step-by-Step Guided Setup:**\n\n"
+                f"**1. Quick Button Role:**\n"
+                f"`{ctx.prefix}rr setup <#channel> <@role> \"[Button Label]\"`\n"
+                f"*Example:* `{ctx.prefix}rr setup #roles @Updates \"Get Updates\"`\n\n"
+                f"**2. Multi-Button Panel:**\n"
+                f"`{ctx.prefix}rr button <#channel> \"<Panel Title>\" Label1=@Role1 Label2=@Role2`\n"
+                f"*Example:* `{ctx.prefix}rr button #roles \"Pick Games\" Minecraft=@Minecraft Valorant=@Valorant`\n\n"
+                f"**3. Standard Emoji Panel:**\n"
+                f"`{ctx.prefix}rr create <#channel> \"<Panel Title>\" 🎮=@Gamers 💻=@Devs`\n\n"
+                f"**4. View Active Panels:**\n"
+                f"`{ctx.prefix}rr list`"
+            ),
+            color=PURPLE,
+        )
+        await ctx.send(embed=embed)
 
 
 async def setup(bot: KyokaBot) -> None:

@@ -53,15 +53,27 @@ class Help(commands.Cog):
                 continue
 
             category_name = getattr(cog, "category", cog_name)
-            if category_name.lower() == "owner":
-                continue
-            # Remove Developer module completely - owner only, never displayed in public help
-            if category_name.lower() == "developer":
-                continue
+            if category_name.lower() in ("owner", "developer"):
+                if ctx is None or not is_primary_owner(getattr(ctx.author, "id", None)):
+                    continue
+                category_name = "Owner and Developer"
 
-            # Display-only rename: Security -> Antinuke (help embed only, cogs untouched)
-            if category_name.lower() == "security":
-                category_name = "Antinuke"
+            # Normalize category names to standard KYOKA 3.0 directory
+            cat_lower = category_name.lower()
+            if cat_lower in ("security", "antinuke"):
+                category_name = "Anti-Nuke and Security"
+            elif cat_lower in ("ticket", "tickets"):
+                category_name = "Tickets"
+            elif cat_lower in ("verification", "verify"):
+                category_name = "Verification"
+            elif cat_lower in ("giveaway", "giveaways"):
+                category_name = "Giveaways"
+            elif cat_lower in ("reactionroles", "reaction_roles", "reaction roles"):
+                category_name = "Reaction Roles"
+            elif cat_lower in ("ai", "aiinteractions", "fun"):
+                category_name = "AI & Community"
+            elif cat_lower in ("config", "settings"):
+                category_name = "Configuration"
 
             if category_name not in categories:
                 categories[category_name] = []
@@ -79,8 +91,21 @@ class Help(commands.Cog):
                         if c not in categories[category_name]:
                             categories[category_name].append(c)
 
-        # Ensure ordered display in dropdown: Antinuke, Moderation, Welcomer, Join to Create, Ticket, Audit Logs, Music, etc.
-        priority_order = ["Antinuke", "Moderation", "Welcomer", "Join to Create", "Ticket", "Audit Logs", "Music", "Premium"]
+        # Standard priority ordering
+        priority_order = [
+            "General",
+            "Moderation",
+            "Anti-Nuke and Security",
+            "Verification",
+            "Tickets",
+            "Reaction Roles",
+            "Giveaways",
+            "AI & Community",
+            "Configuration",
+            "Music",
+            "Premium",
+            "Owner and Developer",
+        ]
         ordered_categories: dict[str, list[commands.Command]] = {}
         for cat in priority_order:
             if cat in categories and categories[cat]:
@@ -92,38 +117,45 @@ class Help(commands.Cog):
         return ordered_categories
 
     def _get_category_emoji(self, cat_name: str) -> str:
-        """Resolve custom application emoji for category header from assets/emoji and assets/emoji2."""
-        e_reg = self.bot.custom_emojis
+        """Resolve custom application emoji for category header."""
+        e_reg = getattr(self.bot, "custom_emojis", None)
+        if not e_reg:
+            return "•"
         mapping = {
-            "Antinuke": e_reg.get("antinuke_shield", e_reg.get("icon_shield", "")),
-            "Music": e_reg.get("music", e_reg.get("icon_music", e_reg.get("Music_Playing", ""))),
-            "Ticket": e_reg.get("icon_ticket", e_reg.get("ticket_support", e_reg.get("ticket", ""))),
-            "Welcomer": e_reg.get("icons_join", e_reg.get("icon_join", "")),
-            "Moderation": e_reg.get("icon_moderation", e_reg.get("icon_mod", e_reg.get("icons_staff", ""))),
-            "Premium": e_reg.get("verified_premium", e_reg.get("icon_premium", "")),
-            "Audit Logs": e_reg.get("icons_podcast", e_reg.get("icon_logging", "")),
-            "Join to Create": e_reg.get("icons_connect", e_reg.get("icons_channel", e_reg.get("icons_podcast", ""))),
+            "Anti-Nuke and Security": e_reg.get("antinuke_shield", e_reg.get("icon_shield", "🛡️")),
+            "Music": e_reg.get("music", e_reg.get("icon_music", "🎵")),
+            "Tickets": e_reg.get("icon_ticket", e_reg.get("ticket_support", "🎫")),
+            "Verification": e_reg.get("icon_shield", "🛡️"),
+            "Reaction Roles": e_reg.get("icon_roles", "🏷️"),
+            "Giveaways": e_reg.get("discord_giveaway", e_reg.get("giveaway", "🎉")),
+            "AI & Community": e_reg.get("icon_sparkles", "✨"),
+            "Configuration": e_reg.get("icon_settings", "⚙️"),
+            "Moderation": e_reg.get("icon_moderation", e_reg.get("icon_mod", "🔨")),
+            "General": e_reg.get("icon_info", "ℹ️"),
+            "Premium": e_reg.get("verified_premium", e_reg.get("icon_premium", "💎")),
         }
-        return mapping.get(cat_name, e_reg.get("icon_moderation", ""))
+        return mapping.get(cat_name, e_reg.get("icon_moderation", "•"))
 
     def _get_category_select_emoji(self, cat_name: str) -> dict[str, Any] | None:
         """Resolve emoji dict for Select Menu options."""
-        e_reg = self.bot.custom_emojis
+        e_reg = getattr(self.bot, "custom_emojis", None)
+        if not e_reg:
+            return None
         mapping = {
-            "Antinuke": "antinuke_shield",
+            "Anti-Nuke and Security": "antinuke_shield",
             "Music": "music",
-            "Ticket": "icon_ticket",
-            "Welcomer": "icons_join",
+            "Tickets": "icon_ticket",
+            "Verification": "icon_shield",
+            "Reaction Roles": "icon_roles",
+            "Giveaways": "discord_giveaway",
+            "AI & Community": "icon_sparkles",
+            "Configuration": "icon_settings",
             "Moderation": "icon_moderation",
+            "General": "icon_info",
             "Premium": "verified_premium",
-            "Audit Logs": "icons_podcast",
-            "Join to Create": "icons_connect",
         }
         emoji_name = mapping.get(cat_name, "icon_moderation")
-        emoji_data = e_reg.get_select_emoji(emoji_name, fallback_unicode=None)
-        if not emoji_data and cat_name == "Join to Create":
-            emoji_data = e_reg.get_select_emoji("icons_channel", fallback_unicode=None) or e_reg.get_select_emoji("icon_moderation", fallback_unicode=None)
-        return emoji_data
+        return e_reg.get_select_emoji(emoji_name, fallback_unicode=None)
 
     def _build_home_container(
         self,
