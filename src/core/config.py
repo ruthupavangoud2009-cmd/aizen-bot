@@ -80,6 +80,9 @@ class Config:
     # PostgreSQL / Supabase Database Settings
     DATABASE_URL: str = os.getenv("DATABASE_URL", "").strip()
 
+    # Proxy Configuration (for Cloudflare / 429 bypass)
+    DISCORD_PROXY: str | None = os.getenv("DISCORD_PROXY", "").strip() or None
+
     # Lavalink / Audio Settings
     LAVALINK_URI: str = os.getenv("LAVALINK_URI", "http://lava2.kasawa.pro:2334").strip()
     LAVALINK_PASSWORD: str = os.getenv("LAVALINK_PASSWORD", "youshallnotpass").strip()

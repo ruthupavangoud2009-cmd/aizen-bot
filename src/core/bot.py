@@ -81,7 +81,13 @@ class KyokaBot(commands.Bot):
         intents.members = True
         intents.presences = True
 
-        proxy_url = os.getenv("DISCORD_PROXY", "").strip() or None
+        proxy_url = Config.DISCORD_PROXY or os.getenv("DISCORD_PROXY", "").strip() or None
+        if proxy_url:
+            # Mask credentials if present for security in logs
+            import urllib.parse
+            parsed_proxy = urllib.parse.urlparse(proxy_url)
+            masked_host = f"{parsed_proxy.scheme}://{parsed_proxy.hostname}:{parsed_proxy.port}" if parsed_proxy.hostname else "configured proxy"
+            logger.info(f"Outbound proxy configured: {masked_host}")
 
         super().__init__(
             command_prefix=get_prefix,

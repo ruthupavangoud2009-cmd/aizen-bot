@@ -5,13 +5,15 @@ services:
     buildCommand: chmod +x build.sh && ./build.sh
     startCommand: python src/main.py
     plan: free
-    region: singapore
+    region: frankfurt
     envVars:
       - key: PYTHON_VERSION
         value: 3.11.9
       - key: DISCORD_TOKEN
         sync: false
       - key: DATABASE_URL
+        sync: false
+      - key: DISCORD_PROXY
         sync: false
       - key: ENVIRONMENT
         value: production
