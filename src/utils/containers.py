@@ -343,56 +343,97 @@ async def send_container_response(
         if ephemeral:
             payload["flags"] |= 64  # EPHEMERAL
 
-        if interaction.response.is_done():
-            if file_list:
-                form = _prepare_multipart_form(payload, file_list)
-                msg_data = await bot.http.request(
-                    discord.http.Route(
-                        "POST",
-                        f"/webhooks/{app_id}/{interaction.token}",
-                    ),
-                    form=form,
-                    files=file_list,
+        primary = container if isinstance(container, KyokaContainer) else container[0]
+        try:
+            if interaction.response.is_done():
+                if file_list:
+                    form = _prepare_multipart_form(payload, file_list)
+                    msg_data = await bot.http.request(
+                        discord.http.Route(
+                            "POST",
+                            f"/webhooks/{app_id}/{interaction.token}",
+                        ),
+                        form=form,
+                        files=file_list,
+                    )
+                else:
+                    msg_data = await bot.http.request(
+                        discord.http.Route(
+                            "POST",
+                            f"/webhooks/{app_id}/{interaction.token}",
+                        ),
+                        json=payload,
+                    )
+                if view and hasattr(bot, "_connection"):
+                    msg_id = int(msg_data["id"]) if isinstance(msg_data, dict) and "id" in msg_data else None
+                    state = getattr(bot, "_connection", None) or getattr(bot, "_state", None) or bot
+                    if hasattr(state, "store_view"):
+                        state.store_view(view, msg_id)
+                return msg_data
+            else:
+                # Send initial response via raw interaction callback
+                if file_list:
+                    form = _prepare_multipart_form(payload, file_list, wrapper={"type": 4, "data": payload})
+                    res = await bot.http.request(
+                        discord.http.Route(
+                            "POST",
+                            f"/interactions/{interaction.id}/{interaction.token}/callback",
+                        ),
+                        form=form,
+                        files=file_list,
+                    )
+                else:
+                    res = await bot.http.request(
+                        discord.http.Route(
+                            "POST",
+                            f"/interactions/{interaction.id}/{interaction.token}/callback",
+                        ),
+                        json={"type": 4, "data": payload},
+                    )
+                if view:
+                    state = getattr(bot, "_connection", None) or getattr(bot, "_state", None) or bot
+                    if hasattr(state, "store_view"):
+                        state.store_view(view)
+                return res
+        except discord.HTTPException as e:
+            logger.warning(f"Raw Components V2 interaction dispatch failed ({e}), attempting standard fallback...")
+            fallback_view = view
+            if fallback_view is None:
+                link_view = discord.ui.View(timeout=None)
+                has_links = False
+                c_list = container if isinstance(container, list) else [container]
+                for c in c_list:
+                    for comp in getattr(c, "components", []):
+                        if comp.get("type") == 1:
+                            for item in comp.get("components", []):
+                                if item.get("type") == 2 and item.get("style") == 5:
+                                    lbl = item.get("label", "Link")
+                                    u = item.get("url", "https://discord.com")
+                                    if u and u.startswith("http"):
+                                        link_view.add_item(discord.ui.Button(label=lbl, url=u, style=discord.ButtonStyle.link))
+                                        has_links = True
+                if has_links:
+                    fallback_view = link_view
+
+            embed = primary.to_embed(content=content)
+            if interaction.response.is_done():
+                return await interaction.followup.send(
+                    content=content,
+                    embed=embed,
+                    view=fallback_view,
+                    ephemeral=ephemeral,
+                    files=file_list or None,
+                    allowed_mentions=allowed_mentions or discord.AllowedMentions(users=True),
                 )
             else:
-                msg_data = await bot.http.request(
-                    discord.http.Route(
-                        "POST",
-                        f"/webhooks/{app_id}/{interaction.token}",
-                    ),
-                    json=payload,
+                return await interaction.response.send_message(
+                    content=content,
+                    embed=embed,
+                    view=fallback_view,
+                    ephemeral=ephemeral,
+                    files=file_list or None,
+                    allowed_mentions=allowed_mentions or discord.AllowedMentions(users=True),
                 )
-            if view and hasattr(bot, "_connection"):
-                msg_id = int(msg_data["id"]) if isinstance(msg_data, dict) and "id" in msg_data else None
-                state = getattr(bot, "_connection", None) or getattr(bot, "_state", None) or bot
-                if hasattr(state, "store_view"):
-                    state.store_view(view, msg_id)
-            return msg_data
-        else:
-            # Send initial response via raw interaction callback
-            if file_list:
-                form = _prepare_multipart_form(payload, file_list, wrapper={"type": 4, "data": payload})
-                res = await bot.http.request(
-                    discord.http.Route(
-                        "POST",
-                        f"/interactions/{interaction.id}/{interaction.token}/callback",
-                    ),
-                    form=form,
-                    files=file_list,
-                )
-            else:
-                res = await bot.http.request(
-                    discord.http.Route(
-                        "POST",
-                        f"/interactions/{interaction.id}/{interaction.token}/callback",
-                    ),
-                    json={"type": 4, "data": payload},
-                )
-            if view:
-                state = getattr(bot, "_connection", None) or getattr(bot, "_state", None) or bot
-                if hasattr(state, "store_view"):
-                    state.store_view(view)
-            return res
     else:
         obj = target
 
@@ -545,8 +586,14 @@ async def edit_container_response(
                         state.store_view(view, msg.id)
                 return
             except Exception as e:
-                logger.error(f"Direct channel PATCH edit failed: {e}")
-                raise
+                logger.warning(f"Direct channel PATCH edit failed: {e}. Attempting standard message edit fallback...")
+                primary = container if isinstance(container, KyokaContainer) else container[0]
+                try:
+                    await msg.edit(content=content, embed=primary.to_embed(content=content), view=view)
+                    return
+                except Exception as fallback_e:
+                    logger.error(f"Fallback message edit failed: {fallback_e}")
+                    raise
         return
 
     interaction = interaction_or_msg
@@ -611,9 +658,30 @@ async def edit_container_response(
                 bot._connection.store_view(view, msg_id)
             return
     except Exception as e:
-        logger.warning(f"Interaction callback edit failed ({e}). Attempting channel PATCH fallback.")
+        logger.warning(f"Interaction callback edit failed ({e}). Attempting standard edit fallback...")
 
-    # fallback to direct channel message edit if interaction expired
+    # Standard discord.py interaction edit fallback
+    primary = container if isinstance(container, KyokaContainer) else container[0]
+    embed = primary.to_embed(content=content)
+    if not interaction.response.is_done():
+        try:
+            await interaction.response.edit_message(content=content, embed=embed, view=view)
+            return
+        except Exception as e_resp:
+            logger.debug(f"interaction.response.edit_message fallback failed: {e_resp}")
+    try:
+        await interaction.edit_original_response(content=content, embed=embed, view=view)
+        return
+    except Exception as e_orig:
+        logger.debug(f"interaction.edit_original_response fallback failed: {e_orig}")
+    if interaction.message:
+        try:
+            await interaction.message.edit(content=content, embed=embed, view=view)
+            return
+        except Exception as e_msg:
+            logger.debug(f"interaction.message.edit fallback failed: {e_msg}")
+
+    # Final fallback to direct channel message edit
     try:
         if interaction.message and interaction.channel_id:
             if file_list:

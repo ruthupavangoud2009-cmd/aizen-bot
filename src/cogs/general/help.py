@@ -1,12 +1,15 @@
 """
 Kyoka Discord Bot - Enterprise SaaS Help & Module Console
-Dynamic permission-aware help menu powered by Discord Components V2 Container Cards.
-Organized into 14 clean, intuitive command categories with interactive dropdown and button navigation.
+Dynamic permission-aware help menu powered by native discord.py UI Views with Category Select
+and Navigation Buttons (Prev/Home/Next/Close) plus Link actions.
+Organized into 14 clean, intuitive command categories with dark purple Aizen styling.
 """
 
 from __future__ import annotations
 
 import asyncio
+import logging
+import math
 from typing import TYPE_CHECKING, Any, Optional
 import discord
 from discord.ext import commands
@@ -19,6 +22,266 @@ from src.security.adult_guard import is_adult_authorized
 
 if TYPE_CHECKING:
     from src.core.bot import KyokaBot
+
+logger = logging.getLogger("Kyoka.Help")
+
+UNICODE_CATEGORY_EMOJIS: dict[str, str] = {
+    "home": "🏠",
+    "🏠・GETTING STARTED": "🏠",
+    "🤖・ARTIFICIAL INTELLIGENCE": "🤖",
+    "⛩️・AIZEN AI SYSTEM": "⛩️",
+    "🛡️・MODERATION": "🛡️",
+    "👋・WELCOME & AUTOMOD": "👋",
+    "🎫・TICKETS & SUPPORT": "🎫",
+    "🎉・GIVEAWAYS & EVENTS": "🎉",
+    "⭐・LEVELS & COMMUNITY": "⭐",
+    "🖼️・IMAGES & AVATARS": "🖼️",
+    "🎵・MUSIC": "🎵",
+    "💬・SOCIAL & FUN": "💬",
+    "💎・PREMIUM": "💎",
+    "⚙️・SERVER ADMINISTRATION": "⚙️",
+    "🔧・UTILITIES": "🔧",
+    "👑・OWNER & DEVELOPER": "👑",
+}
+
+CATEGORY_DESCRIPTIONS: dict[str, str] = {
+    "🏠・GETTING STARTED": "Onboarding wizards, initial setup, bot ping & system stats",
+    "🤖・ARTIFICIAL INTELLIGENCE": "Aizen Gemini AI engine, 10 personalities & auto channels",
+    "🛡️・MODERATION": "Punishments, audit logs, purges, timeouts & channel locks",
+    "👋・WELCOME & AUTOMOD": "Greeting cards, farewell messages, autoroles & anti-spam",
+    "🎫・TICKETS & SUPPORT": "Support panels, ticket management & automated transcripts",
+    "🎉・GIVEAWAYS & EVENTS": "Giveaway creation, requirement validation & winner rerolls",
+    "⭐・LEVELS & COMMUNITY": "XP system, rank cards, leaderboards & member suggestions",
+    "🖼️・IMAGES & AVATARS": "Anime reaction GIFs, avatar grabbers, banners & memes",
+    "🎵・MUSIC": "High-fidelity audio playback, queues, volume & filters",
+    "💬・SOCIAL & FUN": "Mini-games, truth-or-dare, relationship stats & trivia",
+    "💎・PREMIUM": "Kyoka Prime licenses, high-resolution AI & premium perks",
+    "⚙️・SERVER ADMINISTRATION": "Prefix management, logging setups & custom permissions",
+    "🔧・UTILITIES": "Calculators, reminders, timestamps & info lookups",
+    "👑・OWNER & DEVELOPER": "Core bot diagnostics, database status & maintenance tools",
+}
+
+
+class HelpCategorySelect(discord.ui.Select):
+    """Interactive category select menu for switching between command categories."""
+
+    def __init__(
+        self,
+        help_view: HelpView,
+        visible_categories: dict[str, list[commands.Command]],
+        current_selection: str = "home",
+    ) -> None:
+        self.help_view = help_view
+
+        options: list[discord.SelectOption] = [
+            discord.SelectOption(
+                label="Home Overview",
+                value="home",
+                description="Kyoka overview, quickstart & navigation guide",
+                emoji="🏠",
+                default=(current_selection == "home"),
+            )
+        ]
+
+        for cat_name, cmds in visible_categories.items():
+            clean_label = cat_name.split("・", 1)[1] if "・" in cat_name else cat_name
+            opt_label = f"{clean_label} ({len(cmds)})"[:100]
+            desc = CATEGORY_DESCRIPTIONS.get(cat_name, f"{len(cmds)} accessible commands")[:100]
+            emoji_str = UNICODE_CATEGORY_EMOJIS.get(cat_name, "📁")
+
+            options.append(
+                discord.SelectOption(
+                    label=opt_label,
+                    value=cat_name.lower(),
+                    description=desc,
+                    emoji=emoji_str,
+                    default=(current_selection.lower() == cat_name.lower()),
+                )
+            )
+
+        super().__init__(
+            placeholder="Select a category to view commands...",
+            min_values=1,
+            max_values=1,
+            options=options[:25],
+            row=0,
+        )
+
+    async def callback(self, interaction: discord.Interaction) -> None:
+        selected = self.values[0]
+        await self.help_view.switch_category(interaction, selected)
+
+
+class HelpView(discord.ui.View):
+    """Enterprise UI View providing category selection, pagination, and quick links."""
+
+    def __init__(
+        self,
+        cog: Help,
+        ctx: CustomContext,
+        visible_categories: dict[str, list[commands.Command]],
+        current_category: str = "home",
+        timeout: float = 180.0,
+    ) -> None:
+        super().__init__(timeout=timeout)
+        self.cog = cog
+        self.ctx = ctx
+        self.author_id = ctx.author.id
+        self.visible_categories = visible_categories
+        self.category_keys = list(visible_categories.keys())
+        self.current_category = current_category
+        self.message: discord.Message | None = None
+
+        self._build_components()
+
+    def _build_components(self) -> None:
+        """Construct the view buttons and select menu."""
+        self.clear_items()
+
+        # Row 0: Dropdown
+        self.add_item(
+            HelpCategorySelect(
+                self,
+                self.visible_categories,
+                current_selection=self.current_category,
+            )
+        )
+
+        # Row 1: Back, Home, Next, Close
+        btn_back = discord.ui.Button(
+            label="Back",
+            emoji="◀️",
+            style=discord.ButtonStyle.secondary,
+            row=1,
+        )
+        btn_back.callback = self.btn_back_callback
+        self.add_item(btn_back)
+
+        btn_home = discord.ui.Button(
+            label="Home",
+            emoji="🏠",
+            style=discord.ButtonStyle.primary,
+            row=1,
+        )
+        btn_home.callback = self.btn_home_callback
+        self.add_item(btn_home)
+
+        btn_next = discord.ui.Button(
+            label="Next",
+            emoji="▶️",
+            style=discord.ButtonStyle.secondary,
+            row=1,
+        )
+        btn_next.callback = self.btn_next_callback
+        self.add_item(btn_next)
+
+        btn_close = discord.ui.Button(
+            label="Close",
+            emoji="🗑️",
+            style=discord.ButtonStyle.danger,
+            row=1,
+        )
+        btn_close.callback = self.btn_close_callback
+        self.add_item(btn_close)
+
+        # Row 2: Link Buttons
+        if Config.INVITE_URL:
+            self.add_item(
+                discord.ui.Button(
+                    label="Invite",
+                    url=Config.INVITE_URL,
+                    style=discord.ButtonStyle.link,
+                    row=2,
+                )
+            )
+        if Config.SUPPORT_URL:
+            self.add_item(
+                discord.ui.Button(
+                    label="Support",
+                    url=Config.SUPPORT_URL,
+                    style=discord.ButtonStyle.link,
+                    row=2,
+                )
+            )
+
+    async def interaction_check(self, interaction: discord.Interaction) -> bool:
+        """Ensure only the command requester can control this session."""
+        if interaction.user.id != self.author_id:
+            await interaction.response.send_message(
+                "❌ Only the user who requested this help menu can interact with it. Type `+help` or `/help` to open your own!",
+                ephemeral=True,
+            )
+            return False
+        return True
+
+    async def on_timeout(self) -> None:
+        """Disable interactive buttons and dropdown on session expiration."""
+        for item in self.children:
+            if isinstance(item, (discord.ui.Button, discord.ui.Select)) and getattr(item, "style", None) != discord.ButtonStyle.link:
+                item.disabled = True
+        try:
+            if self.message:
+                await self.message.edit(view=self)
+            elif self.ctx and getattr(self.ctx, "interaction", None):
+                await self.ctx.interaction.edit_original_response(view=self)
+        except Exception:
+            pass
+
+    async def switch_category(self, interaction: discord.Interaction, selected_val: str) -> None:
+        """Switch current view page and refresh UI components."""
+        self.current_category = selected_val
+        self._build_components()
+        embed = self.cog.build_embed_for_selection(self.ctx, self.visible_categories, selected_val)
+        await interaction.response.edit_message(embed=embed, view=self)
+
+    async def btn_back_callback(self, interaction: discord.Interaction) -> None:
+        """Navigate to the previous category."""
+        if not self.category_keys:
+            await self.switch_category(interaction, "home")
+            return
+        if self.current_category == "home":
+            new_cat = self.category_keys[-1]
+        else:
+            curr_match = next((c for c in self.category_keys if c.lower() == self.current_category.lower()), None)
+            if curr_match and curr_match in self.category_keys:
+                idx = self.category_keys.index(curr_match)
+                new_cat = self.category_keys[(idx - 1) % len(self.category_keys)]
+            else:
+                new_cat = self.category_keys[0]
+        await self.switch_category(interaction, new_cat)
+
+    async def btn_home_callback(self, interaction: discord.Interaction) -> None:
+        """Navigate directly to the Home Overview."""
+        await self.switch_category(interaction, "home")
+
+    async def btn_next_callback(self, interaction: discord.Interaction) -> None:
+        """Navigate to the next category."""
+        if not self.category_keys:
+            await self.switch_category(interaction, "home")
+            return
+        if self.current_category == "home":
+            new_cat = self.category_keys[0]
+        else:
+            curr_match = next((c for c in self.category_keys if c.lower() == self.current_category.lower()), None)
+            if curr_match and curr_match in self.category_keys:
+                idx = self.category_keys.index(curr_match)
+                new_cat = self.category_keys[(idx + 1) % len(self.category_keys)]
+            else:
+                new_cat = self.category_keys[0]
+        await self.switch_category(interaction, new_cat)
+
+    async def btn_close_callback(self, interaction: discord.Interaction) -> None:
+        """Close the help session gracefully."""
+        self.stop()
+        embed = discord.Embed(
+            title="🔒 Help Session Closed",
+            description="> This help menu has been closed.\n> Type `+help` or `/help` whenever you need guidance.",
+            color=0x2B0938,
+        )
+        for item in self.children:
+            if getattr(item, "style", None) != discord.ButtonStyle.link:
+                item.disabled = True
+        await interaction.response.edit_message(embed=embed, view=self)
 
 
 class Help(commands.Cog):
@@ -42,8 +305,59 @@ class Help(commands.Cog):
         "👑・OWNER & DEVELOPER",
     ]
 
+    CATEGORY_ALIASES = {
+        "start": "🏠・GETTING STARTED",
+        "getting started": "🏠・GETTING STARTED",
+        "onboarding": "🏠・GETTING STARTED",
+        "ai": "🤖・ARTIFICIAL INTELLIGENCE",
+        "artificial intelligence": "🤖・ARTIFICIAL INTELLIGENCE",
+        "aizen": "🤖・ARTIFICIAL INTELLIGENCE",
+        "mod": "🛡️・MODERATION",
+        "moderation": "🛡️・MODERATION",
+        "welcome": "👋・WELCOME & AUTOMOD",
+        "automod": "👋・WELCOME & AUTOMOD",
+        "ticket": "🎫・TICKETS & SUPPORT",
+        "tickets": "🎫・TICKETS & SUPPORT",
+        "support": "🎫・TICKETS & SUPPORT",
+        "giveaway": "🎉・GIVEAWAYS & EVENTS",
+        "giveaways": "🎉・GIVEAWAYS & EVENTS",
+        "events": "🎉・GIVEAWAYS & EVENTS",
+        "levels": "⭐・LEVELS & COMMUNITY",
+        "community": "⭐・LEVELS & COMMUNITY",
+        "xp": "⭐・LEVELS & COMMUNITY",
+        "images": "🖼️・IMAGES & AVATARS",
+        "image": "🖼️・IMAGES & AVATARS",
+        "gifs": "🖼️・IMAGES & AVATARS",
+        "gif": "🖼️・IMAGES & AVATARS",
+        "avatars": "🖼️・IMAGES & AVATARS",
+        "music": "🎵・MUSIC",
+        "audio": "🎵・MUSIC",
+        "social": "💬・SOCIAL & FUN",
+        "fun": "💬・SOCIAL & FUN",
+        "games": "💬・SOCIAL & FUN",
+        "premium": "💎・PREMIUM",
+        "prime": "💎・PREMIUM",
+        "admin": "⚙️・SERVER ADMINISTRATION",
+        "administration": "⚙️・SERVER ADMINISTRATION",
+        "utility": "🔧・UTILITIES",
+        "utilities": "🔧・UTILITIES",
+        "owner": "👑・OWNER & DEVELOPER",
+        "developer": "👑・OWNER & DEVELOPER",
+        "dev": "👑・OWNER & DEVELOPER",
+    }
+
     def __init__(self, bot: KyokaBot) -> None:
         self.bot = bot
+
+    def _get_latency_ms(self) -> int:
+        """Safely compute websocket ping in milliseconds, handling NaN, inf, or None."""
+        try:
+            lat = getattr(self.bot, "latency", None)
+            if lat is not None and not math.isnan(lat) and not math.isinf(lat):
+                return max(0, round(lat * 1000))
+        except Exception:
+            pass
+        return 0
 
     def _resolve_category(self, cmd: commands.Command) -> str:
         """Resolve a command into one of the 14 clean help categories."""
@@ -265,10 +579,10 @@ class Help(commands.Cog):
         return ordered_categories
 
     def _get_category_emoji(self, cat_name: str) -> str:
-        """Resolve custom application emoji for category header."""
+        """Resolve custom application emoji or unicode fallback for category header."""
         e_reg = getattr(self.bot, "custom_emojis", None)
         if not e_reg:
-            return "•"
+            return UNICODE_CATEGORY_EMOJIS.get(cat_name, "•")
         mapping = {
             "🏠・GETTING STARTED": e_reg.get("icon_home", "🏠"),
             "🤖・ARTIFICIAL INTELLIGENCE": e_reg.get("icon_sparkles", "🤖"),
@@ -286,7 +600,7 @@ class Help(commands.Cog):
             "🔧・UTILITIES": e_reg.get("icon_wrench", "🔧"),
             "👑・OWNER & DEVELOPER": e_reg.get("icon_crown", "👑"),
         }
-        return mapping.get(cat_name, e_reg.get("icon_moderation", "•"))
+        return mapping.get(cat_name, UNICODE_CATEGORY_EMOJIS.get(cat_name, "•"))
 
     def _get_category_select_emoji(self, cat_name: str) -> dict[str, Any] | None:
         """Resolve emoji dict for Select Menu options."""
@@ -320,15 +634,15 @@ class Help(commands.Cog):
         custom_id_prefix: str,
         selected_val: str = "home",
     ) -> KyokaContainer:
-        """Construct the Signature Kyoka Overview Card."""
+        """Construct the Signature Kyoka Overview Container Card."""
         guild = ctx.guild
         author = ctx.author
         current_prefix = self.bot.guild_mgr.get_prefix(guild.id if guild else None)
-        ws_ping = round(self.bot.latency * 1000) if self.bot.latency else 0
+        ws_ping = self._get_latency_ms()
         total_commands = sum(len(cmds) for cmds in visible_categories.values())
-        e_reg = self.bot.custom_emojis
+        e_reg = getattr(self.bot, "custom_emojis", None)
 
-        dot = e_reg.get("heart_dot", e_reg.get("icons_rightarrow", "•"))
+        dot = e_reg.get("heart_dot", e_reg.get("icons_rightarrow", "•")) if e_reg else "•"
 
         container = KyokaContainer(accent_color=None)
         container.add_section(
@@ -343,78 +657,10 @@ class Help(commands.Cog):
             f"{dot} **Latency:** `{ws_ping}ms`\n"
             f"{dot} **Prefix:** `{current_prefix}` | **Slash:** `/`\n"
             f"{dot} **Categories:** `{len(visible_categories)}` | **Available Commands:** `{total_commands}`\n"
-            f"{dot} **Quick Start:** Type `{current_prefix}start` or `{current_prefix}setup` to configure your server in minutes!"
+            f"{dot} **Quick Start:** Type `{current_prefix}quickstart` or `{current_prefix}setup` to configure your server in minutes!"
         )
         container.add_separator(divider=True)
-
-        # Dropdown Options
-        home_emoji_data = e_reg.get_select_emoji("icon_home", fallback_unicode=None)
-        home_opt: dict[str, Any] = {
-            "label": "Home",
-            "value": "home",
-            "default": selected_val == "home",
-        }
-        if home_emoji_data:
-            home_opt["emoji"] = home_emoji_data
-
-        options = [home_opt]
-
-        for cat_name, cmds in visible_categories.items():
-            cat_opt: dict[str, Any] = {
-                "label": f"{cat_name} ({len(cmds)})",
-                "value": cat_name.lower(),
-                "default": selected_val == cat_name.lower(),
-            }
-            cat_emoji_data = self._get_category_select_emoji(cat_name)
-            if cat_emoji_data:
-                cat_opt["emoji"] = cat_emoji_data
-            options.append(cat_opt)
-
-        container.add_action_row([
-            {
-                "type": 3,
-                "custom_id": f"{custom_id_prefix}:select_category",
-                "placeholder": "Select a category to view commands...",
-                "options": options[:25],
-            }
-        ])
-
-        container.add_separator(divider=True)
         container.add_text(f"-# **Requested by {author.display_name} • Type {current_prefix}help <command> for details**")
-        container.add_separator(divider=True)
-
-        quick_buttons: list[dict[str, Any]] = [
-            {
-                "type": 2,
-                "style": 1,
-                "label": "Quickstart Guide",
-                "emoji": {"name": "🚀"},
-                "custom_id": f"{custom_id_prefix}:start_guide",
-            },
-            {
-                "type": 2,
-                "style": 4,
-                "label": "Close",
-                "emoji": {"name": "🗑️"},
-                "custom_id": f"{custom_id_prefix}:close_help",
-            },
-        ]
-        if Config.INVITE_URL:
-            quick_buttons.append({
-                "type": 2,
-                "style": 5,
-                "label": "Invite",
-                "url": Config.INVITE_URL,
-            })
-        if Config.SUPPORT_URL:
-            quick_buttons.append({
-                "type": 2,
-                "style": 5,
-                "label": "Support",
-                "url": Config.SUPPORT_URL,
-            })
-        container.add_action_row(quick_buttons)
-
         return container
 
     def _build_category_container(
@@ -425,10 +671,9 @@ class Help(commands.Cog):
         visible_categories: dict[str, list[commands.Command]],
         custom_id_prefix: str,
     ) -> KyokaContainer:
-        """Construct category command card with permission badges and clean layout."""
+        """Construct category command container with permission badges and clean layout."""
         cat_icon = self._get_category_emoji(cat_name)
         cat_icon_prefix = f"{cat_icon} " if cat_icon else ""
-        e_reg = self.bot.custom_emojis
         p = self.bot.guild_mgr.get_prefix(ctx.guild.id if ctx.guild else None)
 
         container = KyokaContainer(accent_color=None)
@@ -497,82 +742,175 @@ class Help(commands.Cog):
             )
             container.add_separator(divider=True)
 
-        # Sort commands alphabetically
         sorted_cmds = sorted(commands_list, key=lambda c: c.qualified_name.lower())
         formatted_cmds = ", ".join([f"`{cmd.qualified_name}`{self._get_badge(cmd)}" for cmd in sorted_cmds])
         container.add_text(f"**Accessible Commands ({len(sorted_cmds)}):**\n" + formatted_cmds)
         container.add_separator(divider=True)
-
-        # Dropdown options
-        home_emoji_data = e_reg.get_select_emoji("icon_home", fallback_unicode=None)
-        home_opt: dict[str, Any] = {
-            "label": "Home",
-            "value": "home",
-            "default": False,
-        }
-        if home_emoji_data:
-            home_opt["emoji"] = home_emoji_data
-
-        options = [home_opt]
-
-        for c_name, cmds in visible_categories.items():
-            cat_opt: dict[str, Any] = {
-                "label": f"{c_name} ({len(cmds)})",
-                "value": c_name.lower(),
-                "default": c_name.lower() == cat_name.lower(),
-            }
-            cat_emoji_data = self._get_category_select_emoji(c_name)
-            if cat_emoji_data:
-                cat_opt["emoji"] = cat_emoji_data
-            options.append(cat_opt)
-
-        container.add_action_row([
-            {
-                "type": 3,
-                "custom_id": f"{custom_id_prefix}:select_category",
-                "placeholder": "Select a category to view commands...",
-                "options": options[:25],
-            }
-        ])
-
-        container.add_separator(divider=True)
         container.add_text(f"-# **Requested by {ctx.author.display_name} • Type {p}help <command> for details**")
-        container.add_separator(divider=True)
-
-        # Navigation row: Prev, Home, Next, Close
-        nav_buttons: list[dict[str, Any]] = [
-            {
-                "type": 2,
-                "style": 2,
-                "label": "Back",
-                "emoji": {"name": "◀️"},
-                "custom_id": f"{custom_id_prefix}:{cat_name}:prev_category",
-            },
-            {
-                "type": 2,
-                "style": 1,
-                "label": "Home",
-                "emoji": {"name": "🏠"},
-                "custom_id": f"{custom_id_prefix}:nav_home",
-            },
-            {
-                "type": 2,
-                "style": 2,
-                "label": "Next",
-                "emoji": {"name": "▶️"},
-                "custom_id": f"{custom_id_prefix}:{cat_name}:next_category",
-            },
-            {
-                "type": 2,
-                "style": 4,
-                "label": "Close",
-                "emoji": {"name": "🗑️"},
-                "custom_id": f"{custom_id_prefix}:close_help",
-            },
-        ]
-        container.add_action_row(nav_buttons)
-
         return container
+
+    def build_home_embed(
+        self,
+        ctx: CustomContext,
+        visible_categories: dict[str, list[commands.Command]],
+    ) -> discord.Embed:
+        """Construct the Signature Kyoka Home Overview Discord Embed."""
+        guild = ctx.guild
+        author = ctx.author
+        p = self.bot.guild_mgr.get_prefix(guild.id if guild else None)
+        ws_ping = self._get_latency_ms()
+        total_commands = sum(len(cmds) for cmds in visible_categories.values())
+
+        embed = discord.Embed(
+            title="⛩️ Kyoka 3.0 — Enterprise All-In-One Discord Bot",
+            description=(
+                "Welcome to **Kyoka 3.0**, high-performance Discord automation powered by "
+                "Google Gemini AI, real-time moderation, community progression, and entertainment.\n\n"
+                "### 🚀 Getting Started & Quick Setup\n"
+                f"• `{p}quickstart` — 5-minute setup checklist for server administrators\n"
+                f"• `{p}setup` — Interactive multi-module server configuration wizard\n"
+                f"• `{p}setup status` — Audit active vs unconfigured features\n"
+                f"• `{p}setprefix <prefix>` — Set custom server command prefix\n\n"
+                "### 🧭 Navigation & Command Types\n"
+                f"• **Prefix Commands:** Use `{p}<command>` (e.g., `{p}ping`, `{p}ai hello`, `{p}help`)\n"
+                f"• **Slash Commands:** Type `/<command>` for Discord autocomplete and modal wizards\n"
+                f"• **Browse Categories:** Select any category from the dropdown below or use **◀️ Back / ▶️ Next**\n"
+                f"• **Command Manual:** Type `{p}help <command>` (e.g., `{p}help ban`, `{p}help ai`) for detailed syntax\n\n"
+                "### 🔒 Permission System\n"
+                "`[Public]` Available to all members • `[Mod]` Requires Kick/Ban/Timeout\n"
+                "`[Admin]` Requires Administrator permission • `[Prime]` Kyoka Premium perks"
+            ),
+            color=0x2B0938,
+        )
+
+        embed.add_field(
+            name="📊 System Status",
+            value=(
+                f"• **Prefix:** `{p}` | **Slash:** `/`\n"
+                f"• **Latency:** `{ws_ping}ms` | **Status:** `Operational`\n"
+                f"• **Commands:** `{total_commands}` accessible across `{len(visible_categories)}` categories"
+            ),
+            inline=True,
+        )
+
+        embed.add_field(
+            name="✨ Key Features",
+            value=(
+                f"• **AI Engine:** `{p}ai`, `{p}aigf`, `{p}aidiag`\n"
+                f"• **Moderation:** `{p}warn`, `{p}kick`, `{p}ban`, `{p}purge`\n"
+                f"• **Utilities:** `{p}calc`, `{p}remind`, `{p}suggest`\n"
+                f"• **Community:** `{p}rank`, `{p}play`, `{p}giveaway`"
+            ),
+            inline=True,
+        )
+
+        embed.set_footer(
+            text=f"Requested by {author.display_name} • Type {p}help <command> for syntax & examples",
+            icon_url=author.display_avatar.url if author.display_avatar else None,
+        )
+        return embed
+
+    def build_category_embed(
+        self,
+        ctx: CustomContext,
+        cat_name: str,
+        commands_list: list[commands.Command],
+        visible_categories: dict[str, list[commands.Command]],
+    ) -> discord.Embed:
+        """Construct a formatted Discord Embed for a specific command category."""
+        cat_keys = list(visible_categories.keys())
+        page_idx = (cat_keys.index(cat_name) + 1) if cat_name in cat_keys else 1
+        total_pages = len(cat_keys)
+        p = self.bot.guild_mgr.get_prefix(ctx.guild.id if ctx.guild else None)
+
+        container = self._build_category_container(
+            ctx=ctx,
+            cat_name=cat_name,
+            commands_list=commands_list,
+            visible_categories=visible_categories,
+            custom_id_prefix="help_ui",
+        )
+        embed = container.to_embed()
+        embed.title = f"{self._get_category_emoji(cat_name)} {cat_name}"
+        embed.color = 0x2B0938
+        embed.set_footer(
+            text=f"Category {page_idx}/{total_pages} • Requested by {ctx.author.display_name} • Type {p}help <command> for details",
+            icon_url=ctx.author.display_avatar.url if ctx.author.display_avatar else None,
+        )
+        return embed
+
+    def build_command_embed(self, ctx: CustomContext, cmd: commands.Command) -> discord.Embed:
+        """Construct detailed single-command manual embed."""
+        guild = ctx.guild
+        p = self.bot.guild_mgr.get_prefix(guild.id if guild else None)
+        cat = self._resolve_category(cmd)
+        cat_icon = self._get_category_emoji(cat)
+        desc = cmd.description or cmd.help or "No detailed description provided."
+        aliases = ", ".join([f"`{a}`" for a in cmd.aliases]) if cmd.aliases else "`None`"
+        sig = f" {cmd.signature}" if cmd.signature else ""
+        usage = f"`{p}{cmd.qualified_name}{sig}`"
+        example = f"`{p}{cmd.qualified_name}`"
+
+        badge = self._get_badge(cmd)
+        status_str = badge.strip(" `[]") if badge else "Public"
+
+        slash_info = f"`/{cmd.name}`" if getattr(cmd, "app_command", None) else "Prefix command only"
+        if cat == "🤖・ARTIFICIAL INTELLIGENCE":
+            slash_info = f"`/ai` or `{p}{cmd.name}`"
+
+        embed = discord.Embed(
+            title=f"{cat_icon} Command: `{cmd.qualified_name}`",
+            description=f"> {desc}",
+            color=0x2B0938,
+        )
+
+        embed.add_field(
+            name="📌 Usage & Execution",
+            value=(
+                f"• **Syntax:** {usage}\n"
+                f"• **Example:** {example}\n"
+                f"• **Slash Command:** {slash_info}"
+            ),
+            inline=False,
+        )
+
+        embed.add_field(
+            name="⚙️ Metadata & Permissions",
+            value=(
+                f"• **Category:** `{cat}`\n"
+                f"• **Required Access:** `{status_str}`\n"
+                f"• **Aliases:** {aliases}"
+            ),
+            inline=False,
+        )
+
+        if isinstance(cmd, commands.Group) and cmd.commands:
+            subcmds = ", ".join([f"`{sc.name}`" for sc in sorted(cmd.commands, key=lambda s: s.name)])
+            embed.add_field(
+                name="📂 Subcommands",
+                value=subcmds,
+                inline=False,
+            )
+
+        embed.set_footer(
+            text=f"Requested by {ctx.author.display_name} • Kyoka 3.0",
+            icon_url=ctx.author.display_avatar.url if ctx.author.display_avatar else None,
+        )
+        return embed
+
+    def build_embed_for_selection(
+        self,
+        ctx: CustomContext,
+        visible_categories: dict[str, list[commands.Command]],
+        selected_val: str,
+    ) -> discord.Embed:
+        """Route selection value to corresponding category or home embed."""
+        if selected_val == "home":
+            return self.build_home_embed(ctx, visible_categories)
+        matched_cat = next((c for c in visible_categories.keys() if c.lower() == selected_val.lower()), None)
+        if matched_cat:
+            return self.build_category_embed(ctx, matched_cat, visible_categories[matched_cat], visible_categories)
+        return self.build_home_embed(ctx, visible_categories)
 
     @commands.hybrid_command(
         name="help",
@@ -589,194 +927,87 @@ class Help(commands.Cog):
 
             target_cmd = self.bot.get_command(query)
             if target_cmd and self._can_run_command(target_cmd, ctx):
-                current_prefix = self.bot.guild_mgr.get_prefix(ctx.guild.id if ctx.guild else None)
-                cat = self._resolve_category(target_cmd)
-                cat_icon = self._get_category_emoji(cat)
-                desc = target_cmd.description or target_cmd.help or "No detailed description available."
-                aliases = ", ".join([f"`{a}`" for a in target_cmd.aliases]) if target_cmd.aliases else "`None`"
-                sig = f" {target_cmd.signature}" if target_cmd.signature else ""
-                usage = f"`{current_prefix}{target_cmd.qualified_name}{sig}`"
-                example = f"`{current_prefix}{target_cmd.qualified_name}`"
-
-                badge = self._get_badge(target_cmd)
-                status_str = badge.strip(" `[]") if badge else "Public"
-
-                # Check slash command support
-                slash_info = f"`/{target_cmd.name}`" if getattr(target_cmd, "app_command", None) else "Prefix command"
-                if cat == "🤖・ARTIFICIAL INTELLIGENCE":
-                    slash_info = f"`/ai` or `{current_prefix}{target_cmd.name}`"
-
-                e_reg = self.bot.custom_emojis
-                dot = e_reg.get("heart_dot", e_reg.get("icons_rightarrow", "-"))
-
-                container = KyokaContainer(accent_color=None)
-                cat_icon_prefix = f"{cat_icon} " if cat_icon else ""
-                container.add_section(
-                    content=(
-                        f"**{cat_icon_prefix}Command: `{target_cmd.name}`**\n"
-                        f"> {desc}"
-                    )
-                )
-                container.add_separator(divider=True)
-                container.add_text(
-                    f"{dot} **Usage:** {usage}\n"
-                    f"{dot} **Example:** {example} | **Slash:** {slash_info}\n"
-                    f"{dot} **Category:** `{cat}` | **Access:** `{status_str}`\n"
-                    f"{dot} **Aliases:** {aliases}"
-                )
-                container.add_separator(divider=True)
-                container.add_text(f"-# Requested by {ctx.author.display_name}")
-                await send_container_response(ctx, container)
+                embed = self.build_command_embed(ctx, target_cmd)
+                await ctx.send(embed=embed)
                 return
 
             # Direct module / category lookup
-            category_aliases = {
-                "start": "🏠・GETTING STARTED",
-                "getting started": "🏠・GETTING STARTED",
-                "onboarding": "🏠・GETTING STARTED",
-                "ai": "🤖・ARTIFICIAL INTELLIGENCE",
-                "artificial intelligence": "🤖・ARTIFICIAL INTELLIGENCE",
-                "aizen": "🤖・ARTIFICIAL INTELLIGENCE",
-                "mod": "🛡️・MODERATION",
-                "moderation": "🛡️・MODERATION",
-                "welcome": "👋・WELCOME & AUTOMOD",
-                "automod": "👋・WELCOME & AUTOMOD",
-                "ticket": "🎫・TICKETS & SUPPORT",
-                "tickets": "🎫・TICKETS & SUPPORT",
-                "support": "🎫・TICKETS & SUPPORT",
-                "giveaway": "🎉・GIVEAWAYS & EVENTS",
-                "giveaways": "🎉・GIVEAWAYS & EVENTS",
-                "events": "🎉・GIVEAWAYS & EVENTS",
-                "levels": "⭐・LEVELS & COMMUNITY",
-                "community": "⭐・LEVELS & COMMUNITY",
-                "xp": "⭐・LEVELS & COMMUNITY",
-                "images": "🖼️・IMAGES & AVATARS",
-                "image": "🖼️・IMAGES & AVATARS",
-                "gifs": "🖼️・IMAGES & AVATARS",
-                "gif": "🖼️・IMAGES & AVATARS",
-                "avatars": "🖼️・IMAGES & AVATARS",
-                "music": "🎵・MUSIC",
-                "audio": "🎵・MUSIC",
-                "social": "💬・SOCIAL & FUN",
-                "fun": "💬・SOCIAL & FUN",
-                "games": "💬・SOCIAL & FUN",
-                "premium": "💎・PREMIUM",
-                "prime": "💎・PREMIUM",
-                "admin": "⚙️・SERVER ADMINISTRATION",
-                "administration": "⚙️・SERVER ADMINISTRATION",
-                "utility": "🔧・UTILITIES",
-                "utilities": "🔧・UTILITIES",
-                "owner": "👑・OWNER & DEVELOPER",
-                "developer": "👑・OWNER & DEVELOPER",
-                "dev": "👑・OWNER & DEVELOPER",
-            }
-            target_cat_name = category_aliases.get(query)
+            target_cat_name = self.CATEGORY_ALIASES.get(query)
             if not target_cat_name:
-                target_cat_name = next((c for c in visible_categories.keys() if c.lower() == query), None)
+                target_cat_name = next(
+                    (c for c in visible_categories.keys() if c.lower() == query or query in c.lower()),
+                    None,
+                )
 
             if target_cat_name:
                 matched_cat = next((c for c in visible_categories.keys() if c.lower() == target_cat_name.lower()), None)
                 if matched_cat:
-                    custom_id_prefix = f"help_console:{ctx.author.id}:{ctx.guild.id if ctx.guild else 0}:{ctx.message.id if ctx.message else 0}"
-                    container = self._build_category_container(
-                        ctx, matched_cat, visible_categories[matched_cat], visible_categories, custom_id_prefix
+                    view = HelpView(
+                        cog=self,
+                        ctx=ctx,
+                        visible_categories=visible_categories,
+                        current_category=matched_cat,
                     )
-                    await send_container_response(ctx, container)
+                    embed = self.build_category_embed(ctx, matched_cat, visible_categories[matched_cat], visible_categories)
+                    msg = await ctx.send(embed=embed, view=view)
+                    if getattr(ctx, "interaction", None):
+                        try:
+                            view.message = await ctx.interaction.original_response()
+                        except Exception:
+                            pass
+                    else:
+                        view.message = msg
                     return
 
+            # Command or category not found — return clear error and attach HelpView
+            p = self.bot.guild_mgr.get_prefix(ctx.guild.id if ctx.guild else None)
+            embed = discord.Embed(
+                title="❌ Command or Category Not Found",
+                description=(
+                    f"No command or category matching **`{command_or_module}`** was found.\n\n"
+                    f"**Suggestions:**\n"
+                    f"• Browse all categories using the dropdown menu below\n"
+                    f"• Type `{p}help` to view the main console overview\n"
+                    f"• Type `{p}quickstart` for initial server onboarding"
+                ),
+                color=0xED4245,
+            )
+            embed.set_footer(
+                text=f"Requested by {ctx.author.display_name} • Kyoka 3.0",
+                icon_url=ctx.author.display_avatar.url if ctx.author.display_avatar else None,
+            )
+            view = HelpView(
+                cog=self,
+                ctx=ctx,
+                visible_categories=visible_categories,
+                current_category="home",
+            )
+            msg = await ctx.send(embed=embed, view=view)
+            if getattr(ctx, "interaction", None):
+                try:
+                    view.message = await ctx.interaction.original_response()
+                except Exception:
+                    pass
+            else:
+                view.message = msg
+            return
+
         # Main Help Console (Home Overview)
-        custom_id_prefix = f"help_console:{ctx.author.id}:{ctx.guild.id if ctx.guild else 0}:{ctx.message.id if ctx.message else 0}"
-        container = self._build_home_container(ctx, visible_categories, custom_id_prefix)
-        await send_container_response(ctx, container)
-
-        def check(interaction: discord.Interaction) -> bool:
-            if not interaction.data:
-                return False
-            custom_id = interaction.data.get("custom_id", "")
-            return custom_id.startswith(f"{custom_id_prefix}:")
-
-        while True:
+        view = HelpView(
+            cog=self,
+            ctx=ctx,
+            visible_categories=visible_categories,
+            current_category="home",
+        )
+        embed = self.build_home_embed(ctx, visible_categories)
+        msg = await ctx.send(embed=embed, view=view)
+        if getattr(ctx, "interaction", None):
             try:
-                interaction: discord.Interaction = await self.bot.wait_for(
-                    "interaction", check=check, timeout=120.0
-                )
-                if not interaction.data:
-                    continue
-
-                if interaction.user.id != ctx.author.id:
-                    await interaction.response.send_message(
-                        "❌ Only the command author can interact with this menu. Type `+help` to open your own!",
-                        ephemeral=True
-                    )
-                    continue
-
-                custom_id = interaction.data.get("custom_id", "")
-                parts = custom_id.split(":")
-                action = parts[-1]
-
-                # Select Menu Navigation
-                if action == "select_category":
-                    selected = interaction.data.get("values", ["home"])[0]
-                    if selected == "home":
-                        new_container = self._build_home_container(ctx, visible_categories, custom_id_prefix, "home")
-                    else:
-                        matched_cat = next((c for c in visible_categories.keys() if c.lower() == selected), None)
-                        if matched_cat:
-                            new_container = self._build_category_container(
-                                ctx, matched_cat, visible_categories[matched_cat], visible_categories, custom_id_prefix
-                            )
-                        else:
-                            new_container = self._build_home_container(ctx, visible_categories, custom_id_prefix, "home")
-                    await edit_container_response(interaction, new_container)
-
-                elif action == "nav_home":
-                    new_container = self._build_home_container(ctx, visible_categories, custom_id_prefix, "home")
-                    await edit_container_response(interaction, new_container)
-
-                elif action == "start_guide":
-                    guide_cat = "🏠・GETTING STARTED"
-                    if guide_cat in visible_categories:
-                        new_container = self._build_category_container(
-                            ctx, guide_cat, visible_categories[guide_cat], visible_categories, custom_id_prefix
-                        )
-                    else:
-                        new_container = self._build_home_container(ctx, visible_categories, custom_id_prefix, "home")
-                    await edit_container_response(interaction, new_container)
-
-                elif action == "prev_category":
-                    curr_cat = parts[-2] if len(parts) >= 2 else ""
-                    cat_keys = list(visible_categories.keys())
-                    if curr_cat in cat_keys:
-                        curr_idx = cat_keys.index(curr_cat)
-                        new_cat = cat_keys[(curr_idx - 1) % len(cat_keys)]
-                    else:
-                        new_cat = cat_keys[0] if cat_keys else "home"
-                    new_container = self._build_category_container(
-                        ctx, new_cat, visible_categories[new_cat], visible_categories, custom_id_prefix
-                    )
-                    await edit_container_response(interaction, new_container)
-
-                elif action == "next_category":
-                    curr_cat = parts[-2] if len(parts) >= 2 else ""
-                    cat_keys = list(visible_categories.keys())
-                    if curr_cat in cat_keys:
-                        curr_idx = cat_keys.index(curr_cat)
-                        new_cat = cat_keys[(curr_idx + 1) % len(cat_keys)]
-                    else:
-                        new_cat = cat_keys[0] if cat_keys else "home"
-                    new_container = self._build_category_container(
-                        ctx, new_cat, visible_categories[new_cat], visible_categories, custom_id_prefix
-                    )
-                    await edit_container_response(interaction, new_container)
-
-                elif action == "close_help":
-                    close_container = KyokaContainer()
-                    close_container.add_section("🔒 **Help Menu Closed**\n> Use `+help` whenever you need guidance.")
-                    await edit_container_response(interaction, close_container)
-                    break
-
-            except asyncio.TimeoutError:
-                break
+                view.message = await ctx.interaction.original_response()
+            except Exception:
+                pass
+        else:
+            view.message = msg
 
 
 async def setup(bot: KyokaBot) -> None:
