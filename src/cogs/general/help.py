@@ -781,10 +781,29 @@ class Help(commands.Cog):
             container.add_separator(divider=True)
 
         sorted_cmds = sorted(commands_list, key=lambda c: c.qualified_name.lower())
-        formatted_cmds = ", ".join([f"`{cmd.qualified_name}`{self._get_badge(cmd)}" for cmd in sorted_cmds])
-        container.add_text(f"**Accessible Commands ({len(sorted_cmds)}):**\n" + formatted_cmds)
+
+        # Render rich command cards with syntax, descriptions, and permission badges
+        cmd_blocks: list[str] = []
+        for cmd in sorted_cmds[:16]:
+            sig = f" {cmd.signature}" if cmd.signature else ""
+            desc = (cmd.description or cmd.help or "No detailed description provided.").strip().split("\n")[0][:110]
+            badge = self._get_badge(cmd)
+            aliases = f" • Aliases: {', '.join([f'`{a}`' for a in cmd.aliases[:3]])}" if cmd.aliases else ""
+            access = f" • Access: {badge}" if badge else ""
+
+            cmd_blocks.append(
+                f"`{cmd.name}` — {desc}\n"
+                f"Usage: `{p}{cmd.qualified_name}{sig}`{aliases}{access}"
+            )
+
+        formatted_text = "\n\n".join(cmd_blocks)
+        if len(sorted_cmds) > 16:
+            remaining = sorted_cmds[16:]
+            formatted_text += f"\n\n**Additional Accessible Commands ({len(remaining)}):**\n" + ", ".join([f"`{c.qualified_name}`" for c in remaining])
+
+        container.add_text(formatted_text)
         container.add_separator(divider=True)
-        container.add_text(f"-# **Requested by {ctx.author.display_name} • Type {p}help <command> for details**")
+        container.add_text(f"-# **Requested by {ctx.author.display_name} • Type {p}help <command> for syntax & examples**")
         return container
 
     def build_home_embed(
@@ -800,25 +819,15 @@ class Help(commands.Cog):
         total_commands = sum(len(cmds) for cmds in visible_categories.values())
 
         embed = discord.Embed(
-            title="⛩️ Kyoka 3.0 — The Perfect Control System",
+            title="⛩️ KYOKA CONTROL — Kyoka 3.0",
             description=(
-                "*“Control the chaos. Command the impossible.”*\n\n"
-                "Welcome to **Kyoka 3.0**, high-performance Discord automation powered by "
-                "Google Gemini AI, real-time moderation, community progression, and entertainment.\n\n"
-                "### 🚀 Getting Started & Quick Setup\n"
-                f"• `{p}quickstart` — 5-minute setup checklist for server administrators\n"
-                f"• `{p}setup` — Interactive multi-module server configuration wizard\n"
-                f"• `{p}setup status` — Audit active vs unconfigured features\n"
-                f"• `{p}setprefix <prefix>` — Set custom server command prefix\n\n"
-                "### 🧭 Navigation & Command Types\n"
-                f"• **Prefix Commands:** Use `{p}<command>` (e.g., `{p}ping`, `{p}ai hello`, `{p}help`)\n"
+                "### The Perfect Illusion · Command Center\n"
+                "> *“Welcome to the domain of Kyoka. Select a module to explore its commands and capabilities.”*\n\n"
+                "**◈ COMMAND & SETUP PROTOCOLS ◈**\n"
+                f"• **Prefix Commands:** Use `{p}<command>` (e.g. `{p}ping`, `{p}ai hello`, `{p}help`)\n"
                 f"• **Slash Commands:** Type `/<command>` for Discord autocomplete and modal wizards\n"
-                f"• **Browse Categories:** Select any category from the dropdown below or use **◀️ Back / ▶️ Next**\n"
-                f"• **Instant Search:** Click **🔍 Search** below or type `{p}help <query>` to search all commands\n"
-                f"• **Command Manual:** Type `{p}help <command>` (e.g., `{p}help ban`, `{p}help ai`) for detailed syntax\n\n"
-                "### 🔒 Permission System\n"
-                "`[Public]` Available to all members • `[Mod]` Requires Kick/Ban/Timeout\n"
-                "`[Admin]` Requires Administrator permission • `[Prime]` Kyoka Premium perks"
+                f"• **Quickstart Guide:** Type `{p}quickstart` or `{p}setup` for the 5-minute setup checklist\n"
+                f"• **Permission System:** `[Public]` Everyone • `[Mod]` Staff • `[Admin]` Administrators • `[Prime]` Kyoka Premium"
             ),
             color=0x2B0938,
         )
@@ -828,7 +837,7 @@ class Help(commands.Cog):
             value=(
                 f"• **Prefix:** `{p}` | **Slash:** `/`\n"
                 f"• **Latency:** `{ws_ping}ms` | **Status:** `Operational`\n"
-                f"• **Commands:** `{total_commands}` accessible across `{len(visible_categories)}` categories"
+                f"• **Commands:** `{total_commands}` registered across `{len(visible_categories)}` categories"
             ),
             inline=True,
         )
@@ -836,26 +845,62 @@ class Help(commands.Cog):
         embed.add_field(
             name="✨ Key Features",
             value=(
-                f"• **AI Engine:** `{p}ai`, `{p}aigf`, `{p}aidiag`\n"
-                f"• **Moderation:** `{p}warn`, `{p}kick`, `{p}ban`, `{p}purge`\n"
-                f"• **Utilities:** `{p}calc`, `{p}remind`, `{p}suggest`\n"
-                f"• **Community:** `{p}rank`, `{p}play`, `{p}giveaway`"
+                f"• **AI Engine:** Google Gemini with 10 personalities (`{p}ai`)\n"
+                f"• **Defense:** Anti-Nuke, Auto-Mod, Purge & Lock (`{p}warn`)\n"
+                f"• **Engagement:** Tickets, Reaction Roles & Giveaways (`{p}play`)\n"
+                f"• **Progression:** Leveling XP, Ranks & Leaderboards (`{p}rank`)"
             ),
             inline=True,
         )
 
+        # Aizen Module Control Matrix
+        is_owner = is_primary_owner(author.id)
+        module_grid = [
+            "🛡️ **Moderation** — Bans, kicks, mutes, purges & audit logs",
+            "🎫 **Tickets & Support** — Interactive ticket panels & HTML transcripts",
+            "👋 **Welcome & AutoMod** — Greeting cards, autoroles & anti-spam defense",
+            "🎉 **Giveaways & Events** — Weighted rolls, entry requirements & rerolls",
+            "⭐ **Leveling & XP** — Chat progression, rank cards, XP & leaderboards",
+            "🤖 **AI Assistant** — Aizen conversational intelligence & 10 personalities",
+            "🎵 **Music System** — High-fidelity audio playback, queues & filters",
+            "🖼️ **Images & Avatars** — Anime reaction GIFs, banners & avatar grabbers",
+            "💬 **Social & Fun** — Mini-games, relationships, quotes, games & trivia",
+            "🔧 **Utilities** — Reminders, calculators, timestamps & diagnostics",
+            "⚙️ **Server Administration** — Prefixes, audit channels & permissions",
+            "💎 **Premium Features** — Elite perks, licenses & high-res AI",
+        ]
+        if is_owner:
+            module_grid.append("👑 **Owner & Developer** — Core bot diagnostics, database & maintenance")
+
+        embed.add_field(
+            name="◈ MODULE CONTROL MATRIX ◈",
+            value="\n".join(module_grid),
+            inline=False,
+        )
+
+        embed.add_field(
+            name="🧭 Interactive Navigation",
+            value=(
+                "Select any module from the dropdown menu below to view full command syntax and examples, "
+                "or click **🔍 Search** to locate any command instantly."
+            ),
+            inline=False,
+        )
+
         # Apply configurable Aizen artwork if available
         assets = getattr(Config, "ASSETS", None)
-        banner_url = getattr(assets, "BANNER_URL", None) or getattr(Config, "AIZEN_IMAGE_URL", "")
+        banner_url = getattr(assets, "HELP_BANNER_URL", None) or getattr(assets, "BANNER_URL", None) or getattr(Config, "AIZEN_IMAGE_URL", "")
         if banner_url and banner_url.strip():
             embed.set_image(url=banner_url.strip())
 
-        thumbnail_url = getattr(assets, "DEFAULT_THUMBNAIL_URL", "")
+        thumbnail_url = getattr(assets, "AIZEN_AVATAR_URL", "") or getattr(assets, "DEFAULT_THUMBNAIL_URL", "")
+        if not thumbnail_url and hasattr(self.bot, "user") and self.bot.user:
+            thumbnail_url = self.bot.user.display_avatar.url
         if thumbnail_url and thumbnail_url.strip():
             embed.set_thumbnail(url=thumbnail_url.strip())
 
         embed.set_footer(
-            text=f"Requested by {author.display_name} • Type {p}help <command> for syntax & examples",
+            text=f"Requested by {author.display_name} • The Perfect Illusion · Command Center",
             icon_url=author.display_avatar.url if author.display_avatar else None,
         )
         return embed
@@ -948,8 +993,15 @@ class Help(commands.Cog):
         embed = container.to_embed()
         embed.title = f"{self._get_category_emoji(cat_name)} {cat_name}"
         embed.color = 0x2B0938
+
+        # Apply configurable Aizen thumbnail
+        assets = getattr(Config, "ASSETS", None)
+        thumb = getattr(assets, "AIZEN_AVATAR_URL", "") or getattr(assets, "DEFAULT_THUMBNAIL_URL", "")
+        if thumb and thumb.strip():
+            embed.set_thumbnail(url=thumb.strip())
+
         embed.set_footer(
-            text=f"Category {page_idx}/{total_pages} • Requested by {ctx.author.display_name} • Type {p}help <command> for details",
+            text=f"Category {page_idx}/{total_pages} • {len(commands_list)} Commands • Requested by {ctx.author.display_name} • Type {p}help <command> for details",
             icon_url=ctx.author.display_avatar.url if ctx.author.display_avatar else None,
         )
         return embed
@@ -1007,11 +1059,17 @@ class Help(commands.Cog):
                 inline=False,
             )
 
+        assets = getattr(Config, "ASSETS", None)
+        thumb = getattr(assets, "AIZEN_AVATAR_URL", "") or getattr(assets, "DEFAULT_THUMBNAIL_URL", "")
+        if thumb and thumb.strip():
+            embed.set_thumbnail(url=thumb.strip())
+
         embed.set_footer(
             text=f"Requested by {ctx.author.display_name} • Kyoka 3.0",
             icon_url=ctx.author.display_avatar.url if ctx.author.display_avatar else None,
         )
         return embed
+
 
     def build_embed_for_selection(
         self,
@@ -1126,4 +1184,7 @@ class Help(commands.Cog):
 
 
 async def setup(bot: KyokaBot) -> None:
-    await bot.add_cog(Help(bot))
+    cog = Help(bot)
+    await bot.add_cog(cog)
+    logger.info("⛩️ [KYOKA CONTROL] Aizen Premium Help Dashboard loaded successfully (Hybrid Prefix & Slash).")
+
