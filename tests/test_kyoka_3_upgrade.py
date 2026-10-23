@@ -1,0 +1,550 @@
+from __future__ import annotations
+
+import datetime
+from unittest.mock import AsyncMock, MagicMock
+import pytest
+import discord
+
+from src.cogs.utility.giveaway import (
+    Giveaways,
+    build_giveaway_container,
+    parse_giveaway_duration,
+)
+from src.cogs.utility.requirements import Requirements
+from src.cogs.admin.config import ServerConfig
+from src.cogs.fun.ai_interactions import AIInteractions
+from src.cogs.general.analytics import AnalyticsAndDiagnostics
+from src.managers.giveaway_manager import (
+    GiveawayManager,
+    ToggleResult,
+    weighted_sample_without_replacement,
+)
+from src.managers.activity_manager import ActivityManager
+from src.managers.ai_manager import AIManager, PERSONALITY_PRESETS
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# 1. TEST EXACT 50 DOCUMENTED SLASH COMMANDS
+# ─────────────────────────────────────────────────────────────────────────────
+
+def test_exact_50_slash_commands_inventory():
+    """Verify the new slash command interface contains exactly the 50 documented commands."""
+    mock_bot = MagicMock()
+    mock_bot.db = AsyncMock()
+
+    gw_cog = Giveaways(mock_bot)
+    req_cog = Requirements(mock_bot)
+    cfg_cog = ServerConfig(mock_bot)
+    ai_cog = AIInteractions(mock_bot)
+    ana_cog = AnalyticsAndDiagnostics(mock_bot)
+
+    # 1. Giveaway group — 18 subcommands
+    gw_cmds = {cmd.name for cmd in gw_cog.giveaway_group.commands}
+    expected_gw = {
+        "create", "quick", "end", "cancel", "pause", "resume",
+        "reroll", "edit", "list", "info", "entries", "check",
+        "exclude", "include", "remind", "clone", "export", "templates"
+    }
+    assert gw_cmds == expected_gw, f"Giveaway subcommands mismatch: {gw_cmds ^ expected_gw}"
+    assert len(gw_cmds) == 18
+
+    # 2. Requirements group — 8 subcommands
+    req_cmds = {cmd.name for cmd in req_cog.requirements_group.commands}
+    expected_req = {
+        "add", "remove", "list", "test",
+        "activity", "roles", "tag", "bonus"
+    }
+    assert req_cmds == expected_req, f"Requirements subcommands mismatch: {req_cmds ^ expected_req}"
+    assert len(req_cmds) == 8
+
+    # 3. Configuration group — 8 subcommands
+    cfg_cmds = {cmd.name for cmd in cfg_cog.config_group.commands}
+    expected_cfg = {
+        "view", "channel", "roles", "permissions",
+        "appearance", "notifications", "activity", "reset"
+    }
+    assert cfg_cmds == expected_cfg, f"Config subcommands mismatch: {cfg_cmds ^ expected_cfg}"
+    assert len(cfg_cmds) == 8
+
+    # 4. AI group — 6 subcommands
+    ai_cmds = {cmd.name for cmd in ai_cog.ai_group.commands}
+    expected_ai = {"setup", "personality", "test", "reset", "enable", "disable"}
+    assert ai_cmds == expected_ai, f"AI subcommands mismatch: {ai_cmds ^ expected_ai}"
+    assert len(ai_cmds) == 6
+
+    # 5. Utility and administration — 10 commands
+    # 5 in AnalyticsAndDiagnostics: activity, leaderboard, auditlog, diagnostics, privacy
+    # 5 in General cogs: help, ping, botinfo, serverinfo, userinfo
+    ana_app_cmds = {cmd.name for cmd in ana_cog.get_app_commands()}
+    expected_ana = {"activity", "leaderboard", "auditlog", "diagnostics", "privacy"}
+    assert ana_app_cmds == expected_ana, f"Analytics app commands mismatch: {ana_app_cmds ^ expected_ana}"
+
+    total_commands_count = len(gw_cmds) + len(req_cmds) + len(cfg_cmds) + len(ai_cmds) + len(ana_app_cmds) + 5
+    assert total_commands_count == 50, f"Expected 50 documented commands, got {total_commands_count}"
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# 2. TEST WEIGHTED WINNER SELECTION ALGORITHM
+# ─────────────────────────────────────────────────────────────────────────────
+
+def test_weighted_sampling_uniqueness_and_counts():
+    items = [(101, 1.0), (102, 2.0), (103, 5.0), (104, 10.0), (105, 1.0)]
+
+    # Draw 3 unique winners
+    winners = weighted_sample_without_replacement(items, 3)
+    assert len(winners) == 3
+    assert len(set(winners)) == 3  # All unique
+
+    # Draw more than population
+    all_drawn = weighted_sample_without_replacement(items, 10)
+    assert len(all_drawn) == 5
+    assert set(all_drawn) == {101, 102, 103, 104, 105}
+
+    # Empty list
+    assert weighted_sample_without_replacement([], 2) == []
+    # Zero count
+    assert weighted_sample_without_replacement(items, 0) == []
+
+
+def test_weighted_sampling_higher_weight_favored():
+    # Large test: item A has weight 100, item B has weight 0.01
+    items = [("Heavy", 100.0), ("Light", 0.01)]
+    wins = {"Heavy": 0, "Light": 0}
+    for _ in range(50):
+        sample = weighted_sample_without_replacement(items, 1)
+        wins[sample[0]] += 1
+
+    # Heavy should win the vast majority of runs
+    assert wins["Heavy"] > wins["Light"]
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# 3. TEST BONUS ENTRIES & STACKING POLICIES
+# ─────────────────────────────────────────────────────────────────────────────
+
+@pytest.mark.asyncio
+async def test_bonus_calculation_highest_stacking():
+    mock_db = AsyncMock()
+    mgr = GiveawayManager(mock_db)
+
+    # Booster role (2x) and VIP role (3x)
+    mock_db.fetch_all.return_value = [
+        {"role_id": 111, "multiplier": 2.0, "extra_entries": 0},
+        {"role_id": 222, "multiplier": 3.0, "extra_entries": 1},
+    ]
+
+    guild = MagicMock()
+    r1 = MagicMock(id=111, name="Booster")
+    r2 = MagicMock(id=222, name="VIP")
+    guild.get_role.side_effect = lambda rid: r1 if rid == 111 else r2
+
+    member = MagicMock(spec=discord.Member)
+    member.guild = guild
+    member.roles = [r1, r2]
+
+    gw = {
+        "guild_id": 999,
+        "bonus_stacking_policy": "highest",
+        "bonus_multiplier_cap": 10.0,
+    }
+
+    base, weight, qroles, desc = await mgr.calculate_member_bonus(gw, member)
+    assert weight == 3.0  # max(2.0, 3.0)
+    assert base == 2      # 1 base + 1 extra entry from VIP
+
+
+@pytest.mark.asyncio
+async def test_bonus_calculation_additive_stacking():
+    mock_db = AsyncMock()
+    mgr = GiveawayManager(mock_db)
+
+    # Booster role (+1.0 above base) and VIP role (+2.0 above base)
+    mock_db.fetch_all.return_value = [
+        {"role_id": 111, "multiplier": 2.0, "extra_entries": 0},
+        {"role_id": 222, "multiplier": 3.0, "extra_entries": 0},
+    ]
+
+    guild = MagicMock()
+    r1 = MagicMock(id=111, name="Booster")
+    r2 = MagicMock(id=222, name="VIP")
+    guild.get_role.side_effect = lambda rid: r1 if rid == 111 else r2
+
+    member = MagicMock(spec=discord.Member)
+    member.guild = guild
+    member.roles = [r1, r2]
+
+    gw = {
+        "guild_id": 999,
+        "bonus_stacking_policy": "additive",
+        "bonus_multiplier_cap": 10.0,
+    }
+
+    base, weight, qroles, desc = await mgr.calculate_member_bonus(gw, member)
+    # 1.0 + (2.0 - 1.0) + (3.0 - 1.0) = 4.0
+    assert weight == 4.0
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# 4. TEST ELIGIBILITY REQUIREMENTS
+# ─────────────────────────────────────────────────────────────────────────────
+
+@pytest.mark.asyncio
+async def test_eligibility_roles_and_account_age():
+    mock_db = AsyncMock()
+    mgr = GiveawayManager(mock_db)
+
+    # Requirements: must have role 777, account age >= 30 days
+    mock_db.fetch_all.return_value = [
+        {"req_type": "role_required", "req_value": "777", "channel_id": None},
+        {"req_type": "account_age_days", "req_value": "30", "channel_id": None},
+    ]
+
+    role777 = MagicMock(id=777)
+    member = MagicMock(spec=discord.Member)
+    member.roles = [role777]
+    # Account created 100 days ago
+    member.created_at = datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(days=100)
+
+    gw = {"guild_id": 555, "required_role_id": None}
+    passed, breakdown = await mgr.check_member_eligibility(gw, member)
+    assert passed is True
+    assert len(breakdown) == 2
+    assert all(b["passed"] for b in breakdown)
+
+
+@pytest.mark.asyncio
+async def test_eligibility_server_tag_check():
+    mock_db = AsyncMock()
+    mgr = GiveawayManager(mock_db)
+
+    mock_db.fetch_all.return_value = [
+        {"req_type": "server_tag", "req_value": "KYOKA", "channel_id": None},
+    ]
+
+    # Member with matching tag
+    member_matching = MagicMock(spec=discord.Member)
+    member_matching.primary_guild = MagicMock(tag="KYOKA", identity_enabled=True)
+
+    gw = {"guild_id": 555, "required_role_id": None}
+    passed, _ = await mgr.check_member_eligibility(gw, member_matching)
+    assert passed is True
+
+    # Member without tag
+    member_no_tag = MagicMock(spec=discord.Member)
+    member_no_tag.primary_guild = None
+    passed_no, breakdown_no = await mgr.check_member_eligibility(gw, member_no_tag)
+    assert passed_no is False
+    assert "No primary server tag equipped" in breakdown_no[0]["reason"]
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# 5. TEST PARTICIPANT JOIN, LEAVE, AND TOGGLE RESULT
+# ─────────────────────────────────────────────────────────────────────────────
+
+@pytest.mark.asyncio
+async def test_toggle_participant_flow():
+    mock_db = AsyncMock()
+    mgr = GiveawayManager(mock_db)
+
+    # Return not existing
+    mock_db.fetch_one.side_effect = [
+        # 1. get giveaway
+        {
+            "id": 1,
+            "guild_id": 999,
+            "prize": "Nitro",
+            "is_paused": False,
+            "is_ended": False,
+            "is_cancelled": False,
+            "entry_limit": 0,
+            "ends_at": datetime.datetime.now(datetime.timezone.utc) + datetime.timedelta(hours=1),
+        },
+        # 2. check existing entry -> None (not joined yet)
+        None,
+        # 3. get participant count for entry limit check -> 0
+        {"cnt": 0},
+        # 4. get participant count after insert -> 1
+        {"cnt": 1},
+    ]
+    mock_db.fetch_all.return_value = []  # no requirements
+
+    member = MagicMock(spec=discord.Member)
+    member.id = 12345
+    member.roles = []
+
+    res = await mgr.toggle_participant(1, member)
+    assert isinstance(res, ToggleResult)
+    assert res[0] is True
+    assert res[1] == "entered"
+    assert res[2] == 1
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# 6. TEST MULTI-PERSONALITY AI PRESETS AND SERVER ISOLATION
+# ─────────────────────────────────────────────────────────────────────────────
+
+def test_ai_personality_presets_and_server_isolation():
+    # Exactly 10 presets defined
+    assert len(PERSONALITY_PRESETS) == 10
+    expected_presets = {
+        "happy_boy", "friendly_helper", "professional", "funny_sarcastic",
+        "calm_supportive", "aizen", "cheerful_anime", "gaming_expert",
+        "short_answer", "custom"
+    }
+    assert set(PERSONALITY_PRESETS.keys()) == expected_presets
+
+    mock_db = AsyncMock()
+    ai_mgr = AIManager(mock_db)
+
+    # Server A: Happy boy
+    ai_mgr._configs[1111] = {
+        "guild_id": 1111,
+        "personality": "happy_boy",
+        "tone": "cheerful",
+        "humor": "playful",
+        "language": "English",
+        "purpose": "Joy",
+        "custom_rules": "",
+        "faqs": "",
+    }
+
+    # Server B: Professional
+    ai_mgr._configs[2222] = {
+        "guild_id": 2222,
+        "personality": "professional",
+        "tone": "formal",
+        "humor": "none",
+        "language": "English",
+        "purpose": "Corporate Assistance",
+        "custom_rules": "",
+        "faqs": "",
+    }
+
+    prompt_a = ai_mgr.build_system_instruction(1111, "Server A")
+    prompt_b = ai_mgr.build_system_instruction(2222, "Server B")
+
+    assert "cheerful, friendly, and playful young boy" in prompt_a
+    assert "Server A" in prompt_a
+    assert "Server B" not in prompt_a
+
+    assert "professional, structured, and business-grade" in prompt_b
+    assert "Server B" in prompt_b
+    assert "Server A" not in prompt_b
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# 7. TEST ACTIVITY TRACKING, SPAM FILTER, AND PRIVACY CONTROLS
+# ─────────────────────────────────────────────────────────────────────────────
+
+@pytest.mark.asyncio
+async def test_activity_tracking_and_privacy_controls():
+    mock_db = AsyncMock()
+    act_mgr = ActivityManager(mock_db)
+
+    act_mgr.update_guild_config_cache(
+        guild_id=123,
+        enabled=True,
+        cooldown=5,
+        excluded_channels=[9999],
+        min_length=3,
+    )
+
+    # 1. Normal message should count
+    counted = await act_mgr.record_message(123, 555, 1000, 15)
+    assert counted is True
+
+    # 2. Rapid message within cooldown (cooldown=5s) should be filtered
+    spam = await act_mgr.record_message(123, 555, 1000, 15)
+    assert spam is False
+
+    # 3. Message in excluded channel should be filtered
+    excluded = await act_mgr.record_message(123, 777, 9999, 20)
+    assert excluded is False
+
+    # 4. Message under min length should be filtered
+    too_short = await act_mgr.record_message(123, 888, 1000, 2)
+    assert too_short is False
+
+    # 5. User privacy opt-out
+    await act_mgr.set_opt_out(555, True)
+    assert act_mgr.is_opted_out(555) is True
+    opted_out_msg = await act_mgr.record_message(123, 555, 1000, 20)
+    assert opted_out_msg is False
+
+    # 6. User erasure
+    erased = await act_mgr.erase_user_data(555)
+    assert erased == 1
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# 8. TEST GIVEAWAY TEMPLATES AND DURATION PARSING
+# ─────────────────────────────────────────────────────────────────────────────
+
+@pytest.mark.asyncio
+async def test_giveaway_templates_and_durations():
+    mock_db = AsyncMock()
+    mgr = GiveawayManager(mock_db)
+
+    # Duration parsing
+    assert parse_giveaway_duration("10m") == datetime.timedelta(minutes=10)
+    assert parse_giveaway_duration("2h") == datetime.timedelta(hours=2)
+    assert parse_giveaway_duration("1d") == datetime.timedelta(days=1)
+    assert parse_giveaway_duration("invalid") is None
+    assert parse_giveaway_duration("1s") is None  # Below 5s minimum
+
+    # Templates
+    mock_db.fetch_one.return_value = {"id": 10}
+    tpl_id = await mgr.save_template(
+        guild_id=100,
+        name="WeeklyNitro",
+        prize="Discord Nitro",
+        description="Weekly community Nitro giveaway",
+        winner_count=1,
+        duration_seconds=604800,
+        requirements=[],
+        bonus_roles=[],
+        user_id=1,
+    )
+    assert tpl_id == 10
+
+    mock_db.fetch_all.return_value = [{"name": "WeeklyNitro", "prize": "Discord Nitro"}]
+    tpls = await mgr.get_templates(100)
+    assert len(tpls) == 1
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# 9. TEST PAUSE, RESUME, CANCEL, AND CSV EXPORT
+# ─────────────────────────────────────────────────────────────────────────────
+
+@pytest.mark.asyncio
+async def test_giveaway_lifecycle_and_csv_export():
+    mock_db = AsyncMock()
+    mgr = GiveawayManager(mock_db)
+
+    # 1. Pause
+    mock_db.fetch_one.return_value = {
+        "id": 1,
+        "guild_id": 100,
+        "channel_id": 200,
+        "message_id": 300,
+        "host_id": 1,
+        "prize": "Nitro",
+        "ends_at": datetime.datetime.now(datetime.timezone.utc) + datetime.timedelta(hours=2),
+        "is_paused": False,
+        "is_ended": False,
+        "is_cancelled": False,
+    }
+    p_res = await mgr.pause_giveaway(300, 999)
+    assert p_res is not None
+    assert p_res["is_paused"] is True
+
+    # 2. Resume
+    mock_db.fetch_one.return_value = {
+        "id": 1,
+        "guild_id": 100,
+        "channel_id": 200,
+        "message_id": 300,
+        "host_id": 1,
+        "prize": "Nitro",
+        "ends_at": datetime.datetime.now(datetime.timezone.utc) + datetime.timedelta(hours=2),
+        "is_paused": True,
+        "is_ended": False,
+        "is_cancelled": False,
+        "remaining_seconds_when_paused": 7200,
+    }
+    r_res = await mgr.resume_giveaway(300, 999)
+    assert r_res is not None
+    assert r_res["is_paused"] is False
+
+    # 3. CSV Export
+    mock_db.fetch_all.return_value = [
+        {
+            "user_id": 111,
+            "base_entries": 1,
+            "effective_weight": 3.0,
+            "qualifying_roles": "VIP",
+            "bonus_breakdown": "3.0x",
+            "is_excluded": False,
+            "exclusion_reason": "",
+            "joined_at": datetime.datetime(2026, 1, 1, 12, 0, tzinfo=datetime.timezone.utc),
+        },
+        {
+            "user_id": 222,
+            "base_entries": 1,
+            "effective_weight": 1.0,
+            "qualifying_roles": "",
+            "bonus_breakdown": "1.0x",
+            "is_excluded": True,
+            "exclusion_reason": "Bot account",
+            "joined_at": datetime.datetime(2026, 1, 1, 12, 5, tzinfo=datetime.timezone.utc),
+        },
+    ]
+    csv_str = await mgr.export_giveaway_csv(1)
+    assert "User ID,Base Entries,Effective Weight,Qualifying Roles" in csv_str
+    assert "111,1,3.0,VIP,False" in csv_str
+    assert "222,1,1.0,,True,Bot account" in csv_str
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# 10. TEST AUTHORIZATION CHECKS & LEGACY PREFIX COMMANDS PRESERVATION
+# ─────────────────────────────────────────────────────────────────────────────
+
+@pytest.mark.asyncio
+async def test_authorization_and_legacy_prefix_commands():
+    from src.cogs.utility.giveaway import is_giveaway_authorized
+    from src.security.owner import OWNER_ID
+
+    mock_bot = MagicMock()
+    mock_bot.db = AsyncMock()
+    mock_bot.db.fetch_one.return_value = None  # no custom role
+
+    # Guild owner
+    guild = MagicMock(spec=discord.Guild)
+    guild.owner_id = 42
+
+    member_owner = MagicMock(spec=discord.Member)
+    member_owner.id = 42
+    member_owner.guild = guild
+    member_owner.guild_permissions.administrator = False
+    member_owner.guild_permissions.manage_guild = False
+    member_owner.guild_permissions.manage_messages = False
+    member_owner.roles = []
+    assert await is_giveaway_authorized(mock_bot, member_owner) is True
+
+    # Primary bot owner
+    bot_owner = MagicMock(spec=discord.Member)
+    bot_owner.id = OWNER_ID
+    bot_owner.guild = guild
+    bot_owner.guild_permissions.administrator = False
+    bot_owner.guild_permissions.manage_guild = False
+    bot_owner.guild_permissions.manage_messages = False
+    bot_owner.roles = []
+    assert await is_giveaway_authorized(mock_bot, bot_owner) is True
+
+    # Administrator
+    admin_member = MagicMock(spec=discord.Member)
+    admin_member.id = 999
+    admin_member.guild = guild
+    admin_member.guild_permissions.administrator = True
+    admin_member.guild_permissions.manage_guild = False
+    admin_member.guild_permissions.manage_messages = False
+    admin_member.roles = []
+    assert await is_giveaway_authorized(mock_bot, admin_member) is True
+
+    # Regular unauthorized user
+    regular = MagicMock(spec=discord.Member)
+    regular.id = 555
+    regular.guild = guild
+    regular.guild_permissions.administrator = False
+    regular.guild_permissions.manage_guild = False
+    regular.guild_permissions.manage_messages = False
+    regular.roles = []
+    assert await is_giveaway_authorized(mock_bot, regular) is False
+
+    # Check Legacy Prefix Commands
+    gw_cog = Giveaways(mock_bot)
+    legacy_gw_commands = [c.name for c in gw_cog.get_commands()]
+    assert "gstart" in legacy_gw_commands
+    assert "gend" in legacy_gw_commands
+    assert "greroll" in legacy_gw_commands
+    assert "glist" in legacy_gw_commands

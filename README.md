@@ -184,6 +184,119 @@ Render will automatically deploy KYOKA alongside the built-in health server on p
 
 ---
 
+## 🎁 KYOKA 3.0 Advanced Giveaway Engine
+
+KYOKA 3.0 introduces a state-of-the-art persistent giveaway engine comparable to Giveaway Boat, featuring:
+
+- **Efraimidis-Spirakis Cryptographic Weighted Selection**: Mathematically sound $k_i = u_i^{1/w_i}$ sampling without memory expansion using Python's `secrets.SystemRandom`.
+- **Dynamic Entry Multipliers**: Configurable role bonuses (`highest`, `additive`, `multiplicative` with configurable caps).
+- **Persistent Anti-Race Entry Locks**: Asynchronous database transactions prevent double entries, retry spam, or race conditions.
+- **Message Activity Requirements**: Calendar-based (today) or rolling-window (7 days) message minimums, channel-specific quotas, and account/membership age thresholds.
+- **Server Tag Verification**: Leverages `discord.py 2.7` `member.primary_guild` clan tags with graceful fallback when clan tags are unsupported on a guild.
+- **Giveaway Lifecycle Controls**: Pause, resume with duration preservation, early conclusion, cancellation, template saving, and reroll history.
+- **Anti-Abuse & Privacy**: Rate limits, flood cooldowns, administrative exclusion logs, and member privacy controls (`/privacy`).
+- **CSV Data Export**: Authorized giveaway audit reports with full entry weights, qualifying roles, and timestamps.
+
+---
+
+## 🤖 Multi-Personality AI Engine (Not Aizen-Only)
+
+KYOKA 3.0 frees servers from hardcoded single-persona AI. Every server independently configures its AI channel, persona, tone, rules, and triggers via `/ai setup`.
+
+### 10 Built-In Personality Presets:
+1. `happy_boy`: Cheerful, positive, energetic boy personality with light humor.
+2. `friendly_helper`: Warm, patient, highly structured community assistant.
+3. `professional`: Direct, formal, concise business assistant.
+4. `funny_sarcastic`: Witty, humorous, sarcastic responses while remaining helpful.
+5. `calm_supportive`: Gentle, mindful, encouraging, and emotionally supportive.
+6. `aizen`: The classic Kyoka preset — confident, philosophical, commanding, dramatic Bleach Aizen persona.
+7. `cheerful_anime`: Enthusiastic anime companion with expressive phrasing and emojis.
+8. `gaming_expert`: Specialized in gaming mechanics, Blox Fruits, meta builds, and leveling strategies.
+9. `short_answer`: Ultra-concise, TL;DR answers strictly under 2 sentences.
+10. `custom`: Server administrators specify their own custom prompt, tone, and guidelines.
+
+Independent server isolation ensures configuring AI on Server A never affects Server B or Server C.
+
+---
+
+## ⚡ Exactly 50 Top-Level Slash Commands
+
+KYOKA 3.0 structures its new slash interface into exactly 50 documented top-level commands across 4 groups and 10 standalone utility/admin commands:
+
+### Giveaway Group (`/giveaway`) — 18 Subcommands
+| Command | Description |
+|---|---|
+| `/giveaway create` | Create and publish a rich interactive giveaway with custom settings. |
+| `/giveaway quick` | Launch a giveaway quickly using sensible default parameters. |
+| `/giveaway end` | Conclude an active giveaway early and draw winners immediately. |
+| `/giveaway cancel` | Cancel an active giveaway without drawing winners. |
+| `/giveaway pause` | Pause entries and freeze the countdown on an active giveaway. |
+| `/giveaway resume` | Resume a paused giveaway with preserved remaining duration. |
+| `/giveaway reroll` | Draw replacement winners for unclaimed or ineligible prizes. |
+| `/giveaway edit` | Update live giveaway settings (prize, winner count, description). |
+| `/giveaway list` | Display active, scheduled, paused, and recent giveaways. |
+| `/giveaway info` | Inspect in-depth giveaway configuration and current status. |
+| `/giveaway entries` | View participant counts and authorized entry details. |
+| `/giveaway check` | Pre-check a specific member's eligibility before or during a draw. |
+| `/giveaway exclude` | Administratively exclude a user from winning with an audit reason. |
+| `/giveaway include` | Restore an excluded user back to eligible status. |
+| `/giveaway remind` | Broadcast a reminder ping about an ending giveaway. |
+| `/giveaway clone` | Replicate an existing giveaway's configuration into a new one. |
+| `/giveaway export` | Export complete participant weights and entry breakdown to CSV. |
+| `/giveaway templates` | Save, list, load, or delete reusable giveaway templates. |
+
+### Requirements Group (`/requirements`) — 8 Subcommands
+| Command | Description |
+|---|---|
+| `/requirements add` | Attach custom eligibility requirements to a giveaway or server defaults. |
+| `/requirements remove` | Remove a configured eligibility requirement by ID. |
+| `/requirements list` | Review all configured requirements for a giveaway or server. |
+| `/requirements test` | Test a member's eligibility against configured rules with full breakdown. |
+| `/requirements activity` | Configure daily or 7-day message volume requirements. |
+| `/requirements roles` | Configure required, permitted (any-of), or excluded roles. |
+| `/requirements tag` | Configure server clan tag verification (with capability check). |
+| `/requirements bonus` | Configure role-based bonus entries and multiplier stacking policies. |
+
+### Configuration Group (`/config`) — 8 Subcommands
+| Command | Description |
+|---|---|
+| `/config view` | Inspect complete server giveaway and activity configurations. |
+| `/config channel` | Designate default giveaway and announcement channels. |
+| `/config roles` | Set the custom giveaway manager role and staff bypasses. |
+| `/config permissions` | Configure who can host or manage giveaways on this server. |
+| `/config appearance` | Customize embed accent colors, branding images, and thumbnails. |
+| `/config notifications` | Configure winner DMs, claim deadlines, and reminder intervals. |
+| `/config activity` | Configure message activity tracking cooldowns and channel exclusions. |
+| `/config reset` | Reset selected server configurations to factory defaults with confirmation. |
+
+### AI Group (`/ai`) — 6 Subcommands
+| Command | Description |
+|---|---|
+| `/ai setup` | Configure AI personality, channel, tone, and rules for this server. |
+| `/ai personality` | Switch between the 10 built-in personality presets or define a custom style. |
+| `/ai test` | Preview how the AI responds under current server settings. |
+| `/ai reset` | Reset the server's AI configuration to default. |
+| `/ai enable` | Activate AI conversational responses in configured channels. |
+| `/ai disable` | Deactivate AI in specific channels or server-wide. |
+
+### Utility & Administration — 10 Top-Level Commands
+| Command | Description |
+|---|---|
+| `/help` | Interactive command guide and category documentation. |
+| `/ping` | Real-time WebSocket latency, API heartbeat, and database response time. |
+| `/botinfo` | Bot version, uptime, server count, and environment status. |
+| `/serverinfo` | Server statistics, owner, creation date, and feature toggles. |
+| `/userinfo` | Member details, join dates, roles, and avatar display. |
+| `/activity` | View personal qualifying message counts (today & past 7 days). |
+| `/leaderboard` | Server-wide message activity leaderboard. |
+| `/auditlog` | Administrative audit trail for giveaway changes and exclusions. |
+| `/diagnostics` | Deep system diagnostics: database pool, background tasks, and permissions. |
+| `/privacy` | Data transparency, privacy information, opt-out, and right-to-be-forgotten erasure. |
+
+*Note: All legacy `+` prefix commands (`+gstart`, `+gend`, `+greroll`, `+glist`, `+ai`, `+ping`, `+botinfo`, etc.) and existing Cogs remain 100% operational and backward-compatible.*
+
+---
+
 ## 🛡️ Ownership & Branding
 
 - **Bot Name**: `KYOKA 3.0`

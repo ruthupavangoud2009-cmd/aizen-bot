@@ -30,6 +30,8 @@ from src.managers.sticky_manager import StickyManager
 from src.managers.antinuke_manager import AntinukeManager
 from src.managers.media_manager import MediaManager
 from src.managers.giveaway_manager import GiveawayManager
+from src.managers.activity_manager import ActivityManager
+from src.managers.ai_manager import AIManager
 from src.utils.emojis import EmojiRegistry
 
 logger = logging.getLogger("Kyoka.Core")
@@ -106,6 +108,8 @@ class KyokaBot(commands.Bot):
         self.antinuke_mgr: AntinukeManager = AntinukeManager(self.db)
         self.media_mgr: MediaManager = MediaManager(self.db)
         self.giveaway_mgr: GiveawayManager = GiveawayManager(self.db)
+        self.activity_mgr: ActivityManager = ActivityManager(self.db)
+        self.ai_mgr: AIManager = AIManager(self.db)
         from src.managers.reaction_role_manager import ReactionRoleManager
         self.reaction_role_mgr: ReactionRoleManager = ReactionRoleManager(self.db)
         self.custom_emojis: EmojiRegistry = EmojiRegistry(self)
@@ -163,6 +167,17 @@ class KyokaBot(commands.Bot):
             await send_bot_mention_card(self, message)
             return
 
+        # Record qualifying message activity in the background (non-blocking)
+        if message.guild:
+            asyncio.create_task(
+                self.activity_mgr.record_message(
+                    message.guild.id,
+                    message.author.id,
+                    message.channel.id,
+                    len(message.content),
+                )
+            )
+
         await self.process_commands(message)
 
     async def setup_hook(self) -> None:
@@ -192,6 +207,8 @@ class KyokaBot(commands.Bot):
         await self.antinuke_mgr.load_cache()
         await self.media_mgr.load_cache()
         await self.giveaway_mgr.load_cache()
+        await self.activity_mgr.load_cache()
+        await self.ai_mgr.load_cache()
         await self.reaction_role_mgr.load_cache()
         await self.custom_emojis.load()
 

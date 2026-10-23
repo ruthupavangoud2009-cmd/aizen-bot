@@ -5,17 +5,49 @@ import logging
 import os
 import time
 from collections import defaultdict, deque
+from typing import Any, Dict, List, Optional
 
 import aiohttp
 import discord
+from discord import app_commands
 from discord.ext import commands
 
 from src.core.context import CustomContext
+from src.managers.ai_manager import PERSONALITY_PRESETS
 from src.security.owner import OWNER_ID, is_primary_owner
+from src.utils.containers import KyokaContainer, send_container_response
 
 log = logging.getLogger("Kyoka.AIInteractions")
 PURPLE = 0x7C3AED
 MAX_HISTORY = 12
+
+
+class ConfirmAIResetView(discord.ui.View):
+    """Confirmation view for resetting server AI configuration."""
+
+    def __init__(self, bot: commands.Bot, guild_id: int, user_id: int) -> None:
+        super().__init__(timeout=60)
+        self.bot = bot
+        self.guild_id = guild_id
+        self.user_id = user_id
+
+    @discord.ui.button(label="Confirm Reset", style=discord.ButtonStyle.danger, custom_id="ai:confirm_reset")
+    async def confirm(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+        if interaction.user.id != self.user_id:
+            return await interaction.response.send_message("Only the command author can confirm this.", ephemeral=True)
+        if hasattr(self.bot, "ai_mgr"):
+            await self.bot.ai_mgr.reset_server_config(self.guild_id)
+        for item in self.children:
+            item.disabled = True
+        await interaction.response.edit_message(content="✅ AI configuration for this server has been reset to defaults.", view=self)
+
+    @discord.ui.button(label="Cancel", style=discord.ButtonStyle.secondary, custom_id="ai:cancel_reset")
+    async def cancel(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+        if interaction.user.id != self.user_id:
+            return await interaction.response.send_message("Only the command author can cancel this.", ephemeral=True)
+        for item in self.children:
+            item.disabled = True
+        await interaction.response.edit_message(content="❌ AI reset cancelled.", view=self)
 
 
 class AIInteractions(commands.Cog):
@@ -100,7 +132,18 @@ class AIInteractions(commands.Cog):
         self._gif_cache[query.lower()] = (now + 60, None)
         return None
 
-    async def _ask_ai(self, guild_id: int, channel_id: int, user_id: int, prompt: str) -> str:
+    async def _ask_ai(self, guild_id: int, channel_id: int, user_id: int, prompt: str, server_name: str = "Discord Server") -> str:
+        ai_mgr = getattr(self.bot, "ai_mgr", None)
+        if ai_mgr:
+            return await ai_mgr.generate_response(
+                self._session(),
+                guild_id,
+                channel_id,
+                user_id,
+                prompt,
+                server_name=server_name,
+            )
+
         key = os.getenv("GEMINI_API_KEY", "").strip()
         if not key or key.lower().startswith("replace_"):
             raise RuntimeError("AI is not configured. Add a valid GEMINI_API_KEY to your deployment environment.")
@@ -121,7 +164,6 @@ class AIInteractions(commands.Cog):
                 "contents": contents,
                 "generationConfig": {"temperature": 0.7, "maxOutputTokens": 300}
             }
-            # Prioritize ultra-fast gemini-3.5-flash-lite (responds in <1s)
             models_to_try: list[str] = ["gemini-3.5-flash-lite", "gemini-3.5-flash", "gemini-flash-lite-latest"]
             env_model = os.getenv("GEMINI_MODEL", "").strip().strip("/")
             if env_model and env_model != "gemini-3.8-flash" and env_model not in models_to_try:
@@ -129,7 +171,6 @@ class AIInteractions(commands.Cog):
 
             answer = ""
             last_error: Exception | None = None
-
             for model in models_to_try:
                 url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent"
                 timeout = aiohttp.ClientTimeout(total=3.5)
@@ -146,16 +187,8 @@ class AIInteractions(commands.Cog):
                                 continue
                         elif response.status in (401, 403):
                             raise RuntimeError("Gemini rejected the API key. Please check GEMINI_API_KEY in Render.")
-                        else:
-                            log.debug("Gemini model %s returned status %s; trying next candidate...", model, response.status)
-                except asyncio.TimeoutError:
-                    log.debug("Gemini model %s timed out; trying next candidate...", model)
-                    continue
-                except RuntimeError:
-                    raise
                 except Exception as exc:
                     last_error = exc
-                    log.debug("Gemini model %s error: %s; trying next candidate...", model, exc)
                     continue
 
             if not answer:
@@ -171,15 +204,240 @@ class AIInteractions(commands.Cog):
         if not prompt.strip():
             return await ctx.send(f"Tell me what you seek. Usage: `{ctx.prefix}ai <message>`")
         guild_id = ctx.guild.id if ctx.guild else 0
+        server_name = ctx.guild.name if ctx.guild else "Discord Server"
         async with ctx.typing():
             try:
-                answer = await self._ask_ai(guild_id, ctx.channel.id, ctx.author.id, prompt)
+                answer = await self._ask_ai(guild_id, ctx.channel.id, ctx.author.id, prompt, server_name=server_name)
             except RuntimeError as exc:
                 return await ctx.send(f"🟣 {exc}")
             except (aiohttp.ClientError, asyncio.TimeoutError):
                 return await ctx.send("🟣 The connection to the AI service failed. Please try again shortly.")
         for start in range(0, len(answer), 1900):
             await ctx.reply(answer[start:start + 1900], mention_author=False, allowed_mentions=discord.AllowedMentions.none())
+
+    # ─── SLASH COMMAND GROUP (6 SUBCOMMANDS) ────────────────────────────────
+
+    ai_group = app_commands.Group(
+        name="ai",
+        description="KYOKA 3.0 Multi-Personality AI System",
+    )
+
+    # 35. /ai setup
+    @ai_group.command(name="setup", description="Configure AI personality, channel, tone, and rules for this server.")
+    @app_commands.describe(
+        channel="Dedicated channel where the AI will respond",
+        personality="Personality preset",
+        tone="Conversational tone (e.g. cheerful, composed, formal, witty)",
+        humor="Humor style (e.g. none, dry, sarcastic, playful)",
+        response_length="Length preference for AI answers",
+        respond_mode="When the AI should answer",
+        purpose="Custom role or purpose for the AI in this server",
+        rules="Special rules or guidelines the AI must follow",
+    )
+    @app_commands.choices(
+        personality=[
+            app_commands.Choice(name="Happy and playful boy", value="happy_boy"),
+            app_commands.Choice(name="Friendly helper", value="friendly_helper"),
+            app_commands.Choice(name="Professional assistant", value="professional"),
+            app_commands.Choice(name="Funny and sarcastic", value="funny_sarcastic"),
+            app_commands.Choice(name="Calm and supportive", value="calm_supportive"),
+            app_commands.Choice(name="Aizen-inspired anime personality", value="aizen"),
+            app_commands.Choice(name="Cheerful anime-inspired", value="cheerful_anime"),
+            app_commands.Choice(name="Blox Fruits & Gaming expert", value="gaming_expert"),
+            app_commands.Choice(name="Short-answer assistant", value="short_answer"),
+            app_commands.Choice(name="Custom server personality", value="custom"),
+        ],
+        response_length=[
+            app_commands.Choice(name="Short & punchy (1-3 sentences)", value="short"),
+            app_commands.Choice(name="Balanced (conversational)", value="balanced"),
+            app_commands.Choice(name="Detailed (in-depth explanations)", value="detailed"),
+        ],
+        respond_mode=[
+            app_commands.Choice(name="Mentions and direct replies only", value="mentions_and_replies"),
+            app_commands.Choice(name="Mentions only", value="mentions_only"),
+            app_commands.Choice(name="All messages in AI channel", value="all_channel_messages"),
+        ],
+    )
+    @app_commands.checks.has_permissions(manage_guild=True)
+    async def slash_setup(
+        self,
+        interaction: discord.Interaction,
+        channel: Optional[discord.TextChannel] = None,
+        personality: Optional[app_commands.Choice[str]] = None,
+        tone: Optional[str] = None,
+        humor: Optional[str] = None,
+        response_length: Optional[app_commands.Choice[str]] = None,
+        respond_mode: Optional[app_commands.Choice[str]] = None,
+        purpose: Optional[str] = None,
+        rules: Optional[str] = None,
+    ) -> None:
+        gid = interaction.guild.id
+        current = self.bot.ai_mgr.get_server_config(gid)
+
+        if channel:
+            current["channel_id"] = channel.id
+        if personality:
+            current["personality"] = personality.value
+        if tone:
+            current["tone"] = tone[:64]
+        if humor:
+            current["humor"] = humor[:64]
+        if response_length:
+            current["response_length"] = response_length.value
+        if respond_mode:
+            current["respond_mode"] = respond_mode.value
+        if purpose:
+            current["purpose"] = purpose[:500]
+        if rules:
+            current["custom_rules"] = rules[:1000]
+
+        current["updated_by"] = interaction.user.id
+        await self.bot.ai_mgr.save_server_config(gid, current)
+
+        p_name = PERSONALITY_PRESETS.get(current["personality"], {}).get("name", current["personality"])
+        dot = self.bot.custom_emojis.get("heart_dot", "•")
+        chan_id = current.get("channel_id")
+        chan_str = f"<#{chan_id}>" if chan_id else "All permitted channels"
+
+        container = KyokaContainer()
+        container.add_section(content=f"# **AI Configured: {interaction.guild.name}**")
+        container.add_separator(divider=True)
+        container.add_text(
+            f"{dot} **Personality Preset:** `{p_name}`\n"
+            f"{dot} **Tone / Humor:** `{current.get('tone')}` / `{current.get('humor')}`\n"
+            f"{dot} **Length:** `{current.get('response_length')}`\n"
+            f"{dot} **Channel:** {chan_str}\n"
+            f"{dot} **Mode:** `{current.get('respond_mode')}`\n"
+            f"> Test the new configuration anytime with `/ai test`!"
+        )
+        await send_container_response(interaction, container, ephemeral=True)
+
+    # 36. /ai personality
+    @ai_group.command(name="personality", description="Choose or customize the AI personality preset for this server.")
+    @app_commands.describe(
+        preset="Choose one of the 10 personality presets",
+        custom_prompt="Custom system instructions (used when preset is 'Custom')",
+    )
+    @app_commands.choices(
+        preset=[
+            app_commands.Choice(name="Happy and playful boy", value="happy_boy"),
+            app_commands.Choice(name="Friendly helper", value="friendly_helper"),
+            app_commands.Choice(name="Professional assistant", value="professional"),
+            app_commands.Choice(name="Funny and sarcastic", value="funny_sarcastic"),
+            app_commands.Choice(name="Calm and supportive", value="calm_supportive"),
+            app_commands.Choice(name="Aizen-inspired anime personality", value="aizen"),
+            app_commands.Choice(name="Cheerful anime-inspired", value="cheerful_anime"),
+            app_commands.Choice(name="Blox Fruits & Gaming expert", value="gaming_expert"),
+            app_commands.Choice(name="Short-answer assistant", value="short_answer"),
+            app_commands.Choice(name="Custom server personality", value="custom"),
+        ]
+    )
+    @app_commands.checks.has_permissions(manage_guild=True)
+    async def slash_personality(
+        self,
+        interaction: discord.Interaction,
+        preset: app_commands.Choice[str],
+        custom_prompt: Optional[str] = None,
+    ) -> None:
+        gid = interaction.guild.id
+        current = self.bot.ai_mgr.get_server_config(gid)
+        current["personality"] = preset.value
+        if custom_prompt:
+            current["custom_system_prompt"] = custom_prompt[:1500]
+
+        await self.bot.ai_mgr.save_server_config(gid, current)
+        preset_info = PERSONALITY_PRESETS.get(preset.value, {})
+        await interaction.response.send_message(
+            f"✅ Switched server AI personality to **{preset_info.get('name', preset.name)}**.\n"
+            f"> *{preset_info.get('description', '')}*",
+            ephemeral=True,
+        )
+
+    # 37. /ai test
+    @ai_group.command(name="test", description="Preview and test the server's configured AI personality.")
+    @app_commands.describe(prompt="Test question or statement to send to the AI")
+    async def slash_test(self, interaction: discord.Interaction, prompt: str) -> None:
+        await interaction.response.defer(ephemeral=True)
+        gid = interaction.guild.id
+        server_name = interaction.guild.name
+        try:
+            answer = await self.bot.ai_mgr.generate_response(
+                self._session(),
+                gid,
+                interaction.channel.id,
+                interaction.user.id,
+                prompt,
+                server_name=server_name,
+            )
+            cfg = self.bot.ai_mgr.get_server_config(gid)
+            preset_name = PERSONALITY_PRESETS.get(cfg.get("personality", "aizen"), {}).get("name", "AI")
+            container = KyokaContainer()
+            container.add_section(content=f"**Personality Preview: {preset_name}**")
+            container.add_separator(divider=True)
+            container.add_text(f"**You:** {prompt}\n\n**KYOKA:** {answer}")
+            await send_container_response(interaction, container, ephemeral=True)
+        except Exception as e:
+            await interaction.followup.send(f"❌ AI Preview failed: {e}", ephemeral=True)
+
+    # 38. /ai reset
+    @ai_group.command(name="reset", description="Reset AI configuration for this server to default settings.")
+    @app_commands.checks.has_permissions(manage_guild=True)
+    async def slash_reset(self, interaction: discord.Interaction) -> None:
+        view = ConfirmAIResetView(self.bot, interaction.guild.id, interaction.user.id)
+        await interaction.response.send_message(
+            "⚠️ **Are you sure you want to reset the AI configuration for this server?**\n"
+            "> This will restore default Aizen settings and clear custom server rules.",
+            view=view,
+            ephemeral=True,
+        )
+
+    # 39. /ai enable
+    @ai_group.command(name="enable", description="Enable AI responses in a specific channel or server-wide.")
+    @app_commands.describe(channel="Channel to enable AI in (leave blank for server-wide)")
+    @app_commands.checks.has_permissions(manage_guild=True)
+    async def slash_enable(self, interaction: discord.Interaction, channel: Optional[discord.TextChannel] = None) -> None:
+        gid = interaction.guild.id
+        current = self.bot.ai_mgr.get_server_config(gid)
+        current["enabled"] = True
+        if channel:
+            allowed = list(current.get("allowed_channels", []))
+            if channel.id not in allowed:
+                allowed.append(channel.id)
+            current["allowed_channels"] = allowed
+            excluded = list(current.get("excluded_channels", []))
+            if channel.id in excluded:
+                excluded.remove(channel.id)
+            current["excluded_channels"] = excluded
+            await self.bot.ai_mgr.save_server_config(gid, current)
+            await interaction.response.send_message(f"✅ Enabled AI responses in {channel.mention}.", ephemeral=True)
+        else:
+            await self.bot.ai_mgr.save_server_config(gid, current)
+            await interaction.response.send_message("✅ Enabled AI responses server-wide.", ephemeral=True)
+
+    # 40. /ai disable
+    @ai_group.command(name="disable", description="Disable AI responses in a specific channel or server-wide.")
+    @app_commands.describe(channel="Channel to disable AI in (leave blank for server-wide)")
+    @app_commands.checks.has_permissions(manage_guild=True)
+    async def slash_disable(self, interaction: discord.Interaction, channel: Optional[discord.TextChannel] = None) -> None:
+        gid = interaction.guild.id
+        current = self.bot.ai_mgr.get_server_config(gid)
+        if channel:
+            excluded = list(current.get("excluded_channels", []))
+            if channel.id not in excluded:
+                excluded.append(channel.id)
+            current["excluded_channels"] = excluded
+            allowed = list(current.get("allowed_channels", []))
+            if channel.id in allowed:
+                allowed.remove(channel.id)
+            current["allowed_channels"] = allowed
+            await self.bot.ai_mgr.save_server_config(gid, current)
+            await interaction.response.send_message(f"✅ Disabled AI responses in {channel.mention}.", ephemeral=True)
+        else:
+            current["enabled"] = False
+            await self.bot.ai_mgr.save_server_config(gid, current)
+            await interaction.response.send_message("✅ Disabled AI responses server-wide.", ephemeral=True)
+
+    # ─── LEGACY PREFIX COMMANDS PRESERVED ────────────────────────────────────
 
     @commands.command(name="aisetup", help="Admin: configure automatic AI replies in a channel, or turn them off.")
     @commands.guild_only()

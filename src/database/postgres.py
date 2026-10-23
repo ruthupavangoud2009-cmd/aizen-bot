@@ -793,6 +793,182 @@ class PostgresDatabase(BaseDatabase):
             """,
             "CREATE INDEX IF NOT EXISTS idx_rr_msg ON reaction_roles (message_id);",
             "CREATE INDEX IF NOT EXISTS idx_rr_guild ON reaction_roles (guild_id);",
+            # KYOKA 3.0 Giveaway Schema Extensions
+            "ALTER TABLE giveaways ADD COLUMN IF NOT EXISTS description TEXT DEFAULT '';",
+            "ALTER TABLE giveaways ADD COLUMN IF NOT EXISTS starts_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP;",
+            "ALTER TABLE giveaways ADD COLUMN IF NOT EXISTS is_paused BOOLEAN DEFAULT FALSE;",
+            "ALTER TABLE giveaways ADD COLUMN IF NOT EXISTS is_cancelled BOOLEAN DEFAULT FALSE;",
+            "ALTER TABLE giveaways ADD COLUMN IF NOT EXISTS paused_at TIMESTAMP;",
+            "ALTER TABLE giveaways ADD COLUMN IF NOT EXISTS remaining_seconds_when_paused INT;",
+            "ALTER TABLE giveaways ADD COLUMN IF NOT EXISTS claim_deadline_seconds INT DEFAULT 0;",
+            "ALTER TABLE giveaways ADD COLUMN IF NOT EXISTS auto_reroll_unclaimed BOOLEAN DEFAULT FALSE;",
+            "ALTER TABLE giveaways ADD COLUMN IF NOT EXISTS entry_limit INT DEFAULT 0;",
+            "ALTER TABLE giveaways ADD COLUMN IF NOT EXISTS embed_color VARCHAR(10) DEFAULT '';",
+            "ALTER TABLE giveaways ADD COLUMN IF NOT EXISTS thumbnail_url TEXT DEFAULT '';",
+            "ALTER TABLE giveaways ADD COLUMN IF NOT EXISTS image_url TEXT DEFAULT '';",
+            "ALTER TABLE giveaways ADD COLUMN IF NOT EXISTS bonus_stacking_policy VARCHAR(20) DEFAULT 'highest';",
+            "ALTER TABLE giveaways ADD COLUMN IF NOT EXISTS bonus_multiplier_cap DOUBLE PRECISION DEFAULT 10.0;",
+            # KYOKA 3.0 Giveaway Participant Extensions
+            "ALTER TABLE giveaway_participants ADD COLUMN IF NOT EXISTS base_entries INT DEFAULT 1;",
+            "ALTER TABLE giveaway_participants ADD COLUMN IF NOT EXISTS bonus_entries INT DEFAULT 0;",
+            "ALTER TABLE giveaway_participants ADD COLUMN IF NOT EXISTS effective_weight DOUBLE PRECISION DEFAULT 1.0;",
+            "ALTER TABLE giveaway_participants ADD COLUMN IF NOT EXISTS qualifying_roles TEXT DEFAULT '';",
+            "ALTER TABLE giveaway_participants ADD COLUMN IF NOT EXISTS bonus_breakdown TEXT DEFAULT '';",
+            "ALTER TABLE giveaway_participants ADD COLUMN IF NOT EXISTS is_excluded BOOLEAN DEFAULT FALSE;",
+            "ALTER TABLE giveaway_participants ADD COLUMN IF NOT EXISTS exclusion_reason TEXT DEFAULT '';",
+            "ALTER TABLE giveaway_participants ADD COLUMN IF NOT EXISTS excluded_by BIGINT;",
+            # KYOKA 3.0 Giveaway Requirements
+            """
+            CREATE TABLE IF NOT EXISTS giveaway_requirements (
+                id SERIAL PRIMARY KEY,
+                giveaway_id INT REFERENCES giveaways(id) ON DELETE CASCADE,
+                guild_id BIGINT NOT NULL,
+                req_type VARCHAR(32) NOT NULL,
+                req_value TEXT NOT NULL,
+                channel_id BIGINT,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            );
+            """,
+            "CREATE INDEX IF NOT EXISTS idx_gw_reqs ON giveaway_requirements(giveaway_id);",
+            "CREATE INDEX IF NOT EXISTS idx_gw_reqs_guild ON giveaway_requirements(guild_id);",
+            # KYOKA 3.0 Giveaway Bonus Roles
+            """
+            CREATE TABLE IF NOT EXISTS giveaway_bonus_roles (
+                id SERIAL PRIMARY KEY,
+                guild_id BIGINT NOT NULL,
+                giveaway_id INT REFERENCES giveaways(id) ON DELETE CASCADE,
+                role_id BIGINT NOT NULL,
+                multiplier DOUBLE PRECISION DEFAULT 1.0,
+                extra_entries INT DEFAULT 0,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            );
+            """,
+            "CREATE INDEX IF NOT EXISTS idx_gw_bonus ON giveaway_bonus_roles(giveaway_id);",
+            "CREATE INDEX IF NOT EXISTS idx_gw_bonus_guild ON giveaway_bonus_roles(guild_id);",
+            # KYOKA 3.0 Giveaway Winners & Claims
+            """
+            CREATE TABLE IF NOT EXISTS giveaway_winners (
+                id SERIAL PRIMARY KEY,
+                giveaway_id INT NOT NULL REFERENCES giveaways(id) ON DELETE CASCADE,
+                user_id BIGINT NOT NULL,
+                weight DOUBLE PRECISION NOT NULL DEFAULT 1.0,
+                drawn_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                claim_deadline TIMESTAMP,
+                is_claimed BOOLEAN DEFAULT FALSE,
+                claimed_at TIMESTAMP,
+                is_rerolled BOOLEAN DEFAULT FALSE,
+                rerolled_at TIMESTAMP,
+                reroll_user_id BIGINT
+            );
+            """,
+            "CREATE INDEX IF NOT EXISTS idx_gw_winners ON giveaway_winners(giveaway_id);",
+            # KYOKA 3.0 Giveaway Templates
+            """
+            CREATE TABLE IF NOT EXISTS giveaway_templates (
+                id SERIAL PRIMARY KEY,
+                guild_id BIGINT NOT NULL,
+                name VARCHAR(64) NOT NULL,
+                prize VARCHAR(255) NOT NULL,
+                description TEXT DEFAULT '',
+                winner_count INT DEFAULT 1,
+                duration_seconds INT DEFAULT 86400,
+                requirements_json TEXT DEFAULT '{}',
+                bonus_roles_json TEXT DEFAULT '{}',
+                created_by BIGINT NOT NULL,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                CONSTRAINT uq_gw_tpl UNIQUE (guild_id, name)
+            );
+            """,
+            # KYOKA 3.0 Giveaway & Config Audit Log
+            """
+            CREATE TABLE IF NOT EXISTS giveaway_audit_log (
+                id BIGSERIAL PRIMARY KEY,
+                guild_id BIGINT NOT NULL,
+                giveaway_id INT,
+                actor_id BIGINT NOT NULL,
+                action VARCHAR(64) NOT NULL,
+                details TEXT DEFAULT '',
+                occurred_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
+            );
+            """,
+            "CREATE INDEX IF NOT EXISTS idx_gw_audit_guild ON giveaway_audit_log(guild_id, occurred_at DESC);",
+            # KYOKA 3.0 Server Giveaway & Config
+            """
+            CREATE TABLE IF NOT EXISTS server_giveaway_config (
+                guild_id BIGINT PRIMARY KEY,
+                manager_role_id BIGINT,
+                giveaway_channel_id BIGINT,
+                log_channel_id BIGINT,
+                winner_role_id BIGINT,
+                embed_color VARCHAR(10) DEFAULT '#7C3AED',
+                ping_role_id BIGINT,
+                notify_on_start BOOLEAN DEFAULT TRUE,
+                notify_on_end BOOLEAN DEFAULT TRUE,
+                reminder_intervals TEXT DEFAULT '1h,15m',
+                activity_tracking_enabled BOOLEAN DEFAULT TRUE,
+                activity_cooldown_seconds INT DEFAULT 5,
+                activity_excluded_channels TEXT DEFAULT '',
+                activity_min_length INT DEFAULT 3,
+                tag_requirement_enabled BOOLEAN DEFAULT FALSE,
+                tag_requirement_text VARCHAR(32) DEFAULT '',
+                updated_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
+            );
+            """,
+            # KYOKA 3.0 Member Activity Tracking
+            """
+            CREATE TABLE IF NOT EXISTS member_activity (
+                guild_id BIGINT NOT NULL,
+                user_id BIGINT NOT NULL,
+                message_date DATE NOT NULL,
+                message_count INT DEFAULT 1,
+                last_message_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
+                PRIMARY KEY (guild_id, user_id, message_date)
+            );
+            """,
+            "CREATE INDEX IF NOT EXISTS idx_member_act_date ON member_activity(guild_id, message_date);",
+            "CREATE INDEX IF NOT EXISTS idx_member_act_user ON member_activity(guild_id, user_id);",
+            """
+            CREATE TABLE IF NOT EXISTS member_activity_channel (
+                guild_id BIGINT NOT NULL,
+                user_id BIGINT NOT NULL,
+                channel_id BIGINT NOT NULL,
+                message_date DATE NOT NULL,
+                message_count INT DEFAULT 1,
+                PRIMARY KEY (guild_id, user_id, channel_id, message_date)
+            );
+            """,
+            "CREATE INDEX IF NOT EXISTS idx_member_act_chan ON member_activity_channel(guild_id, channel_id, message_date);",
+            # KYOKA 3.0 Multi-Personality AI Config
+            """
+            CREATE TABLE IF NOT EXISTS kyoka_ai_configs (
+                guild_id BIGINT PRIMARY KEY,
+                enabled BOOLEAN DEFAULT TRUE,
+                channel_id BIGINT,
+                personality VARCHAR(64) DEFAULT 'aizen',
+                tone VARCHAR(64) DEFAULT 'composed',
+                humor VARCHAR(64) DEFAULT 'dry',
+                language VARCHAR(32) DEFAULT 'English',
+                response_length VARCHAR(32) DEFAULT 'balanced',
+                purpose TEXT DEFAULT 'Server assistant and guide',
+                custom_rules TEXT DEFAULT '',
+                faqs TEXT DEFAULT '',
+                respond_mode VARCHAR(32) DEFAULT 'mentions_and_replies',
+                allowed_channels TEXT DEFAULT '',
+                excluded_channels TEXT DEFAULT '',
+                cooldown_seconds INT DEFAULT 4,
+                custom_system_prompt TEXT DEFAULT '',
+                updated_by BIGINT,
+                updated_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
+            );
+            """,
+            # KYOKA 3.0 User Privacy Preferences
+            """
+            CREATE TABLE IF NOT EXISTS user_privacy_preferences (
+                user_id BIGINT PRIMARY KEY,
+                opt_out_activity BOOLEAN DEFAULT FALSE,
+                updated_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
+            );
+            """,
         ]
         if not self.pool or self.pool._closed:
             await self._heal_pool()
