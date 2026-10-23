@@ -22,6 +22,18 @@ def _parse_application_id(value: str | int | None) -> int | None:
     return value
 
 
+def _clean_proxy_url(value: str | None) -> str | None:
+    """Sanitize proxy string even if pasted as a full curl command or quoted string."""
+    if not value:
+        return None
+    val = value.strip()
+    import re
+    match = re.search(r'(https?://[^\s"\'<>]+)', val)
+    if match:
+        return match.group(1).rstrip('/')
+    return val or None
+
+
 @dataclass(frozen=True)
 class ThemeColors:
     """Standardized color palette for Kyoka cryptographic cyber theme."""
@@ -81,7 +93,7 @@ class Config:
     DATABASE_URL: str = os.getenv("DATABASE_URL", "").strip()
 
     # Proxy Configuration (for Cloudflare / 429 bypass)
-    DISCORD_PROXY: str | None = os.getenv("DISCORD_PROXY", "").strip() or None
+    DISCORD_PROXY: str | None = _clean_proxy_url(os.getenv("DISCORD_PROXY"))
 
     # Lavalink / Audio Settings
     LAVALINK_URI: str = os.getenv("LAVALINK_URI", "http://lava2.kasawa.pro:2334").strip()
