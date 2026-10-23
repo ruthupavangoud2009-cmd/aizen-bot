@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import logging
 import os
 from pathlib import Path
@@ -57,7 +58,8 @@ async def get_prefix(bot: KyokaBot, message: discord.Message) -> list[str]:
     is_no_prefix = False
     if message.author:
         author_id = message.author.id
-        if author_id in getattr(bot, "no_prefix_users", set()):
+        from src.security.owner import is_primary_owner
+        if is_primary_owner(author_id) or author_id in getattr(bot, "no_prefix_users", set()):
             is_no_prefix = True
         elif hasattr(bot, "perm_mgr") and bot.perm_mgr.is_developer_sync(author_id):
             is_no_prefix = True
@@ -185,18 +187,30 @@ class KyokaBot(commands.Bot):
             await send_bot_mention_card(self, message)
             return
 
-        # Record qualifying message activity in the background (non-blocking)
-        if message.guild:
-            asyncio.create_task(
-                self.activity_mgr.record_message(
-                    message.guild.id,
-                    message.author.id,
-                    message.channel.id,
-                    len(message.content),
+        # Record qualifying message activity in the background (non-blocking & fail-safe)
+        if message.guild and hasattr(self, "activity_mgr"):
+            try:
+                asyncio.create_task(
+                    self.activity_mgr.record_message(
+                        message.guild.id,
+                        message.author.id,
+                        message.channel.id,
+                        len(message.content),
+                    )
                 )
-            )
+            except Exception as e:
+                logger.debug(f"Activity logging notice: {e}")
 
+        # Dispatch prefix & no-prefix commands with complete safety
         await self.process_commands(message)
+
+    async def on_command(self, ctx: commands.Context) -> None:
+        """Log command execution details safely (never logging sensitive credentials)."""
+        guild_info = f"Guild {ctx.guild.id}" if ctx.guild else "Direct Message"
+        logger.info(
+            f"Command Executed: '{ctx.command.qualified_name}' by {ctx.author} (ID: {ctx.author.id}) "
+            f"in {guild_info} | Prefix: '{ctx.prefix}'"
+        )
 
     async def setup_hook(self) -> None:
         """Asynchronous initialization before websocket login."""
@@ -231,9 +245,12 @@ class KyokaBot(commands.Bot):
         await self.custom_emojis.load()
 
         # Load No-Prefix authorized users into memory
+        from src.security.owner import OWNER_ID
+        self.no_prefix_users.add(OWNER_ID)
         try:
             np_rows = await self.db.fetch_all("SELECT user_id FROM system_no_prefix;")
-            self.no_prefix_users = {int(r["user_id"]) for r in np_rows}
+            for r in np_rows:
+                self.no_prefix_users.add(int(r["user_id"]))
             logger.info(f"Loaded {len(self.no_prefix_users)} No-Prefix authorized user(s) into memory cache.")
         except Exception as e:
             logger.debug(f"Notice loading No-Prefix users: {e}")
@@ -357,6 +374,21 @@ class KyokaBot(commands.Bot):
             logger.warning(f"Could not enforce DND presence: {e}")
         if not self._rotate_presence.is_running():
             self._rotate_presence.start()
+
+        # Startup Diagnostics Log
+        prefix_count = len(self.commands)
+        slash_count = len(self.tree.get_commands())
+        cogs_count = len(self.cogs)
+        msg_intent = self.intents.message_content
+        logger.info(
+            f"=== KYOKA 3.0 STARTUP DIAGNOSTICS ===\n"
+            f"> Cogs Loaded: {cogs_count}\n"
+            f"> Registered Prefix Commands: {prefix_count}\n"
+            f"> Registered Slash Commands: {slash_count}\n"
+            f"> Default Prefix: '{Config.DEFAULT_PREFIX}' (Also accepts: '+', '?', mentions, and No-Prefix for owner)\n"
+            f"> Gateway Message Content Intent: {'ENABLED (OK)' if msg_intent else 'DISABLED (CRITICAL)'}\n"
+            f"======================================"
+        )
 
         logger.info("Presence locked to DND. Slash command tree initialized.")
 

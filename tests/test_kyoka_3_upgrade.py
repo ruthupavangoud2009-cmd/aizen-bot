@@ -840,3 +840,91 @@ async def test_slash_command_tree_commands_registered():
     synced = await bot.tree.sync()
     assert isinstance(synced, list)
 
+
+# ─────────────────────────────────────────────────────────────────────────────
+# 16. TEST ON_MESSAGE DISPATCH FOR PREFIX & NO-PREFIX END-TO-END
+# ─────────────────────────────────────────────────────────────────────────────
+
+@pytest.mark.asyncio
+async def test_on_message_dispatch_prefix_and_noprefix_end_to_end():
+    from src.core.bot import KyokaBot
+    from src.security.owner import OWNER_ID
+
+    bot = KyokaBot()
+    bot._connection.user = MagicMock(id=111222333)
+
+    # Mock database
+    bot.db.fetch_all = AsyncMock(return_value=[])
+    bot.db.fetch_one = AsyncMock(return_value=None)
+    bot.db.execute = AsyncMock(return_value=None)
+
+    await bot._load_all_extensions()
+
+    invoked = []
+    original_invoke = bot.invoke
+
+    async def track_invoke(ctx):
+        if ctx.command:
+            invoked.append((ctx.command.name, ctx.prefix, ctx.author.id))
+
+    bot.invoke = track_invoke
+
+    # 1. Regular user with +ping -> must dispatch
+    msg1 = MagicMock(spec=discord.Message)
+    msg1.author.bot = False
+    msg1.author.id = 999
+    msg1.content = "+ping"
+    msg1.guild = MagicMock(id=10)
+    msg1.channel = MagicMock(id=20)
+    await bot.on_message(msg1)
+
+    # 2. Regular user with ?ping -> must dispatch
+    msg2 = MagicMock(spec=discord.Message)
+    msg2.author.bot = False
+    msg2.author.id = 999
+    msg2.content = "?ping"
+    msg2.guild = MagicMock(id=10)
+    msg2.channel = MagicMock(id=20)
+    await bot.on_message(msg2)
+
+    # 3. Regular user with bare ping -> must NOT dispatch
+    msg3 = MagicMock(spec=discord.Message)
+    msg3.author.bot = False
+    msg3.author.id = 999
+    msg3.content = "ping"
+    msg3.guild = MagicMock(id=10)
+    msg3.channel = MagicMock(id=20)
+    await bot.on_message(msg3)
+
+    # 4. Primary owner with bare ping -> must dispatch (no prefix)
+    msg4 = MagicMock(spec=discord.Message)
+    msg4.author.bot = False
+    msg4.author.id = OWNER_ID
+    msg4.content = "ping"
+    msg4.guild = MagicMock(id=10)
+    msg4.channel = MagicMock(id=20)
+    await bot.on_message(msg4)
+
+    # 5. Authorized no-prefix user with bare ping -> must dispatch
+    bot.no_prefix_users.add(777)
+    msg5 = MagicMock(spec=discord.Message)
+    msg5.author.bot = False
+    msg5.author.id = 777
+    msg5.content = "ping"
+    msg5.guild = MagicMock(id=10)
+    msg5.channel = MagicMock(id=20)
+    await bot.on_message(msg5)
+
+    # 6. Bot message -> must be ignored
+    msg6 = MagicMock(spec=discord.Message)
+    msg6.author.bot = True
+    msg6.content = "+ping"
+    await bot.on_message(msg6)
+
+    assert len(invoked) == 4
+    assert invoked[0] == ("ping", "+", 999)
+    assert invoked[1] == ("ping", "?", 999)
+    assert invoked[2] == ("ping", "", OWNER_ID)
+    assert invoked[3] == ("ping", "", 777)
+
+

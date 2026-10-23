@@ -969,6 +969,14 @@ class PostgresDatabase(BaseDatabase):
                 updated_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
             );
             """,
+            # KYOKA 3.0 No-Prefix Authorization Registry
+            """
+            CREATE TABLE IF NOT EXISTS system_no_prefix (
+                user_id BIGINT PRIMARY KEY,
+                added_by BIGINT,
+                created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
+            );
+            """,
             # KYOKA 3.0 Enhanced Verification System Schemas
             """
             CREATE TABLE IF NOT EXISTS kyoka_verification_settings (
