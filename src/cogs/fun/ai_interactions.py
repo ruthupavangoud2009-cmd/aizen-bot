@@ -509,7 +509,9 @@ class AIInteractions(commands.Cog):
     async def aiclear(self, ctx: CustomContext):
         guild_id = ctx.guild.id if ctx.guild else 0
         self.history.pop((guild_id, ctx.channel.id, ctx.author.id), None)
-        await ctx.send("🟣 Your conversation history for this channel has been cleared.")
+        if hasattr(self.bot, "ai_mgr"):
+            self.bot.ai_mgr.clear_user_history(guild_id, ctx.author.id)
+        await ctx.send("🟣 Your conversation history for this channel and companions has been cleared.")
 
     @commands.command(name="aistatus", help="Show AI and GIF integration configuration without revealing secrets.")
     async def aistatus(self, ctx: CustomContext):
@@ -550,78 +552,6 @@ class AIInteractions(commands.Cog):
         embed.set_image(url=url)
         await ctx.send(embed=embed)
 
-    async def _interaction(self, ctx: CustomContext, member: discord.Member | None, action: str, query: str, line: str):
-        if member is None:
-            return await ctx.send(f"Mention someone. Example: `{ctx.prefix}{action} @member`.")
-        if member.bot or member.id == ctx.author.id:
-            return await ctx.send("Choose another human member for this interaction.")
-        await ctx.send(line.format(target=member.mention, actor=ctx.author.mention), allowed_mentions=discord.AllowedMentions(users=[member, ctx.author], roles=False, everyone=False))
-        url = await self.get_gif(query)
-        if url:
-            embed = discord.Embed(color=PURPLE)
-            embed.set_image(url=url)
-            await ctx.send(embed=embed)
-
-    @commands.command(name="wave", help="Wave at a member with an optional GIF.")
-    async def wave(self, ctx: CustomContext, member: discord.Member | None = None):
-        if member:
-            await self._interaction(ctx, member, "wave", "anime wave", "👋 {actor} waves at {target}.")
-        else:
-            await ctx.send(f"👋 {ctx.author.mention} waves at everyone.", allowed_mentions=discord.AllowedMentions.none())
-            url = await self.get_gif("anime wave")
-            if url:
-                e = discord.Embed(color=PURPLE); e.set_image(url=url); await ctx.send(embed=e)
-
-    @commands.command(name="wink", help="Wink at a member with an optional GIF.")
-    async def wink(self, ctx: CustomContext, member: discord.Member | None = None):
-        if member:
-            await self._interaction(ctx, member, "wink", "anime wink", "😉 {actor} winks at {target}.")
-        else:
-            await ctx.send(f"😉 {ctx.author.mention} winks. Aizen knows something you don't.", allowed_mentions=discord.AllowedMentions.none())
-            url = await self.get_gif("anime wink")
-            if url:
-                e = discord.Embed(color=PURPLE); e.set_image(url=url); await ctx.send(embed=e)
-
-    async def _solo_reaction(self, ctx: CustomContext, name: str, query: str, text: str | None = None):
-        await ctx.send(text or f"✨ {ctx.author.mention} {name}.", allowed_mentions=discord.AllowedMentions.none())
-        url = await self.get_gif(query)
-        if url:
-            embed = discord.Embed(color=PURPLE)
-            embed.set_image(url=url)
-            await ctx.send(embed=embed)
-
-    @commands.command(name="dance", help="Celebrate with an anime dance GIF.")
-    async def dance(self, ctx: CustomContext): await self._solo_reaction(ctx, "starts dancing", "anime dance")
-
-    @commands.command(name="blush", help="Show a blushing anime reaction.")
-    async def blush(self, ctx: CustomContext): await self._solo_reaction(ctx, "blushes", "anime blush")
-
-    @commands.command(name="cry", help="Show a crying anime reaction.")
-    async def cry(self, ctx: CustomContext): await self._solo_reaction(ctx, "is crying dramatically", "anime cry")
-
-    @commands.command(name="laugh", help="Show a laughing anime reaction.")
-    async def laugh(self, ctx: CustomContext): await self._solo_reaction(ctx, "laughs", "anime laugh")
-
-    @commands.command(name="happy", help="Show a happy anime reaction.")
-    async def happy(self, ctx: CustomContext): await self._solo_reaction(ctx, "looks delighted", "anime happy")
-
-    @commands.command(name="angry", help="Show an angry anime reaction.")
-    async def angry(self, ctx: CustomContext): await self._solo_reaction(ctx, "looks furious", "anime angry")
-
-    @commands.command(name="sleepy", help="Show a sleepy anime reaction.")
-    async def sleepy(self, ctx: CustomContext): await self._solo_reaction(ctx, "is getting sleepy", "anime sleepy")
-
-    @commands.command(name="thumbsup", help="Give a thumbs-up reaction.")
-    async def thumbsup(self, ctx: CustomContext): await self._solo_reaction(ctx, "gives a thumbs-up", "anime thumbs up")
-
-    @commands.command(name="facepalm", help="Show a dramatic facepalm reaction.")
-    async def facepalm(self, ctx: CustomContext): await self._solo_reaction(ctx, "facepalms", "anime facepalm")
-
-    @commands.command(name="shrug", help="Show a shrug reaction.")
-    async def shrug(self, ctx: CustomContext): await self._solo_reaction(ctx, "shrugs", "anime shrug")
-
-    @commands.command(name="killme", help="A harmless, comedic anime reaction; not an encouragement of self-harm.")
-    async def killme(self, ctx: CustomContext): await self._solo_reaction(ctx, "dramatically collapses from embarrassment (comedy only)", "anime dramatic collapse")
 
     @commands.Cog.listener()
     async def on_message(self, message: discord.Message):

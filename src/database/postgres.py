@@ -1036,6 +1036,17 @@ class PostgresDatabase(BaseDatabase):
             );
             """,
             "CREATE INDEX IF NOT EXISTS idx_ticket_notes_ch ON ticket_internal_notes(channel_id);",
+            # KYOKA 3.0 Marriage & Romance System
+            """
+            CREATE TABLE IF NOT EXISTS user_marriages (
+                guild_id BIGINT NOT NULL,
+                user_id BIGINT NOT NULL,
+                spouse_id BIGINT NOT NULL,
+                married_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
+                PRIMARY KEY (guild_id, user_id)
+            );
+            """,
+            "CREATE INDEX IF NOT EXISTS idx_marriages_guild ON user_marriages(guild_id, user_id);",
         ]
         if not self.pool or self.pool._closed:
             await self._heal_pool()

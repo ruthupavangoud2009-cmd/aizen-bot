@@ -13,6 +13,7 @@ from discord.ext import commands
 
 from src.core.context import CustomContext
 from src.security.owner import is_primary_owner
+from src.security.adult_guard import authorize_adult
 from src.managers.gif_manager import GIFManager
 
 SUPPORT_URL = "https://discord.gg/5DBQTQJa9"
@@ -138,56 +139,23 @@ class Fun(commands.Cog):
             allowed_mentions=discord.AllowedMentions(users=[member, ctx.author], roles=False, everyone=False),
         )
 
-    @commands.command(name="slap", help="Aizen gives someone an anime-style slap.")
-    async def slap(self, ctx: CustomContext, member: discord.Member | None = None):
-        await self._target_action(ctx, member, "slapped", "🪭", "in anime roleplay. A flawless illusion.")
-
-    @commands.command(name="hug", help="Send someone a friendly anime hug.")
-    async def hug(self, ctx: CustomContext, member: discord.Member | None = None):
-        await self._target_action(ctx, member, "hugged", "💜", "with a friendly hug.")
-
-    @commands.command(name="pat", help="Give someone a friendly head pat.")
-    async def pat(self, ctx: CustomContext, member: discord.Member | None = None):
-        await self._target_action(ctx, member, "patted", "✨", "gently on the head.")
-
-    @commands.command(name="kiss", help="Send a playful, virtual anime kiss.")
-    async def kiss(self, ctx: CustomContext, member: discord.Member | None = None):
-        await self._target_action(ctx, member, "kissed", "💋", "with a playful virtual kiss.")
-
-    @commands.command(name="bonk", help="Give someone a harmless cartoon bonk.")
-    async def bonk(self, ctx: CustomContext, member: discord.Member | None = None):
-        await self._target_action(ctx, member, "bonked", "🔨", "with a harmless cartoon bonk.")
-
-    @commands.command(name="cuddle", help="Send someone a friendly cuddle.")
-    async def cuddle(self, ctx: CustomContext, member: discord.Member | None = None):
-        await self._target_action(ctx, member, "cuddled", "🫂", "warmly.")
-
-    @commands.command(name="poke", help="Give someone a gentle poke.")
-    async def poke(self, ctx: CustomContext, member: discord.Member | None = None):
-        await self._target_action(ctx, member, "poked", "👉", "gently.")
-
-    @commands.command(name="highfive", help="Give someone a high five.")
-    async def highfive(self, ctx: CustomContext, member: discord.Member | None = None):
-        await self._target_action(ctx, member, "high-fived", "🙌", "with a high five.")
-
-    @commands.command(name="kill", help="Defeat someone in a fictional anime roleplay duel.")
-    async def kill(self, ctx: CustomContext, member: discord.Member | None = None):
-        await self._target_action(
-            ctx, member, "defeated", "⚔️", "in a fictional anime duel. Respawn and try again!"
-        )
 
     @commands.hybrid_command(
         name="fuck",
         help="Playfully dominate someone in a suggestive anime couple interaction (consenting fictional roleplay, non-explicit).",
     )
     async def fuck(self, ctx: CustomContext, member: discord.Member | None = None):
-        """Playful intimate anime couple interaction."""
+        """Playful intimate anime couple interaction (Restricted to Authorized Users)."""
         if member is None:
             return await ctx.send(f"Please mention someone. Example: `{ctx.prefix}fuck @user`")
         if member.bot:
             return await ctx.send("Keep the roleplay between human members.")
         if member.id == ctx.author.id:
             return await ctx.send("Choose another member for this playful interaction.")
+
+        # Strict security check: Adult-humor allowlist
+        if not await authorize_adult(ctx, action_name="fuck"):
+            return
 
         session = getattr(self.bot, "session", None)
         gif_url = await self.gif_mgr.get_action_gif("intimate_couple", session=session)
@@ -204,21 +172,6 @@ class Fun(commands.Cog):
             allowed_mentions=discord.AllowedMentions(users=[member, ctx.author], roles=False, everyone=False),
         )
 
-    @commands.command(name="compliment", help="Give someone a friendly compliment.")
-    async def compliment(self, ctx: CustomContext, member: discord.Member | None = None):
-        if member is None:
-            await ctx.send(f"Please mention someone. Example: `{ctx.prefix}compliment @user`")
-            return
-        compliments = (
-            "Your presence makes this server better.",
-            "You have excellent main-character energy.",
-            "Your kindness deserves its own story arc.",
-        )
-        await ctx.send(
-            f"✨ **Aizen's observation about {member.mention}:** {random.choice(compliments)}",
-            allowed_mentions=discord.AllowedMentions.none(),
-        )
-
     @commands.command(name="roast", help="Give someone a playful roast.")
     async def roast(self, ctx: CustomContext, member: discord.Member | None = None):
         if member is None:
@@ -227,13 +180,6 @@ class Fun(commands.Cog):
             return await ctx.send("Choose another human member for a playful roast.")
         lines = ["Your Wi-Fi has more stability than your plans.", "Even Aizen couldn't make that fit your character arc.", "You bring NPC energy to a main-character server.", "Your comebacks are still buffering.", "That was not in the script, and somehow it was still predictable."]
         await ctx.send(f"🔥 **Aizen's verdict for {member.mention}:** {random.choice(lines)}", allowed_mentions=discord.AllowedMentions.none())
-
-    @commands.command(name="ship", help="Calculate two users' completely scientific compatibility.")
-    async def ship(self, ctx: CustomContext, first: discord.Member, second: discord.Member | None = None):
-        second = second or ctx.author
-        score = random.randint(0, 100)
-        bar = "💜" * (score // 10) + "🤍" * (10 - score // 10)
-        await ctx.send(f"💘 **Aizen's ship scan**\n{first.display_name} × {second.display_name}\n{bar} **{score}%**\n-# Results may be an illusion.")
 
     @commands.command(name="8ball", aliases=["eightball"], help="Ask Aizen's mysterious 8-ball a question.")
     async def eightball(self, ctx: CustomContext, *, question: str):

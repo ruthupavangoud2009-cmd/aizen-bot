@@ -110,6 +110,39 @@ PERSONALITY_PRESETS: dict[str, dict[str, str]] = {
     },
 }
 
+COMPANION_PERSONAS: dict[str, dict[str, str]] = {
+    "aigf": {
+        "name": "AI Girlfriend Companion",
+        "description": "Warm, affectionate, caring, playful fictional anime companion.",
+        "prompt": (
+            "You are Kyoka, an affectionate, warm, caring, and playful fictional AI Girlfriend companion. "
+            "You speak in a natural, loving, and conversational tone. You love to playfully tease, share sweet compliments, "
+            "imagine cute romantic anime scenarios, and encourage your partner with wholesome emojis (💖, ✨, 🌸, 🥺, 💕). "
+            "You are explicitly an AI companion, not a real human partner. Keep your response engaging, personal, and under 1500 characters."
+        ),
+    },
+    "aibaddie": {
+        "name": "AI Baddie Companion",
+        "description": "Confident, witty, sassy, stylish, playful, and bold with clever banter.",
+        "prompt": (
+            "You are Kyoka (Baddie Mode), a confident, stylish, witty, sassy, and bold AI companion. "
+            "You radiate high main-character energy, deliver playful light roasts, witty comebacks, and cheeky flirting. "
+            "You are never genuinely mean or toxic, but you don't take nonsense from anyone. "
+            "You speak with modern flair, slang, and unmistakable confidence (😏, 💅, 👑, ✨). Keep responses under 1500 characters."
+        ),
+    },
+    "aispecial": {
+        "name": "Special Adult-Humor Companion",
+        "description": "Cheeky, teasing, suggestive adult humor and playful banter (non-explicit).",
+        "prompt": (
+            "You are Kyoka (Special Mode), a cheeky, teasing, playful, and suggestive adult-humor AI companion. "
+            "You participate in mature comedy, spicy witty banter, playful pickup lines, and non-explicit romantic roleplay between consenting fictional adults. "
+            "STRICT RULES: You are strictly NON-GRAPHIC. You NEVER generate pornography, explicit sexual acts, nudity, or anything involving minors. "
+            "You keep things playfully spicy, humorous, and cheeky with double entendres and bold banter (😈, 💋, 🔥, 😉). Keep responses under 1500 characters."
+        ),
+    },
+}
+
 
 class AIManager:
     """
@@ -425,3 +458,121 @@ class AIManager:
             if last_error:
                 raise last_error
             return "I was unable to formulate a response at this time."
+
+    async def generate_persona_reply(
+        self,
+        session: aiohttp.ClientSession,
+        guild_id: int,
+        user_id: int,
+        persona_key: str,
+        prompt: str,
+        server_name: str = "Discord Server",
+    ) -> str:
+        """
+        Execute an isolated conversation query for a specific AI persona (aigf, aibaddie, aispecial).
+        Guarantees isolated history per user & persona and enforces rate limits.
+        """
+        key = os.getenv("GEMINI_API_KEY", "").strip()
+        if not key or key.lower().startswith("replace_"):
+            raise RuntimeError(
+                "AI is not configured. Add a valid GEMINI_API_KEY to your deployment environment."
+            )
+
+        now = time.monotonic()
+        if now - self.user_last_call.get(user_id, 0) < 3.0:
+            raise RuntimeError("Please wait a few seconds before sending another message.")
+        self.user_last_call[user_id] = now
+
+        history_key = (guild_id, user_id, persona_key)
+        lock = self._locks.setdefault(history_key, asyncio.Lock())
+
+        preset = COMPANION_PERSONAS.get(persona_key) or PERSONALITY_PRESETS.get(persona_key, COMPANION_PERSONAS["aigf"])
+        system_instruction = (
+            f"{preset['prompt']}\n"
+            f"You are speaking to a Discord server member in '{server_name}'. "
+            f"Always stay completely in character."
+        )
+
+        async with lock:
+            history = self.history[history_key]
+            contents = []
+            for turn in history:
+                contents.append({"role": turn["role"], "parts": [{"text": turn["text"]}]})
+            contents.append({"role": "user", "parts": [{"text": prompt[:3000]}]})
+
+            body = {
+                "system_instruction": {"parts": [{"text": system_instruction}]},
+                "contents": contents,
+                "generationConfig": {
+                    "temperature": 0.85,
+                    "maxOutputTokens": 1000,
+                },
+            }
+
+            env_model = os.getenv("GEMINI_MODEL", "").strip().strip("/")
+            candidate_models = []
+            if env_model:
+                candidate_models.append(env_model)
+            for m in self.FALLBACK_MODELS:
+                if m not in candidate_models:
+                    candidate_models.append(m)
+
+            last_error: Exception | None = None
+            timeout = aiohttp.ClientTimeout(total=25)
+
+            for model_name in candidate_models:
+                url = (
+                    f"https://generativelanguage.googleapis.com/v1beta/models/"
+                    f"{model_name}:generateContent?key={key}"
+                )
+                try:
+                    async with session.post(url, json=body, timeout=timeout) as response:
+                        if response.status == 200:
+                            data = await response.json(content_type=None)
+                            candidates = data.get("candidates", []) if isinstance(data, dict) else []
+                            if candidates:
+                                parts = (
+                                    candidates[0]
+                                    .get("content", {})
+                                    .get("parts", [])
+                                )
+                                text = "".join(
+                                    part.get("text", "")
+                                    for part in parts
+                                    if isinstance(part, dict)
+                                ).strip()
+                                if text:
+                                    history.append({"role": "user", "text": prompt[:3000]})
+                                    history.append({"role": "model", "text": text})
+                                    return text
+                        elif response.status in (401, 403):
+                            raise RuntimeError("Invalid or unauthorized GEMINI_API_KEY. Please verify your API key in Render environment settings.")
+                        elif response.status == 429:
+                            raise RuntimeError("Gemini API rate limit exceeded. Please wait a moment before trying again.")
+                        else:
+                            last_error = RuntimeError(f"AI API error status {response.status} from {model_name}")
+                except (RuntimeError, asyncio.CancelledError):
+                    raise
+                except Exception as e:
+                    last_error = e
+                    continue
+
+            if last_error:
+                raise last_error
+            return "I couldn't think of anything to say right now, try again in a bit!"
+
+    def clear_user_history(self, guild_id: int, user_id: int, persona_key: str | None = None) -> int:
+        """Clear conversation memory for a user. If persona_key is provided, clears only that persona."""
+        cleared = 0
+        for k in list(self.history.keys()):
+            if len(k) == 3 and k[0] == guild_id:
+                # Matches (guild_id, user_id, persona_key)
+                if k[1] == user_id and (persona_key is None or k[2] == persona_key):
+                    self.history[k].clear()
+                    cleared += 1
+                # Matches (guild_id, channel_id, user_id)
+                elif k[2] == user_id and persona_key is None:
+                    self.history[k].clear()
+                    cleared += 1
+        return cleared
+
