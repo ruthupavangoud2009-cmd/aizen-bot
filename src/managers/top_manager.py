@@ -62,6 +62,10 @@ class CalculationResult:
     condition_note: str = ""
     custom_quote: bool = False
     ambiguity_note: str = ""
+    is_clarification: bool = False
+    clarification_title: str = ""
+    clarification_options: list[str] = field(default_factory=list)
+
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -1712,220 +1716,22 @@ class TopManager:
                     break
         return matches
 
-    def calculate_service_price(
-        self,
-        service_query: str,
-        quantity: int = 1,
-        tax_rate: float = 0.0,
-        with_chalice: bool = False,
-    ) -> CalculationResult:
-        """Find authoritative service price and compute subtotal, tax, and total."""
-        norm = service_query.lower().strip()
-
-        # Handle chalice condition for Rip_Indra
-        if "chalice" in norm or with_chalice:
-            if "indra" in norm:
-                item = self.get_price("boss_rip_indra_chalice")
-                if item:
-                    tax_amt, tot = self.calculate_tax(item.price_amount * quantity, tax_rate)
-                    return CalculationResult(
-                        service_name=item.service_name,
-                        category=item.category,
-                        quantity=quantity,
-                        unit_price=item.price_amount,
-                        unit_display=item.price_display,
-                        subtotal=item.price_amount * quantity,
-                        subtotal_display=self.format_price(item.price_amount * quantity),
-                        tax_rate=tax_rate,
-                        tax_amount=tax_amt,
-                        tax_display=self.format_price(tax_amt) if tax_amt > 0 else "0M",
-                        total=tot,
-                        total_display=self.format_price(tot),
-                        condition_note=item.condition_note,
-                        custom_quote=bool(item.custom_quote_required),
-                    )
-
-        # Handle tiered trials (1 trial, 2 trials, 3 trials)
-        if "trial" in norm and not ("draco" in norm or "tushita" in norm or "yama" in norm):
-            if "2 trial" in norm or "two trial" in norm or quantity == 2:
-                tax_amt, tot = self.calculate_tax(40.0, tax_rate)
-                return CalculationResult(
-                    service_name="2 Trials",
-                    category="Trials",
-                    quantity=2,
-                    unit_price=20.0,
-                    unit_display="20M",
-                    subtotal=40.0,
-                    subtotal_display="40M",
-                    tax_rate=tax_rate,
-                    tax_amount=tax_amt,
-                    tax_display=self.format_price(tax_amt) if tax_amt > 0 else "0M",
-                    total=tot,
-                    total_display=self.format_price(tot),
-                    condition_note="",
-                )
-            elif "3 trial" in norm or "three trial" in norm or quantity == 3:
-                tax_amt, tot = self.calculate_tax(60.0, tax_rate)
-                return CalculationResult(
-                    service_name="3 Trials",
-                    category="Trials",
-                    quantity=3,
-                    unit_price=20.0,
-                    unit_display="20M",
-                    subtotal=60.0,
-                    subtotal_display="60M",
-                    tax_rate=tax_rate,
-                    tax_amount=tax_amt,
-                    tax_display=self.format_price(tax_amt) if tax_amt > 0 else "0M",
-                    total=tot,
-                    total_display=self.format_price(tot),
-                    condition_note="",
-                )
-            elif "max race package" in norm or "max package" in norm:
-                item = self.get_price("trial_max_race_package")
-            elif "max" in norm:
-                item = self.get_price("trial_max")
-            elif "training" in norm:
-                item = self.get_price("trial_training")
-            else:
-                item = self.get_price("trial_1")
-
-        # Handle Normal Raids tiered ranges (1-5, 6-10, 11-15, 16-20, 20-25, 25+)
-        elif "normal raid" in norm or (("raid" in norm or "raids" in norm) and not ("advance" in norm or "adv" in norm or "order" in norm or "law" in norm)):
-            if quantity >= 25 and quantity != 25:
-                item = self.get_price("normal_raid_25_plus")
-            elif quantity == 20:
-                # Boundary Overlap Note (16-20 vs 20-25)
-                item = self.get_price("normal_raid_16_20")
-            elif 21 <= quantity <= 25:
-                item = self.get_price("normal_raid_20_25")
-            elif 16 <= quantity <= 19:
-                item = self.get_price("normal_raid_16_20")
-            elif 11 <= quantity <= 15:
-                item = self.get_price("normal_raid_11_15")
-            elif 6 <= quantity <= 10:
-                item = self.get_price("normal_raid_6_10")
-            else:
-                item = self.get_price("normal_raid_1_5")
-
-        # Handle Advance Raids (1-2: 10M, 3-4: 20M, 5: 30M, 6-8: 60M)
-        elif "advance raid" in norm or "adv raid" in norm:
-            if 6 <= quantity <= 8:
-                item = self.get_price("adv_raid_6_8")
-            elif quantity == 5:
-                item = self.get_price("adv_raid_5")
-            elif 3 <= quantity <= 4:
-                item = self.get_price("adv_raid_3_4")
-            else:
-                item = self.get_price("adv_raid_1_2")
-
-        # Handle Order Raids (1: 10M, 2: 20M, 3-5: 60M, 6-8: 120M, 8-10: 150M, 10+: custom)
-        elif "order raid" in norm or "law raid" in norm:
-            if quantity > 10:
-                item = self.get_price("order_raid_10_plus")
-            elif quantity == 8:
-                # Boundary Overlap Note (6-8 vs 8-10)
-                item = self.get_price("order_raid_6_8")
-            elif 9 <= quantity <= 10:
-                item = self.get_price("order_raid_8_10")
-            elif 6 <= quantity <= 7:
-                item = self.get_price("order_raid_6_8")
-            elif 3 <= quantity <= 5:
-                item = self.get_price("order_raid_3_5")
-            elif quantity == 2:
-                item = self.get_price("order_raid_2")
-            else:
-                item = self.get_price("order_raid_1")
-
-        else:
-            # Generic matching
-            item = self.get_price(norm)
-            if not item:
-                # Try finding closest match
-                matches = self.search_prices(norm)
-                if matches:
-                    item = matches[0]
-
-        if not item:
-            raise KeyError(f"No official price found for service '{service_query}'. Contact staff for custom pricing.")
-
-        # Compute totals
-        if item.custom_quote_required:
-            return CalculationResult(
-                service_name=item.service_name,
-                category=item.category,
-                quantity=quantity,
-                unit_price=0.0,
-                unit_display="Custom Quote",
-                subtotal=0.0,
-                subtotal_display="Custom Quote",
-                tax_rate=tax_rate,
-                tax_amount=0.0,
-                tax_display="Custom Quote",
-                total=0.0,
-                total_display="Custom Quote",
-                condition_note=item.condition_note,
-                custom_quote=True,
-            )
-
-        # For tiered packages where price is for the range itself (e.g. Normal Raids 1-5 = 10M tier)
-        if "tier" in item.unit_desc.lower() or item.service_key.startswith("normal_raid_") or item.service_key.startswith("adv_raid_") or item.service_key.startswith("order_raid_"):
-            subtotal = item.price_amount
-        else:
-            subtotal = item.price_amount * quantity
-
-        tax_amt, total = self.calculate_tax(subtotal, tax_rate)
-
-        # Add notes for flagged boundaries
-        ambiguity = ""
-        if "overlap" in item.condition_note.lower():
-            ambiguity = item.condition_note
-
-        return CalculationResult(
-            service_name=item.service_name,
-            category=item.category,
-            quantity=quantity,
-            unit_price=item.price_amount,
-            unit_display=item.price_display,
-            subtotal=subtotal,
-            subtotal_display=self.format_price(subtotal),
-            tax_rate=tax_rate,
-            tax_amount=tax_amt,
-            tax_display=self.format_price(tax_amt) if tax_amt > 0 else "0M",
-            total=total,
-            total_display=self.format_price(total),
-            condition_note=item.condition_note,
-            custom_quote=False,
-            ambiguity_note=ambiguity,
-        )
-
-    # ─────────────────────────────────────────────────────────────────────────
-    # 4. NATURAL LANGUAGE INTENT PARSER
-    # ─────────────────────────────────────────────────────────────────────────
-
-    def parse_top_query(self, query: str) -> dict[str, Any]:
-        """Natural-language intent parser for '?top ...' requests.
-        Understands:
-        - "what's the price of 1 trial?"
-        - "price of 2 trials"
-        - "what is the cost of 5 normal raids?"
-        - "price of Draco V2"
-        - "how much is Dough King?"
-        - "what's the price of 2 trials with 5% tax?"
-        - "calculate 3 trials with 10% tax"
-        - "make a bill for 2 trials with 5% tax unpaid"
+    def parse_top_query(self, query: str, tax_override: Optional[float] = None) -> dict[str, Any]:
+        """Universal smart intent and price parser for '?top ...' and '?top price ...'.
+        Recognizes natural language queries, quantities, version tags, aliases, conditions,
+        overlapping boundaries, clarifications, and optional decimal-safe tax.
         """
         raw = query.strip()
         low = raw.lower()
 
-        # Check intent: BILL vs CALCULATION vs LOOKUP
+        # 1. Intent check
         is_make_bill = any(
             phrase in low for phrase in [
                 "make bill", "make a bill", "create bill", "generate bill", "new bill"
             ]
         )
 
-        # Extract Tax percentage if present (e.g. "5% tax", "with 10% tax", "tax 5%", "7.5% tax")
+        # 2. Extract Tax percentage
         tax_rate = 0.0
         tax_match = re.search(r'(\d+(?:\.\d+)?)\s*%\s*(?:tax)?', low)
         if tax_match:
@@ -1941,56 +1747,816 @@ class TopManager:
                 except ValueError:
                     pass
 
-        # Extract Chalice condition if present
-        with_chalice = "chalice" in low
+        if tax_override is not None and tax_rate == 0.0:
+            tax_rate = float(tax_override)
 
-        # Clean prompt of prefix boilerplate
+        # Clean query of filler prefixes and tax substrings
         cleaned = low
-        for noise in [
-            "what's the price of", "what is the price of", "what is the cost of",
-            "price of", "cost of", "how much is", "how much for", "calculate",
-            "make a bill for", "make bill for", "make bill of", "make a bill of",
-            "make bill", "create bill for", "bill for", "unpaid", "paid",
-        ]:
-            cleaned = cleaned.replace(noise, " ")
-
-        # Strip tax substring from service string
         cleaned = re.sub(r'with\s*\d+(?:\.\d+)?\s*%\s*tax', ' ', cleaned)
         cleaned = re.sub(r'\d+(?:\.\d+)?\s*%\s*tax', ' ', cleaned)
         cleaned = re.sub(r'tax\s*\d+(?:\.\d+)?\s*%?', ' ', cleaned)
+        cleaned = re.sub(r'\bplus\s*\d+(?:\.\d+)?\s*%\b', ' ', cleaned)
+
+        prefixes = [
+            r"^(?:what(?:'s| is)? (?:the )?(?:price|cost) of)\s+",
+            r"^(?:what(?:'s| is)? (?:the )?(?:price|cost) for)\s+",
+            r"^(?:how much (?:is|for))\s+",
+            r"^(?:what(?:'s| is))\s+",
+            r"^(?:price of|cost of)\s+",
+            r"^(?:price for|cost for)\s+",
+            r"^(?:calculate)\s+",
+            r"^(?:make (?:a )?bill (?:for|of))\s+",
+            r"^(?:create (?:a )?bill (?:for|of))\s+",
+            r"^(?:bill (?:for|of))\s+",
+            r"^(?:price)\s+",
+            r"^(?:of)\s+",
+        ]
+        for p in prefixes:
+            cleaned = re.sub(p, '', cleaned).strip()
+
         cleaned = re.sub(r'[?.,!]', ' ', cleaned).strip()
+        norm = re.sub(r'\s+', ' ', cleaned).strip()
 
-        # Extract Quantity if present (e.g. "2 trials", "5 normal raids", "3")
-        quantity = 1
-        qty_match = re.search(r'\b(\d+)\b', cleaned)
-        if qty_match:
-            quantity = int(qty_match.group(1))
-            # Remove isolated number from service string if not part of a version like V2
-            # E.g. "2 trials" -> keep "trials", quantity=2
-            # But "draco v2" -> keep "draco v2", quantity=1
-            if not re.search(r'\bv\d+\b', cleaned):
-                cleaned = re.sub(r'\b' + str(quantity) + r'\b', ' ', cleaned).strip()
+        # ─────────────────────────────────────────────────────────────────────
+        # A. BELI FARMING
+        # ─────────────────────────────────────────────────────────────────────
+        if "beli" in norm or "money" in norm:
+            m_amt = re.search(r'\b(5|10|15|20|25|30)\s*(?:m|million)?\b', norm)
+            target_amt = int(m_amt.group(1)) if m_amt else 10
+            is_plus = "30+" in norm or "30m+" in norm
 
-        service_candidate = re.sub(r'\s+', ' ', cleaned).strip()
-        if not service_candidate:
-            service_candidate = "trials"
+            has_2x = ("with 2x" in norm or "2x money" in norm or "2x" in norm) and not ("without 2x" in norm or "no 2x" in norm)
+            has_no2x = "without 2x" in norm or "no 2x" in norm or "1x" in norm
 
-        # Special casing: if candidate is "trials" and quantity was extracted, candidate is "trials"
-        calc = self.calculate_service_price(
-            service_candidate,
-            quantity=quantity,
-            tax_rate=tax_rate,
-            with_chalice=with_chalice,
-        )
+            if not has_2x and not has_no2x:
+                p_2x = self.get_price(f"beli_2x_{target_amt}m")
+                p_no2x = self.get_price(f"beli_no2x_{target_amt}m")
+                p_2x_str = p_2x.price_display if p_2x else "Custom Quote"
+                p_no2x_str = p_no2x.price_display if p_no2x else "Custom Quote"
+                return {
+                    "intent": "price_lookup",
+                    "calculation": CalculationResult(
+                        service_name=f"{target_amt}M Beli Farming",
+                        category="Beli Farming",
+                        quantity=1,
+                        unit_price=0.0,
+                        unit_display="",
+                        subtotal=0.0,
+                        subtotal_display="",
+                        tax_rate=tax_rate,
+                        tax_amount=0.0,
+                        tax_display="",
+                        total=0.0,
+                        total_display="",
+                        is_clarification=True,
+                        clarification_title="❓ TOP AI MANAGER • CLARIFICATION NEEDED",
+                        clarification_options=[
+                            f"For **{target_amt}M Beli farming**, please specify your 2x Money status:",
+                            f"• **With 2x Money:** **{p_2x_str}**",
+                            f"• **Without 2x Money:** **{p_no2x_str}**",
+                            f"*Ask: `?top price {target_amt}M Beli with 2x money` or `without 2x money`*",
+                        ],
+                    ),
+                    "quantity": 1,
+                    "tax_rate": tax_rate,
+                    "raw_query": raw,
+                }
 
-        return {
-            "intent": "make_bill" if is_make_bill else "price_lookup",
-            "calculation": calc,
-            "quantity": quantity,
-            "tax_rate": tax_rate,
-            "raw_query": raw,
-            "with_chalice": with_chalice,
-        }
+            if has_2x:
+                if target_amt == 25:
+                    calc = CalculationResult(
+                        service_name="25M Beli (With 2x Money)",
+                        category="Beli Farming",
+                        quantity=1,
+                        unit_price=0.0,
+                        unit_display="Custom Quote",
+                        subtotal=0.0,
+                        subtotal_display="Custom Quote",
+                        tax_rate=tax_rate,
+                        tax_amount=0.0,
+                        tax_display="Custom Quote",
+                        total=0.0,
+                        total_display="Custom Quote",
+                        condition_note="With 2x Money • Tier not listed in official catalogue",
+                        custom_quote=True,
+                    )
+                    return {"intent": "price_lookup", "calculation": calc, "quantity": 1, "tax_rate": tax_rate, "raw_query": raw}
+                elif target_amt >= 30 and (is_plus or target_amt > 30):
+                    calc = CalculationResult(
+                        service_name="30M+ Beli (With 2x Money)",
+                        category="Beli Farming",
+                        quantity=1,
+                        unit_price=0.0,
+                        unit_display="Custom Quote",
+                        subtotal=0.0,
+                        subtotal_display="Custom Quote",
+                        tax_rate=tax_rate,
+                        tax_amount=0.0,
+                        tax_display="Custom Quote",
+                        total=0.0,
+                        total_display="Custom Quote",
+                        condition_note="30M+ Beli requires custom quote",
+                        custom_quote=True,
+                    )
+                    return {"intent": "price_lookup", "calculation": calc, "quantity": 1, "tax_rate": tax_rate, "raw_query": raw}
+                else:
+                    item = self.get_price(f"beli_2x_{target_amt}m")
+            else:
+                if target_amt >= 30:
+                    calc = CalculationResult(
+                        service_name="30M+ Beli (Without 2x Money)",
+                        category="Beli Farming",
+                        quantity=1,
+                        unit_price=0.0,
+                        unit_display="Custom Quote",
+                        subtotal=0.0,
+                        subtotal_display="Custom Quote",
+                        tax_rate=tax_rate,
+                        tax_amount=0.0,
+                        tax_display="Custom Quote",
+                        total=0.0,
+                        total_display="Custom Quote",
+                        condition_note="30M+ Beli requires custom quote",
+                        custom_quote=True,
+                    )
+                    return {"intent": "price_lookup", "calculation": calc, "quantity": 1, "tax_rate": tax_rate, "raw_query": raw}
+                else:
+                    item = self.get_price(f"beli_no2x_{target_amt}m")
+
+            if item:
+                tax_amt, tot = self.calculate_tax(item.price_amount, tax_rate)
+                calc = CalculationResult(
+                    service_name=item.service_name,
+                    category=item.category,
+                    quantity=1,
+                    unit_price=item.price_amount,
+                    unit_display=item.price_display,
+                    subtotal=item.price_amount,
+                    subtotal_display=item.price_display,
+                    tax_rate=tax_rate,
+                    tax_amount=tax_amt,
+                    tax_display=self.format_price(tax_amt) if tax_amt > 0 else "0M",
+                    total=tot,
+                    total_display=self.format_price(tot),
+                    condition_note=f"Farmed Beli: {target_amt}M • Service Price: {item.price_display}",
+                )
+                return {"intent": "make_bill" if is_make_bill else "price_lookup", "calculation": calc, "quantity": 1, "tax_rate": tax_rate, "raw_query": raw}
+
+        # ─────────────────────────────────────────────────────────────────────
+        # B. MASTERY & GUN MASTERY
+        # ─────────────────────────────────────────────────────────────────────
+        if "mastery" in norm:
+            is_gun = "gun" in norm or "guns" in norm
+            m_lvl = re.search(r'\b(100|200|300|400|500|600)\b', norm)
+            target_lvl = int(m_lvl.group(1)) if m_lvl else 300
+
+            has_2x = ("with 2x" in norm or "2x mastery" in norm or "2x" in norm) and not ("without 2x" in norm or "no 2x" in norm)
+            has_no2x = "without 2x" in norm or "no 2x" in norm or "1x" in norm
+
+            if not has_2x and not has_no2x:
+                if is_gun:
+                    p_2x = self.get_price(f"gun_mastery_2x_{target_lvl}")
+                    p_no2x = self.get_price(f"gun_mastery_no2x_{target_lvl}")
+                    svc = f"Till {target_lvl} Gun Mastery"
+                else:
+                    p_2x = self.get_price(f"mastery_2x_{target_lvl}")
+                    p_no2x = self.get_price(f"mastery_no2x_{target_lvl}")
+                    svc = f"Till {target_lvl} Mastery"
+
+                p_2x_str = p_2x.price_display if p_2x else "N/A"
+                p_no2x_str = p_no2x.price_display if p_no2x else "N/A"
+                return {
+                    "intent": "price_lookup",
+                    "calculation": CalculationResult(
+                        service_name=svc,
+                        category="Gun Mastery" if is_gun else "Mastery",
+                        quantity=1,
+                        unit_price=0.0,
+                        unit_display="",
+                        subtotal=0.0,
+                        subtotal_display="",
+                        tax_rate=tax_rate,
+                        tax_amount=0.0,
+                        tax_display="",
+                        total=0.0,
+                        total_display="",
+                        is_clarification=True,
+                        clarification_title="❓ TOP AI MANAGER • CLARIFICATION NEEDED",
+                        clarification_options=[
+                            f"For **{svc}**, please specify your 2x Mastery status:",
+                            f"• **With 2x Mastery:** **{p_2x_str}**",
+                            f"• **Without 2x Mastery:** **{p_no2x_str}**",
+                            f"*Ask: `?top price {svc} with 2x mastery` or `without 2x mastery`*",
+                        ],
+                    ),
+                    "quantity": 1,
+                    "tax_rate": tax_rate,
+                    "raw_query": raw,
+                }
+
+            prefix = "gun_mastery" if is_gun else "mastery"
+            cond_str = "2x" if has_2x else "no2x"
+            item = self.get_price(f"{prefix}_{cond_str}_{target_lvl}")
+            if item:
+                tax_amt, tot = self.calculate_tax(item.price_amount, tax_rate)
+                calc = CalculationResult(
+                    service_name=item.service_name,
+                    category=item.category,
+                    quantity=1,
+                    unit_price=item.price_amount,
+                    unit_display=item.price_display,
+                    subtotal=item.price_amount,
+                    subtotal_display=item.price_display,
+                    tax_rate=tax_rate,
+                    tax_amount=tax_amt,
+                    tax_display=self.format_price(tax_amt) if tax_amt > 0 else "0M",
+                    total=tot,
+                    total_display=self.format_price(tot),
+                    condition_note=item.condition_note,
+                )
+                return {"intent": "make_bill" if is_make_bill else "price_lookup", "calculation": calc, "quantity": 1, "tax_rate": tax_rate, "raw_query": raw}
+
+        # ─────────────────────────────────────────────────────────────────────
+        # C. LEVELS
+        # ─────────────────────────────────────────────────────────────────────
+        if "level" in norm or "lvl" in norm:
+            if "max" in norm:
+                item = self.get_price("level_max")
+            else:
+                m_lvl = re.search(r'\b(100|200|300|400|500|1000)\b', norm)
+                if m_lvl:
+                    item = self.get_price(f"level_{m_lvl.group(1)}")
+                else:
+                    item = self.get_price("level_100")
+            if item:
+                tax_amt, tot = self.calculate_tax(item.price_amount, tax_rate)
+                calc = CalculationResult(
+                    service_name=item.service_name,
+                    category=item.category,
+                    quantity=1,
+                    unit_price=item.price_amount,
+                    unit_display=item.price_display,
+                    subtotal=item.price_amount,
+                    subtotal_display=item.price_display,
+                    tax_rate=tax_rate,
+                    tax_amount=tax_amt,
+                    tax_display=self.format_price(tax_amt) if tax_amt > 0 else "0M",
+                    total=tot,
+                    total_display=self.format_price(tot),
+                )
+                return {"intent": "make_bill" if is_make_bill else "price_lookup", "calculation": calc, "quantity": 1, "tax_rate": tax_rate, "raw_query": raw}
+
+        # ─────────────────────────────────────────────────────────────────────
+        # D. RAIDS (NORMAL, ADVANCE, ORDER, or AMBIGUOUS)
+        # ─────────────────────────────────────────────────────────────────────
+        if "raid" in norm or "raids" in norm:
+            is_adv = "advance" in norm or "adv" in norm
+            is_ord = "order" in norm or "law" in norm
+            is_norm = "normal" in norm
+
+            m_q = re.search(r'\b(\d+)\b', norm)
+            qty = int(m_q.group(1)) if m_q else 1
+
+            if not is_adv and not is_ord and not is_norm:
+                # AMBIGUOUS: Could be Normal, Advance, or Order Raids!
+                if qty <= 5: p_norm = "10M (1–5 Raids)"
+                elif qty <= 10: p_norm = "20M (6–10 Raids)"
+                elif qty <= 15: p_norm = "30M (11–15 Raids)"
+                elif qty <= 20: p_norm = "50M (16–20 Raids)"
+                elif qty <= 25: p_norm = "60M (20–25 Raids)"
+                else: p_norm = "Custom Quote"
+
+                if qty <= 2: p_adv = "10M (1–2 Raids)"
+                elif qty <= 4: p_adv = "20M (3–4 Raids)"
+                elif qty == 5: p_adv = "30M (5 Raids)"
+                elif qty <= 8: p_adv = "60M (6–8 Raids)"
+                else: p_adv = "Custom Quote"
+
+                if qty == 1: p_ord = "10M (1 Raid)"
+                elif qty == 2: p_ord = "20M (2 Raids)"
+                elif qty <= 5: p_ord = "60M (3–5 Raids)"
+                elif qty <= 8: p_ord = "120M (6–8 Raids)"
+                elif qty <= 10: p_ord = "150M (8–10 Raids)"
+                else: p_ord = "Custom Quote"
+
+                return {
+                    "intent": "price_lookup",
+                    "calculation": CalculationResult(
+                        service_name=f"{qty} Raids",
+                        category="Raids",
+                        quantity=qty,
+                        unit_price=0.0,
+                        unit_display="",
+                        subtotal=0.0,
+                        subtotal_display="",
+                        tax_rate=tax_rate,
+                        tax_amount=0.0,
+                        tax_display="",
+                        total=0.0,
+                        total_display="",
+                        is_clarification=True,
+                        clarification_title="❓ TOP AI MANAGER • CLARIFICATION NEEDED",
+                        clarification_options=[
+                            f"Your request for **{qty} raids** matches multiple raid categories. Which one did you mean?",
+                            f"• **Normal Raids:** **{p_norm}**",
+                            f"• **Advance Raids:** **{p_adv}**",
+                            f"• **Order Raids:** **{p_ord}**",
+                            f"*Please specify: `normal raids`, `advance raids`, or `order raids`.*",
+                        ],
+                    ),
+                    "quantity": qty,
+                    "tax_rate": tax_rate,
+                    "raw_query": raw,
+                }
+
+            if is_norm:
+                if qty == 20:
+                    p_tier1 = self.get_price("normal_raid_16_20")
+                    p_tier2 = self.get_price("normal_raid_20_25")
+                    tax_amt, tot = self.calculate_tax(p_tier1.price_amount, tax_rate)
+                    return {
+                        "intent": "price_lookup",
+                        "calculation": CalculationResult(
+                            service_name="20 Normal Raids",
+                            category="Normal Raids",
+                            quantity=20,
+                            unit_price=p_tier1.price_amount,
+                            unit_display=p_tier1.price_display,
+                            subtotal=p_tier1.price_amount,
+                            subtotal_display=p_tier1.price_display,
+                            tax_rate=tax_rate,
+                            tax_amount=tax_amt,
+                            tax_display=self.format_price(tax_amt) if tax_amt > 0 else "0M",
+                            total=tot,
+                            total_display=self.format_price(tot),
+                            ambiguity_note="Overlapping tier at 20 raids: Tier 16–20 (50M) vs Tier 20–25 (60M). Defaulting to 50M.",
+                            is_clarification=True,
+                            clarification_title="❓ TOP AI MANAGER • OVERLAPPING BOUNDARY",
+                            clarification_options=[
+                                "Normal Raids has overlapping tiers at **20 raids** in the official price list:",
+                                f"• **Tier 16–20:** **{p_tier1.price_display}**",
+                                f"• **Tier 20–25:** **{p_tier2.price_display}**",
+                                "*(Defaulting to 50M per tier 16–20. Please confirm with staff if tier 20–25 applies.)*",
+                            ],
+                        ),
+                        "quantity": 20,
+                        "tax_rate": tax_rate,
+                        "raw_query": raw,
+                    }
+                if qty > 25:
+                    calc = CalculationResult(
+                        service_name=f"{qty} Normal Raids",
+                        category="Normal Raids",
+                        quantity=qty,
+                        unit_price=0.0,
+                        unit_display="Custom Quote",
+                        subtotal=0.0,
+                        subtotal_display="Custom Quote",
+                        tax_rate=tax_rate,
+                        tax_amount=0.0,
+                        tax_display="Custom Quote",
+                        total=0.0,
+                        total_display="Custom Quote",
+                        custom_quote=True,
+                    )
+                    return {"intent": "price_lookup", "calculation": calc, "quantity": qty, "tax_rate": tax_rate, "raw_query": raw}
+                elif qty >= 21: item = self.get_price("normal_raid_20_25")
+                elif qty >= 16: item = self.get_price("normal_raid_16_20")
+                elif qty >= 11: item = self.get_price("normal_raid_11_15")
+                elif qty >= 6: item = self.get_price("normal_raid_6_10")
+                else: item = self.get_price("normal_raid_1_5")
+
+            elif is_adv:
+                if qty > 8:
+                    calc = CalculationResult(
+                        service_name=f"{qty} Advance Raids",
+                        category="Advance Raids",
+                        quantity=qty,
+                        unit_price=0.0,
+                        unit_display="Custom Quote",
+                        subtotal=0.0,
+                        subtotal_display="Custom Quote",
+                        tax_rate=tax_rate,
+                        tax_amount=0.0,
+                        tax_display="Custom Quote",
+                        total=0.0,
+                        total_display="Custom Quote",
+                        custom_quote=True,
+                    )
+                    return {"intent": "price_lookup", "calculation": calc, "quantity": qty, "tax_rate": tax_rate, "raw_query": raw}
+                elif qty >= 6: item = self.get_price("adv_raid_6_8")
+                elif qty == 5: item = self.get_price("adv_raid_5")
+                elif qty >= 3: item = self.get_price("adv_raid_3_4")
+                else: item = self.get_price("adv_raid_1_2")
+
+            else: # is_ord
+                if qty == 8:
+                    p_tier1 = self.get_price("order_raid_6_8")
+                    p_tier2 = self.get_price("order_raid_8_10")
+                    tax_amt, tot = self.calculate_tax(p_tier1.price_amount, tax_rate)
+                    return {
+                        "intent": "price_lookup",
+                        "calculation": CalculationResult(
+                            service_name="8 Order Raids",
+                            category="Order Raids",
+                            quantity=8,
+                            unit_price=p_tier1.price_amount,
+                            unit_display=p_tier1.price_display,
+                            subtotal=p_tier1.price_amount,
+                            subtotal_display=p_tier1.price_display,
+                            tax_rate=tax_rate,
+                            tax_amount=tax_amt,
+                            tax_display=self.format_price(tax_amt) if tax_amt > 0 else "0M",
+                            total=tot,
+                            total_display=self.format_price(tot),
+                            ambiguity_note="Overlapping tier at 8 raids: Tier 6–8 (120M) vs Tier 8–10 (150M). Defaulting to 120M.",
+                            is_clarification=True,
+                            clarification_title="❓ TOP AI MANAGER • OVERLAPPING BOUNDARY",
+                            clarification_options=[
+                                "Order Raids has overlapping tiers at **8 raids** in the official price list:",
+                                f"• **Tier 6–8:** **{p_tier1.price_display}**",
+                                f"• **Tier 8–10:** **{p_tier2.price_display}**",
+                                "*(Defaulting to 120M per tier 6–8. Please confirm with staff if tier 8–10 applies.)*",
+                            ],
+                        ),
+                        "quantity": 8,
+                        "tax_rate": tax_rate,
+                        "raw_query": raw,
+                    }
+                if qty > 10:
+                    calc = CalculationResult(
+                        service_name=f"{qty} Order Raids",
+                        category="Order Raids",
+                        quantity=qty,
+                        unit_price=0.0,
+                        unit_display="Custom Quote",
+                        subtotal=0.0,
+                        subtotal_display="Custom Quote",
+                        tax_rate=tax_rate,
+                        tax_amount=0.0,
+                        tax_display="Custom Quote",
+                        total=0.0,
+                        total_display="Custom Quote",
+                        custom_quote=True,
+                    )
+                    return {"intent": "price_lookup", "calculation": calc, "quantity": qty, "tax_rate": tax_rate, "raw_query": raw}
+                elif qty >= 9: item = self.get_price("order_raid_8_10")
+                elif qty >= 6: item = self.get_price("order_raid_6_8")
+                elif qty >= 3: item = self.get_price("order_raid_3_5")
+                elif qty == 2: item = self.get_price("order_raid_2")
+                else: item = self.get_price("order_raid_1")
+
+            if item:
+                tax_amt, tot = self.calculate_tax(item.price_amount, tax_rate)
+                calc = CalculationResult(
+                    service_name=item.service_name,
+                    category=item.category,
+                    quantity=qty,
+                    unit_price=item.price_amount,
+                    unit_display=item.price_display,
+                    subtotal=item.price_amount,
+                    subtotal_display=item.price_display,
+                    tax_rate=tax_rate,
+                    tax_amount=tax_amt,
+                    tax_display=self.format_price(tax_amt) if tax_amt > 0 else "0M",
+                    total=tot,
+                    total_display=self.format_price(tot),
+                )
+                return {"intent": "make_bill" if is_make_bill else "price_lookup", "calculation": calc, "quantity": qty, "tax_rate": tax_rate, "raw_query": raw}
+
+        # ─────────────────────────────────────────────────────────────────────
+        # E. TRIALS
+        # ─────────────────────────────────────────────────────────────────────
+        if "trial" in norm or "trials" in norm:
+            if "draco" in norm:
+                m_q = re.search(r'\b(\d+)\b', norm)
+                qty = int(m_q.group(1)) if m_q else 1
+                item = self.get_price("trial_draco")
+                subtotal = item.price_amount * qty
+                tax_amt, tot = self.calculate_tax(subtotal, tax_rate)
+                calc = CalculationResult(
+                    service_name=f"{qty} Draco Trial{'s' if qty > 1 else ''}" if qty > 1 else "Draco Trial",
+                    category=item.category,
+                    quantity=qty,
+                    unit_price=item.price_amount,
+                    unit_display=item.price_display,
+                    subtotal=subtotal,
+                    subtotal_display=self.format_price(subtotal),
+                    tax_rate=tax_rate,
+                    tax_amount=tax_amt,
+                    tax_display=self.format_price(tax_amt) if tax_amt > 0 else "0M",
+                    total=tot,
+                    total_display=self.format_price(tot),
+                )
+                return {"intent": "make_bill" if is_make_bill else "price_lookup", "calculation": calc, "quantity": qty, "tax_rate": tax_rate, "raw_query": raw}
+            elif "tushita" in norm:
+                m_q = re.search(r'\b(\d+)\b', norm)
+                qty = int(m_q.group(1)) if m_q else 1
+                item = self.get_price("sword_tushita_scroll")
+                subtotal = item.price_amount * qty
+                tax_amt, tot = self.calculate_tax(subtotal, tax_rate)
+                calc = CalculationResult(
+                    service_name=f"{qty} Tushita Scroll Trial{'s' if qty > 1 else ''}",
+                    category=item.category,
+                    quantity=qty,
+                    unit_price=item.price_amount,
+                    unit_display=item.price_display,
+                    subtotal=subtotal,
+                    subtotal_display=self.format_price(subtotal),
+                    tax_rate=tax_rate,
+                    tax_amount=tax_amt,
+                    tax_display=self.format_price(tax_amt) if tax_amt > 0 else "0M",
+                    total=tot,
+                    total_display=self.format_price(tot),
+                )
+                return {"intent": "make_bill" if is_make_bill else "price_lookup", "calculation": calc, "quantity": qty, "tax_rate": tax_rate, "raw_query": raw}
+            elif "yama" in norm:
+                m_q = re.search(r'\b(\d+)\b', norm)
+                qty = int(m_q.group(1)) if m_q else 1
+                item = self.get_price("sword_yama_scroll")
+                subtotal = item.price_amount * qty
+                tax_amt, tot = self.calculate_tax(subtotal, tax_rate)
+                calc = CalculationResult(
+                    service_name=f"{qty} Yama Scroll Trial{'s' if qty > 1 else ''}",
+                    category=item.category,
+                    quantity=qty,
+                    unit_price=item.price_amount,
+                    unit_display=item.price_display,
+                    subtotal=subtotal,
+                    subtotal_display=self.format_price(subtotal),
+                    tax_rate=tax_rate,
+                    tax_amount=tax_amt,
+                    tax_display=self.format_price(tax_amt) if tax_amt > 0 else "0M",
+                    total=tot,
+                    total_display=self.format_price(tot),
+                )
+                return {"intent": "make_bill" if is_make_bill else "price_lookup", "calculation": calc, "quantity": qty, "tax_rate": tax_rate, "raw_query": raw}
+            elif "max race package" in norm or "max race" in norm or "race package" in norm:
+                item = self.get_price("trial_max_race_package")
+            elif "max trial" in norm or "max trials" in norm or "full trial" in norm:
+                item = self.get_price("trial_max")
+            elif "training" in norm:
+                item = self.get_price("trial_training")
+            else:
+                m_q = re.search(r'\b(\d+)\b', norm)
+                qty = int(m_q.group(1)) if m_q else 1
+                if qty == 2 or "2 trial" in norm or "two trial" in norm:
+                    item = self.get_price("trial_2")
+                elif qty == 3 or "3 trial" in norm or "three trial" in norm:
+                    item = self.get_price("trial_3")
+                elif qty == 1 or "1 trial" in norm or "one trial" in norm or "single trial" in norm:
+                    item = self.get_price("trial_1")
+                else:
+                    item = self.get_price("trial_1")
+                    subtotal = item.price_amount * qty
+                    tax_amt, tot = self.calculate_tax(subtotal, tax_rate)
+                    calc = CalculationResult(
+                        service_name=f"{qty} Trials",
+                        category="Trials",
+                        quantity=qty,
+                        unit_price=item.price_amount,
+                        unit_display=item.price_display,
+                        subtotal=subtotal,
+                        subtotal_display=self.format_price(subtotal),
+                        tax_rate=tax_rate,
+                        tax_amount=tax_amt,
+                        tax_display=self.format_price(tax_amt) if tax_amt > 0 else "0M",
+                        total=tot,
+                        total_display=self.format_price(tot),
+                    )
+                    return {"intent": "make_bill" if is_make_bill else "price_lookup", "calculation": calc, "quantity": qty, "tax_rate": tax_rate, "raw_query": raw}
+
+            if item:
+                tax_amt, tot = self.calculate_tax(item.price_amount, tax_rate)
+                calc = CalculationResult(
+                    service_name=item.service_name,
+                    category=item.category,
+                    quantity=item.min_qty,
+                    unit_price=item.price_amount,
+                    unit_display=item.price_display,
+                    subtotal=item.price_amount,
+                    subtotal_display=item.price_display,
+                    tax_rate=tax_rate,
+                    tax_amount=tax_amt,
+                    tax_display=self.format_price(tax_amt) if tax_amt > 0 else "0M",
+                    total=tot,
+                    total_display=self.format_price(tot),
+                    condition_note=item.condition_note,
+                )
+                return {"intent": "make_bill" if is_make_bill else "price_lookup", "calculation": calc, "quantity": item.min_qty, "tax_rate": tax_rate, "raw_query": raw}
+
+        # ─────────────────────────────────────────────────────────────────────
+        # F. DRACO (DRACO V1, V2, V3, V4, MAX V4)
+        # ─────────────────────────────────────────────────────────────────────
+        if "draco" in norm:
+            if "max" in norm or "draco max" in norm:
+                item = self.get_price("draco_max_v4")
+            elif "v4" in norm:
+                item = self.get_price("draco_v4")
+            elif "v3" in norm:
+                item = self.get_price("draco_v3")
+            elif "v2" in norm:
+                item = self.get_price("draco_v2")
+            elif "v1" in norm:
+                item = self.get_price("draco_v1")
+            else:
+                item = self.get_price("draco_v1")
+
+            if item:
+                tax_amt, tot = self.calculate_tax(item.price_amount, tax_rate)
+                calc = CalculationResult(
+                    service_name=item.service_name,
+                    category=item.category,
+                    quantity=1,
+                    unit_price=item.price_amount,
+                    unit_display=item.price_display,
+                    subtotal=item.price_amount,
+                    subtotal_display=item.price_display,
+                    tax_rate=tax_rate,
+                    tax_amount=tax_amt,
+                    tax_display=self.format_price(tax_amt) if tax_amt > 0 else "0M",
+                    total=tot,
+                    total_display=self.format_price(tot),
+                    condition_note=item.condition_note,
+                )
+                return {"intent": "make_bill" if is_make_bill else "price_lookup", "calculation": calc, "quantity": 1, "tax_rate": tax_rate, "raw_query": raw}
+
+        # ─────────────────────────────────────────────────────────────────────
+        # G. SEA EVENTS
+        # ─────────────────────────────────────────────────────────────────────
+        if "mirage" in norm:
+            if "blue gear" in norm or "+" in norm:
+                item = self.get_price("sea_mirage_blue_gear")
+            else:
+                item = self.get_price("sea_mirage")
+            tax_amt, tot = self.calculate_tax(item.price_amount, tax_rate)
+            calc = CalculationResult(
+                service_name=item.service_name,
+                category=item.category,
+                quantity=1,
+                unit_price=item.price_amount,
+                unit_display=item.price_display,
+                subtotal=item.price_amount,
+                subtotal_display=item.price_display,
+                tax_rate=tax_rate,
+                tax_amount=tax_amt,
+                tax_display=self.format_price(tax_amt) if tax_amt > 0 else "0M",
+                total=tot,
+                total_display=self.format_price(tot),
+            )
+            return {"intent": "make_bill" if is_make_bill else "price_lookup", "calculation": calc, "quantity": 1, "tax_rate": tax_rate, "raw_query": raw}
+
+        if "prehistoric" in norm:
+            m_q = re.search(r'\b(\d+)\b', norm)
+            qty = int(m_q.group(1)) if m_q else 1
+
+            is_carry = "carry" in norm and not ("not carry" in norm or "no carry" in norm)
+            is_not_carry = "not carry" in norm or "no carry" in norm
+
+            if not is_carry and not is_not_carry:
+                p_nc = self.get_price("sea_prehistoric_not_carry")
+                p_c = self.get_price("sea_prehistoric_carry")
+                return {
+                    "intent": "price_lookup",
+                    "calculation": CalculationResult(
+                        service_name="Prehistoric Island",
+                        category="Sea Events",
+                        quantity=qty,
+                        unit_price=0.0,
+                        unit_display="",
+                        subtotal=0.0,
+                        subtotal_display="",
+                        tax_rate=tax_rate,
+                        tax_amount=0.0,
+                        tax_display="",
+                        total=0.0,
+                        total_display="",
+                        is_clarification=True,
+                        clarification_title="❓ TOP AI MANAGER • CLARIFICATION NEEDED",
+                        clarification_options=[
+                            "For **Prehistoric Island**, please specify carry status:",
+                            f"• **Not Carry:** **{p_nc.price_display}** per island",
+                            f"• **Carry:** **{p_c.price_display}** per island",
+                            "*Ask: `?top price Prehistoric Island carry` or `not carry`*",
+                        ],
+                    ),
+                    "quantity": qty,
+                    "tax_rate": tax_rate,
+                    "raw_query": raw,
+                }
+
+            item = self.get_price("sea_prehistoric_carry" if is_carry else "sea_prehistoric_not_carry")
+            subtotal = item.price_amount * qty
+            tax_amt, tot = self.calculate_tax(subtotal, tax_rate)
+            calc = CalculationResult(
+                service_name=item.service_name,
+                category=item.category,
+                quantity=qty,
+                unit_price=item.price_amount,
+                unit_display=item.price_display,
+                subtotal=subtotal,
+                subtotal_display=self.format_price(subtotal),
+                tax_rate=tax_rate,
+                tax_amount=tax_amt,
+                tax_display=self.format_price(tax_amt) if tax_amt > 0 else "0M",
+                total=tot,
+                total_display=self.format_price(tot),
+                condition_note=item.condition_note,
+            )
+            return {"intent": "make_bill" if is_make_bill else "price_lookup", "calculation": calc, "quantity": qty, "tax_rate": tax_rate, "raw_query": raw}
+
+        # ─────────────────────────────────────────────────────────────────────
+        # H. BOSSES
+        # ─────────────────────────────────────────────────────────────────────
+        if "dough king" in norm or norm == "dk":
+            item = self.get_price("boss_dough_king")
+        elif "cake prince" in norm or norm == "cp":
+            item = self.get_price("boss_cake_prince")
+        elif "soul reaper" in norm:
+            item = self.get_price("boss_soul_reaper")
+        elif "dark beard" in norm or "darkbeard" in norm:
+            item = self.get_price("boss_dark_beard")
+        elif "indra" in norm:
+            has_chalice = "chalice" in norm
+            item = self.get_price("boss_rip_indra_chalice" if has_chalice else "boss_rip_indra")
+        else:
+            item = None
+
+        if item and item.category == "Bosses":
+            tax_amt, tot = self.calculate_tax(item.price_amount, tax_rate)
+            calc = CalculationResult(
+                service_name=item.service_name,
+                category=item.category,
+                quantity=1,
+                unit_price=item.price_amount,
+                unit_display=item.price_display,
+                subtotal=item.price_amount,
+                subtotal_display=item.price_display,
+                tax_rate=tax_rate,
+                tax_amount=tax_amt,
+                tax_display=self.format_price(tax_amt) if tax_amt > 0 else "0M",
+                total=tot,
+                total_display=self.format_price(tot),
+                condition_note=item.condition_note,
+            )
+            return {"intent": "make_bill" if is_make_bill else "price_lookup", "calculation": calc, "quantity": 1, "tax_rate": tax_rate, "raw_query": raw}
+
+        # ─────────────────────────────────────────────────────────────────────
+        # I. SWORDS & GUNS & FIGHTING STYLES & ADMIN & ACCESSORIES & TITLES
+        # ─────────────────────────────────────────────────────────────────────
+        matched = self.get_price(norm)
+        if not matched:
+            clean_words = [w for w in norm.split() if w not in ("title", "sword", "gun", "style", "accessory", "panel")]
+            clean_rejoin = " ".join(clean_words)
+            matched = self.get_price(clean_rejoin)
+            if not matched:
+                matches = self.search_prices(clean_rejoin)
+                if matches:
+                    matched = matches[0]
+
+        if matched:
+            m_q = re.search(r'\b(\d+)\b', norm)
+            qty = int(m_q.group(1)) if m_q else 1
+
+            is_per_unit = "per " in matched.unit_desc.lower() or "each" in matched.unit_desc.lower()
+            subtotal = matched.price_amount * (qty if is_per_unit else 1)
+            tax_amt, tot = self.calculate_tax(subtotal, tax_rate)
+
+            calc = CalculationResult(
+                service_name=matched.service_name,
+                category=matched.category,
+                quantity=qty if is_per_unit else 1,
+                unit_price=matched.price_amount,
+                unit_display=matched.price_display,
+                subtotal=subtotal,
+                subtotal_display=self.format_price(subtotal),
+                tax_rate=tax_rate,
+                tax_amount=tax_amt,
+                tax_display=self.format_price(tax_amt) if tax_amt > 0 else "0M",
+                total=tot,
+                total_display=self.format_price(tot),
+                condition_note=matched.condition_note,
+                custom_quote=bool(matched.custom_quote_required),
+            )
+            return {"intent": "make_bill" if is_make_bill else "price_lookup", "calculation": calc, "quantity": qty if is_per_unit else 1, "tax_rate": tax_rate, "raw_query": raw}
+
+        raise KeyError(f"No official price found for service '{query}'. Contact staff for custom pricing.")
+
+    def calculate_service_price(
+        self,
+        service_query: str,
+        quantity: int = 1,
+        tax_rate: float = 0.0,
+        with_chalice: bool = False,
+    ) -> CalculationResult:
+        """Universal service price calculation engine."""
+        q = service_query
+        if with_chalice and "chalice" not in q.lower():
+            q += " with chalice"
+        if quantity > 1 and not any(ch.isdigit() for ch in q):
+            q = f"{quantity} {q}"
+        res = self.parse_top_query(q, tax_override=tax_rate)
+        return res["calculation"]
 
     # ─────────────────────────────────────────────────────────────────────────
     # 5. PERSISTENT SERVICE BILLING SYSTEM

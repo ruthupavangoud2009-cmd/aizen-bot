@@ -359,6 +359,59 @@ class StaffApplicationReviewView(discord.ui.View):
             await interaction.response.send_message(f"Failed to create interview channel: {e}", ephemeral=True)
 
 
+def format_single_price_embed(calc: CalculationResult) -> discord.Embed:
+    """Format single-service price result strictly per Kyoka Top AI Manager specs.
+    Returns only the requested service, quantity/tier, subtotal/price, conditions, and tax.
+    """
+    if calc.is_clarification:
+        embed = discord.Embed(
+            title=calc.clarification_title or "❓ TOP AI MANAGER • CLARIFICATION NEEDED",
+            description="\n".join(calc.clarification_options),
+            color=KyokaTheme.PRIMARY,
+        )
+        embed.set_footer(text="Kyoka Top AI Manager")
+        return embed
+
+    category_upper = calc.category.upper()
+    title = f"🏷️ {category_upper}"
+
+    # Line 1: Requested service and price / tier
+    if calc.custom_quote:
+        desc_lines = [f"{calc.service_name}: **Custom price — please contact staff.**"]
+    else:
+        if calc.category == "Normal Raids":
+            desc_lines = [f"{calc.quantity} Raids: **{calc.subtotal_display}**"]
+        elif calc.category in ("Advance Raids", "Order Raids"):
+            desc_lines = [f"{calc.quantity} Raids ({calc.service_name}): **{calc.subtotal_display}**"]
+        elif calc.category == "Trials":
+            desc_lines = [f"{calc.service_name}: **{calc.subtotal_display}**"]
+        elif calc.category == "Beli Farming":
+            desc_lines = [f"{calc.service_name}: **{calc.subtotal_display}**"]
+        else:
+            if calc.quantity > 1 and "per" in calc.unit_display.lower():
+                desc_lines = [f"{calc.quantity}x {calc.service_name}: **{calc.subtotal_display}**"]
+            else:
+                desc_lines = [f"{calc.service_name}: **{calc.subtotal_display}**"]
+
+    # Tax lines (only if requested, i.e. tax_rate > 0)
+    if calc.tax_rate > 0:
+        tax_str = f"{int(calc.tax_rate)}%" if calc.tax_rate % 1 == 0 else f"{calc.tax_rate}%"
+        desc_lines.append(f"Tax ({tax_str}): **+{calc.tax_display}**")
+        desc_lines.append(f"Total: **{calc.total_display}**")
+
+    # Condition note (only if relevant and applicable)
+    if calc.condition_note:
+        desc_lines.append(f"*{calc.condition_note}*")
+
+    embed = discord.Embed(
+        title=title,
+        description="\n".join(desc_lines),
+        color=KyokaTheme.PRIMARY,
+    )
+    embed.set_footer(text="Kyoka Top AI Manager")
+    return embed
+
+
 # ─────────────────────────────────────────────────────────────────────────────
 # 2. MAIN TOP AI MANAGER COG
 # ─────────────────────────────────────────────────────────────────────────────
@@ -510,32 +563,8 @@ class TopAIManager(commands.Cog, name="TopAIManager"):
             bill_emb.set_footer(text=f"Bill ID: {bill['id']} • Kyoka Top AI Manager")
             return await ctx.reply(embed=bill_emb, mention_author=False)
 
-        # Standard Price Inquiry Response
-        embed = discord.Embed(
-            title="⛩️ TOP AI MANAGER • PRICE INQUIRY",
-            color=KyokaTheme.PRIMARY,
-            timestamp=discord.utils.utcnow(),
-        )
-        embed.add_field(name="🗡️ Service", value=f"`{calc.service_name}`", inline=True)
-        embed.add_field(name="🔢 Quantity", value=f"`{calc.quantity}`", inline=True)
-        embed.add_field(name="🏷️ Unit Price", value=f"`{calc.unit_display}`", inline=True)
-
-        embed.add_field(name="💵 Subtotal", value=f"**{calc.subtotal_display}**", inline=True)
-        if calc.tax_rate > 0:
-            embed.add_field(name=f"🏛️ Tax ({calc.tax_rate}%)", value=f"`+{calc.tax_display}`", inline=True)
-        embed.add_field(name="💰 Final Total", value=f"**{calc.total_display}**", inline=True)
-
-        if calc.condition_note:
-            embed.add_field(name="📌 Condition Note", value=f"> {calc.condition_note}", inline=False)
-
-        if calc.ambiguity_note:
-            embed.add_field(name="⚠️ Range Boundary Notice", value=f"> {calc.ambiguity_note}", inline=False)
-
-        if calc.custom_quote:
-            embed.add_field(name="💬 Custom Quote", value="> This service requires a custom quote. Please contact staff in a ticket.", inline=False)
-
-        embed.set_thumbnail(url=AIZEN_THUMBNAIL_URL)
-        embed.set_footer(text=f"Requested by {ctx.author.display_name} • Authoritative Official Price List")
+        # Standard Price Inquiry Response (Strictly single-service requested result)
+        embed = format_single_price_embed(calc)
         await ctx.reply(embed=embed, mention_author=False)
 
     # ── SUBCOMMAND: ?top bill ──────────────────────────────────────────────────
@@ -934,55 +963,76 @@ class TopAIManager(commands.Cog, name="TopAIManager"):
         embed.set_footer(text="Kyoka Accounting Ledger • 100% Audit Precision")
         await ctx.reply(embed=embed, mention_author=False)
 
-    # ── SUBCOMMAND: ?top prices ───────────────────────────────────────────────
-    @top_group.group(name="prices", aliases=["price"], invoke_without_command=True)
-    async def prices_cmd(self, ctx: CustomContext, category_or_query: Optional[str] = None):
-        """View official price catalogue or search a category.
+    # ── SUBCOMMAND: ?top price / ?top prices ──────────────────────────────────
+    @top_group.group(name="price", aliases=["prices"], invoke_without_command=True)
+    async def price_cmd(self, ctx: CustomContext, *, query: Optional[str] = None):
+        """Universal Smart Price Search for ALL services.
         
-        Usage: +top prices [category]
-        Categories: Trials, Normal Raids, Advance Raids, Order Raids, Races, Draco, Sea Events, Bosses, Fighting Styles, Swords, Guns, Beli Farming, Levels, Admin Panel, Titles, Accessories, Mastery, Gun Mastery
+        Usage:
+        • +top price of 1 trial
+        • +top price of 5 normal raids
+        • +top price of Draco V2
+        • +top price of 2 trials with 5% tax
+        • +top prices [category] — Browse whole category
         """
         all_prices = self.top_mgr.get_all_prices()
+        categories = sorted(list({p.category for p in all_prices}))
 
-        if category_or_query:
-            query = category_or_query.lower().strip()
-            filtered = [p for p in all_prices if query in p.category.lower() or query in p.service_name.lower()]
-            if not filtered:
-                return await ctx.reply(f"ℹ️ No services found matching **`{category_or_query}`**.", mention_author=False)
-            
+        if not query or not query.strip():
+            # Group by categories
+            desc = "**Authoritative Blox Fruits Price Catalogue:**\n\n"
+            for c in categories:
+                count = sum(1 for p in all_prices if p.category == c)
+                desc += f"• **{c}:** `{count} services`\n"
+
+            p = ctx.prefix or Config.DEFAULT_PREFIX
+            desc += f"\n*Type `{p}top prices <category>` to view itemized tier prices for any category.*"
+
+            embed = discord.Embed(
+                title="🏷️ TOP AI MANAGER • PRICE CATALOGUE",
+                description=desc,
+                color=KyokaTheme.PRIMARY,
+            )
+            embed.set_thumbnail(url=AIZEN_THUMBNAIL_URL)
+            embed.set_footer(text=f"Total Services: {len(all_prices)} • Kyoka Official Prices")
+            return await ctx.reply(embed=embed, mention_author=False)
+
+        q_clean = query.strip()
+        # If user explicitly used "+top prices <category>" to view whole category
+        if ctx.invoked_with == "prices" and any(q_clean.lower() == c.lower() for c in categories):
+            matched_cat = next(c for c in categories if q_clean.lower() == c.lower())
+            filtered = [p for p in all_prices if p.category.lower() == matched_cat.lower()]
             lines = []
-            for p in filtered[:20]:
+            for p in filtered[:25]:
                 note = f" *({p.condition_note})*" if p.condition_note else ""
                 lines.append(f"• **{p.service_name}:** `{p.price_display}`{note}")
 
             embed = discord.Embed(
-                title=f"🏷️ OFFICIAL PRICES • {filtered[0].category.upper()}",
+                title=f"🏷️ OFFICIAL PRICES • {matched_cat.upper()}",
                 description="\n".join(lines),
                 color=KyokaTheme.PRIMARY,
             )
             embed.set_footer(text="Kyoka Top AI Manager • Authoritative Price Catalogue")
             return await ctx.reply(embed=embed, mention_author=False)
 
-        # Group by categories
-        cats = sorted(list({p.category for p in all_prices}))
-        desc = "**Authoritative Blox Fruits Price Catalogue:**\n\n"
-        for c in cats:
-            count = sum(1 for p in all_prices if p.category == c)
-            desc += f"• **{c}:** `{count} services`\n"
+        # Execute Universal Smart Price Search
+        try:
+            parsed = self.top_mgr.parse_top_query(q_clean)
+            calc: CalculationResult = parsed["calculation"]
+            embed = format_single_price_embed(calc)
+            return await ctx.reply(embed=embed, mention_author=False)
+        except KeyError as ke:
+            p = ctx.prefix or Config.DEFAULT_PREFIX
+            err_emb = discord.Embed(
+                title="⚠️ Service Not Found",
+                description=f"{ke}\n\n*Type `{p}top prices` to view the complete price catalogue or contact staff.*",
+                color=KyokaTheme.WARNING,
+            )
+            return await ctx.reply(embed=err_emb, mention_author=False)
+        except Exception as e:
+            return await ctx.reply(f"❌ Could not interpret price query: {e}", mention_author=False)
 
-        p = ctx.prefix or Config.DEFAULT_PREFIX
-        desc += f"\n*Type `{p}top prices <category>` to view itemized tier prices for any category.*"
-
-        embed = discord.Embed(
-            title="🏷️ TOP AI MANAGER • PRICE CATALOGUE",
-            description=desc,
-            color=KyokaTheme.PRIMARY,
-        )
-        embed.set_thumbnail(url=AIZEN_THUMBNAIL_URL)
-        embed.set_footer(text=f"Total Services: {len(all_prices)} • Kyoka Official Prices")
-        await ctx.reply(embed=embed, mention_author=False)
-
-    @prices_cmd.command(name="set")
+    @price_cmd.command(name="set")
     async def price_set_cmd(self, ctx: CustomContext, service_key: str, new_price: float):
         """Update a service price without modifying past bills.
         
@@ -997,7 +1047,7 @@ class TopAIManager(commands.Cog, name="TopAIManager"):
         except Exception as e:
             await ctx.reply(f"⚠️ {e}", mention_author=False)
 
-    @prices_cmd.command(name="rename")
+    @price_cmd.command(name="rename")
     async def price_rename_cmd(self, ctx: CustomContext, service_key: str, *, new_name: str):
         """Rename a service.
         
@@ -1012,7 +1062,7 @@ class TopAIManager(commands.Cog, name="TopAIManager"):
         except Exception as e:
             await ctx.reply(f"⚠️ {e}", mention_author=False)
 
-    @prices_cmd.command(name="custom")
+    @price_cmd.command(name="custom")
     async def price_custom_cmd(self, ctx: CustomContext, service_key: str, on_off: str = "on"):
         """Toggle whether service requires custom quote from staff.
         
@@ -1029,7 +1079,7 @@ class TopAIManager(commands.Cog, name="TopAIManager"):
         except Exception as e:
             await ctx.reply(f"⚠️ {e}", mention_author=False)
 
-    @prices_cmd.command(name="history")
+    @price_cmd.command(name="history")
     async def price_history_cmd(self, ctx: CustomContext, service_key: str):
         """View historical price change audit log.
         
