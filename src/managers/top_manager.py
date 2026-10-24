@@ -1577,6 +1577,21 @@ class TopManager:
                 CREATE INDEX IF NOT EXISTS idx_top_apps_applicant ON top_applications(applicant_id);
             """)
 
+            # Safe non-destructive schema migrations for Appy-Style Applications
+            cols_cfg = {row[1] for row in conn.execute("PRAGMA table_info(top_applications_config)").fetchall()}
+            if "is_open" not in cols_cfg:
+                conn.execute("ALTER TABLE top_applications_config ADD COLUMN is_open INTEGER DEFAULT 1;")
+            if "reviewer_role_id" not in cols_cfg:
+                conn.execute("ALTER TABLE top_applications_config ADD COLUMN reviewer_role_id INTEGER;")
+            if "audit_channel_id" not in cols_cfg:
+                conn.execute("ALTER TABLE top_applications_config ADD COLUMN audit_channel_id INTEGER;")
+            if "positions_json" not in cols_cfg:
+                conn.execute("ALTER TABLE top_applications_config ADD COLUMN positions_json TEXT;")
+
+            cols_app = {row[1] for row in conn.execute("PRAGMA table_info(top_applications)").fetchall()}
+            if "review_message_id" not in cols_app:
+                conn.execute("ALTER TABLE top_applications ADD COLUMN review_message_id INTEGER;")
+
             # Seed initial catalogue if table is empty
             count = conn.execute("SELECT COUNT(*) FROM top_prices").fetchone()[0]
             if count == 0:
@@ -3000,12 +3015,21 @@ class TopManager:
         position: str,
         answers: dict[str, str],
     ) -> dict[str, Any]:
-        """Submit a new staff application with cooldown & duplicate check."""
+        """Submit a new staff application with open-check, cooldown & duplicate prevention."""
         with self._get_connection() as conn:
-            # Check for existing pending application
+            # Check if applications are currently open in this server
+            cfg = conn.execute("SELECT * FROM top_applications_config WHERE guild_id = ?", (guild_id,)).fetchone()
+            if cfg and ("is_open" in cfg.keys()) and cfg["is_open"] == 0:
+                raise ValueError("Staff applications are currently closed or paused. Please check back later.")
+
+            # Validate answers
+            if not answers or not any(v.strip() for v in answers.values()):
+                raise ValueError("Application answers cannot be empty.")
+
+            # Check for existing active application
             existing = conn.execute("""
                 SELECT id, status, created_at FROM top_applications
-                WHERE guild_id = ? AND applicant_id = ? AND status IN ('PENDING', 'UNDER_REVIEW')
+                WHERE guild_id = ? AND applicant_id = ? AND status IN ('PENDING', 'SUBMITTED', 'UNDER_REVIEW', 'MORE_INFO_REQUESTED')
             """, (guild_id, applicant_id)).fetchone()
 
             if existing:
@@ -3015,7 +3039,6 @@ class TopManager:
                 )
 
             # Check cooldown config
-            cfg = conn.execute("SELECT cooldown_days FROM top_applications_config WHERE guild_id = ?", (guild_id,)).fetchone()
             cooldown_days = cfg["cooldown_days"] if cfg and cfg["cooldown_days"] else 7
 
             last_rejected = conn.execute("""
@@ -3086,13 +3109,14 @@ class TopManager:
         new_status: str,
         reason: str = "",
     ) -> dict[str, Any]:
-        """Review application: ACCEPTED, REJECTED, or UNDER_REVIEW."""
+        """Review application: ACCEPTED, REJECTED, UNDER_REVIEW, MORE_INFO_REQUESTED, or CLOSED."""
         app = self.get_application(app_id)
         if not app:
             raise KeyError(f"Application '{app_id}' not found.")
 
         target_status = new_status.strip().upper()
-        if target_status not in ("ACCEPTED", "REJECTED", "UNDER_REVIEW", "WITHDRAWN"):
+        valid_statuses = ("ACCEPTED", "REJECTED", "UNDER_REVIEW", "MORE_INFO_REQUESTED", "WITHDRAWN", "CLOSED")
+        if target_status not in valid_statuses:
             raise ValueError(f"Invalid application status: '{new_status}'.")
 
         now = time.time()
@@ -3122,16 +3146,60 @@ class TopManager:
 
         return self.get_application(app["id"])
 
+    def get_application_stats(self, guild_id: int) -> dict[str, Any]:
+        """Compute recruitment metrics and review time stats for a guild."""
+        with self._get_connection() as conn:
+            rows = conn.execute("SELECT * FROM top_applications WHERE guild_id = ?", (guild_id,)).fetchall()
+            total = len(rows)
+            pending = sum(1 for r in rows if r["status"] in ("PENDING", "SUBMITTED"))
+            under_review = sum(1 for r in rows if r["status"] == "UNDER_REVIEW")
+            more_info = sum(1 for r in rows if r["status"] == "MORE_INFO_REQUESTED")
+            accepted = sum(1 for r in rows if r["status"] == "ACCEPTED")
+            rejected = sum(1 for r in rows if r["status"] == "REJECTED")
+            closed = sum(1 for r in rows if r["status"] == "CLOSED")
+
+            # Calculate average review duration in hours
+            review_times = [
+                (r["updated_at"] - r["created_at"]) / 3600.0
+                for r in rows
+                if r["status"] in ("ACCEPTED", "REJECTED", "CLOSED") and r["updated_at"] > r["created_at"]
+            ]
+            avg_review_hours = (sum(review_times) / len(review_times)) if review_times else 0.0
+
+            pos_counts: dict[str, int] = {}
+            for r in rows:
+                pos = r["position"]
+                pos_counts[pos] = pos_counts.get(pos, 0) + 1
+
+            return {
+                "total": total,
+                "pending": pending,
+                "under_review": under_review,
+                "more_info": more_info,
+                "accepted": accepted,
+                "rejected": rejected,
+                "closed": closed,
+                "avg_review_hours": round(avg_review_hours, 1),
+                "positions": pos_counts,
+            }
+
     def get_app_config(self, guild_id: int) -> dict[str, Any]:
         """Get guild staff application config."""
         with self._get_connection() as conn:
             row = conn.execute("SELECT * FROM top_applications_config WHERE guild_id = ?", (guild_id,)).fetchone()
             if row:
-                return dict(row)
+                d = dict(row)
+                d.setdefault("is_open", 1)
+                d.setdefault("reviewer_role_id", None)
+                d.setdefault("audit_channel_id", None)
+                return d
             return {
                 "guild_id": guild_id,
                 "review_channel_id": None,
                 "role_on_accept_id": None,
+                "reviewer_role_id": None,
+                "audit_channel_id": None,
+                "is_open": 1,
                 "cooldown_days": 7,
                 "default_tax": 0.0,
             }
@@ -3141,27 +3209,44 @@ class TopManager:
         guild_id: int,
         review_channel_id: Optional[int] = None,
         role_on_accept_id: Optional[int] = None,
+        reviewer_role_id: Optional[int] = None,
+        audit_channel_id: Optional[int] = None,
+        is_open: Optional[int] = None,
         cooldown_days: Optional[int] = None,
         default_tax: Optional[float] = None,
+        panel_message_id: Optional[int] = None,
+        panel_channel_id: Optional[int] = None,
     ) -> dict[str, Any]:
         """Save guild staff application config."""
         cur = self.get_app_config(guild_id)
         r_ch = review_channel_id if review_channel_id is not None else cur.get("review_channel_id")
         r_role = role_on_accept_id if role_on_accept_id is not None else cur.get("role_on_accept_id")
+        rev_role = reviewer_role_id if reviewer_role_id is not None else cur.get("reviewer_role_id")
+        aud_ch = audit_channel_id if audit_channel_id is not None else cur.get("audit_channel_id")
+        o_flag = is_open if is_open is not None else cur.get("is_open", 1)
         c_days = cooldown_days if cooldown_days is not None else cur.get("cooldown_days", 7)
         d_tax = default_tax if default_tax is not None else cur.get("default_tax", 0.0)
+        p_msg = panel_message_id if panel_message_id is not None else cur.get("panel_message_id")
+        p_ch = panel_channel_id if panel_channel_id is not None else cur.get("panel_channel_id")
 
         with self._get_connection() as conn:
             conn.execute("""
                 INSERT INTO top_applications_config (
-                    guild_id, review_channel_id, role_on_accept_id, cooldown_days, default_tax
-                ) VALUES (?, ?, ?, ?, ?)
+                    guild_id, review_channel_id, role_on_accept_id, reviewer_role_id,
+                    audit_channel_id, is_open, cooldown_days, default_tax,
+                    panel_message_id, panel_channel_id
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 ON CONFLICT(guild_id) DO UPDATE SET
                     review_channel_id = excluded.review_channel_id,
                     role_on_accept_id = excluded.role_on_accept_id,
+                    reviewer_role_id = excluded.reviewer_role_id,
+                    audit_channel_id = excluded.audit_channel_id,
+                    is_open = excluded.is_open,
                     cooldown_days = excluded.cooldown_days,
-                    default_tax = excluded.default_tax
-            """, (guild_id, r_ch, r_role, c_days, d_tax))
+                    default_tax = excluded.default_tax,
+                    panel_message_id = excluded.panel_message_id,
+                    panel_channel_id = excluded.panel_channel_id
+            """, (guild_id, r_ch, r_role, rev_role, aud_ch, o_flag, c_days, d_tax, p_msg, p_ch))
             conn.commit()
 
         return self.get_app_config(guild_id)

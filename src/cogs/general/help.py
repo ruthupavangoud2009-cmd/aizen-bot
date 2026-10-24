@@ -70,6 +70,7 @@ UNICODE_CATEGORY_EMOJIS: dict[str, str] = {
     "⚙️・SERVER ADMINISTRATION": "⚙️",
     "⚙️・SERVER CONFIGURATION": "⚙️",
     "🔧・UTILITIES": "🔧",
+    "📝・STAFF APPLICATIONS": "📝",
     "👑・OWNER & DEVELOPER": "👑",
 }
 
@@ -99,6 +100,7 @@ CATEGORY_DESCRIPTIONS: dict[str, str] = {
     "⚙️・SERVER ADMINISTRATION": "Prefix management, server wizards, custom help & diagnostics",
     "⚙️・SERVER CONFIGURATION": "Prefix management, server wizards, custom help & diagnostics",
     "🔧・UTILITIES": "Handy server utilities, calculators, reminders & diagnostics",
+    "📝・STAFF APPLICATIONS": "Appy-style staff recruitment panels, applicant submissions & reviewer dashboard",
     "👑・OWNER & DEVELOPER": "Core bot diagnostics, database status, extension reload & maintenance",
 }
 

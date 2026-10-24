@@ -63,6 +63,7 @@ class AssetManager:
         "premium": "help_premium.png",
         "config": "help_config.png",
         "owner": "help_owner.png",
+        "staff_applications": "help_tickets.png",
     }
 
     # Map feature keys to local filenames in assets/kyoka/features/
@@ -73,6 +74,8 @@ class AssetManager:
         "ai_banner": "ai_banner.png",
         "blox_fruits_ai": "blox_fruits_ai.png",
         "ticket_panel": "ticket_panel.png",
+        "staff_applications": "ticket_panel.png",
+        "staff_panel": "ticket_panel.png",
         "vouch_card_background": "vouch_card_background.png",
         "service_bill_background": "service_bill_background.png",
         "verification_banner": "verification_banner.png",

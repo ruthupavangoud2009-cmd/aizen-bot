@@ -1,9 +1,11 @@
 from __future__ import annotations
 
 import asyncio
+import collections
 import logging
 import os
 from pathlib import Path
+import time
 import aiohttp
 import discord
 from discord.ext import commands, tasks
@@ -95,7 +97,7 @@ class KyokaBot(commands.Bot):
             help_command=None,
             case_insensitive=True,
             strip_after_prefix=True,
-            status=discord.Status.dnd,
+            status=discord.Status.online,
             proxy=proxy_url,
             allowed_mentions=discord.AllowedMentions(
                 everyone=False,
@@ -103,13 +105,20 @@ class KyokaBot(commands.Bot):
                 users=True,
                 replied_user=True,
             ),
-            activity=discord.CustomActivity(
-                name=f"Listening to {Config.DEFAULT_PREFIX}help",
+            activity=discord.Game(
+                name="KYOKA | The Ultimate Bot",
             ),
         )
 
         if Config.CLIENT_ID:
             self._connection.application_id = Config.CLIENT_ID
+
+        # Telemetry & Performance Instrumentation (bounded storage)
+        from collections import deque
+        self.slow_operations: deque = deque(maxlen=30)
+        self._user_mention_cooldown: dict[int, float] = {}
+        self._guild_mention_cooldown: dict[int, float] = {}
+        self.custom_status: str | None = None
 
         # Sole Database Driver (Supabase PostgreSQL)
         from src.database.postgres import PostgresDatabase
@@ -199,16 +208,103 @@ class KyokaBot(commands.Bot):
 
         return True
 
+    def record_slow_operation(self, name: str, duration_ms: float, details: str = "") -> None:
+        """Record slow operation into bounded ring buffer without storing sensitive data."""
+        self.slow_operations.append({
+            "name": name,
+            "duration_ms": duration_ms,
+            "details": details,
+            "timestamp": time.time(),
+        })
+
+    def _check_mention_cooldown(self, user_id: int, guild_id: int | None = None) -> bool:
+        """Enforce per-user and per-guild cooldowns on bot mention triggers with bounded storage."""
+        now = time.monotonic()
+        if len(self._user_mention_cooldown) > 300:
+            self._user_mention_cooldown = {uid: t for uid, t in self._user_mention_cooldown.items() if now - t < 60}
+        if len(self._guild_mention_cooldown) > 300:
+            self._guild_mention_cooldown = {gid: t for gid, t in self._guild_mention_cooldown.items() if now - t < 60}
+
+        # Check guild cooldown (3s)
+        if guild_id and now - self._guild_mention_cooldown.get(guild_id, 0.0) < 3.0:
+            return False
+
+        # Check user cooldown (10s)
+        if now - self._user_mention_cooldown.get(user_id, 0.0) < 10.0:
+            return False
+
+        self._user_mention_cooldown[user_id] = now
+        if guild_id:
+            self._guild_mention_cooldown[guild_id] = now
+        return True
+
+    async def _handle_bot_mention(self, message: discord.Message) -> None:
+        """Respond to bot mention with friendly greeting and interactive help dashboard."""
+        greeting_text = "Hey! I'm KYOKA — The Ultimate Bot. Need help? Explore my commands and features below."
+        try:
+            help_cog = self.get_cog("Help")
+            if help_cog:
+                ctx = await self.get_context(message)
+                visible_categories = await help_cog._get_visible_categories(ctx)
+                from src.cogs.general.help import HelpView
+                view = HelpView(
+                    cog=help_cog,
+                    ctx=ctx,
+                    visible_categories=visible_categories,
+                    current_category="home",
+                )
+                embed = help_cog.build_home_embed(ctx, visible_categories)
+                banner_file = getattr(embed, "banner_file", None)
+                if banner_file:
+                    msg = await message.reply(
+                        content=greeting_text,
+                        embed=embed,
+                        file=banner_file,
+                        view=view,
+                        mention_author=False,
+                    )
+                else:
+                    msg = await message.reply(
+                        content=greeting_text,
+                        embed=embed,
+                        view=view,
+                        mention_author=False,
+                    )
+                view.message = msg
+                return
+        except (discord.Forbidden, discord.HTTPException) as e:
+            logger.debug(f"Permission or network notice sending mention help dashboard: {e}")
+            return
+        except Exception as e:
+            logger.debug(f"Fallback on bot mention: {e}")
+
+        # Fallback if Help cog unavailable
+        try:
+            from src.core.greetings import send_bot_mention_card
+            await send_bot_mention_card(self, message)
+        except Exception:
+            pass
+
     async def on_message(self, message: discord.Message) -> None:
-        """Handle standalone bot mentions and process prefix/mention commands."""
+        """Handle bot mentions and process prefix/mention commands."""
         if message.author.bot:
             return
 
-        # Check if message is purely mentioning the bot (with optional spaces)
-        clean_content = message.content.strip()
-        if self.user and clean_content in [f"<@{self.user.id}>", f"<@!{self.user.id}>"]:
-            from src.core.greetings import send_bot_mention_card
-            await send_bot_mention_card(self, message)
+        # Check for actual bot mentions using structured Discord data
+        if self.user and self.user in message.mentions and not message.mention_everyone:
+            # Check if this message was an explicit command invocation (e.g. '@KYOKA help', '@KYOKA ping')
+            try:
+                ctx = await self.get_context(message)
+                if ctx.valid and ctx.command is not None:
+                    # Valid command: let standard command processing handle it to avoid duplicate responses
+                    await self.invoke(ctx)
+                    return
+            except Exception:
+                pass
+
+            # Not an explicit command; check anti-spam mention cooldown
+            if self._check_mention_cooldown(message.author.id, message.guild.id if message.guild else None):
+                await self._handle_bot_mention(message)
             return
 
         # Record qualifying message activity & progression in background (non-blocking & fail-safe)
@@ -399,12 +495,12 @@ class KyokaBot(commands.Bot):
 
     @tasks.loop(seconds=60)
     async def _rotate_presence(self) -> None:
-        """Maintain persistent bot presence and DND status."""
+        """Maintain persistent bot presence and Online status."""
         try:
-            status_text = self.custom_status or f"Listening to {Config.DEFAULT_PREFIX}help"
+            status_text = self.custom_status or "KYOKA | The Ultimate Bot"
             await self.change_presence(
-                status=discord.Status.dnd,
-                activity=discord.CustomActivity(name=status_text),
+                status=discord.Status.online,
+                activity=discord.Game(name=status_text),
             )
         except Exception:
             pass
@@ -434,15 +530,15 @@ class KyokaBot(commands.Bot):
             except Exception as e:
                 logger.debug(f"Notice snapshotting guild {g.id}: {e}")
 
-        # Immediately lock presence to DND with persistent custom status
+        # Immediately lock presence to Online with persistent status
         try:
-            status_text = self.custom_status or f"Listening to {Config.DEFAULT_PREFIX}help"
+            status_text = self.custom_status or "KYOKA | The Ultimate Bot"
             await self.change_presence(
-                status=discord.Status.dnd,
-                activity=discord.CustomActivity(name=status_text),
+                status=discord.Status.online,
+                activity=discord.Game(name=status_text),
             )
         except Exception as e:
-            logger.warning(f"Could not enforce DND presence: {e}")
+            logger.warning(f"Could not enforce Online presence: {e}")
         if not self._rotate_presence.is_running():
             self._rotate_presence.start()
 

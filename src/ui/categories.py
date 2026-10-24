@@ -207,13 +207,22 @@ CATEGORIES: list[CategoryMeta] = [
         priority=20,
     ),
     CategoryMeta(
+        id="staff_applications",
+        name="Staff Applications",
+        tag="📝・STAFF APPLICATIONS",
+        emoji="📝",
+        description="Appy-style staff recruitment panels, applicant submissions & reviewer dashboard",
+        image_key="staff_applications",
+        priority=21,
+    ),
+    CategoryMeta(
         id="owner",
         name="Owner & Developer",
         tag="👑・OWNER & DEVELOPER",
         emoji="👑",
         description="Core bot diagnostics, database status, extension reloading & maintenance",
         image_key="owner",
-        priority=21,
+        priority=22,
     ),
 ]
 
@@ -250,6 +259,9 @@ CATEGORY_SEARCH_ALIASES: dict[str, str] = {
     # Service Bills
     "bill": "service_bills", "bills": "service_bills", "invoice": "service_bills", "service": "service_bills", "billing": "service_bills",
     "top": "service_bills", "topai": "service_bills", "topmanager": "service_bills", "toptiers": "service_bills",
+    # Staff Applications
+    "staff": "staff_applications", "apply": "staff_applications", "apps": "staff_applications",
+    "application": "staff_applications", "applications": "staff_applications", "staffapp": "staff_applications",
     # Blox Fruits AI
     "bloxai": "blox_fruits", "bfai": "blox_fruits", "bloxfruits": "blox_fruits", "bf": "blox_fruits", "fruit": "blox_fruits", "fruitnotifier": "blox_fruits",
     # AI System & Voice
@@ -426,6 +438,8 @@ def resolve_command_category(cmd: Any) -> CategoryMeta:
     parent = getattr(cmd, "root_parent", None) or getattr(cmd, "parent", None)
     if parent:
         parent_name = getattr(parent, "name", "").lower()
+        if parent_name in ("app", "apply", "staffapp", "applications"):
+            return CATEGORY_BY_ID["staff_applications"]
         if parent_name in ("aivoice", "voiceai", "aiv"):
             return CATEGORY_BY_ID["ai"]
         if parent_name in ("bill", "bills", "invoice"):
@@ -509,6 +523,12 @@ def resolve_command_category(cmd: Any) -> CategoryMeta:
         "vlb", "vouchinfo", "vouchhistory", "vouchimport", "rep", "reputation", "botstaff",
     ):
         return CATEGORY_BY_ID["vouches"]
+
+    # Staff Applications
+    if root_name in ("app", "apply", "staffapp", "applications", "staffapplication") or (
+        root_name == "top" and any(part in ("app", "apply", "applications") for part in getattr(cmd, "qualified_name", "").lower().split())
+    ):
+        return CATEGORY_BY_ID["staff_applications"]
 
     # Blox Fruits Service Bills
     if root_name in (

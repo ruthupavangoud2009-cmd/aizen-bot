@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import math
 import time
 import re
 import discord
@@ -72,19 +73,24 @@ class Ping(commands.Cog):
             return await ctx.send(f"🔔 **Aizen ping test ({count}/5):** {mentions}", allowed_mentions=discord.AllowedMentions(users=[target]))
         cmd_start = time.perf_counter()
 
-        # Measure DB ping with timeout resilience
+        # Measure asyncio event-loop lag
+        loop_start = time.perf_counter()
+        await asyncio.sleep(0)
+        loop_lag = (time.perf_counter() - loop_start) * 1000
+
+        # Measure DB ping & health with timeout resilience
         db_str = "Offline"
         if hasattr(self.bot, "db") and self.bot.db:
             try:
                 start_db = time.perf_counter()
                 await asyncio.wait_for(self.bot.db.fetch_one("SELECT 1;"), timeout=2.0)
                 db_ms = (time.perf_counter() - start_db) * 1000
-                db_str = f"{db_ms:.2f}ms"
+                db_str = f"Healthy (`{db_ms:.2f}ms`)"
             except Exception:
                 db_str = "Unavailable"
 
-        # Measure Discord Websocket latency
-        ws_latency = (self.bot.latency * 1000) if self.bot.latency else 0.0
+        # Measure Discord Gateway WebSocket heartbeat latency
+        ws_latency = (self.bot.latency * 1000) if (self.bot.latency and not math.isnan(self.bot.latency)) else 0.0
 
         # Calculate Uptime
         now = discord.utils.utcnow()
@@ -97,21 +103,26 @@ class Ping(commands.Cog):
         shard_id = ctx.guild.shard_id if ctx.guild else 0
         cmd_latency = (time.perf_counter() - cmd_start) * 1000
 
+        # Record telemetry if command took long
+        if cmd_latency > 250.0 and hasattr(self.bot, "record_slow_operation"):
+            self.bot.record_slow_operation("ping", cmd_latency, f"Guild {ctx.guild.id if ctx.guild else 0}")
+
         e_reg = getattr(self.bot, "custom_emojis", None)
         dot = e_reg.get("heart_dot", e_reg.get("icons_rightarrow", "•")) if e_reg else "•"
 
         container = KyokaContainer(accent_color=None)
         container.add_section(
             content=(
-                f"**Kyoka Latency & Performance**\n"
-                f"> Current gateway latency, command roundtrip, database response speed, and system uptime."
+                f"**Kyoka Latency & Performance Matrix**\n"
+                f"> Separately measured gateway heartbeat, bot processing time, event-loop lag, and database status."
             )
         )
         container.add_separator(divider=True)
 
         container.add_text(
-            f"{dot} **Gateway:** `{ws_latency:.2f}ms` | **Command:** `{cmd_latency:.2f}ms`\n"
-            f"{dot} **Database:** `{db_str}` | **Uptime:** `{uptime_str}` | **Shard:** `#{shard_id}`"
+            f"{dot} **Gateway:** `{ws_latency:.2f}ms` | **Bot Processing:** `{cmd_latency:.2f}ms`\n"
+            f"{dot} **Event-Loop Lag:** `{loop_lag:.2f}ms` | **Database:** {db_str}\n"
+            f"{dot} **Process Uptime:** `{uptime_str}` | **Shard:** `#{shard_id}`"
         )
         container.add_separator(divider=True)
         container.add_text(f"-# Requested by {ctx.author.display_name}")

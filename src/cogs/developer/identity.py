@@ -255,7 +255,7 @@ class BotEditView(discord.ui.View):
         prompt_card.add_section(
             content=(
                 "**Edit Bot Status**\n"
-                "> Type the new activity/status text in this channel (e.g. `Listening to ?help`).\n"
+                "> Type the new activity/status text in this channel (e.g. `KYOKA | The Ultimate Bot`).\n"
                 "> Type `cancel` to abort."
             )
         )
@@ -282,7 +282,7 @@ class BotEditView(discord.ui.View):
             return
 
         is_reset = text_val.lower() in ("reset", "default", "none")
-        target_text = f"Listening to {Config.DEFAULT_PREFIX}help" if is_reset else text_val
+        target_text = "KYOKA | The Ultimate Bot" if is_reset else text_val
 
         try:
             self.bot.custom_status = None if is_reset else text_val
@@ -295,15 +295,15 @@ class BotEditView(discord.ui.View):
                 )
 
             await self.bot.change_presence(
-                status=discord.Status.dnd,
-                activity=discord.CustomActivity(name=target_text),
+                status=discord.Status.online,
+                activity=discord.Game(name=target_text),
             )
             success_card = KyokaContainer(accent_color=None)
             success_card.add_section(
                 content=(
                     f"**Bot Activity Status Updated**\n"
                     f"> **Activity:** `{target_text}`\n"
-                    f"> **Mode:** `Do Not Disturb (DND)`\n"
+                    f"> **Mode:** `Online`\n"
                     f"> **Persistence:** `Active & Saved to Database`"
                 )
             )
@@ -341,7 +341,7 @@ class IdentityCog(commands.Cog, name="Developer-Identity"):
         current_name = bot_user.name if bot_user else "Kyoka"
 
         # Resolve current custom activity name
-        activity_str = "Listening to ?help"
+        activity_str = "KYOKA | The Ultimate Bot"
         if self.bot.guilds and self.bot.guilds[0].me.activity:
             act = self.bot.guilds[0].me.activity
             activity_str = getattr(act, "name", str(act))
@@ -352,7 +352,7 @@ class IdentityCog(commands.Cog, name="Developer-Identity"):
                 f"### {current_name} Persona Console\n"
                 f"> **Username** • `{current_name}`\n"
                 f"> **Status** • `{activity_str}`\n"
-                f"> **Mode** • `Do Not Disturb (DND)`"
+                f"> **Mode** • `Online`"
             ),
             accessory={"type": 11, "media": {"url": avatar_url}} if avatar_url else None,
         )
@@ -480,7 +480,7 @@ class IdentityCog(commands.Cog, name="Developer-Identity"):
         """Update bot presence status text."""
         clean_status = new_status.strip()
         is_reset = clean_status.lower() in ("reset", "default", "none")
-        target_text = f"Listening to {Config.DEFAULT_PREFIX}help" if is_reset else clean_status
+        target_text = "KYOKA | The Ultimate Bot" if is_reset else clean_status
 
         try:
             self.bot.custom_status = None if is_reset else clean_status
@@ -493,15 +493,15 @@ class IdentityCog(commands.Cog, name="Developer-Identity"):
                 )
 
             await self.bot.change_presence(
-                status=discord.Status.dnd,
-                activity=discord.CustomActivity(name=target_text),
+                status=discord.Status.online,
+                activity=discord.Game(name=target_text),
             )
             container = KyokaContainer(accent_color=None)
             container.add_section(
                 content=(
                     f"**Bot Activity Status Updated**\n"
                     f"> **Activity:** `{target_text}`\n"
-                    f"> **Mode:** `Do Not Disturb (DND)`\n"
+                    f"> **Mode:** `Online`\n"
                     f"> **Persistence:** `Active & Saved to Database`"
                 )
             )

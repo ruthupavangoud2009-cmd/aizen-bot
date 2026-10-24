@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import math
 import os
 import platform
 import sys
@@ -140,6 +141,81 @@ class SystemCog(commands.Cog, name="Developer-System"):
         container.add_section(content=f"```yaml\n{text_block}\n```")
         container.add_separator(divider=True)
         container.add_text(f"-# pid {pid} • {t_dur:.2f}ms telemetry")
+        await send_container_response(ctx, container)
+
+    @commands.command(name="diag", aliases=["diagnostics"])
+    @is_owner()
+    async def diagnostics(self, ctx: CustomContext) -> None:
+        """
+        Owner-only diagnostic command: uptime, memory, background tasks, database health, and slow operations.
+        Usage:
+          +diag
+          +diagnostics
+        """
+        # 1. Uptime calculation
+        now = discord.utils.utcnow()
+        start = getattr(self.bot, "start_time", now)
+        delta = int((now - start).total_seconds())
+        hours, remainder = divmod(delta, 3600)
+        minutes, seconds = divmod(remainder, 60)
+        uptime_str = f"{hours}h {minutes}m {seconds}s" if hours else f"{minutes}m {seconds}s"
+
+        # 2. Memory usage
+        rss_mb = 0.0
+        vms_mb = 0.0
+        mem_pct = 0.0
+        if psutil:
+            try:
+                proc = psutil.Process()
+                rss_mb = proc.memory_info().rss / (1024 * 1024)
+                vms_mb = proc.memory_info().vms / (1024 * 1024)
+                mem_pct = psutil.virtual_memory().percent
+            except Exception:
+                pass
+
+        # 3. Active background tasks & coroutines
+        all_tasks = asyncio.all_tasks()
+        active_task_count = len(all_tasks)
+        running_tasks = sum(1 for t in all_tasks if not t.done())
+
+        # 4. Database health
+        db_health = "Offline"
+        db_ms = 0.0
+        if hasattr(self.bot, "db") and self.bot.db:
+            try:
+                t_db = time.perf_counter()
+                await asyncio.wait_for(self.bot.db.fetch_one("SELECT 1;"), timeout=2.0)
+                db_ms = (time.perf_counter() - t_db) * 1000
+                db_health = f"Healthy (`{db_ms:.2f}ms`)"
+            except Exception as e:
+                db_health = f"Degraded (`{e}`)"
+
+        # 5. Recent slow operations from bounded ring buffer
+        slow_ops = list(getattr(self.bot, "slow_operations", []))
+        if slow_ops:
+            slow_lines = []
+            for op in slow_ops[-5:]:
+                detail_str = f" — {op['details']}" if op.get("details") else ""
+                slow_lines.append(f"• `{op['name']}`: **{op['duration_ms']:.1f}ms** (<t:{int(op['timestamp'])}:R>){detail_str}")
+            slow_text = "\n".join(slow_lines)
+        else:
+            slow_text = "*No operations exceeded 250ms threshold.*"
+
+        ws_lat = round(self.bot.latency * 1000) if (self.bot.latency and not math.isnan(self.bot.latency)) else 0
+
+        container = KyokaContainer(accent_color=None)
+        container.add_section(
+            content=(
+                f"### 🛡️ KYOKA Core Diagnostics (Owner Authorized)\n"
+                f"> **System Uptime:** `{uptime_str}` • **Gateway:** `{ws_lat}ms`\n"
+                f"> **Memory (RSS/VMS):** `{rss_mb:.1f} MB` / `{vms_mb:.1f} MB` (`{mem_pct}%` allocated)\n"
+                f"> **Active Tasks:** `{running_tasks}` running (`{active_task_count}` scheduled)\n"
+                f"> **Database Health:** {db_health}\n\n"
+                f"**Recent Slow Operations (>250ms):**\n{slow_text}"
+            )
+        )
+        container.add_separator(divider=True)
+        container.add_text("-# Kyoka Telemetry Engine • Zero-Leakage Architecture")
         await send_container_response(ctx, container)
 
 

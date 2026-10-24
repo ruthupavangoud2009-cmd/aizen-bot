@@ -144,6 +144,211 @@ class StaffApplicationModal(discord.ui.Modal):
         await interaction.response.send_message(embed=confirm_embed, ephemeral=True)
 
 
+def is_app_reviewer(user: Any, guild: Optional[discord.Guild], top_mgr: TopManager) -> bool:
+    """Check if member has authority to review applications."""
+    if getattr(user, "id", 0) == 1505515188991033409:
+        return True
+    if hasattr(user, "guild_permissions"):
+        if user.guild_permissions.administrator or user.guild_permissions.manage_guild:
+            return True
+        if guild:
+            cfg = top_mgr.get_app_config(guild.id)
+            rev_role_id = cfg.get("reviewer_role_id")
+            if rev_role_id and any(r.id == rev_role_id for r in getattr(user, "roles", [])):
+                return True
+    return False
+
+
+def build_app_review_embed(app: dict[str, Any], applicant_user: Optional[Any] = None) -> discord.Embed:
+    """Construct or refresh the staff application review embed."""
+    status_emoji = {
+        "PENDING": "🟡",
+        "SUBMITTED": "🟡",
+        "UNDER_REVIEW": "🟠",
+        "MORE_INFO_REQUESTED": "💬",
+        "ACCEPTED": "🟢",
+        "REJECTED": "🔴",
+        "CLOSED": "📁",
+        "WITHDRAWN": "⚪",
+    }.get(app.get("status", "PENDING"), "⚪")
+
+    color = KyokaTheme.PRIMARY
+    if app.get("status") == "ACCEPTED":
+        color = KyokaTheme.SUCCESS
+    elif app.get("status") in ("REJECTED", "CLOSED"):
+        color = KyokaTheme.ERROR
+    elif app.get("status") == "MORE_INFO_REQUESTED":
+        color = KyokaTheme.WARNING
+
+    embed = discord.Embed(
+        title=f"📥 STAFF APPLICATION • {app['id']}",
+        description=(
+            f"**Applicant:** <@{app['applicant_id']}> (`{app.get('applicant_name', 'Unknown')}`)\n"
+            f"**Position:** `{app.get('position', 'Staff Candidate')}`\n"
+            f"**Status:** {status_emoji} **{app.get('status', 'PENDING')}**\n"
+            f"**Submitted:** <t:{int(app.get('created_at', time.time()))}:R>"
+        ),
+        color=color,
+        timestamp=discord.utils.utcnow(),
+    )
+
+    for q, a in app.get("answers", {}).items():
+        embed.add_field(name=f"❓ {q}", value=f"> {str(a)[:900]}", inline=False)
+
+    if app.get("decision_reason"):
+        embed.add_field(name="⚖️ Decision Notes", value=f"> {app['decision_reason']}", inline=False)
+
+    if app.get("staff_notes"):
+        embed.add_field(name="📝 Private Staff Notes", value=f"> {app['staff_notes'][:900]}", inline=False)
+
+    if applicant_user and getattr(applicant_user, "display_avatar", None):
+        embed.set_thumbnail(url=applicant_user.display_avatar.url)
+
+    reviewer_str = app.get("reviewer_name") or "Pending"
+    embed.set_footer(text=f"Application ID: {app['id']} • Reviewer: {reviewer_str}")
+    return embed
+
+
+class StaffApplicationRejectModal(discord.ui.Modal, title="🔴 Reject Staff Application"):
+    def __init__(self, top_mgr: TopManager, app_id: str, applicant_id: int):
+        super().__init__()
+        self.top_mgr = top_mgr
+        self.app_id = app_id
+        self.applicant_id = applicant_id
+        self.reason_input = discord.ui.TextInput(
+            label="Rejection Reason",
+            style=discord.TextStyle.paragraph,
+            placeholder="Feedback for applicant (or leave default)...",
+            required=False,
+            default="Not accepted at this time",
+            max_length=300,
+        )
+        self.add_item(self.reason_input)
+
+    async def on_submit(self, interaction: discord.Interaction):
+        reason = self.reason_input.value.strip() or "Not accepted at this time"
+        try:
+            app = self.top_mgr.review_application(
+                self.app_id,
+                reviewer_id=interaction.user.id,
+                reviewer_name=str(interaction.user),
+                new_status="REJECTED",
+                reason=reason,
+            )
+        except Exception as e:
+            return await interaction.response.send_message(f"Error: {e}", ephemeral=True)
+
+        try:
+            applicant = interaction.client.get_user(self.applicant_id)
+            if applicant:
+                dm = discord.Embed(
+                    title="Notice Regarding Your Staff Application",
+                    description=(
+                        f"Thank you for your interest in joining our staff team. After review, your application "
+                        f"(`{self.app_id}`) was **not accepted** at this time.\n\n"
+                        f"> **Reason:** `{reason}`\n\n"
+                        f"You are welcome to reapply after the cooldown period has elapsed."
+                    ),
+                    color=KyokaTheme.ERROR,
+                )
+                await applicant.send(embed=dm)
+        except Exception:
+            pass
+
+        updated_emb = build_app_review_embed(app, interaction.client.get_user(self.applicant_id))
+        await interaction.response.send_message(f"🔴 Application **{self.app_id}** marked as **REJECTED**.", ephemeral=True)
+        try:
+            if interaction.message:
+                await interaction.message.edit(embed=updated_emb)
+        except Exception:
+            pass
+
+
+class StaffApplicationReqInfoModal(discord.ui.Modal, title="💬 Request Additional Information"):
+    def __init__(self, top_mgr: TopManager, app_id: str, applicant_id: int):
+        super().__init__()
+        self.top_mgr = top_mgr
+        self.app_id = app_id
+        self.applicant_id = applicant_id
+        self.question_input = discord.ui.TextInput(
+            label="Question for Applicant",
+            style=discord.TextStyle.paragraph,
+            placeholder="What additional information do you need from the applicant?",
+            required=True,
+            max_length=500,
+        )
+        self.add_item(self.question_input)
+
+    async def on_submit(self, interaction: discord.Interaction):
+        q = self.question_input.value.strip()
+        try:
+            app = self.top_mgr.review_application(
+                self.app_id,
+                reviewer_id=interaction.user.id,
+                reviewer_name=str(interaction.user),
+                new_status="MORE_INFO_REQUESTED",
+                reason=f"Info requested: {q}",
+            )
+            self.top_mgr.add_application_note(self.app_id, staff_id=interaction.user.id, note=f"[Info Requested] {q}")
+        except Exception as e:
+            return await interaction.response.send_message(f"Error: {e}", ephemeral=True)
+
+        try:
+            applicant = interaction.client.get_user(self.applicant_id)
+            if applicant:
+                dm = discord.Embed(
+                    title="💬 Staff Application — Information Requested",
+                    description=(
+                        f"The staff team has reviewed your application (`{self.app_id}`) and requested additional information:\n\n"
+                        f"> **Question:** {q}\n\n"
+                        f"Please reply or contact staff directly with your response."
+                    ),
+                    color=KyokaTheme.WARNING,
+                )
+                await applicant.send(embed=dm)
+        except Exception:
+            pass
+
+        updated_emb = build_app_review_embed(app, interaction.client.get_user(self.applicant_id))
+        await interaction.response.send_message(f"💬 Information request sent to applicant for **{self.app_id}**.", ephemeral=True)
+        try:
+            if interaction.message:
+                await interaction.message.edit(embed=updated_emb)
+        except Exception:
+            pass
+
+
+class StaffApplicationNoteModal(discord.ui.Modal, title="📝 Add Internal Staff Note"):
+    def __init__(self, top_mgr: TopManager, app_id: str, applicant_id: int):
+        super().__init__()
+        self.top_mgr = top_mgr
+        self.app_id = app_id
+        self.applicant_id = applicant_id
+        self.note_input = discord.ui.TextInput(
+            label="Internal Staff Note",
+            style=discord.TextStyle.paragraph,
+            placeholder="Confidential staff comments, interview notes, or vouch verification...",
+            required=True,
+            max_length=500,
+        )
+        self.add_item(self.note_input)
+
+    async def on_submit(self, interaction: discord.Interaction):
+        note_text = self.note_input.value.strip()
+        try:
+            app = self.top_mgr.add_application_note(self.app_id, staff_id=interaction.user.id, note=note_text)
+        except Exception as e:
+            return await interaction.response.send_message(f"Error: {e}", ephemeral=True)
+
+        updated_emb = build_app_review_embed(app, interaction.client.get_user(self.applicant_id))
+        await interaction.response.send_message(f"📝 Note added to application **{self.app_id}**.", ephemeral=True)
+        try:
+            if interaction.message:
+                await interaction.message.edit(embed=updated_emb)
+        except Exception:
+            pass
+
+
 class StaffPositionSelect(discord.ui.Select):
     """Position select menu before displaying the modal."""
 
@@ -184,6 +389,12 @@ class StaffPositionSelect(discord.ui.Select):
         )
 
     async def callback(self, interaction: discord.Interaction):
+        cfg = self.top_mgr.get_app_config(interaction.guild_id or 0)
+        if cfg.get("is_open", 1) == 0:
+            return await interaction.response.send_message(
+                "❌ **Staff applications are currently closed or paused.** Please check back later!",
+                ephemeral=True,
+            )
         chosen_position = self.values[0]
         modal = StaffApplicationModal(self.top_mgr, chosen_position)
         await interaction.response.send_modal(modal)
@@ -204,6 +415,12 @@ class StaffApplicationPanelView(discord.ui.View):
         emoji="📝",
     )
     async def apply_button(self, interaction: discord.Interaction, button: discord.ui.Button):
+        cfg = self.top_mgr.get_app_config(interaction.guild_id or 0)
+        if cfg.get("is_open", 1) == 0:
+            return await interaction.response.send_message(
+                "❌ **Staff applications are currently closed or paused.** Please check back later!",
+                ephemeral=True,
+            )
         modal = StaffApplicationModal(self.top_mgr, "General Staff Candidate")
         await interaction.response.send_modal(modal)
 
@@ -217,13 +434,22 @@ class StaffApplicationReviewView(discord.ui.View):
         self.app_id = app_id
         self.applicant_id = applicant_id
 
-    @discord.ui.button(label="Accept", style=discord.ButtonStyle.success, emoji="✅", custom_id="app_btn_accept")
+    async def interaction_check(self, interaction: discord.Interaction) -> bool:
+        if not is_app_reviewer(interaction.user, interaction.guild, self.top_mgr):
+            await interaction.response.send_message("❌ Staff or reviewer permission required.", ephemeral=True)
+            return False
+        return True
+
+    @discord.ui.button(label="Accept", style=discord.ButtonStyle.success, emoji="✅", custom_id="app_btn_accept", row=0)
     async def accept_button(self, interaction: discord.Interaction, button: discord.ui.Button):
-        if not interaction.user.guild_permissions.administrator and interaction.user.id != 1505515188991033409:
-            return await interaction.response.send_message("❌ Administrator permission required.", ephemeral=True)
+        app = self.top_mgr.get_application(self.app_id)
+        if not app:
+            return await interaction.response.send_message("❌ Application not found.", ephemeral=True)
+        if app["status"] in ("ACCEPTED", "REJECTED", "CLOSED"):
+            return await interaction.response.send_message(f"⚠️ Application {self.app_id} has already been finalized as **{app['status']}**.", ephemeral=True)
 
         try:
-            self.top_mgr.review_application(
+            app = self.top_mgr.review_application(
                 self.app_id,
                 reviewer_id=interaction.user.id,
                 reviewer_name=str(interaction.user),
@@ -263,63 +489,56 @@ class StaffApplicationReviewView(discord.ui.View):
         except Exception:
             pass
 
-        await interaction.response.send_message(
-            f"✅ Application **{self.app_id}** marked as **ACCEPTED** by {interaction.user.mention}.{role_msg}",
-            ephemeral=False,
-        )
+        updated_emb = build_app_review_embed(app, interaction.client.get_user(self.applicant_id))
+        for item in self.children:
+            if isinstance(item, discord.ui.Button):
+                item.disabled = True
 
-    @discord.ui.button(label="Reject", style=discord.ButtonStyle.danger, emoji="❌", custom_id="app_btn_reject")
+        await interaction.response.edit_message(embed=updated_emb, view=self)
+
+    @discord.ui.button(label="Reject", style=discord.ButtonStyle.danger, emoji="❌", custom_id="app_btn_reject", row=0)
     async def reject_button(self, interaction: discord.Interaction, button: discord.ui.Button):
-        if not interaction.user.guild_permissions.administrator and interaction.user.id != 1505515188991033409:
-            return await interaction.response.send_message("❌ Administrator permission required.", ephemeral=True)
+        app = self.top_mgr.get_application(self.app_id)
+        if not app:
+            return await interaction.response.send_message("❌ Application not found.", ephemeral=True)
+        if app["status"] in ("ACCEPTED", "REJECTED", "CLOSED"):
+            return await interaction.response.send_message(f"⚠️ Application {self.app_id} has already been finalized as **{app['status']}**.", ephemeral=True)
 
-        try:
-            self.top_mgr.review_application(
-                self.app_id,
-                reviewer_id=interaction.user.id,
-                reviewer_name=str(interaction.user),
-                new_status="REJECTED",
-                reason=f"Declined by {interaction.user}",
-            )
-        except Exception as e:
-            return await interaction.response.send_message(f"Error: {e}", ephemeral=True)
+        modal = StaffApplicationRejectModal(self.top_mgr, self.app_id, self.applicant_id)
+        await interaction.response.send_modal(modal)
 
-        try:
-            applicant = interaction.client.get_user(self.applicant_id)
-            if applicant:
-                dm_embed = discord.Embed(
-                    title="Notice Regarding Your Staff Application",
-                    description=(
-                        f"Thank you for your interest in joining our staff team. After review, your application "
-                        f"(`{self.app_id}`) was not approved at this time.\n\n"
-                        f"You are welcome to reapply after the cooldown period has expired."
-                    ),
-                    color=KyokaTheme.ERROR,
-                )
-                await applicant.send(embed=dm_embed)
-        except Exception:
-            pass
-
-        await interaction.response.send_message(
-            f"🔴 Application **{self.app_id}** marked as **REJECTED** by {interaction.user.mention}.",
-            ephemeral=False,
-        )
-
-    @discord.ui.button(label="Under Review", style=discord.ButtonStyle.secondary, emoji="🟡", custom_id="app_btn_review")
+    @discord.ui.button(label="Under Review", style=discord.ButtonStyle.secondary, emoji="🟠", custom_id="app_btn_review", row=0)
     async def under_review_button(self, interaction: discord.Interaction, button: discord.ui.Button):
+        app = self.top_mgr.get_application(self.app_id)
+        if not app:
+            return await interaction.response.send_message("❌ Application not found.", ephemeral=True)
+        if app["status"] in ("ACCEPTED", "REJECTED", "CLOSED"):
+            return await interaction.response.send_message(f"⚠️ Application {self.app_id} has already been finalized as **{app['status']}**.", ephemeral=True)
+
         try:
-            self.top_mgr.review_application(
+            app = self.top_mgr.review_application(
                 self.app_id,
                 reviewer_id=interaction.user.id,
                 reviewer_name=str(interaction.user),
                 new_status="UNDER_REVIEW",
                 reason="Review in progress",
             )
-            await interaction.response.send_message(f"🟡 Application **{self.app_id}** status updated to **UNDER REVIEW**.", ephemeral=True)
+            updated_emb = build_app_review_embed(app, interaction.client.get_user(self.applicant_id))
+            await interaction.response.edit_message(embed=updated_emb, view=self)
         except Exception as e:
             await interaction.response.send_message(f"Error: {e}", ephemeral=True)
 
-    @discord.ui.button(label="Interview Ticket", style=discord.ButtonStyle.primary, emoji="🎫", custom_id="app_btn_interview")
+    @discord.ui.button(label="Request Info", style=discord.ButtonStyle.primary, emoji="💬", custom_id="app_btn_req_info", row=1)
+    async def request_info_button(self, interaction: discord.Interaction, button: discord.ui.Button):
+        modal = StaffApplicationReqInfoModal(self.top_mgr, self.app_id, self.applicant_id)
+        await interaction.response.send_modal(modal)
+
+    @discord.ui.button(label="Add Note", style=discord.ButtonStyle.secondary, emoji="📝", custom_id="app_btn_add_note", row=1)
+    async def add_note_button(self, interaction: discord.Interaction, button: discord.ui.Button):
+        modal = StaffApplicationNoteModal(self.top_mgr, self.app_id, self.applicant_id)
+        await interaction.response.send_modal(modal)
+
+    @discord.ui.button(label="Interview Ticket", style=discord.ButtonStyle.secondary, emoji="🎫", custom_id="app_btn_interview", row=1)
     async def interview_ticket_button(self, interaction: discord.Interaction, button: discord.ui.Button):
         guild = interaction.guild
         if not guild:
@@ -329,7 +548,6 @@ class StaffApplicationReviewView(discord.ui.View):
         if not applicant:
             return await interaction.response.send_message("❌ Applicant is no longer in this server.", ephemeral=True)
 
-        # Create private interview channel
         overwrites = {
             guild.default_role: discord.PermissionOverwrite(read_messages=False),
             interaction.user: discord.PermissionOverwrite(read_messages=True, send_messages=True),
@@ -357,6 +575,28 @@ class StaffApplicationReviewView(discord.ui.View):
             await interaction.response.send_message(f"🎫 Interview channel created: {interview_ch.mention}", ephemeral=True)
         except Exception as e:
             await interaction.response.send_message(f"Failed to create interview channel: {e}", ephemeral=True)
+
+    @discord.ui.button(label="Close", style=discord.ButtonStyle.secondary, emoji="📁", custom_id="app_btn_close", row=1)
+    async def close_button(self, interaction: discord.Interaction, button: discord.ui.Button):
+        app = self.top_mgr.get_application(self.app_id)
+        if not app:
+            return await interaction.response.send_message("❌ Application not found.", ephemeral=True)
+
+        try:
+            app = self.top_mgr.review_application(
+                self.app_id,
+                reviewer_id=interaction.user.id,
+                reviewer_name=str(interaction.user),
+                new_status="CLOSED",
+                reason=f"Closed by {interaction.user}",
+            )
+            updated_emb = build_app_review_embed(app, interaction.client.get_user(self.applicant_id))
+            for item in self.children:
+                if isinstance(item, discord.ui.Button):
+                    item.disabled = True
+            await interaction.response.edit_message(embed=updated_emb, view=self)
+        except Exception as e:
+            await interaction.response.send_message(f"Error: {e}", ephemeral=True)
 
 
 def format_single_price_embed(calc: CalculationResult) -> discord.Embed:
@@ -431,8 +671,13 @@ class TopAIManager(commands.Cog, name="TopAIManager"):
         """Verify author has authoritative staff or administrator privileges."""
         if ctx.author.id == 1505515188991033409:
             return True
-        if ctx.guild and getattr(ctx.author, "guild_permissions", None) and ctx.author.guild_permissions.administrator:
-            return True
+        if ctx.guild and getattr(ctx.author, "guild_permissions", None):
+            if ctx.author.guild_permissions.administrator or ctx.author.guild_permissions.manage_guild:
+                return True
+            cfg = self.top_mgr.get_app_config(ctx.guild.id)
+            rev_role = cfg.get("reviewer_role_id")
+            if rev_role and hasattr(ctx.author, "roles") and any(r.id == rev_role for r in ctx.author.roles):
+                return True
         perm_mgr = getattr(self.bot, "perm_mgr", None)
         if perm_mgr and hasattr(perm_mgr, "is_developer_sync"):
             try:
@@ -1239,12 +1484,14 @@ class TopAIManager(commands.Cog, name="TopAIManager"):
         await ctx.reply(embed=embed, mention_author=False)
 
     @app_group.command(name="accept")
-    @commands.has_permissions(administrator=True)
-    async def app_accept_cmd(self, ctx: CustomContext, app_id: str, *, reason: str = "Accepted by admin"):
-        """Accept a staff application and notify the applicant.
+    async def app_accept_cmd(self, ctx: CustomContext, app_id: str, *, reason: str = "Accepted by staff"):
+        """Accept a staff application, grant configured role, and notify the applicant.
         
         Usage: +top app accept <app_id> [reason]
         """
+        if not self.is_bot_staff(ctx):
+            return await ctx.reply("❌ Staff permissions required.", mention_author=False)
+
         try:
             app = self.top_mgr.review_application(
                 app_id,
@@ -1253,17 +1500,66 @@ class TopAIManager(commands.Cog, name="TopAIManager"):
                 new_status="ACCEPTED",
                 reason=reason,
             )
-            await ctx.reply(f"✅ Application **`{app_id.upper()}`** for <@{app['applicant_id']}> marked as **ACCEPTED**.", mention_author=False)
         except Exception as e:
-            await ctx.reply(f"⚠️ {e}", mention_author=False)
+            return await ctx.reply(f"⚠️ {e}", mention_author=False)
+
+        role_msg = ""
+        cfg = self.top_mgr.get_app_config(ctx.guild.id if ctx.guild else 0)
+        auto_role_id = cfg.get("role_on_accept_id")
+        if auto_role_id and ctx.guild:
+            target_role = ctx.guild.get_role(auto_role_id)
+            target_member = ctx.guild.get_member(app["applicant_id"])
+            if target_role and target_member:
+                try:
+                    await target_member.add_roles(target_role, reason=f"Staff application {app_id.upper()} accepted")
+                    role_msg = f" Granted **{target_role.name}**."
+                except Exception as ex:
+                    role_msg = f" (Role assignment note: {ex})"
+
+        # DM applicant
+        try:
+            applicant_user = self.bot.get_user(app["applicant_id"])
+            if applicant_user:
+                dm = discord.Embed(
+                    title="🎉 Congratulations! Staff Application Accepted",
+                    description=(
+                        f"Your application (`{app_id.upper()}`) has been **ACCEPTED** by {ctx.author.mention}!\n\n"
+                        f"> **Note / Reason:** `{reason}`\n\n"
+                        f"Welcome to the team! Please contact server management for your onboarding."
+                    ),
+                    color=KyokaTheme.SUCCESS,
+                )
+                await applicant_user.send(embed=dm)
+        except Exception:
+            pass
+
+        # Audit channel logging
+        aud_ch_id = cfg.get("audit_channel_id")
+        if aud_ch_id and ctx.guild:
+            aud_ch = ctx.guild.get_channel(aud_ch_id)
+            if aud_ch and isinstance(aud_ch, discord.TextChannel):
+                audit_emb = discord.Embed(
+                    title="⚖️ AUDIT: Staff Application Accepted",
+                    description=f"**Application:** `{app_id.upper()}`\n**Applicant:** <@{app['applicant_id']}>\n**Reviewer:** {ctx.author.mention}\n**Reason:** `{reason}`",
+                    color=KyokaTheme.SUCCESS,
+                    timestamp=discord.utils.utcnow(),
+                )
+                try:
+                    await aud_ch.send(embed=audit_emb)
+                except Exception:
+                    pass
+
+        await ctx.reply(f"✅ Application **`{app_id.upper()}`** for <@{app['applicant_id']}> marked as **ACCEPTED**.{role_msg}", mention_author=False)
 
     @app_group.command(name="reject")
-    @commands.has_permissions(administrator=True)
     async def app_reject_cmd(self, ctx: CustomContext, app_id: str, *, reason: str = "Not accepted at this time"):
         """Reject a staff application and notify the applicant.
         
         Usage: +top app reject <app_id> [reason]
         """
+        if not self.is_bot_staff(ctx):
+            return await ctx.reply("❌ Staff permissions required.", mention_author=False)
+
         try:
             app = self.top_mgr.review_application(
                 app_id,
@@ -1272,9 +1568,327 @@ class TopAIManager(commands.Cog, name="TopAIManager"):
                 new_status="REJECTED",
                 reason=reason,
             )
-            await ctx.reply(f"🔴 Application **`{app_id.upper()}`** for <@{app['applicant_id']}> marked as **REJECTED**.", mention_author=False)
+        except Exception as e:
+            return await ctx.reply(f"⚠️ {e}", mention_author=False)
+
+        # DM applicant
+        try:
+            applicant_user = self.bot.get_user(app["applicant_id"])
+            if applicant_user:
+                dm = discord.Embed(
+                    title="Notice Regarding Your Staff Application",
+                    description=(
+                        f"Thank you for your interest in joining our staff team. After review, your application "
+                        f"(`{app_id.upper()}`) was **not accepted** at this time.\n\n"
+                        f"> **Reason:** `{reason}`\n\n"
+                        f"You are welcome to reapply once the cooldown period has elapsed."
+                    ),
+                    color=KyokaTheme.ERROR,
+                )
+                await applicant_user.send(embed=dm)
+        except Exception:
+            pass
+
+        # Audit channel logging
+        cfg = self.top_mgr.get_app_config(ctx.guild.id if ctx.guild else 0)
+        aud_ch_id = cfg.get("audit_channel_id")
+        if aud_ch_id and ctx.guild:
+            aud_ch = ctx.guild.get_channel(aud_ch_id)
+            if aud_ch and isinstance(aud_ch, discord.TextChannel):
+                audit_emb = discord.Embed(
+                    title="⚖️ AUDIT: Staff Application Rejected",
+                    description=f"**Application:** `{app_id.upper()}`\n**Applicant:** <@{app['applicant_id']}>\n**Reviewer:** {ctx.author.mention}\n**Reason:** `{reason}`",
+                    color=KyokaTheme.ERROR,
+                    timestamp=discord.utils.utcnow(),
+                )
+                try:
+                    await aud_ch.send(embed=audit_emb)
+                except Exception:
+                    pass
+
+        await ctx.reply(f"🔴 Application **`{app_id.upper()}`** for <@{app['applicant_id']}> marked as **REJECTED**.", mention_author=False)
+
+    @app_group.command(name="underreview", aliases=["review"])
+    async def app_underreview_cmd(self, ctx: CustomContext, app_id: str):
+        """Mark a staff application as UNDER REVIEW.
+        
+        Usage: +top app underreview <app_id>
+        """
+        if not self.is_bot_staff(ctx):
+            return await ctx.reply("❌ Staff permissions required.", mention_author=False)
+
+        try:
+            app = self.top_mgr.review_application(
+                app_id,
+                reviewer_id=ctx.author.id,
+                reviewer_name=str(ctx.author),
+                new_status="UNDER_REVIEW",
+                reason="Review in progress",
+            )
+            await ctx.reply(f"🟠 Application **`{app_id.upper()}`** status updated to **UNDER REVIEW**.", mention_author=False)
         except Exception as e:
             await ctx.reply(f"⚠️ {e}", mention_author=False)
+
+    @app_group.command(name="requestinfo", aliases=["reqinfo"])
+    async def app_requestinfo_cmd(self, ctx: CustomContext, app_id: str, *, question: str):
+        """Request additional information from an applicant and log inquiry note.
+        
+        Usage: +top app requestinfo <app_id> <question>
+        """
+        if not self.is_bot_staff(ctx):
+            return await ctx.reply("❌ Staff permissions required.", mention_author=False)
+
+        try:
+            app = self.top_mgr.review_application(
+                app_id,
+                reviewer_id=ctx.author.id,
+                reviewer_name=str(ctx.author),
+                new_status="MORE_INFO_REQUESTED",
+                reason=f"Info requested: {question}",
+            )
+            self.top_mgr.add_application_note(app_id, staff_id=ctx.author.id, note=f"[Info Requested] {question}")
+        except Exception as e:
+            return await ctx.reply(f"⚠️ {e}", mention_author=False)
+
+        # DM applicant
+        try:
+            applicant_user = self.bot.get_user(app["applicant_id"])
+            if applicant_user:
+                dm = discord.Embed(
+                    title="💬 Staff Application — Information Requested",
+                    description=(
+                        f"The staff team has reviewed your application (`{app_id.upper()}`) and requested additional information:\n\n"
+                        f"> **Question:** {question}\n\n"
+                        f"Please contact server staff directly with your response."
+                    ),
+                    color=KyokaTheme.WARNING,
+                )
+                await applicant_user.send(embed=dm)
+        except Exception:
+            pass
+
+        await ctx.reply(f"💬 Information request sent for application **`{app_id.upper()}`**.", mention_author=False)
+
+    @app_group.command(name="closeapp", aliases=["archive"])
+    async def app_closeapp_cmd(self, ctx: CustomContext, app_id: str, *, reason: str = "Closed by staff"):
+        """Close or archive a staff application.
+        
+        Usage: +top app closeapp <app_id> [reason]
+        """
+        if not self.is_bot_staff(ctx):
+            return await ctx.reply("❌ Staff permissions required.", mention_author=False)
+
+        try:
+            app = self.top_mgr.review_application(
+                app_id,
+                reviewer_id=ctx.author.id,
+                reviewer_name=str(ctx.author),
+                new_status="CLOSED",
+                reason=reason,
+            )
+            await ctx.reply(f"📁 Application **`{app_id.upper()}`** has been **CLOSED / ARCHIVED**.", mention_author=False)
+        except Exception as e:
+            await ctx.reply(f"⚠️ {e}", mention_author=False)
+
+    @app_group.command(name="reopen")
+    async def app_reopen_cmd(self, ctx: CustomContext, app_id: str):
+        """Reopen a previously closed or reviewed application back to PENDING.
+        
+        Usage: +top app reopen <app_id>
+        """
+        if not self.is_bot_staff(ctx):
+            return await ctx.reply("❌ Staff permissions required.", mention_author=False)
+
+        try:
+            app = self.top_mgr.review_application(
+                app_id,
+                reviewer_id=ctx.author.id,
+                reviewer_name=str(ctx.author),
+                new_status="PENDING",
+                reason="Reopened by staff",
+            )
+            await ctx.reply(f"🔄 Application **`{app_id.upper()}`** reopened as **PENDING**.", mention_author=False)
+        except Exception as e:
+            await ctx.reply(f"⚠️ {e}", mention_author=False)
+
+    @app_group.command(name="open")
+    @commands.has_permissions(manage_guild=True)
+    async def app_open_cmd(self, ctx: CustomContext):
+        """Open staff recruitment and accept new applications.
+        
+        Usage: +top app open
+        """
+        self.top_mgr.set_app_config(ctx.guild.id, is_open=1)
+        await ctx.reply("✅ Staff applications are now **OPEN**. Members may submit applications.", mention_author=False)
+
+    @app_group.command(name="close", aliases=["pause"])
+    @commands.has_permissions(manage_guild=True)
+    async def app_close_cmd(self, ctx: CustomContext):
+        """Close or pause staff recruitment and reject new submissions.
+        
+        Usage: +top app close
+        """
+        self.top_mgr.set_app_config(ctx.guild.id, is_open=0)
+        await ctx.reply("🛑 Staff applications are now **CLOSED / PAUSED**. New submissions are temporarily blocked.", mention_author=False)
+
+    @app_group.command(name="status")
+    async def app_status_cmd(self, ctx: CustomContext, app_id: str):
+        """Check application status (Public & safe view, sensitive notes omitted).
+        
+        Usage: +top app status <app_id>
+        """
+        app = self.top_mgr.get_application(app_id)
+        if not app:
+            return await ctx.reply(f"❌ Application **`{app_id.upper()}`** not found.", mention_author=False)
+
+        status_emoji = {
+            "PENDING": "🟡",
+            "SUBMITTED": "🟡",
+            "UNDER_REVIEW": "🟠",
+            "MORE_INFO_REQUESTED": "💬",
+            "ACCEPTED": "🟢",
+            "REJECTED": "🔴",
+            "CLOSED": "📁",
+            "WITHDRAWN": "⚪",
+        }.get(app["status"], "⚪")
+
+        color = KyokaTheme.PRIMARY
+        if app["status"] == "ACCEPTED":
+            color = KyokaTheme.SUCCESS
+        elif app["status"] in ("REJECTED", "CLOSED"):
+            color = KyokaTheme.ERROR
+        elif app["status"] == "MORE_INFO_REQUESTED":
+            color = KyokaTheme.WARNING
+
+        embed = discord.Embed(
+            title=f"📄 APPLICATION STATUS • {app['id']}",
+            description=(
+                f"**Applicant:** <@{app['applicant_id']}>\n"
+                f"**Position:** `{app['position']}`\n"
+                f"**Current Status:** {status_emoji} **{app['status']}**\n"
+                f"**Submitted:** <t:{int(app['created_at'])}:R>"
+            ),
+            color=color,
+        )
+        if app.get("decision_reason"):
+            embed.add_field(name="⚖️ Status Note", value=f"> {app['decision_reason']}", inline=False)
+
+        embed.set_footer(text="Kyoka Staff Recruitment Engine")
+        await ctx.reply(embed=embed, mention_author=False)
+
+    @app_group.command(name="stats")
+    async def app_stats_cmd(self, ctx: CustomContext):
+        """View recruitment statistics and average review duration.
+        
+        Usage: +top app stats
+        """
+        if not self.is_bot_staff(ctx):
+            return await ctx.reply("❌ Staff permissions required.", mention_author=False)
+
+        stats = self.top_mgr.get_application_stats(ctx.guild.id if ctx.guild else 0)
+        cfg = self.top_mgr.get_app_config(ctx.guild.id if ctx.guild else 0)
+        open_status = "🟢 Open" if cfg.get("is_open", 1) != 0 else "🔴 Closed/Paused"
+
+        pos_lines = [f"• **{pos}:** {cnt}" for pos, cnt in stats["positions"].items()] or ["• None recorded yet"]
+
+        embed = discord.Embed(
+            title="📊 STAFF RECRUITMENT METRICS & STATS",
+            description=f"**Current Status:** {open_status}\n**Total Applications:** `{stats['total']}`",
+            color=KyokaTheme.PRIMARY,
+        )
+        embed.add_field(
+            name="📋 Status Breakdown",
+            value=(
+                f"🟡 Pending: **{stats['pending']}**\n"
+                f"🟠 Under Review: **{stats['under_review']}**\n"
+                f"💬 Info Requested: **{stats['more_info']}**\n"
+                f"🟢 Accepted: **{stats['accepted']}**\n"
+                f"🔴 Rejected: **{stats['rejected']}**\n"
+                f"📁 Closed: **{stats['closed']}**"
+            ),
+            inline=True,
+        )
+        embed.add_field(
+            name="⏱️ Efficiency",
+            value=f"Average Review Time:\n**{stats['avg_review_hours']} hours**",
+            inline=True,
+        )
+        embed.add_field(
+            name="🛡️ Positions Breakdown",
+            value="\n".join(pos_lines),
+            inline=False,
+        )
+        embed.set_footer(text="Kyoka Staff Analytics")
+        await ctx.reply(embed=embed, mention_author=False)
+
+    @app_group.group(name="config", invoke_without_command=True)
+    @commands.has_permissions(manage_guild=True)
+    async def app_config_group(self, ctx: CustomContext):
+        """Manage recruitment system configuration.
+        
+        Subcommands:
+        • +top app config reviewer_role <@role>
+        • +top app config role <@role>
+        • +top app config audit_channel <#channel>
+        • +top app config cooldown <days>
+        • +top app config show
+        """
+        p = ctx.prefix or Config.DEFAULT_PREFIX
+        cfg = self.top_mgr.get_app_config(ctx.guild.id)
+        open_str = "🟢 Open" if cfg.get("is_open", 1) != 0 else "🔴 Closed"
+        rev_ch = f"<#{cfg['review_channel_id']}>" if cfg.get("review_channel_id") else "*None configured*"
+        rev_role = f"<@&{cfg['reviewer_role_id']}>" if cfg.get("reviewer_role_id") else "*Administrators only*"
+        auto_role = f"<@&{cfg['role_on_accept_id']}>" if cfg.get("role_on_accept_id") else "*None*"
+        aud_ch = f"<#{cfg['audit_channel_id']}>" if cfg.get("audit_channel_id") else "*None*"
+
+        embed = discord.Embed(
+            title="⚙️ STAFF RECRUITMENT CONFIGURATION",
+            description=(
+                f"**Recruitment Status:** {open_str}\n"
+                f"**Review Channel:** {rev_ch}\n"
+                f"**Reviewer Role:** {rev_role}\n"
+                f"**Auto Role on Accept:** {auto_role}\n"
+                f"**Audit Channel:** {aud_ch}\n"
+                f"**Rejection Cooldown:** `{cfg.get('cooldown_days', 7)} days`\n\n"
+                f"**Commands:**\n"
+                f"• `{p}top app config reviewer_role <@role>`\n"
+                f"• `{p}top app config role <@role>`\n"
+                f"• `{p}top app config audit_channel <#channel>`\n"
+                f"• `{p}top app config cooldown <days>`"
+            ),
+            color=KyokaTheme.PRIMARY,
+        )
+        await ctx.reply(embed=embed, mention_author=False)
+
+    @app_config_group.command(name="reviewer_role", aliases=["reviewerrole", "reviewers"])
+    @commands.has_permissions(manage_guild=True)
+    async def config_reviewer_role_cmd(self, ctx: CustomContext, role: discord.Role):
+        """Set the designated role allowed to review applications."""
+        self.top_mgr.set_app_config(ctx.guild.id, reviewer_role_id=role.id)
+        await ctx.reply(f"✅ Staff reviewer role set to {role.mention}.", mention_author=False)
+
+    @app_config_group.command(name="role", aliases=["autorole", "staffrole"])
+    @commands.has_permissions(manage_guild=True)
+    async def config_role_cmd(self, ctx: CustomContext, role: discord.Role):
+        """Set role automatically granted when an application is accepted."""
+        self.top_mgr.set_app_config(ctx.guild.id, role_on_accept_id=role.id)
+        await ctx.reply(f"✅ Automatic role on accept set to {role.mention}.", mention_author=False)
+
+    @app_config_group.command(name="audit_channel", aliases=["auditchannel", "audit"])
+    @commands.has_permissions(manage_guild=True)
+    async def config_audit_channel_cmd(self, ctx: CustomContext, channel: discord.TextChannel):
+        """Set the channel where application decisions and audits are logged."""
+        self.top_mgr.set_app_config(ctx.guild.id, audit_channel_id=channel.id)
+        await ctx.reply(f"✅ Staff application audit channel set to {channel.mention}.", mention_author=False)
+
+    @app_config_group.command(name="cooldown")
+    @commands.has_permissions(manage_guild=True)
+    async def config_cooldown_cmd(self, ctx: CustomContext, days: int):
+        """Set rejection cooldown period in days before re-applying."""
+        if days < 0 or days > 365:
+            return await ctx.reply("❌ Cooldown days must be between 0 and 365.", mention_author=False)
+        self.top_mgr.set_app_config(ctx.guild.id, cooldown_days=days)
+        await ctx.reply(f"✅ Application rejection cooldown set to **{days} day(s)**.", mention_author=False)
 
     @app_group.command(name="note")
     async def app_note_cmd(self, ctx: CustomContext, app_id: str, *, note: str):
@@ -1290,6 +1904,43 @@ class TopAIManager(commands.Cog, name="TopAIManager"):
             await ctx.reply(f"📝 Note appended to application **`{app_id.upper()}`**.", mention_author=False)
         except Exception as e:
             await ctx.reply(f"⚠️ {e}", mention_author=False)
+
+    # ── TOP-LEVEL APPLY COMMAND GROUP ─────────────────────────────────────────
+    @commands.group(name="apply", aliases=["staffapp"], invoke_without_command=True)
+    async def apply_top_level_cmd(self, ctx: CustomContext):
+        """Staff recruitment portal & application console.
+        
+        Usage:
+        • +apply — Open interactive recruitment position selector
+        • +apply status <app_id> — Check status of your application
+        """
+        p = ctx.prefix or Config.DEFAULT_PREFIX
+        cfg = self.top_mgr.get_app_config(ctx.guild.id if ctx.guild else 0)
+        if cfg.get("is_open", 1) == 0:
+            return await ctx.reply(
+                "🛑 **Staff applications are currently closed or paused.** Please check back later!",
+                mention_author=False,
+            )
+
+        embed = discord.Embed(
+            title="⛩️ KYOKA STAFF RECRUITMENT • APPLICATION PORTAL",
+            description=(
+                "> *\"True power lies in disciplined execution.\"* — **Aizen**\n\n"
+                "Welcome to the Kyoka Staff Application Portal!\n"
+                "Select a position below to launch your private application modal.\n\n"
+                f"• Check existing application status: `{p}apply status <APP_ID>`"
+            ),
+            color=KyokaTheme.PRIMARY,
+        )
+        embed.set_thumbnail(url=AIZEN_THUMBNAIL_URL)
+        embed.set_footer(text="Kyoka Staff Recruitment Engine • Confidential Submissions")
+        view = StaffApplicationPanelView(self.top_mgr)
+        await ctx.reply(embed=embed, view=view, mention_author=False)
+
+    @apply_top_level_cmd.command(name="status")
+    async def apply_sub_status_cmd(self, ctx: CustomContext, app_id: str):
+        """Check application status via +apply status <app_id>."""
+        await self.app_status_cmd(ctx, app_id)
 
 
 async def setup(bot: commands.Bot) -> None:
