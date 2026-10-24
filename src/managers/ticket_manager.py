@@ -241,6 +241,16 @@ class TicketManager:
         row = await self.db.fetch_one(query, *args)
         return row
 
+    async def get_active_tickets_count_for_user(self, guild_id: int, user_id: int, panel_id: int | None = None) -> int:
+        """Count how many open tickets a user currently has for a panel or guild."""
+        query = "SELECT COUNT(*) as cnt FROM active_tickets WHERE guild_id = $1 AND user_id = $2 AND status = 'open'"
+        args: list[Any] = [guild_id, user_id]
+        if panel_id is not None:
+            query += " AND panel_id = $3"
+            args.append(panel_id)
+        row = await self.db.fetch_one(query, *args)
+        return int(row["cnt"]) if row and "cnt" in row else 0
+
     async def claim_ticket(self, channel_id: int, claimed_by: int) -> bool:
         """Set the claiming staff member for an active ticket."""
         await self.db.execute(

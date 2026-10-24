@@ -76,7 +76,7 @@ class HelpCategorySelect(discord.ui.Select):
 
         options: list[discord.SelectOption] = [
             discord.SelectOption(
-                label="Home Overview",
+                label="Home",
                 value="home",
                 description="Kyoka overview, quickstart & navigation guide",
                 emoji="🏠",
@@ -85,14 +85,18 @@ class HelpCategorySelect(discord.ui.Select):
         ]
 
         for cat_name, cmds in visible_categories.items():
-            clean_label = cat_name.split("・", 1)[1] if "・" in cat_name else cat_name
-            opt_label = f"{clean_label} ({len(cmds)})"[:100]
+            # Clean display label matching Screenshot 2
+            raw_title = cat_name.split("・", 1)[1] if "・" in cat_name else cat_name
+            clean_label = raw_title.title() if raw_title.isupper() else raw_title
+            clean_label = clean_label.strip()
+
+            # Short module-specific description
             desc = CATEGORY_DESCRIPTIONS.get(cat_name, f"{len(cmds)} accessible commands")[:100]
             emoji_str = UNICODE_CATEGORY_EMOJIS.get(cat_name, "📁")
 
             options.append(
                 discord.SelectOption(
-                    label=opt_label,
+                    label=clean_label[:100],
                     value=cat_name.lower(),
                     description=desc,
                     emoji=emoji_str,
@@ -101,7 +105,7 @@ class HelpCategorySelect(discord.ui.Select):
             )
 
         super().__init__(
-            placeholder="Select a category to view commands...",
+            placeholder="Select a module to view commands...",
             min_values=1,
             max_values=1,
             options=options[:25],
@@ -146,6 +150,7 @@ class HelpView(discord.ui.View):
         ctx: CustomContext,
         visible_categories: dict[str, list[commands.Command]],
         current_category: str = "home",
+        current_page: int = 1,
         timeout: float = 180.0,
     ) -> None:
         super().__init__(timeout=timeout)
@@ -155,6 +160,7 @@ class HelpView(discord.ui.View):
         self.visible_categories = visible_categories
         self.category_keys = list(visible_categories.keys())
         self.current_category = current_category
+        self.current_page = current_page
         self.message: discord.Message | None = None
 
         self._build_components()
@@ -218,11 +224,12 @@ class HelpView(discord.ui.View):
         btn_close.callback = self.btn_close_callback
         self.add_item(btn_close)
 
-        # Row 2: Link Buttons
+        # Row 2: Link Buttons matching Screenshot 1
+        bot_name = self.cog.bot.user.name if hasattr(self.cog.bot, "user") and self.cog.bot.user else "Kyoka"
         if Config.INVITE_URL:
             self.add_item(
                 discord.ui.Button(
-                    label="Invite",
+                    label=f"Invite {bot_name}",
                     url=Config.INVITE_URL,
                     style=discord.ButtonStyle.link,
                     row=2,
@@ -231,7 +238,7 @@ class HelpView(discord.ui.View):
         if Config.SUPPORT_URL:
             self.add_item(
                 discord.ui.Button(
-                    label="Support",
+                    label="Support Server",
                     url=Config.SUPPORT_URL,
                     style=discord.ButtonStyle.link,
                     row=2,
@@ -264,12 +271,23 @@ class HelpView(discord.ui.View):
     async def switch_category(self, interaction: discord.Interaction, selected_val: str) -> None:
         """Switch current view page and refresh UI components."""
         self.current_category = selected_val
+        self.current_page = 1
         self._build_components()
-        embed = self.cog.build_embed_for_selection(self.ctx, self.visible_categories, selected_val)
+        embed = self.cog.build_embed_for_selection(self.ctx, self.visible_categories, selected_val, page=1)
         await interaction.response.edit_message(embed=embed, view=self)
 
     async def btn_back_callback(self, interaction: discord.Interaction) -> None:
-        """Navigate to the previous category."""
+        """Navigate to the previous page or previous category."""
+        if self.current_category != "home":
+            cat_match = next((c for c in self.category_keys if c.lower() == self.current_category.lower()), None)
+            if cat_match and self.current_page > 1:
+                self.current_page -= 1
+                embed = self.cog.build_embed_for_selection(
+                    self.ctx, self.visible_categories, self.current_category, page=self.current_page
+                )
+                await interaction.response.edit_message(embed=embed, view=self)
+                return
+
         if not self.category_keys:
             await self.switch_category(interaction, "home")
             return
@@ -289,7 +307,20 @@ class HelpView(discord.ui.View):
         await self.switch_category(interaction, "home")
 
     async def btn_next_callback(self, interaction: discord.Interaction) -> None:
-        """Navigate to the next category."""
+        """Navigate to the next page or next category."""
+        if self.current_category != "home":
+            cat_match = next((c for c in self.category_keys if c.lower() == self.current_category.lower()), None)
+            if cat_match:
+                cmds = self.visible_categories.get(cat_match, [])
+                total_pages = max(1, math.ceil(len(cmds) / 15))
+                if self.current_page < total_pages:
+                    self.current_page += 1
+                    embed = self.cog.build_embed_for_selection(
+                        self.ctx, self.visible_categories, self.current_category, page=self.current_page
+                    )
+                    await interaction.response.edit_message(embed=embed, view=self)
+                    return
+
         if not self.category_keys:
             await self.switch_category(interaction, "home")
             return
@@ -614,6 +645,33 @@ class Help(commands.Cog):
             if cat not in ordered_categories and cmds:
                 ordered_categories[cat] = cmds
 
+        # Integrate guild custom categories if configured
+        if ctx.guild and hasattr(self.bot, "custom_help_mgr") and self.bot.custom_help_mgr:
+            try:
+                custom_cats = await self.bot.custom_help_mgr.get_guild_categories(ctx.guild.id)
+                for c_cat in custom_cats:
+                    if c_cat.get("is_hidden"):
+                        author_perms = getattr(ctx.author, "guild_permissions", None)
+                        is_admin = bool(author_perms and author_perms.administrator) or is_primary_owner(getattr(ctx.author, "id", None))
+                        if not is_admin:
+                            continue
+                    c_name = c_cat["category_name"]
+                    c_emoji = c_cat.get("emoji") or "📁"
+                    cat_header = f"{c_emoji}・{c_name.upper()}"
+                    matched_cmds: list[commands.Command] = []
+                    for c_cmd_name in c_cat.get("commands", []):
+                        cmd_obj = self.bot.get_command(c_cmd_name)
+                        if cmd_obj and self._can_run_command(cmd_obj, ctx):
+                            if cmd_obj not in matched_cmds:
+                                matched_cmds.append(cmd_obj)
+                    if matched_cmds:
+                        ordered_categories[cat_header] = matched_cmds
+                        if c_cat.get("description"):
+                            CATEGORY_DESCRIPTIONS[cat_header] = c_cat["description"]
+                        UNICODE_CATEGORY_EMOJIS[cat_header] = c_emoji
+            except Exception as e:
+                logger.debug(f"Error loading custom categories: {e}")
+
         return ordered_categories
 
     def _get_category_emoji(self, cat_name: str) -> str:
@@ -811,18 +869,18 @@ class Help(commands.Cog):
         ctx: CustomContext,
         visible_categories: dict[str, list[commands.Command]],
     ) -> discord.Embed:
-        """Construct the Signature Kyoka Home Overview Discord Embed with compact module listing."""
+        """Construct the Signature Kyoka Home Overview Discord Embed matching reference design."""
         guild = ctx.guild
         author = ctx.author
         p = self.bot.guild_mgr.get_prefix(guild.id if guild else None)
         ws_ping = self._get_latency_ms()
         total_commands = sum(len(cmds) for cmds in visible_categories.values())
+        bot_name = self.bot.user.name if hasattr(self.bot, "user") and self.bot.user else "Kyoka"
 
         embed = discord.Embed(
-            title="⛩️ Kyoka 3.0 — Command Modules",
+            title=f"Hey, I'm {bot_name} — Kyoka 3.0",
             description=(
-                "### The Perfect Illusion · Command Directory\n"
-                "> Select a module from the menu below or type `{p}help <command>` for syntax.\n\n"
+                "> Built for our community — keeping your server safe, active, and effortlessly connected.\n\n"
                 f"• **Prefix Commands:** `{p}<command>` · **Slash Commands:** `/<command>`\n"
                 f"• **Quickstart Guide:** `{p}quickstart` · `{p}setup`\n"
                 f"• **Permission System:** `[Public]` Everyone · `[Mod]` Staff · `[Admin]` Administrators · `[Prime]` Kyoka Premium"
@@ -833,47 +891,22 @@ class Help(commands.Cog):
         embed.add_field(
             name="📊 System Status",
             value=(
+                f"• **Latency:** `{ws_ping}ms`\n"
                 f"• **Prefix:** `{p}` | **Slash:** `/`\n"
-                f"• **Latency:** `{ws_ping}ms` | **Status:** `Operational`\n"
-                f"• **Commands:** `{total_commands}` registered across `{len(visible_categories)}` categories"
+                f"• **Available Commands:** `{total_commands}` across `{len(visible_categories)}` categories"
             ),
-            inline=True,
+            inline=False,
         )
 
         embed.add_field(
             name="✨ Key Features",
             value=(
-                f"• **AI Engine:** Google Gemini with 10 personalities (`{p}ai`)\n"
-                f"• **Defense:** Anti-Nuke, Auto-Mod, Purge & Lock (`{p}warn`)\n"
-                f"• **Engagement:** Tickets, Reaction Roles & Giveaways (`{p}ticket`)\n"
-                f"• **Progression:** Leveling XP, Ranks & Leaderboards (`{p}rank`)"
+                "• Select a module from the dropdown below to explore accessible commands.\n"
+                "• Use pagination buttons to browse between pages (max 15 commands/page).\n"
+                "• Use `🔍 Search` to find any specific command instantly."
             ),
-            inline=True,
+            inline=False,
         )
-
-        # Compact Module Sections showing command names only: `cmd1` · `cmd2` · `cmd3`
-        for cat_name, cmds in visible_categories.items():
-            if not cmds:
-                continue
-            clean_title = cat_name.split("・", 1)[1] if "・" in cat_name else cat_name
-            seen: set[str] = set()
-            c_names: list[str] = []
-            for c in cmds:
-                qname = c.qualified_name
-                if qname not in seen:
-                    seen.add(qname)
-                    c_names.append(qname)
-            c_names.sort()
-
-            cmd_tags = " · ".join(f"`{name}`" for name in c_names)
-            if len(cmd_tags) > 1024:
-                cmd_tags = cmd_tags[:1000] + "...`"
-
-            embed.add_field(
-                name=f"**{clean_title}**",
-                value=cmd_tags or "`None`",
-                inline=False,
-            )
 
         # Apply configurable Aizen GIF at the bottom with graceful fallback
         assets = getattr(Config, "ASSETS", None)
@@ -967,11 +1000,10 @@ class Help(commands.Cog):
         cat_name: str,
         commands_list: list[commands.Command],
         visible_categories: dict[str, list[commands.Command]],
+        page: int = 1,
     ) -> discord.Embed:
-        """Construct a formatted Discord Embed for a specific command category."""
+        """Construct a formatted Discord Embed for a specific command category with strict 15 cmd limit."""
         cat_keys = list(visible_categories.keys())
-        page_idx = (cat_keys.index(cat_name) + 1) if cat_name in cat_keys else 1
-        total_pages = len(cat_keys)
         p = self.bot.guild_mgr.get_prefix(ctx.guild.id if ctx.guild else None)
 
         clean_cat_title = cat_name.split("・", 1)[1] if "・" in cat_name else cat_name
@@ -979,35 +1011,31 @@ class Help(commands.Cog):
 
         # Collect unique command names
         seen: set[str] = set()
-        c_names: list[str] = []
+        unique_cmds: list[commands.Command] = []
         for c in commands_list:
             if c.qualified_name not in seen:
                 seen.add(c.qualified_name)
-                c_names.append(c.qualified_name)
-        c_names.sort()
-        cmd_tags = " · ".join(f"`{name}`" for name in c_names)
+                unique_cmds.append(c)
+        unique_cmds.sort(key=lambda c: c.qualified_name)
+
+        per_page = 15
+        total_pages = max(1, math.ceil(len(unique_cmds) / per_page))
+        safe_page = max(1, min(page, total_pages))
+        start_idx = (safe_page - 1) * per_page
+        page_cmds = unique_cmds[start_idx : start_idx + per_page]
+
+        cmd_tags = " · ".join(f"`{c.qualified_name}`{self._get_badge(c)}" for c in page_cmds)
 
         embed = discord.Embed(
             title=f"{self._get_category_emoji(cat_name)} {cat_name}",
             description=(
                 f"> {cat_desc}\n\n"
-                f"**COMMANDS ({len(c_names)}):**\n"
-                f"{cmd_tags}\n\n"
+                f"**COMMANDS ({len(unique_cmds)} total · Page {safe_page}/{total_pages}):**\n"
+                f"{cmd_tags or '`None`'}\n\n"
                 f"*Type `{p}help <command>` for detailed syntax, arguments, and aliases.*"
             ),
             color=0x2B0938,
         )
-
-        # Highlight top 6 commands with usage
-        for cmd in commands_list[:6]:
-            sig = f" {cmd.signature}" if cmd.signature else ""
-            desc = (cmd.description or cmd.help or "No description provided.").strip().split("\n")[0][:90]
-            badge = self._get_badge(cmd)
-            embed.add_field(
-                name=f"`{p}{cmd.qualified_name}{sig}`{badge}",
-                value=f"> {desc}",
-                inline=False,
-            )
 
         assets = getattr(Config, "ASSETS", None)
         gif_url = (
@@ -1023,7 +1051,7 @@ class Help(commands.Cog):
             embed.set_thumbnail(url=thumb.strip())
 
         embed.set_footer(
-            text=f"Module {page_idx}/{total_pages} • {len(c_names)} Commands • Requested by {ctx.author.display_name} • KYOKA 3.0",
+            text=f"Page {safe_page}/{total_pages} • {len(unique_cmds)} Commands • Requested by {ctx.author.display_name} • KYOKA 3.0",
             icon_url=ctx.author.display_avatar.url if ctx.author.display_avatar else None,
         )
         return embed
@@ -1098,13 +1126,16 @@ class Help(commands.Cog):
         ctx: CustomContext,
         visible_categories: dict[str, list[commands.Command]],
         selected_val: str,
+        page: int = 1,
     ) -> discord.Embed:
         """Route selection value to corresponding category or home embed."""
         if selected_val == "home":
             return self.build_home_embed(ctx, visible_categories)
         matched_cat = next((c for c in visible_categories.keys() if c.lower() == selected_val.lower()), None)
         if matched_cat:
-            return self.build_category_embed(ctx, matched_cat, visible_categories[matched_cat], visible_categories)
+            return self.build_category_embed(
+                ctx, matched_cat, visible_categories[matched_cat], visible_categories, page=page
+            )
         return self.build_home_embed(ctx, visible_categories)
 
     @commands.hybrid_command(
@@ -1203,6 +1234,173 @@ class Help(commands.Cog):
                 pass
         else:
             view.message = msg
+
+    # ─── CUSTOM HELP CATEGORIES ADMINISTRATION ────────────────────────────────
+    @commands.group(
+        name="customhelp",
+        aliases=["chelp"],
+        invoke_without_command=True,
+        description="Manage custom help categories for your server without code changes.",
+    )
+    @commands.has_permissions(administrator=True)
+    async def customhelp(self, ctx: CustomContext) -> None:
+        """Overview of custom help category management commands."""
+        p = self.bot.guild_mgr.get_prefix(ctx.guild.id if ctx.guild else None)
+        embed = discord.Embed(
+            title="⚙️ Custom Help Categories Manager",
+            description=(
+                "Customize your server's help menu and categories dynamically.\n\n"
+                f"• `{p}customhelp create <name> [emoji] [description]` — Create a new category\n"
+                f"• `{p}customhelp rename <old_name> <new_name>` — Rename an existing category\n"
+                f"• `{p}customhelp emoji <name> <emoji>` — Update the icon/emoji\n"
+                f"• `{p}customhelp add <category> <command>` — Add a registered command to category\n"
+                f"• `{p}customhelp remove <category> <command>` — Remove a command from category\n"
+                f"• `{p}customhelp hide <category>` — Hide category from help menu\n"
+                f"• `{p}customhelp show <category>` — Show category in help menu\n"
+                f"• `{p}customhelp delete <category>` — Delete a custom category\n"
+                f"• `{p}customhelp list` — List all custom categories and their commands\n"
+                f"• `{p}customhelp reset` — Reset custom categories to defaults"
+            ),
+            color=0x2B0938,
+        )
+        embed.set_footer(text=f"Requested by {ctx.author.display_name} • Administrator Only")
+        await ctx.send(embed=embed)
+
+    @customhelp.command(name="create", description="Create a new custom help category.")
+    @commands.has_permissions(administrator=True)
+    async def customhelp_create(
+        self, ctx: CustomContext, name: str, emoji: str = "📁", *, description: str = "Custom server commands"
+    ) -> None:
+        if not ctx.guild:
+            return
+        success, msg = await self.bot.custom_help_mgr.create_category(
+            ctx.guild.id, name, emoji=emoji, description=description
+        )
+        color = 0x2B0938 if success else 0xED4245
+        embed = discord.Embed(title="Custom Help Category", description=f"> {msg}", color=color)
+        await ctx.send(embed=embed)
+
+    @customhelp.command(name="rename", description="Rename an existing custom help category.")
+    @commands.has_permissions(administrator=True)
+    async def customhelp_rename(self, ctx: CustomContext, old_name: str, new_name: str) -> None:
+        if not ctx.guild:
+            return
+        success, msg = await self.bot.custom_help_mgr.rename_category(ctx.guild.id, old_name, new_name)
+        color = 0x2B0938 if success else 0xED4245
+        embed = discord.Embed(title="Custom Help Category", description=f"> {msg}", color=color)
+        await ctx.send(embed=embed)
+
+    @customhelp.command(name="emoji", description="Set icon or emoji for a custom help category.")
+    @commands.has_permissions(administrator=True)
+    async def customhelp_emoji(self, ctx: CustomContext, name: str, emoji: str) -> None:
+        if not ctx.guild:
+            return
+        success, msg = await self.bot.custom_help_mgr.set_emoji(ctx.guild.id, name, emoji)
+        color = 0x2B0938 if success else 0xED4245
+        embed = discord.Embed(title="Custom Help Category", description=f"> {msg}", color=color)
+        await ctx.send(embed=embed)
+
+    @customhelp.command(name="add", description="Add a registered command to a custom help category.")
+    @commands.has_permissions(administrator=True)
+    async def customhelp_add(self, ctx: CustomContext, category_name: str, command_name: str) -> None:
+        if not ctx.guild:
+            return
+        all_cmds = {c.qualified_name.lower() for c in self.bot.commands}
+        owner_cmds = {
+            "spam", "spamcancel", "guesshostadd", "guesshostremove", "guesshosts",
+            "eval", "exec", "restart", "shutdown", "sync", "leaveserver", "blacklist",
+            "whitelistuser", "errors", "validateconfig", "maintenance", "systemstatus",
+            "dbstatus", "extstatus",
+        }
+        success, msg = await self.bot.custom_help_mgr.add_command(
+            ctx.guild.id, category_name, command_name, all_cmds, owner_cmds
+        )
+        color = 0x2B0938 if success else 0xED4245
+        embed = discord.Embed(title="Custom Help Category", description=f"> {msg}", color=color)
+        await ctx.send(embed=embed)
+
+    @customhelp.command(name="remove", description="Remove a command from a custom help category.")
+    @commands.has_permissions(administrator=True)
+    async def customhelp_remove(self, ctx: CustomContext, category_name: str, command_name: str) -> None:
+        if not ctx.guild:
+            return
+        success, msg = await self.bot.custom_help_mgr.remove_command(ctx.guild.id, category_name, command_name)
+        color = 0x2B0938 if success else 0xED4245
+        embed = discord.Embed(title="Custom Help Category", description=f"> {msg}", color=color)
+        await ctx.send(embed=embed)
+
+    @customhelp.command(name="hide", description="Hide a custom category from the help menu.")
+    @commands.has_permissions(administrator=True)
+    async def customhelp_hide(self, ctx: CustomContext, category_name: str) -> None:
+        if not ctx.guild:
+            return
+        success, msg = await self.bot.custom_help_mgr.set_hidden(ctx.guild.id, category_name, True)
+        color = 0x2B0938 if success else 0xED4245
+        embed = discord.Embed(title="Custom Help Category", description=f"> {msg}", color=color)
+        await ctx.send(embed=embed)
+
+    @customhelp.command(name="show", description="Show a custom category in the help menu.")
+    @commands.has_permissions(administrator=True)
+    async def customhelp_show(self, ctx: CustomContext, category_name: str) -> None:
+        if not ctx.guild:
+            return
+        success, msg = await self.bot.custom_help_mgr.set_hidden(ctx.guild.id, category_name, False)
+        color = 0x2B0938 if success else 0xED4245
+        embed = discord.Embed(title="Custom Help Category", description=f"> {msg}", color=color)
+        await ctx.send(embed=embed)
+
+    @customhelp.command(name="delete", description="Delete a custom help category.")
+    @commands.has_permissions(administrator=True)
+    async def customhelp_delete(self, ctx: CustomContext, category_name: str) -> None:
+        if not ctx.guild:
+            return
+        success, msg = await self.bot.custom_help_mgr.delete_category(ctx.guild.id, category_name)
+        color = 0x2B0938 if success else 0xED4245
+        embed = discord.Embed(title="Custom Help Category", description=f"> {msg}", color=color)
+        await ctx.send(embed=embed)
+
+    @customhelp.command(name="list", description="List all custom help categories for this server.")
+    @commands.has_permissions(administrator=True)
+    async def customhelp_list(self, ctx: CustomContext) -> None:
+        if not ctx.guild:
+            return
+        categories = await self.bot.custom_help_mgr.get_guild_categories(ctx.guild.id)
+        if not categories:
+            embed = discord.Embed(
+                title="⚙️ Custom Help Categories",
+                description="> No custom categories configured for this server. Use `customhelp create` to make one!",
+                color=0x2B0938,
+            )
+            await ctx.send(embed=embed)
+            return
+
+        embed = discord.Embed(
+            title="⚙️ Custom Help Categories",
+            description=f"Found **{len(categories)}** custom category/categories for this server:\n",
+            color=0x2B0938,
+        )
+        for cat in categories:
+            cmds = cat.get("commands", [])
+            cmd_preview = ", ".join(f"`{c}`" for c in cmds[:10]) if cmds else "*No commands added*"
+            if len(cmds) > 10:
+                cmd_preview += f" *(+{len(cmds)-10} more)*"
+            status = "🔒 Hidden" if cat.get("is_hidden") else "👁️ Visible"
+            embed.add_field(
+                name=f"{cat.get('emoji', '📁')} {cat['category_name']} [{status}]",
+                value=f"> {cat.get('description', '')}\n> **Commands ({len(cmds)}):** {cmd_preview}",
+                inline=False,
+            )
+        await ctx.send(embed=embed)
+
+    @customhelp.command(name="reset", description="Reset all custom help categories to defaults.")
+    @commands.has_permissions(administrator=True)
+    async def customhelp_reset(self, ctx: CustomContext) -> None:
+        if not ctx.guild:
+            return
+        success, msg = await self.bot.custom_help_mgr.reset_categories(ctx.guild.id)
+        color = 0x2B0938 if success else 0xED4245
+        embed = discord.Embed(title="Custom Help Categories Reset", description=f"> {msg}", color=color)
+        await ctx.send(embed=embed)
 
 
 async def setup(bot: KyokaBot) -> None:

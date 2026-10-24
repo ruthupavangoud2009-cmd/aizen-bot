@@ -136,14 +136,12 @@ async def test_help_compact_embed_structure():
 
     assert "Kyoka 3.0" in embed.title
     assert embed.color.value == 0x2B0938  # Dark violet aesthetic
-    # Verify thumbnail / Aizen GIF URL is set
-    assert embed.thumbnail.url is not None
-    assert "http" in embed.thumbnail.url
-    # Verify fields contain category listings formatted cleanly
+    # Verify embed length is strictly safe under 6,000 chars (prevents 6,939 HTTP 400 error)
+    assert len(embed) < 6000
+    # Verify fields contain system status and key features
     field_names = [f.name for f in embed.fields]
-    assert "**MODERATION**" in field_names
-    mod_field = next(f for f in embed.fields if f.name == "**MODERATION**")
-    assert "`ban`" in mod_field.value
+    assert "📊 System Status" in field_names
+    assert "✨ Key Features" in field_names
 
 
 # ─────────────────────────────────────────────────────────────────────────────

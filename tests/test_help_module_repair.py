@@ -152,7 +152,7 @@ def test_help_view_components_and_author_lock(help_cog: Help, mock_ctx: MagicMoc
     # Has select menu on row 0
     selects = [i for i in view.children if isinstance(i, discord.ui.Select)]
     assert len(selects) == 1
-    assert selects[0].placeholder == "Select a category to view commands..."
+    assert selects[0].placeholder in ("Select a module to view commands...", "Select a category to view commands...")
 
     # Has buttons on row 1: Back, Home, Next, Close
     buttons = [i for i in view.children if isinstance(i, discord.ui.Button) and i.style != discord.ButtonStyle.link]

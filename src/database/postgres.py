@@ -1026,6 +1026,37 @@ class PostgresDatabase(BaseDatabase):
             "ALTER TABLE active_tickets ADD COLUMN IF NOT EXISTS close_reason TEXT DEFAULT '';",
             "ALTER TABLE ticket_panels ADD COLUMN IF NOT EXISTS categories_json TEXT DEFAULT '[]';",
             "ALTER TABLE ticket_panels ADD COLUMN IF NOT EXISTS faq_text TEXT DEFAULT '';",
+            "ALTER TABLE ticket_panels ADD COLUMN IF NOT EXISTS max_tickets_per_user INT DEFAULT 0;",
+            # Custom Help Categories per Server
+            """
+            CREATE TABLE IF NOT EXISTS guild_custom_help_categories (
+                guild_id BIGINT NOT NULL,
+                category_name VARCHAR(64) NOT NULL,
+                emoji VARCHAR(32) DEFAULT '📁',
+                description VARCHAR(128) DEFAULT 'Custom server commands',
+                commands TEXT[] DEFAULT '{}',
+                priority INT DEFAULT 0,
+                is_hidden BOOLEAN DEFAULT FALSE,
+                PRIMARY KEY (guild_id, category_name)
+            );
+            """,
+            # Voice Welcome Configuration per Server
+            """
+            CREATE TABLE IF NOT EXISTS guild_voice_welcome_config (
+                guild_id BIGINT PRIMARY KEY,
+                enabled BOOLEAN DEFAULT FALSE,
+                channel_id BIGINT,
+                trigger VARCHAR(32) DEFAULT 'both',
+                greeting_text TEXT DEFAULT 'Hi there! Thanks for joining {server}. Welcome to our community, {user}!',
+                tts_provider VARCHAR(32) DEFAULT 'gtts',
+                language VARCHAR(10) DEFAULT 'en',
+                cooldown_seconds INT DEFAULT 10,
+                queue_expiration_seconds INT DEFAULT 60,
+                allow_bots BOOLEAN DEFAULT FALSE,
+                defer_if_music_active BOOLEAN DEFAULT TRUE,
+                updated_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
+            );
+            """,
             """
             CREATE TABLE IF NOT EXISTS ticket_internal_notes (
                 id SERIAL PRIMARY KEY,

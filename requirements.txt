@@ -18,3 +18,4 @@ Pillow>=10.2.0
 # Process metrics & cloud hosting static audio binaries
 psutil>=5.9.0
 static-ffmpeg>=2.5
+gTTS>=2.5.4

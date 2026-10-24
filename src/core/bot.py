@@ -146,6 +146,10 @@ class KyokaBot(commands.Bot):
         self.leveling_mgr: LevelingManager = LevelingManager(self.db)
         from src.managers.reaction_role_manager import ReactionRoleManager
         self.reaction_role_mgr: ReactionRoleManager = ReactionRoleManager(self.db)
+        from src.managers.custom_help_manager import CustomHelpManager
+        self.custom_help_mgr: CustomHelpManager = CustomHelpManager(self.db)
+        from src.managers.voice_welcome_manager import VoiceWelcomeManager
+        self.voice_welcome_mgr: VoiceWelcomeManager = VoiceWelcomeManager(self, self.db)
         self.custom_emojis: EmojiRegistry = EmojiRegistry(self)
         self.no_prefix_users: set[int] = set()
         self.custom_status: str | None = None

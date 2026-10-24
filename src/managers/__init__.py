@@ -11,6 +11,8 @@ from src.managers.temp_voice_manager import TempVoiceManager
 from src.managers.translator_manager import TranslatorManager
 from src.managers.sticky_manager import StickyManager
 from src.managers.reaction_role_manager import ReactionRoleManager
+from src.managers.custom_help_manager import CustomHelpManager
+from src.managers.voice_welcome_manager import VoiceWelcomeManager
 
 __all__ = [
     "GuildManager",
@@ -26,4 +28,6 @@ __all__ = [
     "TranslatorManager",
     "StickyManager",
     "ReactionRoleManager",
+    "CustomHelpManager",
+    "VoiceWelcomeManager",
 ]

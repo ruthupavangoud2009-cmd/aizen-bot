@@ -800,22 +800,19 @@ class TicketSystem(commands.Cog):
                 await send_container_response(interaction, container, ephemeral=True)
                 return
 
-            # Check existing active ticket for user (Max 1 active ticket per panel/guild)
-            existing = await self.bot.ticket_mgr.get_active_ticket_for_user(interaction.guild.id, interaction.user.id, panel_id=panel_id)
-            if existing:
-                ch_id = existing.get("channel_id")
-                ch_obj = interaction.guild.get_channel(ch_id) if ch_id else None
-                if ch_obj:
+            # Check configurable per-user ticket limit (0 = Unlimited simultaneous tickets by default)
+            max_tickets = int(panel.get("max_tickets_per_user") or 0)
+            if max_tickets > 0:
+                active_count = await self.bot.ticket_mgr.get_active_tickets_count_for_user(
+                    interaction.guild.id, interaction.user.id, panel_id=panel_id
+                )
+                if active_count >= max_tickets:
                     container = KyokaContainer()
                     container.add_section(
-                        content=f"**Ticket Limit Reached**\n> You already have an open ticket in {ch_obj.mention}."
+                        content=f"**Ticket Limit Reached**\n> You have reached the maximum limit of **{max_tickets}** open ticket(s) configured for this panel."
                     )
                     await send_container_response(interaction, container, ephemeral=True)
                     return
-                else:
-                    # Ghost ticket (channel was deleted from Discord), auto-close in database
-                    if ch_id:
-                        await self.bot.ticket_mgr.close_ticket(ch_id, self.bot.user.id if self.bot.user else 0)
 
             await interaction.response.defer(ephemeral=True)
 
@@ -825,7 +822,8 @@ class TicketSystem(commands.Cog):
 
             # Resolve channel name
             naming = panel.get("naming_format", "ticket-{count}")
-            clean_user = re.sub(r"[^a-zA-Z0-9_-]", "", interaction.user.name.lower()) or "user"
+            raw_user_name = str(getattr(interaction.user, "name", "user"))
+            clean_user = re.sub(r"[^a-zA-Z0-9_-]", "", raw_user_name.lower()) or "user"
             channel_name = naming.replace("{count}", ticket_str).replace("{user}", clean_user)
 
             # Resolve or auto-create target category
@@ -1523,6 +1521,24 @@ class TicketSystem(commands.Cog):
             )
         )
         await send_container_response(ctx, c)
+
+    @ticket_group.command(name="limit", description="Configure the maximum simultaneous tickets per user for a panel (0 = unlimited).")
+    @commands.has_permissions(administrator=True)
+    async def ticket_limit_cmd(self, ctx: CustomContext, panel_name: str, limit: int = 0) -> None:
+        """Set max simultaneous tickets per user on a panel (0 for unlimited)."""
+        clean_name = panel_name.lower().strip()
+        panel = await self.bot.ticket_mgr.get_panel(ctx.guild.id, clean_name)
+        if not panel:
+            return await ctx.send_error(f"Panel `{clean_name}` not found.")
+        if limit < 0:
+            limit = 0
+        await self.bot.db.execute(
+            "UPDATE ticket_panels SET max_tickets_per_user = $1 WHERE guild_id = $2 AND panel_name = $3;",
+            limit, ctx.guild.id, clean_name
+        )
+        self.bot.ticket_mgr._panels_cache.pop(ctx.guild.id, None)
+        status = "Unlimited" if limit == 0 else str(limit)
+        await ctx.send_success(f"Ticket limit for panel `{clean_name}` set to **{status}** per user.")
 
 
 async def setup(bot: KyokaBot) -> None:
