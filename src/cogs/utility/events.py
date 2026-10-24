@@ -6,8 +6,10 @@ to member join, member leave, and server boost events.
 
 from __future__ import annotations
 
+import asyncio
 import logging
 import re
+import time
 from typing import Any, Optional, Dict
 import discord
 from discord import app_commands
@@ -28,6 +30,7 @@ class AutoEvents(commands.Cog):
 
     def __init__(self, bot: KyokaBot) -> None:
         self.bot = bot
+        self._recent_joins: dict[tuple[int, int], float] = {}
 
     async def cog_load(self) -> None:
         """Dynamically attach embed announce command to embed group so ?embed announce works."""
@@ -83,22 +86,18 @@ class AutoEvents(commands.Cog):
             return False, "Target channel is not a valid text channel or thread."
 
         # Permission verification
-        if isinstance(channel, discord.TextChannel):
-            bot_member = guild.me
+        bot_member = guild.me
+        if isinstance(channel, discord.TextChannel) and bot_member:
             perms = channel.permissions_for(bot_member)
             if not perms.view_channel:
                 return False, f"Bot is missing `View Channel` permission in {channel.mention}."
             if not perms.send_messages:
                 return False, f"Bot is missing `Send Messages` permission in {channel.mention}."
-            if not perms.embed_links:
-                return False, f"Bot is missing `Embed Links` permission in {channel.mention}."
-            if not perms.manage_webhooks:
-                return False, f"Bot requires `Manage Webhooks` permission in {channel.mention} to render Discord Components V2 Container Cards."
 
         embed_name = config.get("embed_name") if config else None
         msg_template = config.get("message_content") if config else None
 
-        # resolve Outer Message Content (Ping message)
+        # Resolve Outer Message Content (Ping message)
         outer_content = None
         if msg_template:
             if msg_template.strip().lower() in ["none", "no_ping", "silent"]:
@@ -106,25 +105,27 @@ class AutoEvents(commands.Cog):
             else:
                 outer_content = resolve_placeholders(msg_template, user=member, guild=guild, extra=extra)
 
-        # build Container from saved embed or fallback container
+        # Build Container from saved embed or fallback container
         container = None
         if embed_name:
-            template_data = await self.bot.embed_mgr.get_template(guild.id, embed_name)
-            if template_data:
-                draft = ContainerDraft.from_dict(template_data)
-                avatar_url = str(self.bot.user.display_avatar.url) if self.bot and self.bot.user else ""
-                container = draft.to_container(
-                    user=member,
-                    guild=guild,
-                    channel=channel,
-                    bot=self.bot,
-                    default_avatar=avatar_url,
-                )
-            else:
-                logger.warning(f"Bound template '{embed_name}' not found for {event_type} in guild {guild.id}")
+            try:
+                template_data = await self.bot.embed_mgr.get_template(guild.id, embed_name)
+                if template_data:
+                    draft = ContainerDraft.from_dict(template_data)
+                    avatar_url = str(self.bot.user.display_avatar.url) if self.bot and self.bot.user else ""
+                    container = draft.to_container(
+                        user=member,
+                        guild=guild,
+                        channel=channel,
+                        bot=self.bot,
+                        default_avatar=avatar_url,
+                    )
+                else:
+                    logger.warning(f"Bound template '{embed_name}' not found for {event_type} in guild {guild.id}")
+            except Exception as e:
+                logger.warning(f"Template loading error for '{embed_name}' in guild {guild.id}: {e}. Using native fallback card.")
 
         if not container:
-            # Fallback container
             container = KyokaContainer(accent_color=None)
             if event_type == "welcome":
                 container.add_section(
@@ -153,21 +154,66 @@ class AutoEvents(commands.Cog):
             container.add_separator(divider=True)
             container.add_text(f"-# {guild.name}")
 
-        try:
-            target_msg = await send_container_response(
-                channel,
-                container,
-                content=outer_content,
-                allowed_mentions=discord.AllowedMentions(users=True, roles=False, everyone=False),
-            )
-            # If template has interactive modules, register card for page switching
-            msg_id = None
-            if isinstance(target_msg, dict) and "id" in target_msg:
-                msg_id = int(target_msg["id"])
-            elif hasattr(target_msg, "id"):
-                msg_id = int(target_msg.id)
+        # Attempt sending container response via webhook first, falling back cleanly to Discord Embed
+        target_msg = None
+        can_webhook = True
+        if isinstance(channel, discord.TextChannel) and bot_member:
+            perms = channel.permissions_for(bot_member)
+            if not perms.manage_webhooks:
+                can_webhook = False
 
-            if container and embed_name and msg_id:
+        if can_webhook:
+            try:
+                target_msg = await send_container_response(
+                    channel,
+                    container,
+                    content=outer_content,
+                    allowed_mentions=discord.AllowedMentions(users=True, roles=False, everyone=False),
+                )
+            except Exception as wh_err:
+                logger.debug(f"Webhook container dispatch failed in {channel.id}, falling back to embed: {wh_err}")
+                target_msg = None
+
+        if target_msg is None:
+            # Resilient native Discord Embed fallback (guaranteed to deliver without webhooks)
+            fallback_title = f"🌸 Welcome to {guild.name}!" if event_type == "welcome" else (
+                f"👋 Farewell from {guild.name}" if event_type == "leave" else f"🚀 Server Boost!"
+            )
+            fallback_desc = (
+                f"Hey {member.mention}, welcome to **{guild.name}**!\n> You are our **{guild.member_count:,}th** member."
+                if event_type == "welcome"
+                else (f"**{member.name}** has left the server.\n> We now have **{guild.member_count:,}** members." if event_type == "leave" else f"Thank you {member.mention} for boosting the server!")
+            )
+            fb_embed = discord.Embed(
+                title=fallback_title,
+                description=fallback_desc,
+                color=0x2B0938,
+            )
+            if hasattr(member, "display_avatar") and member.display_avatar:
+                fb_embed.set_thumbnail(url=member.display_avatar.url)
+            fb_embed.set_footer(
+                text=f"{guild.name} • Kyoka 3.0",
+                icon_url=guild.icon.url if guild.icon else None,
+            )
+            try:
+                target_msg = await channel.send(
+                    content=outer_content,
+                    embed=fb_embed,
+                    allowed_mentions=discord.AllowedMentions(users=True, roles=False, everyone=False),
+                )
+            except Exception as send_err:
+                logger.error(f"Failed to dispatch {event_type} embed in {guild.name}: {send_err}")
+                return False, f"Error sending message: {send_err}"
+
+        # If template has interactive modules, register card for page switching
+        msg_id = None
+        if isinstance(target_msg, dict) and "id" in target_msg:
+            msg_id = int(target_msg["id"])
+        elif hasattr(target_msg, "id"):
+            msg_id = int(target_msg.id)
+
+        if container and embed_name and msg_id:
+            try:
                 draft_data = await self.bot.embed_mgr.get_template(guild.id, embed_name)
                 if draft_data:
                     await self.bot.embed_mgr.record_interactive_card(
@@ -176,13 +222,9 @@ class AutoEvents(commands.Cog):
                         template_name=embed_name,
                         payload=draft_data,
                     )
-            return True, None
-        except discord.Forbidden as e:
-            logger.error(f"Missing permissions to send {event_type} in {channel.name}: {e}")
-            return False, f"Permission Denied (403): Bot lacks permissions to send in {channel.mention}. Please grant `Send Messages` and `Embed Links` in channel settings."
-        except Exception as e:
-            logger.error(f"Failed to dispatch {event_type} card in {guild.name}: {e}", exc_info=e)
-            return False, f"Error sending message: {e}"
+            except Exception:
+                pass
+        return True, None
 
     async def _get_autorole_id(self, guild_id: int, target: str = "human") -> int | None:
         """Fetch configured autorole ID for the guild with L1 microsecond cache ('human' or 'bot')."""
@@ -218,32 +260,56 @@ class AutoEvents(commands.Cog):
 
     @commands.Cog.listener()
     async def on_member_join(self, member: discord.Member) -> None:
-        """Handle welcome greeting and auto-role on member join (separate human and bot roles)."""
-        # Handle Auto-Role assignment (for both humans and bots)
-        target_type = "bot" if member.bot else "human"
-        role_id = await self._get_autorole_id(member.guild.id, target=target_type)
-        if role_id:
-            role = member.guild.get_role(role_id)
-            if role and member.guild.me.guild_permissions.manage_roles and member.guild.me.top_role > role:
-                try:
+        """Handle welcome greeting and auto-role on member join (safe background execution, music-independent)."""
+        if not member.guild:
+            return
+
+        import time
+        now = time.monotonic()
+        key = (member.guild.id, member.id)
+        if key in self._recent_joins and now - self._recent_joins[key] < 8.0:
+            logger.debug(f"Ignoring duplicate member join event for {member.id} in {member.guild.id}")
+            return
+        self._recent_joins[key] = now
+
+        # Prune old cache entries
+        if len(self._recent_joins) > 500:
+            self._recent_joins = {k: v for k, v in self._recent_joins.items() if now - v < 30.0}
+
+        # Dispatch join handling in non-blocking background task to protect music and gateway loop
+        asyncio.create_task(self._safe_handle_member_join(member))
+
+    async def _safe_handle_member_join(self, member: discord.Member) -> None:
+        """Execute autorole and welcome card safely without blocking or throwing unhandled errors."""
+        # 1. Handle Auto-Role assignment (isolated try/except)
+        try:
+            target_type = "bot" if member.bot else "human"
+            role_id = await self._get_autorole_id(member.guild.id, target=target_type)
+            if role_id:
+                role = member.guild.get_role(role_id)
+                if role and member.guild.me.guild_permissions.manage_roles and member.guild.me.top_role > role:
                     await member.add_roles(role, reason=f"Kyoka Auto-Role System ({target_type.capitalize()})")
                     logger.info(f"Assigned {target_type} autorole @{role.name} to {member} in {member.guild.name}")
-                except Exception as e:
-                    logger.warning(f"Failed to assign {target_type} autorole in {member.guild.name}: {e}")
+        except Exception as e:
+            logger.warning(f"Failed to assign {target_type} autorole in {member.guild.name}: {e}")
 
         # Welcome greetings and DMs are only for real human members
         if member.bot:
             return
 
-        await self._send_event_card("welcome", member.guild, member)
+        # 2. Handle Text Channel Welcome Card (isolated try/except)
+        try:
+            await self._send_event_card("welcome", member.guild, member)
+        except Exception as e:
+            logger.error(f"Failed to send welcome card in {member.guild.name}: {e}")
 
-        # Handle DM Welcome if enabled
-        config = await self.bot.event_mgr.get_event_config(member.guild.id, "welcome")
-        if config and config.get("dm_enabled") and config.get("dm_embed_name"):
-            dm_name = config["dm_embed_name"]
-            dm_data = await self.bot.embed_mgr.get_template(member.guild.id, dm_name)
-            if dm_data:
-                try:
+        # 3. Handle DM Welcome if enabled (isolated try/except)
+        try:
+            config = await self.bot.event_mgr.get_event_config(member.guild.id, "welcome")
+            if config and config.get("dm_enabled") and config.get("dm_embed_name"):
+                dm_name = config["dm_embed_name"]
+                dm_data = await self.bot.embed_mgr.get_template(member.guild.id, dm_name)
+                if dm_data:
                     draft = ContainerDraft.from_dict(dm_data)
                     avatar_url = str(self.bot.user.display_avatar.url) if self.bot and self.bot.user else ""
                     dm_container = draft.to_container(
@@ -253,15 +319,21 @@ class AutoEvents(commands.Cog):
                         default_avatar=avatar_url,
                     )
                     await send_container_response(member, dm_container)
-                except Exception:
-                    pass  # User DMs closed
+        except Exception:
+            pass  # User DMs closed or blocked
 
     @commands.Cog.listener()
     async def on_member_remove(self, member: discord.Member) -> None:
-        """Handle farewell on member leave."""
-        if member.bot:
+        """Handle farewell on member leave (safe background task)."""
+        if not member.guild or member.bot:
             return
-        await self._send_event_card("leave", member.guild, member)
+        asyncio.create_task(self._safe_handle_member_remove(member))
+
+    async def _safe_handle_member_remove(self, member: discord.Member) -> None:
+        try:
+            await self._send_event_card("leave", member.guild, member)
+        except Exception as e:
+            logger.error(f"Failed to send leave card in {member.guild.name}: {e}")
 
     @commands.Cog.listener()
     async def on_member_update(self, before: discord.Member, after: discord.Member) -> None:
@@ -760,9 +832,9 @@ class AutoEvents(commands.Cog):
         """Dispatch a saved embed card with an outer mention ping."""
         await self._dispatch_announcement(ctx, args)
 
-    @commands.hybrid_command(
-        name="announce",
-        aliases=["embedannounce"],
+    @commands.command(
+        name="embedannounce",
+        aliases=["cardannounce"],
         description="Dispatch a saved embed card with an outer mention ping (@everyone, role, etc.).",
     )
     @commands.has_permissions(manage_messages=True)

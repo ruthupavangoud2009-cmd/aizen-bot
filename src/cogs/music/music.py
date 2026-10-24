@@ -544,16 +544,15 @@ class Music(commands.Cog):
         """Show currently playing song details."""
         await execute_nowplaying(self, ctx)
 
-    @commands.hybrid_command(
+    @commands.command(
         name="loop",
         description="Toggle loop mode between off, track, and entire queue.",
     )
-    @app_commands.describe(mode="Loop mode: off, track, or queue")
     async def loop(self, ctx: CustomContext, mode: Optional[str] = None) -> None:
         """Toggle loop mode."""
         await execute_loop(self, ctx, mode)
 
-    @commands.hybrid_command(
+    @commands.command(
         name="shuffle",
         description="Randomize the order of upcoming songs in queue.",
     )
@@ -561,7 +560,7 @@ class Music(commands.Cog):
         """Shuffle queue."""
         await execute_shuffle(self, ctx)
 
-    @commands.hybrid_command(
+    @commands.command(
         name="clear",
         aliases=["clearqueue", "cq", "queueclear", "qc"],
         description="Clear all upcoming tracks from the queue.",
@@ -580,7 +579,7 @@ class Music(commands.Cog):
         """Adjust playback volume."""
         await execute_volume(self, ctx, volume)
 
-    @commands.hybrid_command(
+    @commands.command(
         name="like",
         aliases=["fav", "favorite"],
         description="Save the currently playing song into your personal Favorites playlist.",
@@ -589,25 +588,19 @@ class Music(commands.Cog):
         """Save current song to Favorites playlist."""
         await handle_like(ctx, self)
 
-    @commands.hybrid_command(
+    @commands.command(
         name="unlike",
         aliases=["unfav", "dislike"],
         description="Remove a song from your personal Favorites playlist by title or playing track.",
     )
-    @app_commands.describe(query="Optional song title or track number to remove from Favorites")
     async def unlike(self, ctx: CustomContext, *, query: Optional[str] = None) -> None:
         """Remove a song from Favorites playlist."""
         await handle_unlike(ctx, self, query=query)
 
-    @commands.hybrid_command(
+    @commands.command(
         name="playlist",
         aliases=["pl"],
         description="Manage, play, view, and save custom song playlists.",
-    )
-    @app_commands.describe(
-        action="Action: create, add, play, view, delete, list",
-        name="Playlist name",
-        query="Optional song title or URL (if adding a specific song)",
     )
     async def playlist(
         self,
@@ -621,26 +614,24 @@ class Music(commands.Cog):
         await handle_playlist(ctx, self, action, name, query=query)
 
 
-    @commands.hybrid_command(
+    @commands.command(
         name="remove",
         description="Remove a specific track from the upcoming queue by its number.",
     )
-    @app_commands.describe(index="Track number to remove from the queue")
     async def remove(self, ctx: CustomContext, index: int) -> None:
         """Remove a track from queue."""
         await execute_remove(self, ctx, index)
 
-    @commands.hybrid_command(
+    @commands.command(
         name="jump",
         aliases=["skipto"],
         description="Skip directly to a specific track number in the queue.",
     )
-    @app_commands.describe(index="Track number to skip directly to")
     async def jump(self, ctx: CustomContext, index: int) -> None:
         """Skip directly to a track in queue."""
         await execute_jump(self, ctx, index)
 
-    @commands.hybrid_command(
+    @commands.command(
         name="247",
         aliases=["stay"],
         description="Toggle 24/7 mode to keep Kyro connected in voice even when empty.",

@@ -26,41 +26,65 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger("Kyoka.Help")
 
+HELP_COMMANDS_PER_PAGE: int = 15
+
 UNICODE_CATEGORY_EMOJIS: dict[str, str] = {
     "home": "🏠",
     "🏠・GETTING STARTED": "🏠",
-    "🤖・ARTIFICIAL INTELLIGENCE": "🤖",
-    "⛩️・AIZEN AI SYSTEM": "⛩️",
+    "🏠・GENERAL & UTILITY": "🏠",
     "🛡️・MODERATION": "🛡️",
+    "🔒・AUTOMOD & SECURITY": "🔒",
     "👋・WELCOME & AUTOMOD": "👋",
+    "👋・WELCOME & GOODBYE": "👋",
+    "🛡️・VERIFICATION": "🛡️",
     "🎫・TICKETS & SUPPORT": "🎫",
+    "🎭・REACTION ROLES": "🎭",
     "🎉・GIVEAWAYS & EVENTS": "🎉",
     "⭐・LEVELS & COMMUNITY": "⭐",
-    "🖼️・IMAGES & AVATARS": "🖼️",
     "🎵・MUSIC": "🎵",
+    "💤・AFK": "💤",
+    "⭐・VOUCHES & REPUTATION": "⭐",
+    "🧾・BLOX FRUITS SERVICE BILLS": "🧾",
+    "🍎・BLOX FRUITS AI": "🍎",
+    "📊・LEVELING & LEADERBOARDS": "📊",
+    "🤖・ARTIFICIAL INTELLIGENCE": "🤖",
+    "🖼️・IMAGES & AVATARS": "🖼️",
     "💬・SOCIAL & FUN": "💬",
     "💎・PREMIUM": "💎",
     "⚙️・SERVER ADMINISTRATION": "⚙️",
+    "⚙️・SERVER CONFIGURATION": "⚙️",
     "🔧・UTILITIES": "🔧",
     "👑・OWNER & DEVELOPER": "👑",
 }
 
 CATEGORY_DESCRIPTIONS: dict[str, str] = {
-    "🏠・GETTING STARTED": "Onboarding wizards, initial setup, bot ping & system stats",
+    "🏠・GETTING STARTED": "Server onboarding, quickstart guide, bot setup & essential info",
+    "🏠・GENERAL & UTILITY": "General utilities, calculators, reminders, info lookups & essential tools",
+    "🛡️・MODERATION": "Punishments, audit logs, purges, timeouts, channel locks & cases",
+    "🔒・AUTOMOD & SECURITY": "Anti-spam, anti-flood, invite protection, bad words & antinuke",
+    "👋・WELCOME & AUTOMOD": "Greeting cards, farewell departures, autoroles & join settings",
+    "👋・WELCOME & GOODBYE": "Greeting cards, farewell departures, autoroles & join settings",
+    "🛡️・VERIFICATION": "Gatekeep channels with role isolation, button & challenge verification",
+    "🎫・TICKETS & SUPPORT": "Interactive support ticket panels, claims & automated transcripts",
+    "🎭・REACTION ROLES": "Self-service role menus, reaction assignment & interactive panels",
+    "🎉・GIVEAWAYS & EVENTS": "Giveaway creation, requirement validation, timers & winner rerolls",
+    "⭐・LEVELS & COMMUNITY": "XP rewards, rank cards, level-up announcements & leaderboards",
+    "🎵・MUSIC": "High-fidelity audio playback, queues, volume, filters & 24/7 radio",
+    "💤・AFK": "Status notices, AFK reason tracking, mentions & return alerts",
+    "⭐・VOUCHES & REPUTATION": "Verified member vouches, Blox Fruits trust profiles & leaderboards",
+    "🧾・BLOX FRUITS SERVICE BILLS": "Blox Fruits service invoices, itemized receipts, fruits & Robux payment",
+    "🍎・BLOX FRUITS AI": "Specialized Blox Fruits AI, fruit guides, trade calculator & builds",
+    "📊・LEVELING & LEADERBOARDS": "XP rewards, rank cards, level-up announcements & leaderboards",
     "🤖・ARTIFICIAL INTELLIGENCE": "Aizen Gemini AI engine, 10 personalities & auto channels",
-    "🛡️・MODERATION": "Punishments, audit logs, purges, timeouts & channel locks",
-    "👋・WELCOME & AUTOMOD": "Greeting cards, farewell messages, autoroles & anti-spam",
-    "🎫・TICKETS & SUPPORT": "Support panels, ticket management & automated transcripts",
-    "🎉・GIVEAWAYS & EVENTS": "Giveaway creation, requirement validation & winner rerolls",
-    "⭐・LEVELS & COMMUNITY": "XP system, rank cards, leaderboards & member suggestions",
     "🖼️・IMAGES & AVATARS": "Anime reaction GIFs, avatar grabbers, banners & memes",
-    "🎵・MUSIC": "High-fidelity audio playback, queues, volume & filters",
     "💬・SOCIAL & FUN": "Mini-games, truth-or-dare, relationship stats & trivia",
     "💎・PREMIUM": "Kyoka Prime licenses, high-resolution AI & premium perks",
-    "⚙️・SERVER ADMINISTRATION": "Prefix management, logging setups & custom permissions",
-    "🔧・UTILITIES": "Calculators, reminders, timestamps & info lookups",
-    "👑・OWNER & DEVELOPER": "Core bot diagnostics, database status & maintenance tools",
+    "⚙️・SERVER ADMINISTRATION": "Prefix management, server wizards, custom help & diagnostics",
+    "⚙️・SERVER CONFIGURATION": "Prefix management, server wizards, custom help & diagnostics",
+    "🔧・UTILITIES": "Handy server utilities, calculators, reminders & diagnostics",
+    "👑・OWNER & DEVELOPER": "Core bot diagnostics, database status, extension reload & maintenance",
 }
+
 
 
 class HelpCategorySelect(discord.ui.Select):
@@ -312,7 +336,7 @@ class HelpView(discord.ui.View):
             cat_match = next((c for c in self.category_keys if c.lower() == self.current_category.lower()), None)
             if cat_match:
                 cmds = self.visible_categories.get(cat_match, [])
-                total_pages = max(1, math.ceil(len(cmds) / 15))
+                total_pages = max(1, math.ceil(len(cmds) / HELP_COMMANDS_PER_PAGE))
                 if self.current_page < total_pages:
                     self.current_page += 1
                     embed = self.cog.build_embed_for_selection(
@@ -376,15 +400,19 @@ class Help(commands.Cog):
 
     CATEGORY_ALIASES = {
         "start": "🏠・GETTING STARTED",
+        "quickstart": "🏠・GETTING STARTED",
         "getting started": "🏠・GETTING STARTED",
-        "onboarding": "🏠・GETTING STARTED",
+        "general": "🏠・GETTING STARTED",
         "ai": "🤖・ARTIFICIAL INTELLIGENCE",
-        "artificial intelligence": "🤖・ARTIFICIAL INTELLIGENCE",
         "aizen": "🤖・ARTIFICIAL INTELLIGENCE",
         "mod": "🛡️・MODERATION",
         "moderation": "🛡️・MODERATION",
         "welcome": "👋・WELCOME & AUTOMOD",
-        "automod": "👋・WELCOME & AUTOMOD",
+        "goodbye": "👋・WELCOME & AUTOMOD",
+        "automod": "🔒・AUTOMOD & SECURITY",
+        "security": "🔒・AUTOMOD & SECURITY",
+        "verify": "🛡️・VERIFICATION",
+        "verification": "🛡️・VERIFICATION",
         "ticket": "🎫・TICKETS & SUPPORT",
         "tickets": "🎫・TICKETS & SUPPORT",
         "support": "🎫・TICKETS & SUPPORT",
@@ -392,24 +420,39 @@ class Help(commands.Cog):
         "giveaways": "🎉・GIVEAWAYS & EVENTS",
         "events": "🎉・GIVEAWAYS & EVENTS",
         "levels": "⭐・LEVELS & COMMUNITY",
-        "community": "⭐・LEVELS & COMMUNITY",
+        "leveling": "⭐・LEVELS & COMMUNITY",
+        "rank": "⭐・LEVELS & COMMUNITY",
         "xp": "⭐・LEVELS & COMMUNITY",
         "images": "🖼️・IMAGES & AVATARS",
-        "image": "🖼️・IMAGES & AVATARS",
-        "gifs": "🖼️・IMAGES & AVATARS",
-        "gif": "🖼️・IMAGES & AVATARS",
-        "avatars": "🖼️・IMAGES & AVATARS",
         "music": "🎵・MUSIC",
         "audio": "🎵・MUSIC",
         "social": "💬・SOCIAL & FUN",
         "fun": "💬・SOCIAL & FUN",
-        "games": "💬・SOCIAL & FUN",
         "premium": "💎・PREMIUM",
         "prime": "💎・PREMIUM",
         "admin": "⚙️・SERVER ADMINISTRATION",
         "administration": "⚙️・SERVER ADMINISTRATION",
+        "config": "⚙️・SERVER ADMINISTRATION",
+        "settings": "⚙️・SERVER ADMINISTRATION",
         "utility": "🔧・UTILITIES",
         "utilities": "🔧・UTILITIES",
+        "vouch": "⭐・VOUCHES & REPUTATION",
+        "vouches": "⭐・VOUCHES & REPUTATION",
+        "rep": "⭐・VOUCHES & REPUTATION",
+        "reputation": "⭐・VOUCHES & REPUTATION",
+        "bill": "🧾・BLOX FRUITS SERVICE BILLS",
+        "bills": "🧾・BLOX FRUITS SERVICE BILLS",
+        "invoice": "🧾・BLOX FRUITS SERVICE BILLS",
+        "invoices": "🧾・BLOX FRUITS SERVICE BILLS",
+        "bloxfruits": "🍎・BLOX FRUITS AI",
+        "bloxai": "🍎・BLOX FRUITS AI",
+        "bf": "🍎・BLOX FRUITS AI",
+        "fruit": "🍎・BLOX FRUITS AI",
+        "afk": "💤・AFK",
+        "reactionrole": "🎭・REACTION ROLES",
+        "reactionroles": "🎭・REACTION ROLES",
+        "rr": "🎭・REACTION ROLES",
+        "roles": "🎭・REACTION ROLES",
         "owner": "👑・OWNER & DEVELOPER",
         "developer": "👑・OWNER & DEVELOPER",
         "dev": "👑・OWNER & DEVELOPER",
@@ -429,13 +472,13 @@ class Help(commands.Cog):
         return 0
 
     def _resolve_category(self, cmd: commands.Command) -> str:
-        """Resolve a command into one of the 14 clean help categories."""
+        """Resolve a command into one of the clean, modular help categories."""
         name = cmd.name.lower()
-        cog_cat = getattr(cmd.cog, "category", "").strip()
+        cog_cat = getattr(cmd.cog, "category", "").strip().lower()
         cog_name = getattr(cmd.cog, "qualified_name", "").lower()
 
-        # 14. 👑・OWNER & DEVELOPER
-        if cog_cat.lower() in ("owner", "developer") or cog_name in ("owner", "ownersystem", "developer") or name in (
+        # 1. 👑・OWNER & DEVELOPER
+        if cog_cat in ("owner", "developer") or cog_name in ("owner", "ownersystem", "developer") or name in (
             "owner", "dev", "health", "dbstatus", "extstatus", "eval", "exec", "restart",
             "shutdown", "sync", "leaveserver", "blacklist", "whitelistuser", "errors",
             "validateconfig", "maintenance", "spam", "spamcancel", "guesshostadd",
@@ -443,25 +486,40 @@ class Help(commands.Cog):
         ):
             return "👑・OWNER & DEVELOPER"
 
-        # 1. 🏠・GETTING STARTED
-        if cog_cat.lower() in ("onboarding", "getting started") or name in (
-            "help", "start", "quickstart", "setup", "ping", "invite", "support",
-            "botinfo", "serverinfo", "userinfo", "roleinfo", "channelinfo",
-            "about", "uptime", "links", "invitebot",
-        ):
-            return "🏠・GETTING STARTED"
+        # 2. 🧾・BLOX FRUITS SERVICE BILLS
+        if cog_cat in ("bills", "billing") or cog_name in ("bills", "billing") or name.startswith("bill"):
+            return "🧾・BLOX FRUITS SERVICE BILLS"
 
-        # 2. 🤖・ARTIFICIAL INTELLIGENCE
-        if cog_cat in ("AI Companions", "AI & Chat", "AIInteractions", "🤖・ARTIFICIAL INTELLIGENCE", "⛩️・AIZEN AI SYSTEM") or name in (
-            "aigf", "aibaddie", "aispecial", "aiclearcompanion", "aichannel", "aidiag", "aistatus",
-            "ai", "chat", "askai", "aizenai", "aisetup", "aipersonality", "aiconfig", "aitest",
-            "aiclear", "aimodel", "aidebug", "girlfriend", "baddie", "specialai", "clearcompanion",
-            "setaichannel", "setcompanionchannel", "aichatsetup", "aihelp", "companion",
+        # 3. 🍎・BLOX FRUITS AI
+        if cog_cat in ("blox fruits ai", "bloxfruitsai", "bloxfruits") or cog_name in ("bloxfruitsai", "bloxfruits") or name in (
+            "bloxai", "fruitinfo", "grindhelp", "tradehelp", "buildhelp", "bfai", "finfo", "bfbuild", "tradecalc", "levelhelp", "grindguide"
         ):
-            return "🤖・ARTIFICIAL INTELLIGENCE"
+            return "🍎・BLOX FRUITS AI"
 
-        # 3. 🛡️・MODERATION
-        if cog_cat.lower() in ("moderation", "mod") or name in (
+        # 4. ⭐・VOUCHES & REPUTATION
+        if cog_cat in ("vouches", "vouch", "reputation") or cog_name in ("vouches", "vouch") or name in (
+            "vouch", "vouches", "vouchprofile", "vouchleaderboard", "vouchchannel", "heldvouches", "vouchremove", "botstaff", "repcheck", "vouchlb", "topvouches", "repleaderboard"
+        ):
+            return "⭐・VOUCHES & REPUTATION"
+
+        # 5. 🛡️・VERIFICATION
+        if cog_cat in ("verification", "verify") or cog_name in ("verification", "verify") or name.startswith("verify") or name in ("verification", "verify"):
+            return "🛡️・VERIFICATION"
+
+        # 6. 👋・WELCOME & AUTOMOD
+        if cog_name in ("welcome", "goodbye") or name in (
+            "welcome", "goodbye", "autorole", "welcometest", "goodbyetest", "welcomecard", "goodbyecard", "welcomesetup"
+        ):
+            return "👋・WELCOME & AUTOMOD"
+
+        # 7. 🔒・AUTOMOD & SECURITY
+        if cog_cat in ("automod", "security", "antinuke") or name in (
+            "antispam", "antiflood", "invites", "badwords", "mentionspam", "automod", "antinuke", "whitelist", "extraowner", "boost", "security"
+        ):
+            return "🔒・AUTOMOD & SECURITY"
+
+        # 8. 🛡️・MODERATION
+        if cog_cat in ("moderation", "mod") or name in (
             "warn", "warnings", "timeout", "untimeout", "kick", "ban", "unban", "softban",
             "purge", "slowmode", "lock", "unlock", "hide", "unhide", "nick", "modlogs", "modlog",
             "case", "unwarn", "clearwarnings", "delwarn", "mute", "unmute", "snipe", "snipeall",
@@ -469,46 +527,27 @@ class Help(commands.Cog):
         ):
             return "🛡️・MODERATION"
 
-        # 4. 👋・WELCOME & AUTOMOD
-        if cog_cat.lower() in ("automod", "welcome", "antinuke", "security") or name in (
-            "welcome", "goodbye", "autorole", "antispam", "antiflood", "invites", "badwords",
-            "mentionspam", "automod", "antinuke", "whitelist", "extraowner", "boost",
-        ):
-            return "👋・WELCOME & AUTOMOD"
-
-        # 5. 🎫・TICKETS & SUPPORT
-        if cog_cat.lower() in ("ticket", "tickets", "support") or name.startswith("ticket") or name in (
+        # 9. 🎫・TICKETS & SUPPORT
+        if cog_cat in ("ticket", "tickets", "support") or name.startswith("ticket") or name in (
             "panel", "claim", "close", "reopen", "transcript", "ticketstats", "ticketsetup",
             "addmember", "removemember",
         ):
             return "🎫・TICKETS & SUPPORT"
 
-        # 6. 🎉・GIVEAWAYS & EVENTS
-        if cog_cat.lower() in ("giveaway", "giveaways", "events") or name in (
+        # 10. 🎭・REACTION ROLES
+        if cog_cat in ("reaction roles", "reactionrole", "roles") or name in (
+            "reactionrole", "rr", "rolemenu", "addreactionrole", "removereactionrole", "reactionroles"
+        ):
+            return "🎭・REACTION ROLES"
+
+        # 11. 🎉・GIVEAWAYS & EVENTS
+        if cog_cat in ("giveaway", "giveaways", "events") or name in (
             "giveaway", "gstart", "gend", "greroll", "glist", "requirements", "reroll", "event", "events",
         ):
             return "🎉・GIVEAWAYS & EVENTS"
 
-        # 7. ⭐・LEVELS & COMMUNITY
-        if cog_cat in ("Community & XP", "Intelligence", "Levels", "Suggestions") or name in (
-            "levels", "rank", "levelconfig", "activity", "leaderboard", "xp", "xpmultiplier",
-            "multiplier", "daily", "streak", "rep", "reputation", "suggest", "suggestions",
-            "poll", "polls", "serverstats", "privacy", "diagnostics", "tech", "devpulse", "cve", "news",
-        ):
-            return "⭐・LEVELS & COMMUNITY"
-
-        # 8. 🖼️・IMAGES & AVATARS
-        if cog_cat in ("Images & GIFs", "Anime Actions") or name in (
-            "gif", "meme", "randomgif", "imagine", "steal", "emojis", "expressions",
-            "stickers", "delemoji", "filter", "trigger", "hug", "kiss", "pat", "slap",
-            "cuddle", "wave", "dance", "smile", "cry", "blush", "banner", "serveravatar",
-            "serverbanner", "avatar", "punch", "blast", "animekick", "bonk", "poke", "bite", "yeet",
-            "highfive", "stare", "scare", "laugh", "wink", "shy", "facepalm",
-        ):
-            return "🖼️・IMAGES & AVATARS"
-
-        # 9. 🎵・MUSIC
-        if cog_cat.lower() in ("music", "audio") or name in (
+        # 12. 🎵・MUSIC
+        if cog_cat in ("music", "audio") or name in (
             "play", "pause", "resume", "skip", "stop", "queue", "nowplaying", "np",
             "volume", "vol", "loop", "repeat", "shuffle", "clear", "remove", "seek",
             "autoplay", "lyrics", "jump", "stay", "247", "playlist", "like", "unlike",
@@ -516,44 +555,67 @@ class Help(commands.Cog):
         ):
             return "🎵・MUSIC"
 
-        # 10. 💬・SOCIAL & FUN
-        if cog_cat in ("Romance & Relationships", "Social & Profiles", "Games", "Fun", "Adult Humor — Restricted") or name in (
-            "propose", "marry", "divorce", "breakup", "relationship", "couple", "marriage",
-            "love", "crush", "date", "jealous", "flirt", "pickup", "compliment", "romance",
-            "heartbreak", "reject", "confess", "rizz", "ship", "compatibility", "soulmate",
-            "loveletter", "profile", "bio", "coinflip", "flip", "dice", "roll", "8ball",
-            "eightball", "choose", "rate", "joke", "fact", "quote", "wyr", "truth", "dare",
-            "roast", "rps", "trivia", "wordguess", "wordgame", "bloxfruits", "bf", "bloxtrivia",
-            "tod", "truthordare", "guess", "membercount",
-            "goon", "goonreaction", "fuck", "smash", "thirst", "downbad", "downbadcheck",
-            "hornybonk", "seduce", "spank", "wildreaction", "adultreaction", "simp",
-            "obsessed", "fantasize", "tease", "bedroomeyes", "caughtlacking", "rateattraction",
-        ):
-            return "💬・SOCIAL & FUN"
+        # 13. 💤・AFK
+        if cog_cat == "afk" or name == "afk":
+            return "💤・AFK"
 
-        # 11. 💎・PREMIUM
-        if cog_cat.lower() in ("premium", "prime") or name in (
+        # 14. ⭐・LEVELS & COMMUNITY
+        if cog_cat in ("community & xp", "levels", "leveling") or name in (
+            "levels", "rank", "levelconfig", "activity", "leaderboard", "xp", "xpmultiplier",
+            "multiplier", "daily", "streak",
+        ):
+            return "⭐・LEVELS & COMMUNITY"
+
+        # 15. 🤖・ARTIFICIAL INTELLIGENCE
+        if cog_cat in ("ai companions", "ai & chat", "aiinteractions", "🤖・artificial intelligence", "⛩️・aizen ai system") or name in (
+            "aigf", "aibaddie", "aispecial", "aiclearcompanion", "aichannel", "aidiag", "aistatus",
+            "ai", "chat", "askai", "aizenai", "aisetup", "aipersonality", "aiconfig", "aitest",
+            "aiclear", "aimodel", "aidebug", "girlfriend", "baddie", "specialai", "clearcompanion",
+            "setaichannel", "setcompanionchannel", "aichatsetup", "aihelp", "companion",
+        ):
+            return "🤖・ARTIFICIAL INTELLIGENCE"
+
+        # 16. 💎・PREMIUM
+        if cog_cat in ("premium", "prime") or name in (
             "premium", "redeem", "tier", "license", "prime", "perks",
         ):
             return "💎・PREMIUM"
 
-        # 12. ⚙️・SERVER ADMINISTRATION
-        if cog_cat.lower() in ("admin", "administration", "config", "settings") or name in (
+        # 17. ⚙️・SERVER ADMINISTRATION
+        if cog_cat in ("admin", "administration", "config", "settings") or name in (
             "prefix", "setprefix", "resetprefix", "media", "sticky", "logs", "config",
-            "disablecmd", "enablecmd", "channelsettings", "rolesettings",
+            "disablecmd", "enablecmd", "channelsettings", "rolesettings", "customhelp", "chelp", "setup",
         ):
             return "⚙️・SERVER ADMINISTRATION"
 
-        # 13. 🔧・UTILITIES
-        if cog_cat.lower() in ("utility", "utilities", "reminders", "calculator") or name in (
-            "calc", "calculator", "math", "remind", "reminder", "reminders", "timer",
-            "time", "timestamp", "format", "userlookup", "rolelookup", "channellookup",
-            "apistatus", "botlatency",
+        # 18. 🔧・UTILITIES
+        if cog_cat in ("utilities", "utility", "tools") or name in (
+            "calc", "calculate", "remind", "remindme", "reminders", "time", "timestamp", "avatar", "serveravatar",
         ):
             return "🔧・UTILITIES"
 
-        # Fallback
-        return "🔧・UTILITIES"
+        # 19. 🖼️・IMAGES & AVATARS
+        if cog_cat in ("images & gifs", "anime actions") or name in (
+            "gif", "meme", "randomgif", "imagine", "steal", "emojis", "expressions",
+            "stickers", "delemoji", "filter", "trigger", "hug", "kiss", "pat", "slap",
+            "cuddle", "wave", "dance", "smile", "cry", "blush", "punch", "blast",
+            "animekick", "bonk", "poke", "bite", "yeet", "highfive", "stare", "scare", "laugh", "wink", "shy", "facepalm",
+        ):
+            return "🖼️・IMAGES & AVATARS"
+
+        # 20. 💬・SOCIAL & FUN
+        if cog_cat in ("romance & relationships", "social & profiles", "games", "fun", "adult humor — restricted") or name in (
+            "propose", "marry", "divorce", "breakup", "relationship", "couple", "marriage",
+            "love", "crush", "date", "jealous", "flirt", "pickup", "compliment", "romance",
+            "heartbreak", "reject", "confess", "rizz", "ship", "compatibility", "soulmate",
+            "loveletter", "bio", "coinflip", "flip", "dice", "roll", "8ball",
+            "eightball", "choose", "rate", "joke", "fact", "quote", "wyr", "truth", "dare",
+            "roast", "rps", "trivia", "wordguess", "wordgame", "tod", "truthordare", "guess",
+        ):
+            return "💬・SOCIAL & FUN"
+
+        # 21. 🏠・GETTING STARTED (Default)
+        return "🏠・GETTING STARTED"
 
     @staticmethod
     def _can_run_command(cmd: Any, ctx: CustomContext | None = None) -> bool:
@@ -680,20 +742,25 @@ class Help(commands.Cog):
         if not e_reg:
             return UNICODE_CATEGORY_EMOJIS.get(cat_name, "•")
         mapping = {
-            "🏠・GETTING STARTED": e_reg.get("icon_home", "🏠"),
-            "🤖・ARTIFICIAL INTELLIGENCE": e_reg.get("icon_sparkles", "🤖"),
-            "⛩️・AIZEN AI SYSTEM": e_reg.get("icon_sparkles", "⛩️"),
+            "🏠・GENERAL & UTILITY": e_reg.get("icon_home", "🏠"),
             "🛡️・MODERATION": e_reg.get("icon_moderation", "🛡️"),
-            "👋・WELCOME & AUTOMOD": e_reg.get("icon_shield", "👋"),
+            "🔒・AUTOMOD & SECURITY": e_reg.get("icon_shield", "🔒"),
+            "👋・WELCOME & GOODBYE": e_reg.get("icon_shield", "👋"),
+            "🛡️・VERIFICATION": e_reg.get("icon_shield", "🛡️"),
             "🎫・TICKETS & SUPPORT": e_reg.get("icon_ticket", "🎫"),
+            "🎭・REACTION ROLES": e_reg.get("icon_settings", "🎭"),
             "🎉・GIVEAWAYS & EVENTS": e_reg.get("discord_giveaway", "🎉"),
-            "⭐・LEVELS & COMMUNITY": e_reg.get("icon_chart", "⭐"),
-            "🖼️・IMAGES & AVATARS": e_reg.get("icon_image", "🖼️"),
             "🎵・MUSIC": e_reg.get("music", e_reg.get("icon_music", "🎵")),
+            "💤・AFK": "💤",
+            "⭐・VOUCHES & REPUTATION": e_reg.get("icon_chart", "⭐"),
+            "🧾・BLOX FRUITS SERVICE BILLS": "🧾",
+            "🍎・BLOX FRUITS AI": e_reg.get("icon_sparkles", "🍎"),
+            "📊・LEVELING & LEADERBOARDS": e_reg.get("icon_chart", "📊"),
+            "🤖・ARTIFICIAL INTELLIGENCE": e_reg.get("icon_sparkles", "🤖"),
+            "🖼️・IMAGES & AVATARS": e_reg.get("icon_image", "🖼️"),
             "💬・SOCIAL & FUN": e_reg.get("icon_heart", "💬"),
             "💎・PREMIUM": e_reg.get("verified_premium", "💎"),
-            "⚙️・SERVER ADMINISTRATION": e_reg.get("icon_settings", "⚙️"),
-            "🔧・UTILITIES": e_reg.get("icon_wrench", "🔧"),
+            "⚙️・SERVER CONFIGURATION": e_reg.get("icon_settings", "⚙️"),
             "👑・OWNER & DEVELOPER": e_reg.get("icon_crown", "👑"),
         }
         return mapping.get(cat_name, UNICODE_CATEGORY_EMOJIS.get(cat_name, "•"))
@@ -704,20 +771,23 @@ class Help(commands.Cog):
         if not e_reg:
             return None
         mapping = {
-            "🏠・GETTING STARTED": "icon_home",
-            "🤖・ARTIFICIAL INTELLIGENCE": "icon_sparkles",
-            "⛩️・AIZEN AI SYSTEM": "icon_sparkles",
+            "🏠・GENERAL & UTILITY": "icon_home",
             "🛡️・MODERATION": "icon_moderation",
-            "👋・WELCOME & AUTOMOD": "icon_shield",
+            "🔒・AUTOMOD & SECURITY": "icon_shield",
+            "👋・WELCOME & GOODBYE": "icon_shield",
+            "🛡️・VERIFICATION": "icon_shield",
             "🎫・TICKETS & SUPPORT": "icon_ticket",
+            "🎭・REACTION ROLES": "icon_settings",
             "🎉・GIVEAWAYS & EVENTS": "discord_giveaway",
-            "⭐・LEVELS & COMMUNITY": "icon_chart",
-            "🖼️・IMAGES & AVATARS": "icon_image",
             "🎵・MUSIC": "music",
+            "⭐・VOUCHES & REPUTATION": "icon_chart",
+            "📊・LEVELING & LEADERBOARDS": "icon_chart",
+            "🤖・ARTIFICIAL INTELLIGENCE": "icon_sparkles",
+            "🍎・BLOX FRUITS AI": "icon_sparkles",
+            "🖼️・IMAGES & AVATARS": "icon_image",
             "💬・SOCIAL & FUN": "icon_heart",
             "💎・PREMIUM": "verified_premium",
-            "⚙️・SERVER ADMINISTRATION": "icon_settings",
-            "🔧・UTILITIES": "icon_wrench",
+            "⚙️・SERVER CONFIGURATION": "icon_settings",
             "👑・OWNER & DEVELOPER": "icon_crown",
         }
         emoji_name = mapping.get(cat_name, "icon_moderation")
@@ -1018,22 +1088,25 @@ class Help(commands.Cog):
                 unique_cmds.append(c)
         unique_cmds.sort(key=lambda c: c.qualified_name)
 
-        per_page = 15
+        per_page = HELP_COMMANDS_PER_PAGE
         total_pages = max(1, math.ceil(len(unique_cmds) / per_page))
         safe_page = max(1, min(page, total_pages))
         start_idx = (safe_page - 1) * per_page
         page_cmds = unique_cmds[start_idx : start_idx + per_page]
 
-        cmd_tags = " · ".join(f"`{c.qualified_name}`{self._get_badge(c)}" for c in page_cmds)
+        desc_lines = [
+            f"> {cat_desc}\n",
+            f"**Page {safe_page}/{total_pages}** • **{len(unique_cmds)}** accessible command(s)\n",
+        ]
+        for c in page_cmds:
+            badge = self._get_badge(c)
+            desc_text = (c.description or getattr(c, "help", None) or "No detailed description provided.").strip().split("\n")[0][:80]
+            desc_lines.append(f"• `{c.qualified_name}`{badge} — *{desc_text}*")
+        desc_lines.append(f"\n*Use ◀️ / ▶️ buttons to paginate • Type `{p}help <command>` for full manual.*")
 
         embed = discord.Embed(
             title=f"{self._get_category_emoji(cat_name)} {cat_name}",
-            description=(
-                f"> {cat_desc}\n\n"
-                f"**COMMANDS ({len(unique_cmds)} total · Page {safe_page}/{total_pages}):**\n"
-                f"{cmd_tags or '`None`'}\n\n"
-                f"*Type `{p}help <command>` for detailed syntax, arguments, and aliases.*"
-            ),
+            description="\n".join(desc_lines),
             color=0x2B0938,
         )
 

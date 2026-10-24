@@ -155,7 +155,7 @@ class SnipeCog(commands.Cog, name="Utility-Snipe"):
         self.bot.snipe_cache[channel_id].appendleft(entry)
         self.bot.guild_snipe_cache[guild_id].appendleft(entry)
 
-    @commands.hybrid_command(
+    @commands.command(
         name="snipe",
         aliases=["sn"],
         description="View recently deleted messages in this channel.",
@@ -276,7 +276,7 @@ class SnipeCog(commands.Cog, name="Utility-Snipe"):
         container.add_text(f"-# Requested by {ctx.author.display_name}")
         await send_container_response(ctx, container)
 
-    @commands.hybrid_command(
+    @commands.command(
         name="clearsnipe",
         aliases=["csnipe"],
         description="Purge the deleted message snipe cache for this channel (or 'all' for entire server).",

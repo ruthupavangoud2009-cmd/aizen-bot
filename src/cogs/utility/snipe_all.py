@@ -29,7 +29,7 @@ class SnipeAllCog(commands.Cog, name="Utility-SnipeAll"):
         if not hasattr(self.bot, "guild_snipe_cache"):
             self.bot.guild_snipe_cache = {}
 
-    @commands.hybrid_command(
+    @commands.command(
         name="snipeall",
         aliases=["sall", "globalsnipe", "serversnipe"],
         description="Show recent deleted messages across all channels in the server.",
@@ -152,7 +152,7 @@ class SnipeAllCog(commands.Cog, name="Utility-SnipeAll"):
         container.add_text(f"-# Requested by {ctx.author.display_name}")
         await send_container_response(ctx, container)
 
-    @commands.hybrid_command(
+    @commands.command(
         name="clearsnipeall",
         aliases=["csnipeall", "wipesnipeall"],
         description="Wipe the server-wide deleted message cache across all channels.",
