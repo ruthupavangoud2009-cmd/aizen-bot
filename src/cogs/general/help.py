@@ -12,6 +12,7 @@ import io
 import logging
 import math
 import os
+import time
 from typing import TYPE_CHECKING, Any, Optional
 import discord
 from discord.ext import commands
@@ -722,9 +723,10 @@ class Help(commands.Cog):
             return " `[Prime]`"
         return ""
 
-    async def _get_visible_categories(self, ctx: CustomContext) -> dict[str, list[commands.Command]]:
-        """Group commands that the current user has permission to view and execute into the 14 categories."""
+    def _get_base_categories(self) -> dict[str, list[commands.Command]]:
+        """Index all commands across cogs and bot commands once."""
         categories: dict[str, list[commands.Command]] = {cat: [] for cat in self.CATEGORY_ORDER}
+        seen_cmd_names: set[str] = set()
 
         def _collect_all(cmd_obj: commands.Command) -> list[commands.Command]:
             cmd_list = [cmd_obj]
@@ -733,9 +735,6 @@ class Help(commands.Cog):
                     cmd_list.extend(_collect_all(sub_cmd))
             return cmd_list
 
-        # Collect from all cogs and bot commands to ensure 100% directory completeness
-        seen_cmd_names: set[str] = set()
-        
         all_root_cmds: list[commands.Command] = list(self.bot.commands)
         for cog_name, cog in self.bot.cogs.items():
             if cog_name.lower() in ["errorhandler"]:
@@ -749,13 +748,29 @@ class Help(commands.Cog):
             if cog and getattr(cog, "qualified_name", "").lower() in ["errorhandler"]:
                 continue
             for c in _collect_all(cmd):
-                if self._can_run_command(c, ctx):
-                    target_cat = self._resolve_category(c)
-                    if target_cat not in categories:
-                        categories[target_cat] = []
-                    if c not in categories[target_cat] and c.qualified_name not in seen_cmd_names:
-                        categories[target_cat].append(c)
-                        seen_cmd_names.add(c.qualified_name)
+                target_cat = self._resolve_category(c)
+                if target_cat not in categories:
+                    categories[target_cat] = []
+                if c not in categories[target_cat] and c.qualified_name not in seen_cmd_names:
+                    categories[target_cat].append(c)
+                    seen_cmd_names.add(c.qualified_name)
+
+        return categories
+
+    async def _get_visible_categories(self, ctx: CustomContext) -> dict[str, list[commands.Command]]:
+        """Group commands that the current user has permission to view and execute into categories with high-speed caching."""
+        # Use cached command index if command count has not changed
+        if not hasattr(self, "_cached_base_categories") or getattr(self, "_cached_cmd_count", -1) != len(self.bot.commands):
+            self._cached_base_categories = self._get_base_categories()
+            self._cached_cmd_count = len(self.bot.commands)
+
+        base_categories = self._cached_base_categories
+        categories: dict[str, list[commands.Command]] = {}
+
+        for cat, cmds in base_categories.items():
+            permitted = [c for c in cmds if self._can_run_command(c, ctx)]
+            if permitted:
+                categories[cat] = permitted
 
         # Retain only non-empty categories following exact priority order
         ordered_categories: dict[str, list[commands.Command]] = {}
@@ -1037,7 +1052,7 @@ class Help(commands.Cog):
         ctx: CustomContext,
         visible_categories: dict[str, list[commands.Command]],
     ) -> discord.Embed:
-        """Construct the Signature Kyoka Home Overview Discord Embed matching reference Aizen design."""
+        """Construct the tiny, ultra-fast Kyoka Help Console Embed matching Aizen reference."""
         guild = ctx.guild
         author = ctx.author
         p = self.bot.guild_mgr.get_prefix(guild.id if guild else None)
@@ -1045,44 +1060,21 @@ class Help(commands.Cog):
         total_commands = sum(len(cmds) for cmds in visible_categories.values())
 
         embed = KyokaHelpEmbed(
-            title="⛩️ Hey, I'm Kyoka — Kyoka 3.0 • Command Console",
-            description=(
-                f"*\"Power isn't given. It's taken.\"* — **Aizen**\n\n"
-                f"> **Built for our community:** high-fidelity audio, Blox Fruits AI,\n"
-                f"> automated moderation, enterprise tickets, and community entertainment.\n\n"
-                f"⚡ **Quickstart & Setup:**\n"
-                f"• Type `{p}quickstart` or `{p}setup` for initial server onboarding\n"
-                f"• **Prefix Commands:** All commands work with `{p}` (e.g. `{p}play`, `{p}ai`)\n"
-                f"• **Slash Commands:** Integrated `/[cmd]` application commands\n"
-                f"• **Permission System:** Role & permission enforced command controls\n"
-                f"• **Command Archive:** Use the dropdown below or `{p}hca` for full directory"
-            ),
+            title="⛩️ KYOKA HELP — Kyoka 3.0",
+            description="> Choose a category below to explore commands.",
             color=0x2B0938,
         )
 
         embed.add_field(
             name="📊 System Status",
-            value=(
-                f"• **Gateway Latency:** `{ws_ping}ms`\n"
-                f"• **Available Commands:** `{total_commands}` across `{len(visible_categories)}` categories\n"
-                f"• **Prefix Commands:** `{p}` | **Slash Commands:** `/[cmd]`"
-            ),
-            inline=False,
+            value=f"• **Ping:** `{ws_ping}ms` • **Prefix:** `{p}` • **Commands:** `{total_commands}`",
+            inline=True,
         )
-
         embed.add_field(
             name="✨ Key Features",
-            value=(
-                "• Select a module from the **Category Dropdown** below to explore commands.\n"
-                "• Use pagination buttons **◀️ / ▶️** to browse between pages (max 15 commands/page).\n"
-                "• Click **🔍 Search** or use `+hca` to find any specific command instantly."
-            ),
-            inline=False,
+            value=f"• Select a module from the dropdown below\n• Type `{p}help <command>` for detailed manual",
+            inline=True,
         )
-
-        # Attach high-res Aizen home banner
-        banner_file = AssetManager.attach_help_banner(embed, "home")
-        embed.banner_file = banner_file
 
         assets = getattr(Config, "ASSETS", None)
         thumbnail_url = getattr(assets, "AIZEN_AVATAR_URL", "") or getattr(assets, "DEFAULT_THUMBNAIL_URL", "")
@@ -1092,9 +1084,10 @@ class Help(commands.Cog):
             embed.set_thumbnail(url=thumbnail_url.strip())
 
         embed.set_footer(
-            text=f"Requested by {author.display_name} • Kyoka 3.0 • Aizen Edition",
+            text=f"Requested by {author.display_name} • Kyoka 3.0",
             icon_url=author.display_avatar.url if author.display_avatar else None,
         )
+        embed.banner_file = None
         return embed
 
     def build_search_results_embed(
@@ -1210,9 +1203,7 @@ class Help(commands.Cog):
             color=0x2B0938,
         )
 
-        image_key = cat_meta.image_key if cat_meta else "general"
-        banner_file = AssetManager.attach_help_banner(embed, image_key)
-        embed.banner_file = banner_file
+        embed.banner_file = None
 
         assets = getattr(Config, "ASSETS", None)
         thumb = getattr(assets, "AIZEN_AVATAR_URL", "") or getattr(assets, "DEFAULT_THUMBNAIL_URL", "")
@@ -1315,8 +1306,10 @@ class Help(commands.Cog):
         description="Display the Kyoka command directory tailored to your permissions.",
     )
     async def help_command(self, ctx: CustomContext, *, command_or_module: str | None = None) -> None:
-        """Interactive help menu filtered by user permissions and organized into 14 categories."""
+        """Interactive help menu filtered by user permissions and organized into categories."""
+        t_start = time.perf_counter()
         visible_categories = await self._get_visible_categories(ctx)
+        t_categories = time.perf_counter()
 
         # Direct command or module lookup
         if command_or_module:
@@ -1405,11 +1398,21 @@ class Help(commands.Cog):
             current_category="home",
         )
         embed = self.build_home_embed(ctx, visible_categories)
+        t_embed = time.perf_counter()
         banner_file = getattr(embed, "banner_file", None)
         if banner_file:
             msg = await ctx.send(embed=embed, file=banner_file, view=view)
         else:
             msg = await ctx.send(embed=embed, view=view)
+        t_send = time.perf_counter()
+
+        logger.info(
+            f"⚡ [Help Timing] Total: {(t_send - t_start)*1000:.1f}ms | "
+            f"Categories: {(t_categories - t_start)*1000:.1f}ms | "
+            f"Embed: {(t_embed - t_categories)*1000:.1f}ms | "
+            f"Send: {(t_send - t_embed)*1000:.1f}ms"
+        )
+
         if getattr(ctx, "interaction", None):
             try:
                 view.message = await ctx.interaction.original_response()

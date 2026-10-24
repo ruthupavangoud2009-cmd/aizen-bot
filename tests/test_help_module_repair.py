@@ -85,26 +85,18 @@ def test_help_category_order_complete():
 
 
 def test_help_home_embed_content(help_cog: Help, mock_ctx: MagicMock):
-    """Verify beginner-friendly Home Overview contains quickstart, navigation, and permission info."""
+    """Verify compact Home Overview matches tiny UI specification."""
     visible = {
         "🏠・GETTING STARTED": [MagicMock(qualified_name="start"), MagicMock(qualified_name="quickstart")],
         "🤖・ARTIFICIAL INTELLIGENCE": [MagicMock(qualified_name="ai")],
         "🛡️・MODERATION": [MagicMock(qualified_name="kick"), MagicMock(qualified_name="ban")],
     }
     embed = help_cog.build_home_embed(mock_ctx, visible)
-    assert embed.title is not None and "Kyoka 3.0" in embed.title
+    assert embed.title is not None and "KYOKA HELP" in embed.title
     assert embed.color.value == 0x2B0938
 
     desc = embed.description
-    assert "quickstart" in desc
-    assert "setup" in desc
-    assert "Prefix Commands" in desc
-    assert "Slash Commands" in desc
-    assert "Permission System" in desc
-
-    field_names = [f.name for f in embed.fields]
-    assert "📊 System Status" in field_names
-    assert "✨ Key Features" in field_names
+    assert "Choose a category below" in desc
 
 
 def test_help_category_embed_content(help_cog: Help, mock_ctx: MagicMock):

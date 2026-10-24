@@ -481,6 +481,9 @@ class MusicAgent:
     @_background_sweeper.before_loop
     async def _before_sweeper(self) -> None:
         try:
-            await self.bot.wait_until_ready()
-        except RuntimeError:
+            if hasattr(self.bot, "wait_until_ready"):
+                res = self.bot.wait_until_ready()
+                if asyncio.iscoroutine(res):
+                    await res
+        except Exception:
             pass

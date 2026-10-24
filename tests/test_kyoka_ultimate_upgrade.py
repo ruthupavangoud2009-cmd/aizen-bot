@@ -55,13 +55,11 @@ def test_help_home_embed_character_limit_and_structure():
 
     embed = cog.build_home_embed(ctx, visible_categories)
 
-    # Must be well under 6,000 characters (eliminating the 6,939 char HTTP 400 Bad Request error)
+    # Must be well under 6,000 characters (tiny compact UI)
     total_len = len(embed)
-    assert total_len < 2000, f"Home embed length ({total_len}) exceeds compact limit!"
-    assert "Hey, I'm Kyoka — Kyoka 3.0" in embed.title
-    assert "Built for our community" in embed.description
-    assert "16ms" in embed.fields[0].value
-    assert "Available Commands" in embed.fields[0].value
+    assert total_len < 1000, f"Home embed length ({total_len}) exceeds compact limit!"
+    assert "KYOKA HELP" in embed.title
+    assert "Choose a category below" in embed.description
     assert "Requested by Aizen" in embed.footer.text
 
 

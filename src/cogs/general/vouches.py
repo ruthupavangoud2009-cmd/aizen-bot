@@ -248,6 +248,18 @@ class Vouches(commands.Cog, name="Vouches"):
         """Backward-compatible alias for staff check."""
         return self.is_bot_staff(ctx)
 
+    async def vouchleaderboard(self, ctx):
+        """Backward-compatible proxy for tests and internal callers."""
+        return await self.vlb(ctx)
+
+    async def vouchprofile(self, ctx, member=None):
+        """Backward-compatible proxy for tests and internal callers."""
+        return await self.vouchinfo(ctx, member=member)
+
+    async def vouches(self, ctx, member=None):
+        """Backward-compatible proxy for tests and internal callers."""
+        return await self.vouchhistory(ctx, member=member)
+
     def _parse_service_and_reason(self, raw_text: str) -> tuple[str, str]:
         parts = raw_text.strip().split(maxsplit=1)
         if not parts:
@@ -357,7 +369,7 @@ class Vouches(commands.Cog, name="Vouches"):
     # ── 2. GLOBAL LEADERBOARD (VLB) ───────────────────────────────────────────
     @commands.command(name='vlb', aliases=['vouchleaderboard', 'vouchlb', 'topvouches', 'repleaderboard'])
     @commands.guild_only()
-    async def vouchleaderboard(self, ctx):
+    async def vlb(self, ctx):
         """Display the global top trusted members and service providers across all servers."""
         with conn() as c:
             rows = c.execute(
@@ -387,9 +399,6 @@ class Vouches(commands.Cog, name="Vouches"):
 
         banner_file = AssetManager.attach_feature_banner(embed, "vouches")
         await ctx.reply(embed=embed, file=banner_file, mention_author=False)
-
-    # Class-level method alias so both cog.vlb and cog.vouchleaderboard work
-    vlb = vouchleaderboard
 
     # ── 3. VOUCH PROFILE / VOUCHINFO ──────────────────────────────────────────
     @commands.command(name='vouchinfo', aliases=['vouchprofile', 'rep', 'reputation'])
@@ -459,9 +468,6 @@ class Vouches(commands.Cog, name="Vouches"):
         banner_file = AssetManager.attach_feature_banner(e, "vouches")
         await ctx.reply(embed=e, file=banner_file, mention_author=False)
 
-    # Class-level alias so both cog.vouchinfo and cog.vouchprofile work
-    vouchprofile = vouchinfo
-
     # ── 4. VOUCH HISTORY / VOUCHES ────────────────────────────────────────────
     @commands.command(name='vouchhistory', aliases=['vouches', 'repcheck'])
     @commands.guild_only()
@@ -491,9 +497,6 @@ class Vouches(commands.Cog, name="Vouches"):
         banner_file = AssetManager.attach_feature_banner(embed, "vouches")
         msg = await ctx.reply(embed=embed, file=banner_file, view=view, mention_author=False)
         view.message = msg
-
-    # Class-level alias so both cog.vouchhistory and cog.vouches work
-    vouches = vouchhistory
 
     # ── 5. BOT STAFF HISTORICAL IMPORT ────────────────────────────────────────
     @commands.command(name='vouchimport')
