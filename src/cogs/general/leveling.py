@@ -119,7 +119,7 @@ class Leveling(commands.Cog, name="General-Leveling"):
 
     @commands.hybrid_command(
         name="levels",
-        aliases=["xptop", "top"],
+        aliases=["xptop", "leveltop", "lb"],
         description="Show the server XP and level leaderboard.",
     )
     @app_commands.describe(limit="Number of members to display (default: 10, max: 25)")

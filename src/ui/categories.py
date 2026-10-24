@@ -249,6 +249,7 @@ CATEGORY_SEARCH_ALIASES: dict[str, str] = {
     "vlb": "vouches", "vouchinfo": "vouches", "vouchhistory": "vouches", "vouchimport": "vouches",
     # Service Bills
     "bill": "service_bills", "bills": "service_bills", "invoice": "service_bills", "service": "service_bills", "billing": "service_bills",
+    "top": "service_bills", "topai": "service_bills", "topmanager": "service_bills", "toptiers": "service_bills",
     # Blox Fruits AI
     "bloxai": "blox_fruits", "bfai": "blox_fruits", "bloxfruits": "blox_fruits", "bf": "blox_fruits", "fruit": "blox_fruits", "fruitnotifier": "blox_fruits",
     # AI System & Voice
@@ -284,6 +285,8 @@ COG_MAPPINGS: dict[str, str] = {
 
     # Service Bills
     "bills": "service_bills",
+    "topaimanager": "service_bills",
+    "top": "service_bills",
 
     # Vouches
     "vouches": "vouches",

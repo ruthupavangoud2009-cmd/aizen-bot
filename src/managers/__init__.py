@@ -13,6 +13,7 @@ from src.managers.sticky_manager import StickyManager
 from src.managers.reaction_role_manager import ReactionRoleManager
 from src.managers.custom_help_manager import CustomHelpManager
 from src.managers.voice_welcome_manager import VoiceWelcomeManager
+from src.managers.top_manager import TopManager
 
 __all__ = [
     "GuildManager",
@@ -30,4 +31,5 @@ __all__ = [
     "ReactionRoleManager",
     "CustomHelpManager",
     "VoiceWelcomeManager",
+    "TopManager",
 ]
