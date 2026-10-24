@@ -246,6 +246,7 @@ CATEGORY_SEARCH_ALIASES: dict[str, str] = {
     "afk": "afk", "away": "afk",
     # Vouches
     "vouch": "vouches", "vouches": "vouches", "rep": "vouches", "reputation": "vouches", "trust": "vouches",
+    "vlb": "vouches", "vouchinfo": "vouches", "vouchhistory": "vouches", "vouchimport": "vouches",
     # Service Bills
     "bill": "service_bills", "bills": "service_bills", "invoice": "service_bills", "service": "service_bills", "billing": "service_bills",
     # Blox Fruits AI
@@ -502,6 +503,7 @@ def resolve_command_category(cmd: Any) -> CategoryMeta:
     if root_name in (
         "vouch", "vouches", "vouchprofile", "vouchleaderboard", "vouchchannel",
         "heldvouches", "vouchremove", "repcheck", "vouchlb", "topvouches", "repleaderboard",
+        "vlb", "vouchinfo", "vouchhistory", "vouchimport", "rep", "reputation", "botstaff",
     ):
         return CATEGORY_BY_ID["vouches"]
 

@@ -209,33 +209,10 @@ class AFKCog(commands.Cog, name="AFK"):
         guild_id = ctx.guild.id
         key = (user_id, guild_id)
 
-        # Handle Nickname update if permissions permit
+        # AFK rule: NEVER modify any member's Discord username or server nickname.
+        # AFK manages status only. Nicknames and usernames remain 100% untouched.
         nickname_changed = False
         original_nickname: Optional[str] = None
-        new_nick: Optional[str] = None
-        if isinstance(ctx.author, discord.Member):
-            original_nickname = ctx.author.nick
-            # Check if bot can edit author's nickname
-            me = ctx.guild.me
-            can_manage = me.guild_permissions.manage_nicknames or me.guild_permissions.administrator
-            try:
-                is_higher = me.top_role > ctx.author.top_role
-            except Exception:
-                is_higher = False
-            is_owner = ctx.author.id == ctx.guild.owner_id
-
-            if can_manage and is_higher and not is_owner:
-                current_display = ctx.author.display_name
-                if not current_display.startswith("[AFK] "):
-                    new_nick = f"[AFK] {current_display}"[:32]
-                    nickname_changed = True
-                    async def _apply_afk_nick(member: discord.Member, target_nick: str) -> None:
-                        try:
-                            await member.edit(nick=target_nick, reason="Kyoka AFK Status Update")
-                        except Exception as e:
-                            logger.debug(f"Unable to update nickname for AFK user {member}: {e}")
-
-                    asyncio.create_task(_apply_afk_nick(ctx.author, new_nick))
 
         # Update cache
         afk_entry = AFKData(
@@ -243,8 +220,8 @@ class AFKCog(commands.Cog, name="AFK"):
             guild_id=guild_id,
             reason=final_reason,
             created_at=now,
-            nickname_changed=nickname_changed,
-            original_nickname=original_nickname,
+            nickname_changed=False,
+            original_nickname=None,
         )
         self._afk_cache[key] = afk_entry
 
@@ -264,8 +241,8 @@ class AFKCog(commands.Cog, name="AFK"):
                 user_id,
                 guild_id,
                 final_reason,
-                nickname_changed,
-                original_nickname,
+                False,
+                None,
                 now,
             )
         except Exception as e:
@@ -276,17 +253,15 @@ class AFKCog(commands.Cog, name="AFK"):
         heart_dot = e_reg.get("heart_dot", "") if e_reg else ""
         dot_str = f"{heart_dot} " if heart_dot else ""
 
-        nick_disp = new_nick if (nickname_changed and new_nick) else (ctx.author.display_name if isinstance(ctx.author, discord.Member) else ctx.author.name)
-
         container = KyokaContainer(accent_color=None)
         # Title: Username AFK (no @tag)
         container.add_text(f"### {ctx.author.name} AFK")
         container.add_separator(divider=True)
 
-        # Description: Reason, Nickname, Tag with heart_dot
+        # Description: Reason, Went AFK, Tag with heart_dot
         body_lines = [
             f"{dot_str}**Reason:** {final_reason}",
-            f"{dot_str}**Nickname:** `{nick_disp}`",
+            f"{dot_str}**Went AFK:** <t:{int(now.timestamp())}:R>",
             f"{dot_str}**Tag:** {ctx.author.mention}",
         ]
         container.add_section(content="\n".join(body_lines))
@@ -329,17 +304,7 @@ class AFKCog(commands.Cog, name="AFK"):
             if not afk_data:
                 return
 
-            # Revert nickname in background without blocking welcome back response
-            if afk_data.nickname_changed and isinstance(message.author, discord.Member):
-                async def _revert_afk_nick(member: discord.Member, orig_nick: Optional[str]) -> None:
-                    try:
-                        curr = member.nick or ""
-                        if curr.startswith("[AFK] "):
-                            await member.edit(nick=orig_nick, reason="Kyoka AFK Status Removal")
-                    except Exception as e:
-                        logger.debug(f"Unable to revert nickname for {member}: {e}")
-
-                asyncio.create_task(_revert_afk_nick(message.author, afk_data.original_nickname))
+            # AFK status only: Nicknames and server names remain 100% untouched.
 
             # Remove from database in background
             asyncio.create_task(

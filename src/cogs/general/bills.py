@@ -8,8 +8,10 @@ from typing import Optional, Union
 import discord
 from discord.ext import commands
 
+from src.ui.theme import KyokaTheme
+from src.ui.asset_manager import AssetManager
+
 DB = Path('data/kyoka_billing.sqlite3')
-PURPLE = discord.Color.from_rgb(111, 67, 190)
 
 BLOX_CATEGORIES = {
     "raid": ("⚡", "Raids & Carries"),
@@ -31,7 +33,9 @@ STATUS_BADGES = {
     "REFUNDED": ("🟣", "REFUNDED"),
 }
 
+
 def db():
+    """Establish SQLite connection and ensure schema with backward-compatible migrations."""
     DB.parent.mkdir(parents=True, exist_ok=True)
     c = sqlite3.connect(DB)
     c.row_factory = sqlite3.Row
@@ -57,7 +61,11 @@ def db():
             category TEXT DEFAULT 'Raids & Carries',
             service_item TEXT DEFAULT '',
             payment_method TEXT DEFAULT '',
-            notes TEXT DEFAULT ''
+            notes TEXT DEFAULT '',
+            quantity INTEGER DEFAULT 1,
+            discount REAL DEFAULT 0.0,
+            updated REAL,
+            evidence_url TEXT DEFAULT ''
         );
         CREATE TABLE IF NOT EXISTS bill_audit_log(
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -74,6 +82,10 @@ def db():
         ("service_item", "TEXT DEFAULT ''"),
         ("payment_method", "TEXT DEFAULT ''"),
         ("notes", "TEXT DEFAULT ''"),
+        ("quantity", "INTEGER DEFAULT 1"),
+        ("discount", "REAL DEFAULT 0.0"),
+        ("updated", "REAL"),
+        ("evidence_url", "TEXT DEFAULT ''"),
     ]:
         try:
             c.execute(f"ALTER TABLE bills ADD COLUMN {col_def[0]} {col_def[1]}")
@@ -82,24 +94,37 @@ def db():
     return c
 
 
-class Bills(commands.Cog):
+class Bills(commands.Cog, name="Bills"):
+    """Blox Fruits Service Billing, Invoices & Receipt Ledger."""
     category = 'Bills'
 
     def __init__(self, bot):
         self.bot = bot
 
     def is_staff(self, ctx) -> bool:
-        if ctx.author.id == 1505515188991033409 or ctx.author.guild_permissions.administrator:
+        """Check if author is an authorized staff member for invoice creation and payment processing."""
+        # 1. Authoritative Primary Owner
+        if ctx.author.id == 1505515188991033409:
             return True
-        if ctx.author.guild_permissions.manage_guild or ctx.author.guild_permissions.manage_messages:
-            return True
-        # Check botstaff table from reputation database if available
+        # 2. Server Administrator or Guild Managers
+        if ctx.guild and getattr(ctx.author, "guild_permissions", None):
+            if ctx.author.guild_permissions.administrator:
+                return True
+            if ctx.author.guild_permissions.manage_guild or ctx.author.guild_permissions.manage_messages:
+                return True
+        # 3. Check botstaff table from reputation database if available
         try:
             rep_db = Path('data/kyoka_reputation.sqlite3')
             if rep_db.exists():
                 with sqlite3.connect(rep_db) as rc:
-                    if rc.execute('SELECT 1 FROM botstaff WHERE guild_id=? AND user_id=?',
-                                  (ctx.guild.id, ctx.author.id)).fetchone():
+                    if ctx.guild:
+                        row = rc.execute('SELECT 1 FROM botstaff WHERE guild_id=? AND user_id=?',
+                                         (ctx.guild.id, ctx.author.id)).fetchone()
+                        if row:
+                            return True
+                    row_global = rc.execute('SELECT 1 FROM botstaff WHERE user_id=?',
+                                            (ctx.author.id,)).fetchone()
+                    if row_global:
                         return True
         except Exception:
             pass
@@ -124,7 +149,7 @@ class Bills(commands.Cog):
     def _format_invoice_embed(self, ctx, r: sqlite3.Row, cfg: sqlite3.Row) -> discord.Embed:
         status_key = (r['status'] or 'PENDING').upper()
         s_icon, s_label = STATUS_BADGES.get(status_key, ("⚪", status_key))
-        ts = int(r['created'])
+        ts = int(r['created']) if r['created'] else int(time.time())
         category = r['category'] or 'Blox Fruits Service'
 
         embed = discord.Embed(
@@ -132,10 +157,13 @@ class Bills(commands.Cog):
             description=f"Official Blox Fruits Service Receipt & Payment Ledger\n"
                         f"**Status:** {s_icon} **{s_label}**\n"
                         f"**Issued:** <t:{ts}:f> (<t:{ts}:R>)",
-            color=PURPLE,
+            color=KyokaTheme.PRIMARY,
             timestamp=discord.utils.utcnow()
         )
-        embed.set_thumbnail(url=ctx.guild.icon.url if ctx.guild.icon else self.bot.user.display_avatar.url)
+        if ctx.guild and ctx.guild.icon:
+            embed.set_thumbnail(url=ctx.guild.icon.url)
+        elif self.bot.user:
+            embed.set_thumbnail(url=self.bot.user.display_avatar.url)
 
         embed.add_field(name="👤 Customer", value=f"<@{r['customer']}>\n`ID: {r['customer']}`", inline=True)
         embed.add_field(name="🛡️ Service Provider", value=f"<@{r['creator']}>", inline=True)
@@ -177,9 +205,10 @@ class Bills(commands.Cog):
                         f"• `+billcurrency <code>` — Set default currency (e.g. `ROBUX`, `USD`, `FRUIT`)\n"
                         f"• `+billpayment <instructions>` — Set accepted fruit/payment instructions\n"
                         f"• `+billtax <name> <percent>` — Set optional surcharge/tax rate",
-            color=PURPLE
+            color=KyokaTheme.PRIMARY
         )
-        await ctx.reply(embed=e, mention_author=False)
+        banner_file = AssetManager.attach_feature_banner(e, "service_bills")
+        await ctx.reply(embed=e, file=banner_file, mention_author=False)
 
     @commands.command(name='billname')
     @commands.guild_only()
@@ -232,7 +261,7 @@ class Bills(commands.Cog):
 
     @commands.command(name='bill')
     @commands.guild_only()
-    async def bill(self, ctx, customer: discord.Member, *args):
+    async def bill(self, ctx, customer: Union[discord.Member, discord.User], *args):
         """Create a new Blox Fruits service invoice for a customer.
         
         Usage Examples:
@@ -244,7 +273,7 @@ class Bills(commands.Cog):
         if not self.is_staff(ctx):
             return await ctx.reply('❌ Only server staff or administrators can issue service bills.', mention_author=False)
 
-        if customer.bot:
+        if getattr(customer, "bot", False):
             return await ctx.reply('Cannot issue an invoice to a bot.', mention_author=False)
 
         if not args:
@@ -286,8 +315,6 @@ class Bills(commands.Cog):
 
             if matched_cat and len(args) >= 3:
                 category = matched_cat
-                # Try to extract payment and notes
-                # If there are at least 3 tokens: cat, service_item, payment
                 service_item = args[1]
                 payment_method = args[2]
                 notes = " ".join(args[3:]) if len(args) > 3 else cfg['payment']
@@ -307,9 +334,15 @@ class Bills(commands.Cog):
 
         with db() as c:
             c.execute(
-                '''INSERT INTO bills(id, guild, creator, customer, description, subtotal, tax, total, status, created, category, service_item, payment_method, notes)
-                   VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?)''',
-                (ident, ctx.guild.id, ctx.author.id, customer.id, description, amount, tax_total if is_numeric else 0.0, total, 'PENDING', now, category, service_item, payment_method, notes)
+                '''INSERT INTO bills(
+                    id, guild, creator, customer, description, subtotal, tax, total,
+                    status, created, category, service_item, payment_method, notes
+                ) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?)''',
+                (
+                    ident, ctx.guild.id, ctx.author.id, customer.id, description,
+                    amount, tax_total if is_numeric else 0.0, total, 'PENDING', now,
+                    category, service_item, payment_method, notes
+                )
             )
             c.execute(
                 'INSERT INTO bill_audit_log(guild, bill_id, staff_id, old_status, new_status, timestamp) VALUES(?,?,?,?,?,?)',
@@ -318,9 +351,11 @@ class Bills(commands.Cog):
             row = c.execute('SELECT * FROM bills WHERE id=?', (ident,)).fetchone()
 
         embed = self._format_invoice_embed(ctx, row, cfg)
+        banner_file = AssetManager.attach_feature_banner(embed, "service_bills")
         await ctx.reply(
             content=f"🔔 {customer.mention}, an official Blox Fruits service invoice has been issued to you by {ctx.author.mention}:",
             embed=embed,
+            file=banner_file,
             mention_author=False
         )
 
@@ -332,14 +367,14 @@ class Bills(commands.Cog):
         with db() as c:
             r = c.execute('SELECT * FROM bills WHERE id=? AND guild=?', (clean_id, ctx.guild.id)).fetchone()
             if not r:
-                # Also try matching without prefix if user typed just the hex
                 r = c.execute('SELECT * FROM bills WHERE id LIKE ? AND guild=?', (f"%{clean_id}%", ctx.guild.id)).fetchone()
         if not r:
             return await ctx.reply(f'❌ Invoice `{ident}` was not found in this server.', mention_author=False)
 
         cfg, _ = self.taxes(ctx.guild.id)
         embed = self._format_invoice_embed(ctx, r, cfg)
-        await ctx.reply(embed=embed, mention_author=False)
+        banner_file = AssetManager.attach_feature_banner(embed, "service_bills")
+        await ctx.reply(embed=embed, file=banner_file, mention_author=False)
 
     @commands.command(name='billpaid')
     @commands.guild_only()
@@ -352,8 +387,13 @@ class Bills(commands.Cog):
             r = c.execute('SELECT * FROM bills WHERE id=? AND guild=?', (clean_id, ctx.guild.id)).fetchone()
             if not r:
                 return await ctx.reply(f'Invoice `{ident}` not found.', mention_author=False)
+
+            # Anti-Fraud Protection: Customers cannot mark their own invoices as paid
+            if r['customer'] == ctx.author.id and ctx.author.id != 1505515188991033409:
+                return await ctx.reply('❌ Anti-Fraud Protection: Customers cannot verify or mark their own invoices as paid.', mention_author=False)
+
             old_status = r['status']
-            c.execute('UPDATE bills SET status=? WHERE id=? AND guild=?', ('PAID', clean_id, ctx.guild.id))
+            c.execute('UPDATE bills SET status=?, updated=? WHERE id=? AND guild=?', ('PAID', time.time(), clean_id, ctx.guild.id))
             c.execute(
                 'INSERT INTO bill_audit_log(guild, bill_id, staff_id, old_status, new_status, timestamp) VALUES(?,?,?,?,?,?)',
                 (ctx.guild.id, clean_id, ctx.author.id, old_status, 'PAID', time.time())
@@ -362,9 +402,11 @@ class Bills(commands.Cog):
 
         cfg, _ = self.taxes(ctx.guild.id)
         embed = self._format_invoice_embed(ctx, r, cfg)
+        banner_file = AssetManager.attach_feature_banner(embed, "service_bills")
         await ctx.reply(
             content=f"✅ Invoice `{clean_id}` marked as **PAID** by {ctx.author.mention}. Customer: <@{r['customer']}>",
             embed=embed,
+            file=banner_file,
             mention_author=False
         )
 
@@ -380,7 +422,7 @@ class Bills(commands.Cog):
             if not r:
                 return await ctx.reply(f'Invoice `{ident}` not found.', mention_author=False)
             old_status = r['status']
-            c.execute('UPDATE bills SET status=? WHERE id=? AND guild=?', ('CANCELLED', clean_id, ctx.guild.id))
+            c.execute('UPDATE bills SET status=?, updated=? WHERE id=? AND guild=?', ('CANCELLED', time.time(), clean_id, ctx.guild.id))
             c.execute(
                 'INSERT INTO bill_audit_log(guild, bill_id, staff_id, old_status, new_status, timestamp) VALUES(?,?,?,?,?,?)',
                 (ctx.guild.id, clean_id, ctx.author.id, old_status, 'CANCELLED', time.time())
@@ -399,7 +441,7 @@ class Bills(commands.Cog):
             if not r:
                 return await ctx.reply(f'Invoice `{ident}` not found.', mention_author=False)
             old_status = r['status']
-            c.execute('UPDATE bills SET status=? WHERE id=? AND guild=?', ('REFUNDED', clean_id, ctx.guild.id))
+            c.execute('UPDATE bills SET status=?, updated=? WHERE id=? AND guild=?', ('REFUNDED', time.time(), clean_id, ctx.guild.id))
             c.execute(
                 'INSERT INTO bill_audit_log(guild, bill_id, staff_id, old_status, new_status, timestamp) VALUES(?,?,?,?,?,?)',
                 (ctx.guild.id, clean_id, ctx.author.id, old_status, 'REFUNDED', time.time())
@@ -420,7 +462,7 @@ class Bills(commands.Cog):
             if not r:
                 return await ctx.reply('Invoice not found in this server.', mention_author=False)
             old_status = r['status']
-            c.execute('UPDATE bills SET status=? WHERE id=? AND guild=?', (status_clean, clean_id, ctx.guild.id))
+            c.execute('UPDATE bills SET status=?, updated=? WHERE id=? AND guild=?', (status_clean, time.time(), clean_id, ctx.guild.id))
             c.execute(
                 'INSERT INTO bill_audit_log(guild, bill_id, staff_id, old_status, new_status, timestamp) VALUES(?,?,?,?,?,?)',
                 (ctx.guild.id, clean_id, ctx.author.id, old_status, status_clean, time.time())
@@ -458,9 +500,10 @@ class Bills(commands.Cog):
                 lines.append(f"`{r['id']}` • {icon} **{st}** • <@{r['customer']}> — *{desc_snippet}*")
             desc = "\n".join(lines)
 
-        embed = discord.Embed(title=title, description=desc, color=PURPLE, timestamp=discord.utils.utcnow())
+        embed = discord.Embed(title=title, description=desc, color=KyokaTheme.PRIMARY, timestamp=discord.utils.utcnow())
         embed.set_footer(text='Type +billview <id> to view full details')
-        await ctx.reply(embed=embed, mention_author=False)
+        banner_file = AssetManager.attach_feature_banner(embed, "service_bills")
+        await ctx.reply(embed=embed, file=banner_file, mention_author=False)
 
     @commands.command(name='billstats')
     @commands.guild_only()
@@ -485,13 +528,13 @@ class Bills(commands.Cog):
                         f"🟡 **Pending Orders:** `{pending}`\n"
                         f"🔴 **Cancelled Orders:** `{cancelled}`\n\n"
                         f"**Category Breakdown:**\n{cat_text}",
-            color=PURPLE,
+            color=KyokaTheme.PRIMARY,
             timestamp=discord.utils.utcnow()
         )
         embed.set_footer(text='KYŌKA Blox Fruits Service Analytics')
-        await ctx.reply(embed=embed, mention_author=False)
+        banner_file = AssetManager.attach_feature_banner(embed, "service_bills")
+        await ctx.reply(embed=embed, file=banner_file, mention_author=False)
 
 
 async def setup(bot):
     await bot.add_cog(Bills(bot))
-

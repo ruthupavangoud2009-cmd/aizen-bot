@@ -11,8 +11,6 @@ from typing import Any
 import discord
 from discord.ext import commands
 
-from src.core.config import Config
-
 logger = logging.getLogger("Kyoka.Containers")
 
 
