@@ -93,7 +93,7 @@ class ErrorHandler(commands.Cog):
             container.add_section(
                 content=(
                     f"**{err_icon}Internal Error**\n"
-                    f"> `{error}`"
+                    f"> An unexpected error occurred while executing this command. The diagnostic incident has been securely recorded."
                 )
             )
 

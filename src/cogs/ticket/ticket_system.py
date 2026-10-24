@@ -51,17 +51,17 @@ class TicketInsideControlsView(discord.ui.View):
         super().__init__(timeout=None)
         self.cog = cog
         e_reg = getattr(cog.bot, "custom_emojis", None)
-        if e_reg:
+        if e_reg and hasattr(e_reg, "get_emoji_obj"):
             lock_em = e_reg.get_emoji_obj("icons_locked") or e_reg.get_emoji_obj("icon_lock")
-            if lock_em:
+            if isinstance(lock_em, (str, discord.Emoji, discord.PartialEmoji)):
                 self.btn_close.emoji = lock_em
 
             staff_em = e_reg.get_emoji_obj("icons_staff") or e_reg.get_emoji_obj("icon_mod")
-            if staff_em:
+            if isinstance(staff_em, (str, discord.Emoji, discord.PartialEmoji)):
                 self.btn_claim.emoji = staff_em
 
             file_em = e_reg.get_emoji_obj("icons_file") or e_reg.get_emoji_obj("icons_files")
-            if file_em:
+            if isinstance(file_em, (str, discord.Emoji, discord.PartialEmoji)):
                 self.btn_transcript.emoji = file_em
 
     @discord.ui.button(
@@ -75,6 +75,20 @@ class TicketInsideControlsView(discord.ui.View):
         if not ticket:
             container = KyokaContainer()
             container.add_section(content="**Ticket Error**\n> This channel is not registered as an active ticket.")
+            await send_container_response(interaction, container, ephemeral=True)
+            return
+
+        panel = await self.cog.bot.ticket_mgr.get_panel_by_id(ticket.get("panel_id", 0)) if ticket else None
+        is_creator = bool(ticket and interaction.user.id == ticket.get("user_id"))
+        is_staff = interaction.user.guild_permissions.manage_channels or interaction.user.guild_permissions.administrator
+        if panel and panel.get("support_role_id"):
+            s_role = interaction.guild.get_role(panel["support_role_id"]) if interaction.guild else None
+            if s_role and s_role in getattr(interaction.user, "roles", []):
+                is_staff = True
+
+        if not (is_creator or is_staff):
+            container = KyokaContainer()
+            container.add_section(content="**Permission Denied**\n> Only the ticket creator or authorized staff can close this ticket.")
             await send_container_response(interaction, container, ephemeral=True)
             return
 
@@ -136,8 +150,22 @@ class TicketInsideControlsView(discord.ui.View):
             await send_container_response(interaction, container, ephemeral=True)
             return
 
-        await interaction.response.defer(ephemeral=True)
         ticket = await self.cog.bot.ticket_mgr.get_ticket(interaction.channel_id)
+        panel = await self.cog.bot.ticket_mgr.get_panel_by_id(ticket.get("panel_id", 0)) if ticket else None
+        is_creator = bool(ticket and interaction.user.id == ticket.get("user_id"))
+        is_staff = interaction.user.guild_permissions.manage_channels or interaction.user.guild_permissions.administrator
+        if panel and panel.get("support_role_id"):
+            s_role = interaction.guild.get_role(panel["support_role_id"]) if interaction.guild else None
+            if s_role and s_role in getattr(interaction.user, "roles", []):
+                is_staff = True
+
+        if not (is_creator or is_staff):
+            container = KyokaContainer()
+            container.add_section(content="**Permission Denied**\n> Only the ticket creator or authorized staff can download transcripts.")
+            await send_container_response(interaction, container, ephemeral=True)
+            return
+
+        await interaction.response.defer(ephemeral=True)
         file = await generate_html_transcript(interaction.channel, ticket, bot=self.cog.bot)
         t_card = KyokaContainer()
         t_card.add_section(content="**Ticket Transcript**\n> Here is the live HTML transcript for this ticket:")
@@ -167,6 +195,19 @@ class TicketClosedControlsView(discord.ui.View):
         row=0,
     )
     async def btn_reopen(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+        ticket = await self.cog.bot.ticket_mgr.get_ticket(interaction.channel_id)
+        if not ticket:
+            ticket = await self.cog.bot.db.fetch_one("SELECT * FROM active_tickets WHERE channel_id = $1;", interaction.channel_id)
+        if ticket:
+            panel = await self.cog.bot.ticket_mgr.get_panel_by_id(ticket.get("panel_id", 0)) if ticket else None
+            is_creator = bool(ticket and interaction.user.id == ticket.get("user_id"))
+            is_staff = interaction.user.guild_permissions.manage_channels or interaction.user.guild_permissions.administrator
+            if panel and panel.get("support_role_id"):
+                s_role = interaction.guild.get_role(panel["support_role_id"]) if interaction.guild else None
+                if s_role and s_role in getattr(interaction.user, "roles", []):
+                    is_staff = True
+            if not (is_creator or is_staff):
+                return await interaction.response.send_message("Only the ticket creator or authorized staff can reopen this ticket.", ephemeral=True)
         await self.cog.execute_ticket_reopen(interaction)
 
     @discord.ui.button(
@@ -179,8 +220,21 @@ class TicketClosedControlsView(discord.ui.View):
     async def btn_transcript(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
         if not isinstance(interaction.channel, (discord.TextChannel, discord.Thread)):
             return
-        await interaction.response.defer(ephemeral=True)
         ticket = await self.cog.bot.ticket_mgr.get_ticket(interaction.channel_id)
+        if not ticket:
+            ticket = await self.cog.bot.db.fetch_one("SELECT * FROM active_tickets WHERE channel_id = $1;", interaction.channel_id)
+        if ticket:
+            panel = await self.cog.bot.ticket_mgr.get_panel_by_id(ticket.get("panel_id", 0)) if ticket else None
+            is_creator = bool(ticket and interaction.user.id == ticket.get("user_id"))
+            is_staff = interaction.user.guild_permissions.manage_channels or interaction.user.guild_permissions.administrator
+            if panel and panel.get("support_role_id"):
+                s_role = interaction.guild.get_role(panel["support_role_id"]) if interaction.guild else None
+                if s_role and s_role in getattr(interaction.user, "roles", []):
+                    is_staff = True
+            if not (is_creator or is_staff):
+                return await interaction.response.send_message("Only the ticket creator or authorized staff can view this transcript.", ephemeral=True)
+
+        await interaction.response.defer(ephemeral=True)
         file = await generate_html_transcript(interaction.channel, ticket, bot=self.cog.bot)
         t_card = KyokaContainer()
         t_card.add_section(content="**Ticket Transcript**\n> Here is the saved HTML transcript for this ticket:")
@@ -545,9 +599,13 @@ class TicketSetupWizard(discord.ui.View):
             if tmpl:
                 draft = ContainerDraft.from_dict(tmpl)
         else:
-            draft.title = "Support & Inquiries"
-            draft.description = "Click the button below to create a private support ticket with our staff team."
-            draft.accent_hex = "5865F2"
+            draft.title = "🎫 Kyoka Support Portal"
+            draft.description = (
+                "**Need assistance?**\n"
+                "> Select an inquiry category below or click **Create Ticket** to open a private channel with our staff team.\n"
+                "> An authorized staff member will assist you shortly."
+            )
+            draft.accent_hex = "7C3AED"  # Aizen Royal Violet
 
         panel_container = draft.to_container(
             user=interaction.user,
@@ -572,7 +630,47 @@ class TicketSetupWizard(discord.ui.View):
         )
         panel_id = temp_row.get("id", 1)
 
-        # Attach interactive persistent button inside panel container (Secondary Default Gray + Custom ticket_nox Emoji)
+        # Attach interactive category select dropdown
+        select_action_row: dict[str, Any] = {
+            "type": 1,
+            "components": [
+                {
+                    "type": 3,
+                    "custom_id": f"ticket_select_{panel_id}",
+                    "placeholder": "Select an inquiry category...",
+                    "min_values": 1,
+                    "max_values": 1,
+                    "options": [
+                        {
+                            "label": "General Support",
+                            "value": "General Support",
+                            "description": "General questions, server guidance, and member help",
+                            "emoji": {"name": "💬"},
+                        },
+                        {
+                            "label": "Billing & Donations",
+                            "value": "Billing & Donations",
+                            "description": "Store purchases, Kyoka Prime perks, and subscription help",
+                            "emoji": {"name": "💎"},
+                        },
+                        {
+                            "label": "Bug Reports & Technical",
+                            "value": "Bug Reports",
+                            "description": "Report an issue, bug, or bot malfunction",
+                            "emoji": {"name": "🔧"},
+                        },
+                        {
+                            "label": "Staff Inquiry",
+                            "value": "Staff Inquiry",
+                            "description": "Direct private contact with server administrators",
+                            "emoji": {"name": "🛡️"},
+                        },
+                    ],
+                }
+            ],
+        }
+
+        # Attach interactive persistent button inside panel container
         ticket_emoji = (
             self.bot.custom_emojis.get_select_emoji("ticket_nox")
             or self.bot.custom_emojis.get_select_emoji("ticket_support")
@@ -583,7 +681,7 @@ class TicketSetupWizard(discord.ui.View):
             "components": [
                 {
                     "type": 2,
-                    "style": 2,  # Secondary (Default Gray)
+                    "style": 1,  # Primary Blurple/Violet
                     "label": self.button_label or "Create Ticket",
                     "custom_id": f"ticket_open_{panel_id}",
                 }
@@ -592,6 +690,7 @@ class TicketSetupWizard(discord.ui.View):
         if ticket_emoji:
             btn_action_row["components"][0]["emoji"] = ticket_emoji
 
+        panel_container.components.append(select_action_row)
         panel_container.components.append(btn_action_row)
 
         msg_data = await send_container_response(target_channel, panel_container)
@@ -644,6 +743,8 @@ class TicketSystem(commands.Cog):
 
     def __init__(self, bot: KyokaBot) -> None:
         self.bot = bot
+        # Concurrency protection tracking in-flight ticket creations per (guild_id, user_id)
+        self._creating_tickets: set[tuple[int, int]] = set()
         # Register persistent inside-ticket views (active and closed controls)
         self.bot.add_view(TicketInsideControlsView(self))
         self.bot.add_view(TicketClosedControlsView(self))
@@ -652,210 +753,244 @@ class TicketSystem(commands.Cog):
 
     @commands.Cog.listener()
     async def on_interaction(self, interaction: discord.Interaction) -> None:
-        """Handle ticket panel create button clicks globally across all guilds."""
+        """Handle ticket panel create button and category select clicks globally across all guilds."""
         if interaction.type != discord.InteractionType.component:
             return
 
         custom_id = interaction.data.get("custom_id", "")
-        if not custom_id.startswith("ticket_open_"):
+        if not (custom_id.startswith("ticket_open_") or custom_id.startswith("ticket_select_")):
             return
 
         if not interaction.guild or not isinstance(interaction.user, discord.Member):
             return
 
-        try:
-            panel_id = int(custom_id.replace("ticket_open_", ""))
-        except ValueError:
-            return
-
-        panel = await self.bot.ticket_mgr.get_panel_by_id(panel_id)
-        if not panel:
+        # Concurrency & rapid repeated clicks protection
+        lock_key = (interaction.guild.id, interaction.user.id)
+        if lock_key in self._creating_tickets:
             container = KyokaContainer()
-            container.add_section(content="**Configuration Error**\n> This ticket panel configuration was not found.")
+            container.add_section(
+                content="**Ticket Creation In Progress**\n> Your support ticket is currently being created. Please wait a moment."
+            )
             await send_container_response(interaction, container, ephemeral=True)
             return
 
-        # Check existing active ticket for user (Max 1 active ticket per panel/guild)
-        existing = await self.bot.ticket_mgr.get_active_ticket_for_user(interaction.guild.id, interaction.user.id, panel_id=panel_id)
-        if existing:
-            ch_id = existing.get("channel_id")
-            ch_obj = interaction.guild.get_channel(ch_id) if ch_id else None
-            if ch_obj:
+        self._creating_tickets.add(lock_key)
+        try:
+            chosen_category = "General Support"
+            if custom_id.startswith("ticket_select_"):
+                raw_id = custom_id.replace("ticket_select_", "")
+                if interaction.data.get("values"):
+                    chosen_category = str(interaction.data["values"][0])
+            else:
+                raw_id = custom_id.replace("ticket_open_", "")
+                if "_" in raw_id:
+                    parts = raw_id.split("_", 1)
+                    raw_id = parts[0]
+                    chosen_category = parts[1].replace("-", " ").title()
+
+            try:
+                panel_id = int(raw_id)
+            except ValueError:
+                return
+
+            panel = await self.bot.ticket_mgr.get_panel_by_id(panel_id)
+            if not panel:
                 container = KyokaContainer()
-                container.add_section(
-                    content=f"**Ticket Limit Reached**\n> You already have an open ticket in {ch_obj.mention}."
-                )
+                container.add_section(content="**Configuration Error**\n> This ticket panel configuration was not found.")
                 await send_container_response(interaction, container, ephemeral=True)
                 return
-            else:
-                # Ghost ticket (channel was deleted from Discord), auto-close in database
-                if ch_id:
-                    await self.bot.ticket_mgr.close_ticket(ch_id, self.bot.user.id if self.bot.user else 0)
 
-        await interaction.response.defer(ephemeral=True)
-
-        # Increment sequential ticket number
-        ticket_num = await self.bot.ticket_mgr.get_next_ticket_number(interaction.guild.id)
-        ticket_str = f"{ticket_num:04d}"
-
-        # Resolve channel name
-        naming = panel.get("naming_format", "ticket-{count}")
-        clean_user = re.sub(r"[^a-zA-Z0-9_-]", "", interaction.user.name.lower()) or "user"
-        channel_name = naming.replace("{count}", ticket_str).replace("{user}", clean_user)
-
-        # Resolve or auto-create target category
-        cat_id = panel.get("category_id")
-        category: discord.CategoryChannel | None = None
-        if cat_id:
-            cat_obj = interaction.guild.get_channel(cat_id)
-            if isinstance(cat_obj, discord.CategoryChannel):
-                category = cat_obj
-
-        if not category:
-            category = discord.utils.get(interaction.guild.categories, name="Tickets")
-            if not category:
-                try:
-                    category = await interaction.guild.create_category(
-                        name="Tickets",
-                        reason="Kyoka Support Tickets Category",
+            # Check existing active ticket for user (Max 1 active ticket per panel/guild)
+            existing = await self.bot.ticket_mgr.get_active_ticket_for_user(interaction.guild.id, interaction.user.id, panel_id=panel_id)
+            if existing:
+                ch_id = existing.get("channel_id")
+                ch_obj = interaction.guild.get_channel(ch_id) if ch_id else None
+                if ch_obj:
+                    container = KyokaContainer()
+                    container.add_section(
+                        content=f"**Ticket Limit Reached**\n> You already have an open ticket in {ch_obj.mention}."
                     )
-                except Exception as cat_err:
-                    logger.warning(f"Could not auto-create Tickets category (fallback to root): {cat_err}")
-                    category = None
+                    await send_container_response(interaction, container, ephemeral=True)
+                    return
+                else:
+                    # Ghost ticket (channel was deleted from Discord), auto-close in database
+                    if ch_id:
+                        await self.bot.ticket_mgr.close_ticket(ch_id, self.bot.user.id if self.bot.user else 0)
 
-        # Safely resolve bot member
-        bot_member = interaction.guild.me
-        if not bot_member and self.bot.user:
-            bot_member = interaction.guild.get_member(self.bot.user.id)
+            await interaction.response.defer(ephemeral=True)
 
-        # Construct permission overrides
-        overrides: dict[discord.abc.Snowflake, discord.PermissionOverwrite] = {
-            interaction.guild.default_role: discord.PermissionOverwrite(view_channel=False, send_messages=False),
-            interaction.user: discord.PermissionOverwrite(
-                view_channel=True,
-                send_messages=True,
-                attach_files=True,
-                embed_links=True,
-                read_message_history=True,
-            ),
-        }
+            # Increment sequential ticket number
+            ticket_num = await self.bot.ticket_mgr.get_next_ticket_number(interaction.guild.id)
+            ticket_str = f"{ticket_num:04d}"
 
-        if bot_member:
-            overrides[bot_member] = discord.PermissionOverwrite(
-                view_channel=True,
-                send_messages=True,
-                manage_channels=True,
-                manage_messages=True,
-                attach_files=True,
-                embed_links=True,
-                read_message_history=True,
-            )
+            # Resolve channel name
+            naming = panel.get("naming_format", "ticket-{count}")
+            clean_user = re.sub(r"[^a-zA-Z0-9_-]", "", interaction.user.name.lower()) or "user"
+            channel_name = naming.replace("{count}", ticket_str).replace("{user}", clean_user)
 
-        support_role_id = panel.get("support_role_id")
-        if support_role_id:
-            s_role = interaction.guild.get_role(support_role_id)
-            if s_role:
-                overrides[s_role] = discord.PermissionOverwrite(
+            # Resolve or auto-create target category
+            cat_id = panel.get("category_id")
+            category: discord.CategoryChannel | None = None
+            if cat_id:
+                cat_obj = interaction.guild.get_channel(cat_id)
+                if isinstance(cat_obj, discord.CategoryChannel):
+                    category = cat_obj
+
+            if not category:
+                category = discord.utils.get(interaction.guild.categories, name="Tickets")
+                if not category:
+                    try:
+                        category = await interaction.guild.create_category(
+                            name="Tickets",
+                            reason="Kyoka Support Tickets Category",
+                        )
+                    except Exception as cat_err:
+                        logger.warning(f"Could not auto-create Tickets category (fallback to root): {cat_err}")
+                        category = None
+
+            # Safely resolve bot member
+            bot_member = interaction.guild.me
+            if not bot_member and self.bot.user:
+                bot_member = interaction.guild.get_member(self.bot.user.id)
+
+            # Construct permission overrides
+            overrides: dict[discord.abc.Snowflake, discord.PermissionOverwrite] = {
+                interaction.guild.default_role: discord.PermissionOverwrite(view_channel=False, send_messages=False),
+                interaction.user: discord.PermissionOverwrite(
                     view_channel=True,
                     send_messages=True,
+                    attach_files=True,
+                    embed_links=True,
+                    read_message_history=True,
+                ),
+            }
+
+            if bot_member:
+                overrides[bot_member] = discord.PermissionOverwrite(
+                    view_channel=True,
+                    send_messages=True,
+                    manage_channels=True,
                     manage_messages=True,
                     attach_files=True,
                     embed_links=True,
                     read_message_history=True,
                 )
 
-        # Create private ticket text channel (with root fallback if category fails)
-        try:
-            ticket_channel = await interaction.guild.create_text_channel(
-                name=channel_name,
-                category=category,
-                overwrites=overrides,
-                topic=f"Ticket #{ticket_str} | Creator: {interaction.user} (ID: {interaction.user.id})",
-                reason=f"Ticket created by {interaction.user}",
-            )
-        except Exception as create_err:
-            logger.warning(f"Failed to create channel under category '{category}', attempting root creation fallback: {create_err}")
+            support_role_id = panel.get("support_role_id")
+            if support_role_id:
+                s_role = interaction.guild.get_role(support_role_id)
+                if s_role:
+                    overrides[s_role] = discord.PermissionOverwrite(
+                        view_channel=True,
+                        send_messages=True,
+                        manage_messages=True,
+                        attach_files=True,
+                        embed_links=True,
+                        read_message_history=True,
+                    )
+
+            # Atomic creation with rollback guarantee on database or initialization failure
+            ticket_channel: discord.TextChannel | None = None
             try:
-                ticket_channel = await interaction.guild.create_text_channel(
-                    name=channel_name,
-                    overwrites=overrides,
-                    topic=f"Ticket #{ticket_str} | Creator: {interaction.user} (ID: {interaction.user.id})",
-                    reason=f"Ticket created by {interaction.user}",
+                try:
+                    ticket_channel = await interaction.guild.create_text_channel(
+                        name=channel_name,
+                        category=category,
+                        overwrites=overrides,
+                        topic=f"Ticket #{ticket_str} | Category: {chosen_category} | Creator: {interaction.user} (ID: {interaction.user.id})",
+                        reason=f"Ticket created by {interaction.user}",
+                    )
+                except Exception as cat_create_err:
+                    logger.warning(f"Category creation fallback to root: {cat_create_err}")
+                    ticket_channel = await interaction.guild.create_text_channel(
+                        name=channel_name,
+                        overwrites=overrides,
+                        topic=f"Ticket #{ticket_str} | Category: {chosen_category} | Creator: {interaction.user} (ID: {interaction.user.id})",
+                        reason=f"Ticket created by {interaction.user}",
+                    )
+
+                # Record ticket in database atomically
+                await self.bot.ticket_mgr.create_ticket(
+                    guild_id=interaction.guild.id,
+                    panel_id=panel_id,
+                    channel_id=ticket_channel.id,
+                    user_id=interaction.user.id,
+                    ticket_number=ticket_num,
+                    category=chosen_category,
                 )
-            except Exception as final_err:
-                logger.error(f"Final ticket channel creation failed: {final_err}", exc_info=final_err)
+            except Exception as atomic_err:
+                logger.error(f"Atomic ticket creation failure: {atomic_err}", exc_info=atomic_err)
+                if ticket_channel:
+                    try:
+                        await ticket_channel.delete(reason="Ticket creation rollback due to DB/setup failure")
+                    except Exception:
+                        pass
                 err_card = KyokaContainer()
                 err_card.add_section(
-                    content=f"**Creation Failed**\n> Failed to create ticket channel: `{final_err}`.\n> Please ensure the bot has **Manage Channels** permission."
+                    content=f"**Creation Failed**\n> Failed to initialize ticket channel: `{atomic_err}`.\n> Ensure the bot has **Manage Channels** and **Manage Roles** permissions."
                 )
-                await send_container_response(
-                    interaction,
-                    err_card,
-                    ephemeral=True,
-                )
+                await send_container_response(interaction, err_card, ephemeral=True)
                 return
 
-        # Record ticket in database
-        await self.bot.ticket_mgr.create_ticket(
-            guild_id=interaction.guild.id,
-            panel_id=panel_id,
-            channel_id=ticket_channel.id,
-            user_id=interaction.user.id,
-            ticket_number=ticket_num,
-        )
-
-        # Send welcome card in ticket channel
-        arrow = self.bot.custom_emojis.get("icons_rightarrow", "›")
-        welcome_container = KyokaContainer(accent_color=None)  # Sleek Dark Mode Default
-        welcome_container.add_section(
-            content=(
-                f"**Ticket #{ticket_str} • {interaction.user.display_name}**\n"
-                f"> Welcome to your private support ticket, {interaction.user.mention}.\n"
-                f"> Please describe your inquiry in detail. Our staff team will assist you shortly."
-            )
-        )
-        welcome_container.add_separator(divider=True)
-        welcome_container.add_text(
-            f"{arrow} **Ticket ID:** `#{ticket_str}`\n"
-            f"{arrow} **Panel:** `{panel.get('panel_name', 'Support')}`\n"
-            f"{arrow} **Status:** `Open` • **Claimed:** *Unclaimed*"
-        )
-        welcome_container.add_separator(divider=True)
-        welcome_container.add_text("-# Use the buttons below to manage this ticket.")
-
-        await send_container_response(
-            ticket_channel,
-            welcome_container,
-            view=TicketInsideControlsView(self),
-            content=f"{interaction.user.mention} {f'<@&{support_role_id}>' if support_role_id else ''}",
-        )
-
-        # Log ticket creation in log channel if configured
-        log_channel_id = panel.get("log_channel_id")
-        if log_channel_id:
-            log_ch = interaction.guild.get_channel(log_channel_id)
-            if isinstance(log_ch, discord.TextChannel):
-                log_c = KyokaContainer(accent_color=5763719)  # Green
-                log_c.add_section(
-                    content=(
-                        f"**Ticket Opened • #{ticket_str}**\n"
-                        f"> User: {interaction.user.mention} `「{interaction.user.id}」`\n"
-                        f"> Channel: {ticket_channel.mention}\n"
-                        f"> Panel: `{panel.get('panel_name')}`"
-                    )
+            # Send welcome card in ticket channel
+            arrow = self.bot.custom_emojis.get("icons_rightarrow", "›")
+            welcome_container = KyokaContainer(accent_color=None)
+            welcome_container.add_section(
+                content=(
+                    f"**Ticket #{ticket_str} • {interaction.user.display_name}**\n"
+                    f"> Welcome to your private support ticket, {interaction.user.mention}.\n"
+                    f"> Please describe your inquiry in detail. Our staff team will assist you shortly."
                 )
-                await send_container_response(log_ch, log_c)
+            )
+            welcome_container.add_separator(divider=True)
+            welcome_container.add_text(
+                f"{arrow} **Ticket ID:** `#{ticket_str}`\n"
+                f"{arrow} **Category:** `{chosen_category}`\n"
+                f"{arrow} **Panel:** `{panel.get('panel_name', 'Support')}`\n"
+                f"{arrow} **Status:** `Open` • **Claimed:** *Unclaimed*"
+            )
+            welcome_container.add_separator(divider=True)
+            welcome_container.add_text("-# Use the buttons below to manage this ticket.")
 
-        # Ephemeral confirmation to user
-        created_card = KyokaContainer()
-        created_card.add_section(
-            content=f"**Ticket Created**\n> Your support ticket is ready: {ticket_channel.mention}"
-        )
-        await send_container_response(
-            interaction,
-            created_card,
-            ephemeral=True,
-        )
+            await send_container_response(
+                ticket_channel,
+                welcome_container,
+                view=TicketInsideControlsView(self),
+                content=f"{interaction.user.mention} {f'<@&{support_role_id}>' if support_role_id else ''}",
+            )
+
+            # Log ticket creation in log channel if configured
+            log_channel_id = panel.get("log_channel_id")
+            if log_channel_id:
+                log_ch = interaction.guild.get_channel(log_channel_id)
+                if isinstance(log_ch, discord.TextChannel):
+                    try:
+                        log_c = KyokaContainer(accent_color=5763719)  # Green
+                        log_c.add_section(
+                            content=(
+                                f"**Ticket Opened • #{ticket_str}**\n"
+                                f"> User: {interaction.user.mention} `「{interaction.user.id}」`\n"
+                                f"> Category: `{chosen_category}`\n"
+                                f"> Channel: {ticket_channel.mention}\n"
+                                f"> Panel: `{panel.get('panel_name')}`"
+                            )
+                        )
+                        await send_container_response(log_ch, log_c)
+                    except Exception as log_err:
+                        logger.warning(f"Could not dispatch ticket log: {log_err}")
+
+            # Ephemeral confirmation to user
+            created_card = KyokaContainer()
+            created_card.add_section(
+                content=f"**Ticket Created**\n> Your support ticket is ready: {ticket_channel.mention}"
+            )
+            await send_container_response(
+                interaction,
+                created_card,
+                ephemeral=True,
+            )
+        finally:
+            self._creating_tickets.discard(lock_key)
 
     # ─── TICKET CLOSE EXECUTION ───────────────────────────────────────────────
 

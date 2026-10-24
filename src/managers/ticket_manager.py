@@ -189,16 +189,26 @@ class TicketManager:
         channel_id: int,
         user_id: int,
         ticket_number: int,
+        category: str = "General Support",
     ) -> dict[str, Any]:
         """Record an open ticket in the database and cache."""
         query = """
-        INSERT INTO active_tickets (guild_id, panel_id, channel_id, user_id, ticket_number, status)
-        VALUES ($1, $2, $3, $4, $5, 'open')
+        INSERT INTO active_tickets (guild_id, panel_id, channel_id, user_id, ticket_number, status, category)
+        VALUES ($1, $2, $3, $4, $5, 'open', $6)
         RETURNING *;
         """
-        row = await self.db.fetch_one(query, guild_id, panel_id, channel_id, user_id, ticket_number)
+        try:
+            row = await self.db.fetch_one(query, guild_id, panel_id, channel_id, user_id, ticket_number, category)
+        except Exception:
+            # Fallback if category column is absent in older schema
+            fallback_query = """
+            INSERT INTO active_tickets (guild_id, panel_id, channel_id, user_id, ticket_number, status)
+            VALUES ($1, $2, $3, $4, $5, 'open')
+            RETURNING *;
+            """
+            row = await self.db.fetch_one(fallback_query, guild_id, panel_id, channel_id, user_id, ticket_number)
         if row:
-            self._active_tickets_cache[channel_id] = row
+            self._active_tickets_cache[channel_id] = dict(row)
         return row or {}
 
     async def get_ticket(self, channel_id: int) -> dict[str, Any] | None:

@@ -811,7 +811,7 @@ class Help(commands.Cog):
         ctx: CustomContext,
         visible_categories: dict[str, list[commands.Command]],
     ) -> discord.Embed:
-        """Construct the Signature Kyoka Home Overview Discord Embed."""
+        """Construct the Signature Kyoka Home Overview Discord Embed with compact module listing."""
         guild = ctx.guild
         author = ctx.author
         p = self.bot.guild_mgr.get_prefix(guild.id if guild else None)
@@ -819,15 +819,13 @@ class Help(commands.Cog):
         total_commands = sum(len(cmds) for cmds in visible_categories.values())
 
         embed = discord.Embed(
-            title="⛩️ KYOKA CONTROL — Kyoka 3.0",
+            title="⛩️ Kyoka 3.0 — Command Modules",
             description=(
-                "### The Perfect Illusion · Command Center\n"
-                "> *“Welcome to the domain of Kyoka. Select a module to explore its commands and capabilities.”*\n\n"
-                "**◈ COMMAND & SETUP PROTOCOLS ◈**\n"
-                f"• **Prefix Commands:** Use `{p}<command>` (e.g. `{p}ping`, `{p}ai hello`, `{p}help`)\n"
-                f"• **Slash Commands:** Type `/<command>` for Discord autocomplete and modal wizards\n"
-                f"• **Quickstart Guide:** Type `{p}quickstart` or `{p}setup` for the 5-minute setup checklist\n"
-                f"• **Permission System:** `[Public]` Everyone • `[Mod]` Staff • `[Admin]` Administrators • `[Prime]` Kyoka Premium"
+                "### The Perfect Illusion · Command Directory\n"
+                "> Select a module from the menu below or type `{p}help <command>` for syntax.\n\n"
+                f"• **Prefix Commands:** `{p}<command>` · **Slash Commands:** `/<command>`\n"
+                f"• **Quickstart Guide:** `{p}quickstart` · `{p}setup`\n"
+                f"• **Permission System:** `[Public]` Everyone · `[Mod]` Staff · `[Admin]` Administrators · `[Prime]` Kyoka Premium"
             ),
             color=0x2B0938,
         )
@@ -847,51 +845,45 @@ class Help(commands.Cog):
             value=(
                 f"• **AI Engine:** Google Gemini with 10 personalities (`{p}ai`)\n"
                 f"• **Defense:** Anti-Nuke, Auto-Mod, Purge & Lock (`{p}warn`)\n"
-                f"• **Engagement:** Tickets, Reaction Roles & Giveaways (`{p}play`)\n"
+                f"• **Engagement:** Tickets, Reaction Roles & Giveaways (`{p}ticket`)\n"
                 f"• **Progression:** Leveling XP, Ranks & Leaderboards (`{p}rank`)"
             ),
             inline=True,
         )
 
-        # Aizen Module Control Matrix
-        is_owner = is_primary_owner(author.id)
-        module_grid = [
-            "🛡️ **Moderation** — Bans, kicks, mutes, purges & audit logs",
-            "🎫 **Tickets & Support** — Interactive ticket panels & HTML transcripts",
-            "👋 **Welcome & AutoMod** — Greeting cards, autoroles & anti-spam defense",
-            "🎉 **Giveaways & Events** — Weighted rolls, entry requirements & rerolls",
-            "⭐ **Leveling & XP** — Chat progression, rank cards, XP & leaderboards",
-            "🤖 **AI Assistant** — Aizen conversational intelligence & 10 personalities",
-            "🎵 **Music System** — High-fidelity audio playback, queues & filters",
-            "🖼️ **Images & Avatars** — Anime reaction GIFs, banners & avatar grabbers",
-            "💬 **Social & Fun** — Mini-games, relationships, quotes, games & trivia",
-            "🔧 **Utilities** — Reminders, calculators, timestamps & diagnostics",
-            "⚙️ **Server Administration** — Prefixes, audit channels & permissions",
-            "💎 **Premium Features** — Elite perks, licenses & high-res AI",
-        ]
-        if is_owner:
-            module_grid.append("👑 **Owner & Developer** — Core bot diagnostics, database & maintenance")
+        # Compact Module Sections showing command names only: `cmd1` · `cmd2` · `cmd3`
+        for cat_name, cmds in visible_categories.items():
+            if not cmds:
+                continue
+            clean_title = cat_name.split("・", 1)[1] if "・" in cat_name else cat_name
+            seen: set[str] = set()
+            c_names: list[str] = []
+            for c in cmds:
+                qname = c.qualified_name
+                if qname not in seen:
+                    seen.add(qname)
+                    c_names.append(qname)
+            c_names.sort()
 
-        embed.add_field(
-            name="◈ MODULE CONTROL MATRIX ◈",
-            value="\n".join(module_grid),
-            inline=False,
-        )
+            cmd_tags = " · ".join(f"`{name}`" for name in c_names)
+            if len(cmd_tags) > 1024:
+                cmd_tags = cmd_tags[:1000] + "...`"
 
-        embed.add_field(
-            name="🧭 Interactive Navigation",
-            value=(
-                "Select any module from the dropdown menu below to view full command syntax and examples, "
-                "or click **🔍 Search** to locate any command instantly."
-            ),
-            inline=False,
-        )
+            embed.add_field(
+                name=f"**{clean_title}**",
+                value=cmd_tags or "`None`",
+                inline=False,
+            )
 
-        # Apply configurable Aizen artwork if available
+        # Apply configurable Aizen GIF at the bottom with graceful fallback
         assets = getattr(Config, "ASSETS", None)
-        banner_url = getattr(assets, "HELP_BANNER_URL", None) or getattr(assets, "BANNER_URL", None) or getattr(Config, "AIZEN_IMAGE_URL", "")
-        if banner_url and banner_url.strip():
-            embed.set_image(url=banner_url.strip())
+        gif_url = (
+            getattr(assets, "HELP_GIF_URL", None)
+            or os.getenv("KYOKA_HELP_GIF_URL")
+            or "https://media.giphy.com/media/d4zHnLJcd45n663K/giphy.gif"
+        )
+        if gif_url and str(gif_url).strip():
+            embed.set_image(url=str(gif_url).strip())
 
         thumbnail_url = getattr(assets, "AIZEN_AVATAR_URL", "") or getattr(assets, "DEFAULT_THUMBNAIL_URL", "")
         if not thumbnail_url and hasattr(self.bot, "user") and self.bot.user:
@@ -900,7 +892,7 @@ class Help(commands.Cog):
             embed.set_thumbnail(url=thumbnail_url.strip())
 
         embed.set_footer(
-            text=f"Requested by {author.display_name} • The Perfect Illusion · Command Center",
+            text=f"Requested by {author.display_name} • KYOKA 3.0",
             icon_url=author.display_avatar.url if author.display_avatar else None,
         )
         return embed
@@ -941,7 +933,6 @@ class Help(commands.Cog):
             embed.color = 0xED4245
         else:
             embed.description = f"Found **{len(matched)}** accessible command(s) matching `{clean_query}`:\n\n"
-            # Sort: exact name match first, then prefix match, then others
             matched.sort(
                 key=lambda item: (
                     0 if item[0].qualified_name.lower() == clean_query else (
@@ -983,25 +974,56 @@ class Help(commands.Cog):
         total_pages = len(cat_keys)
         p = self.bot.guild_mgr.get_prefix(ctx.guild.id if ctx.guild else None)
 
-        container = self._build_category_container(
-            ctx=ctx,
-            cat_name=cat_name,
-            commands_list=commands_list,
-            visible_categories=visible_categories,
-            custom_id_prefix="help_ui",
-        )
-        embed = container.to_embed()
-        embed.title = f"{self._get_category_emoji(cat_name)} {cat_name}"
-        embed.color = 0x2B0938
+        clean_cat_title = cat_name.split("・", 1)[1] if "・" in cat_name else cat_name
+        cat_desc = CATEGORY_DESCRIPTIONS.get(cat_name, f"Accessible commands for {clean_cat_title}.")
 
-        # Apply configurable Aizen thumbnail
+        # Collect unique command names
+        seen: set[str] = set()
+        c_names: list[str] = []
+        for c in commands_list:
+            if c.qualified_name not in seen:
+                seen.add(c.qualified_name)
+                c_names.append(c.qualified_name)
+        c_names.sort()
+        cmd_tags = " · ".join(f"`{name}`" for name in c_names)
+
+        embed = discord.Embed(
+            title=f"{self._get_category_emoji(cat_name)} {cat_name}",
+            description=(
+                f"> {cat_desc}\n\n"
+                f"**COMMANDS ({len(c_names)}):**\n"
+                f"{cmd_tags}\n\n"
+                f"*Type `{p}help <command>` for detailed syntax, arguments, and aliases.*"
+            ),
+            color=0x2B0938,
+        )
+
+        # Highlight top 6 commands with usage
+        for cmd in commands_list[:6]:
+            sig = f" {cmd.signature}" if cmd.signature else ""
+            desc = (cmd.description or cmd.help or "No description provided.").strip().split("\n")[0][:90]
+            badge = self._get_badge(cmd)
+            embed.add_field(
+                name=f"`{p}{cmd.qualified_name}{sig}`{badge}",
+                value=f"> {desc}",
+                inline=False,
+            )
+
         assets = getattr(Config, "ASSETS", None)
+        gif_url = (
+            getattr(assets, "HELP_GIF_URL", None)
+            or os.getenv("KYOKA_HELP_GIF_URL")
+            or "https://media.giphy.com/media/d4zHnLJcd45n663K/giphy.gif"
+        )
+        if gif_url and str(gif_url).strip():
+            embed.set_image(url=str(gif_url).strip())
+
         thumb = getattr(assets, "AIZEN_AVATAR_URL", "") or getattr(assets, "DEFAULT_THUMBNAIL_URL", "")
         if thumb and thumb.strip():
             embed.set_thumbnail(url=thumb.strip())
 
         embed.set_footer(
-            text=f"Category {page_idx}/{total_pages} • {len(commands_list)} Commands • Requested by {ctx.author.display_name} • Type {p}help <command> for details",
+            text=f"Module {page_idx}/{total_pages} • {len(c_names)} Commands • Requested by {ctx.author.display_name} • KYOKA 3.0",
             icon_url=ctx.author.display_avatar.url if ctx.author.display_avatar else None,
         )
         return embed

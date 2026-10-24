@@ -500,14 +500,15 @@ class Fun(commands.Cog):
 
     @commands.command(
         name="spam",
-        help="Owner-only: repeat a message up to 100 times; explicit @user mentions are pinged.",
+        help="Owner-only: repeat a message up to 2,000 times; explicit @user mentions are pinged.",
     )
     async def spam(self, ctx: CustomContext, count: int, *, message: str):
         # Enforce authorization before validating arguments or starting any output job.
-        if not is_primary_owner(ctx.author.id):
+        author_id = getattr(ctx.author, "id", None)
+        if not is_primary_owner(author_id):
             return await ctx.send("⛔ Only the primary bot owner can use this command.")
-        if not 1 <= count <= 100:
-            return await ctx.send("Choose a count from **1 to 100**.")
+        if not 1 <= count <= 2000:
+            return await ctx.send("Choose a count from **1 to 2,000**.")
         message = message.strip()
         if not message:
             return await ctx.send(
@@ -519,41 +520,47 @@ class Fun(commands.Cog):
         if "@everyone" in lowered or "@here" in lowered:
             return await ctx.send("Mass mentions are blocked in this command.")
         if ctx.channel.id in self._spam_tasks and not self._spam_tasks[ctx.channel.id].done():
-            return await ctx.send("A repeat-message task is already running in this channel.")
+            return await ctx.send(
+                f"A repeat-message task is already running in this channel. Use `{ctx.prefix}spamcancel` to stop it."
+            )
 
         # Only user mentions explicitly included in the command invocation can ping.
         # Roles, @everyone, @here, and reply-author pings remain disabled.
-        mentioned_users = list({user.id: user for user in ctx.message.mentions}.values())
+        mentioned_users = list({user.id: user for user in ctx.message.mentions}.values()) if hasattr(ctx, "message") and ctx.message else []
         allowed_mentions = discord.AllowedMentions(
             everyone=False,
             users=mentioned_users,
             roles=False,
             replied_user=False,
         )
-        # Keep the status notice temporary as well; the owner can still cancel
-        # the task with the usual command while it is running.
         await ctx.send(
-            f"Starting **{count}** messages with a 0.8-second interval. "
+            f"⚡ Starting **{count}** messages (interval: 0.8s). "
             f"Explicit user mentions: **{'enabled' if mentioned_users else 'none'}**. "
-            f"Use `{ctx.prefix}spamcancel` to stop.",
-            delete_after=5,
+            f"Use `{ctx.prefix}spamcancel` to halt.",
+            delete_after=6,
         )
 
         async def repeat_messages():
             try:
-                for _ in range(count):
-                    # Each repeated message remains visible for five seconds,
-                    # then Discord deletes it automatically.
-                    await ctx.send(
-                        message,
-                        allowed_mentions=allowed_mentions,
-                        delete_after=5,
-                    )
+                for idx in range(count):
+                    try:
+                        await ctx.send(
+                            message,
+                            allowed_mentions=allowed_mentions,
+                            delete_after=5,
+                        )
+                    except discord.HTTPException as http_err:
+                        if getattr(http_err, "status", None) == 429:
+                            logger.warning("Owner spam task paused due to rate-limit (429), terminating task safely.")
+                        else:
+                            logger.warning(f"Owner spam task encountered HTTPException: {http_err}")
+                        break
                     await asyncio.sleep(0.8)
             except asyncio.CancelledError:
+                logger.info("Owner spam task was cancelled.")
                 raise
-            except (discord.Forbidden, discord.HTTPException):
-                logger.warning("Owner spam task stopped after Discord rejected a message.")
+            except Exception as e:
+                logger.warning(f"Owner spam task stopped unexpectedly: {e}")
             finally:
                 self._spam_tasks.pop(ctx.channel.id, None)
 
@@ -561,12 +568,14 @@ class Fun(commands.Cog):
 
     @commands.command(name="spamcancel", help="Owner-only: cancel a running repeat-message task.")
     async def spamcancel(self, ctx: CustomContext):
-        if not is_primary_owner(ctx.author.id):
+        author_id = getattr(ctx.author, "id", None)
+        if not is_primary_owner(author_id):
             return await ctx.send("⛔ Only the primary bot owner can use this command.")
         task = self._spam_tasks.get(ctx.channel.id)
         if not task or task.done():
             return await ctx.send("There is no repeat-message task running in this channel.")
         task.cancel()
+        self._spam_tasks.pop(ctx.channel.id, None)
         await ctx.send("🛑 Repeat-message task cancelled.")
 
     @commands.command(name="guesshelp", help="Explain number-game rules and host authorization.")

@@ -78,7 +78,7 @@ class AizenAssets:
             os.getenv("AIZEN_IMAGE_URL", "https://cdn.discordapp.com/attachments/1562020726670753854/1562693591900495872/07991C9B-39EC-4343-BF54-0E74C6819B78.gif")
         )
     ).strip()
-    HELP_GIF_URL: str = os.getenv("KYOKA_HELP_GIF_URL", "").strip()
+    HELP_GIF_URL: str = os.getenv("KYOKA_HELP_GIF_URL", "https://media.giphy.com/media/d4zHnLJcd45n663K/giphy.gif").strip()
     WELCOME_IMAGE_URL: str = os.getenv("KYOKA_WELCOME_IMAGE_URL", "").strip()
     LEVELUP_IMAGE_URL: str = os.getenv("KYOKA_LEVELUP_IMAGE_URL", "").strip()
     DEFAULT_THUMBNAIL_URL: str = os.getenv("KYOKA_DEFAULT_THUMBNAIL_URL", "").strip()

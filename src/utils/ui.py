@@ -244,6 +244,89 @@ class KyokaEmbed(discord.Embed):
         embed.set_footer(text="Kyoka Security Guard • Permission Denied")
         return embed
 
+    @classmethod
+    def moderation(
+        cls,
+        action: str,
+        target: Any,
+        moderator: Any,
+        reason: str = "No reason provided",
+        *,
+        duration: str | None = None,
+    ) -> KyokaEmbed:
+        """Create a standardized dark-purple moderation audit embed."""
+        t_name = getattr(target, "display_name", str(target))
+        m_name = getattr(moderator, "display_name", str(moderator))
+        desc = (
+            f"**Action:** `{action.upper()}`\n"
+            f"**Target:** {getattr(target, 'mention', t_name)} `「{getattr(target, 'id', '0')}」`\n"
+            f"**Moderator:** {getattr(moderator, 'mention', m_name)}\n"
+            f"**Reason:** `{reason}`"
+        )
+        if duration:
+            desc += f"\n**Duration:** `{duration}`"
+        embed = cls(
+            title=f"{AizenSymbols.SHIELD} Moderation Action • {action.title()}",
+            description=desc,
+            color=AizenPalette.ROYAL_VIOLET,
+        )
+        t_avatar = getattr(getattr(target, "display_avatar", None), "url", None)
+        if t_avatar:
+            embed.set_thumbnail(url=str(t_avatar))
+        embed.set_footer(text="KYOKA Moderation Protocol • Logged")
+        return embed
+
+    @classmethod
+    def afk_notice(
+        cls,
+        member: Any,
+        reason: str,
+        *,
+        duration_str: str | None = None,
+    ) -> KyokaEmbed:
+        """Create a standardized AFK notification embed."""
+        m_name = getattr(member, "display_name", str(member))
+        desc = f"**{m_name}** is currently AFK.\n> **Reason:** `{reason}`"
+        if duration_str:
+            desc += f"\n> **Since:** `{duration_str} ago`"
+        embed = cls(
+            title=f"💤 Member AFK",
+            description=desc,
+            color=AizenPalette.DEEP_PURPLE,
+        )
+        m_avatar = getattr(getattr(member, "display_avatar", None), "url", None)
+        if m_avatar:
+            embed.set_thumbnail(url=str(m_avatar))
+        embed.set_footer(text="KYOKA • Presence System")
+        return embed
+
+    @classmethod
+    def vouch_card(
+        cls,
+        recipient: Any,
+        author: Any,
+        comment: str,
+        *,
+        total_vouches: int = 1,
+    ) -> KyokaEmbed:
+        """Create a standardized member vouch card."""
+        r_name = getattr(recipient, "display_name", str(recipient))
+        a_name = getattr(author, "display_name", str(author))
+        embed = cls(
+            title=f"⭐ Vouch Recorded for {r_name}",
+            description=(
+                f"> “{comment}”\n\n"
+                f"**Vouched by:** {getattr(author, 'mention', a_name)}\n"
+                f"**Total Reputation:** **{total_vouches}** vouches"
+            ),
+            color=AizenPalette.ELECTRIC_PURPLE,
+        )
+        r_avatar = getattr(getattr(recipient, "display_avatar", None), "url", None)
+        if r_avatar:
+            embed.set_thumbnail(url=str(r_avatar))
+        embed.set_footer(text="KYOKA Trust & Reputation Network")
+        return embed
+
     @staticmethod
     def progress_bar(
         current: Union[int, float],
