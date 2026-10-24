@@ -498,6 +498,13 @@ class Fun(commands.Cog):
             else:
                 await message.add_reaction("➖")
 
+    def _get_task_manager(self):
+        from src.core.task_manager import TaskManager
+        mgr = getattr(self.bot, "task_mgr", None)
+        if isinstance(mgr, TaskManager):
+            return mgr
+        return None
+
     @commands.command(
         name="spam",
         help="Owner-only: repeat a message up to 2,000 times; explicit @user mentions are pinged.",
@@ -519,26 +526,45 @@ class Fun(commands.Cog):
         lowered = message.lower()
         if "@everyone" in lowered or "@here" in lowered:
             return await ctx.send("Mass mentions are blocked in this command.")
+
+        task_mgr = self._get_task_manager()
+
+        # Check existing channel task
+        channel_task_running = False
         if ctx.channel.id in self._spam_tasks and not self._spam_tasks[ctx.channel.id].done():
+            channel_task_running = True
+        elif task_mgr and task_mgr.get_task_by_channel(ctx.channel.id):
+            channel_task_running = True
+
+        if channel_task_running:
             return await ctx.send(
                 f"A repeat-message task is already running in this channel. Use `{ctx.prefix}spamcancel` to stop it."
             )
 
         # Only user mentions explicitly included in the command invocation can ping.
         # Roles, @everyone, @here, and reply-author pings remain disabled.
-        mentioned_users = list({user.id: user for user in ctx.message.mentions}.values()) if hasattr(ctx, "message") and ctx.message else []
+        mentioned_users = list({user.id: user for user in ctx.message.mentions}.values()) if hasattr(ctx, "message") and ctx.message and hasattr(ctx.message, "mentions") else []
         allowed_mentions = discord.AllowedMentions(
             everyone=False,
             users=mentioned_users,
             roles=False,
             replied_user=False,
         )
+
+        task_id = task_mgr.get_next_task_id() if task_mgr else f"SPAM-{int(time.time() * 1000) % 10000:04d}"
+        from src.core.task_manager import SpamControlView
+        view = SpamControlView(task_id, task_mgr, ctx.author.id) if task_mgr else None
+
         await ctx.send(
-            f"⚡ Starting **{count}** messages (interval: 0.8s). "
+            f"⚡ Starting **{count}** messages (Task: `{task_id}`, interval: 0.8s). "
             f"Explicit user mentions: **{'enabled' if mentioned_users else 'none'}**. "
             f"Use `{ctx.prefix}spamcancel` to halt.",
+            view=view,
             delete_after=6,
         )
+
+        channel_id = int(ctx.channel.id)
+        task_info_ref = [None]
 
         async def repeat_messages():
             try:
@@ -549,34 +575,106 @@ class Fun(commands.Cog):
                             allowed_mentions=allowed_mentions,
                             delete_after=5,
                         )
+                        if task_info_ref[0]:
+                            task_info_ref[0].sent_count += 1
                     except discord.HTTPException as http_err:
                         if getattr(http_err, "status", None) == 429:
-                            logger.warning("Owner spam task paused due to rate-limit (429), terminating task safely.")
+                            logger.warning(f"Owner spam task {task_id} paused due to rate-limit (429), terminating task safely.")
                         else:
-                            logger.warning(f"Owner spam task encountered HTTPException: {http_err}")
+                            logger.warning(f"Owner spam task {task_id} encountered HTTPException: {http_err}")
                         break
                     await asyncio.sleep(0.8)
             except asyncio.CancelledError:
-                logger.info("Owner spam task was cancelled.")
+                logger.info(f"Owner spam task {task_id} was cancelled.")
                 raise
             except Exception as e:
-                logger.warning(f"Owner spam task stopped unexpectedly: {e}")
+                logger.warning(f"Owner spam task {task_id} stopped unexpectedly: {e}")
             finally:
-                self._spam_tasks.pop(ctx.channel.id, None)
+                if task_mgr:
+                    task_mgr.unregister_task(task_id)
+                self._spam_tasks.pop(channel_id, None)
 
-        self._spam_tasks[ctx.channel.id] = asyncio.create_task(repeat_messages())
+        task = asyncio.create_task(repeat_messages())
+        self._spam_tasks[channel_id] = task
 
-    @commands.command(name="spamcancel", help="Owner-only: cancel a running repeat-message task.")
-    async def spamcancel(self, ctx: CustomContext):
+        def _on_done(t: asyncio.Task) -> None:
+            if task_mgr:
+                task_mgr.unregister_task(task_id)
+            self._spam_tasks.pop(channel_id, None)
+
+        task.add_done_callback(_on_done)
+
+        if task_mgr:
+            initiating_msg_id = ctx.message.id if hasattr(ctx, "message") and ctx.message else None
+            task_info_ref[0] = task_mgr.register_spam_task(
+                task_id=task_id,
+                task=task,
+                guild_id=ctx.guild.id if ctx.guild else None,
+                channel_id=ctx.channel.id,
+                invoker_id=ctx.author.id,
+                initiating_message_id=initiating_msg_id,
+                count=count,
+            )
+
+    @commands.command(
+        name="spamcancel",
+        aliases=["spamstop"],
+        help="Owner-only: cancel running repeat-message tasks. Use '?spamcancel all' for emergency global stop.",
+    )
+    async def spamcancel(self, ctx: CustomContext, target: str | None = None):
         author_id = getattr(ctx.author, "id", None)
         if not is_primary_owner(author_id):
             return await ctx.send("⛔ Only the primary bot owner can use this command.")
+
+        task_mgr = self._get_task_manager()
+
+        # Global emergency cancel: ?spamcancel all / ?spamstop all
+        if target and target.lower() in ("all", "global", "stop"):
+            cancelled = 0
+            if task_mgr:
+                cancelled += task_mgr.cancel_all(reason="emergency_stop_command")
+            for t in list(self._spam_tasks.values()):
+                if not t.done():
+                    t.cancel()
+                    cancelled += 1
+            self._spam_tasks.clear()
+            return await ctx.send(f"🛑 Emergency stop executed: cancelled **{cancelled}** active repeat-message tasks.")
+
+        # Targeted task cancel by Task ID: e.g. ?spamcancel SPAM-0001
+        if target and target.upper().startswith("SPAM-"):
+            if task_mgr and task_mgr.cancel_task(target.upper(), reason="owner_targeted_cancel"):
+                return await ctx.send(f"🛑 Task **{target.upper()}** cancelled.")
+            return await ctx.send(f"No active task found with ID `{target}`.")
+
+        # Channel-specific cancel
         task = self._spam_tasks.get(ctx.channel.id)
-        if not task or task.done():
-            return await ctx.send("There is no repeat-message task running in this channel.")
-        task.cancel()
-        self._spam_tasks.pop(ctx.channel.id, None)
-        await ctx.send("🛑 Repeat-message task cancelled.")
+        if task and not task.done():
+            task.cancel()
+            self._spam_tasks.pop(ctx.channel.id, None)
+            if task_mgr:
+                task_mgr.cancel_by_channel(ctx.channel.id, reason="channel_cancel_command")
+            return await ctx.send("🛑 Repeat-message task cancelled.")
+
+        if task_mgr:
+            cancelled_id = task_mgr.cancel_by_channel(ctx.channel.id, reason="channel_cancel_command")
+            if cancelled_id:
+                return await ctx.send(f"🛑 Repeat-message task (`{cancelled_id}`) cancelled.")
+
+        return await ctx.send("There is no repeat-message task running in this channel.")
+
+    @commands.Cog.listener()
+    async def on_raw_message_delete(self, payload: discord.RawMessageDeleteEvent) -> None:
+        """Cancel task if initiating command message was deleted."""
+        task_mgr = self._get_task_manager()
+        if task_mgr:
+            task_mgr.cancel_by_message_id(payload.message_id, reason="initiating_message_deleted")
+
+    @commands.Cog.listener()
+    async def on_message_delete(self, message: discord.Message) -> None:
+        """Cancel task if initiating command message was deleted."""
+        task_mgr = self._get_task_manager()
+        if task_mgr:
+            task_mgr.cancel_by_message_id(message.id, reason="initiating_message_deleted")
 
     @commands.command(name="guesshelp", help="Explain number-game rules and host authorization.")
     async def guesshelp(self, ctx: CustomContext):

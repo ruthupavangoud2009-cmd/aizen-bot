@@ -101,6 +101,7 @@ class Config:
         or ""
     ).strip()
     CLIENT_ID: int | None = _parse_application_id(os.getenv("CLIENT_ID", "").strip())
+    VOICE_WELCOME_BOT_TOKEN: str | None = os.getenv("VOICE_WELCOME_BOT_TOKEN", "").strip() or None
     
     # Prefixes & Identity
     BOT_NAME: str = os.getenv("BOT_NAME", "KYOKA 3.0")

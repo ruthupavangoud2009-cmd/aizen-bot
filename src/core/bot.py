@@ -150,6 +150,12 @@ class KyokaBot(commands.Bot):
         self.custom_help_mgr: CustomHelpManager = CustomHelpManager(self.db)
         from src.managers.voice_welcome_manager import VoiceWelcomeManager
         self.voice_welcome_mgr: VoiceWelcomeManager = VoiceWelcomeManager(self, self.db)
+        from src.core.task_manager import TaskManager
+        self.task_mgr: TaskManager = TaskManager(self)
+        from src.core.feature_registry import FeatureRegistry
+        self.feature_registry: FeatureRegistry = FeatureRegistry(self)
+        from src.core.command_registry import CommandRegistry
+        self.command_registry: CommandRegistry = CommandRegistry(self)
         self.custom_emojis: EmojiRegistry = EmojiRegistry(self)
         self.no_prefix_users: set[int] = set()
         self.custom_status: str | None = None
@@ -357,8 +363,14 @@ class KyokaBot(commands.Bot):
                 logger.error(f"Failed to load extension {module_name}: {type(e).__name__}", exc_info=e)
 
     async def close(self) -> None:
-        """Gracefully release database pools and network sessions."""
+        """Gracefully release database pools, background tasks, and network sessions."""
         logger.info("Shutting down Kyoka Bot gracefully...")
+
+        if hasattr(self, "task_mgr"):
+            try:
+                await self.task_mgr.shutdown()
+            except Exception as e:
+                logger.warning(f"Error during TaskManager shutdown: {e}")
 
         if self.session:
             await self.session.close()
@@ -367,6 +379,23 @@ class KyokaBot(commands.Bot):
             await self.db.close()
 
         await super().close()
+
+    async def on_raw_message_delete(self, payload: discord.RawMessageDeleteEvent) -> None:
+        """Cancel any running spam/repeat-message task linked to the deleted command message."""
+        if hasattr(self, "task_mgr"):
+            self.task_mgr.cancel_by_message_id(payload.message_id, reason="initiating_message_deleted")
+
+    async def on_message_delete(self, message: discord.Message) -> None:
+        """Cancel any running spam/repeat-message task linked to the deleted command message."""
+        if hasattr(self, "task_mgr"):
+            self.task_mgr.cancel_by_message_id(message.id, reason="initiating_message_deleted")
+
+    async def on_raw_message_edit(self, payload: discord.RawMessageUpdateEvent) -> None:
+        """Cancel task if the initiating command message was emptied or invalidated."""
+        if hasattr(self, "task_mgr"):
+            content = payload.data.get("content", "")
+            if not content.strip():
+                self.task_mgr.cancel_by_message_id(payload.message_id, reason="initiating_message_emptied")
 
     @tasks.loop(seconds=60)
     async def _rotate_presence(self) -> None:
@@ -431,6 +460,18 @@ class KyokaBot(commands.Bot):
             f"> Gateway Message Content Intent: {'ENABLED (OK)' if msg_intent else 'DISABLED (CRITICAL)'}\n"
             f"======================================"
         )
+
+        # Index feature and command registries
+        if hasattr(self, "command_registry"):
+            try:
+                self.command_registry.rebuild_from_bot(self)
+            except Exception as e:
+                logger.warning(f"CommandRegistry rebuild failed: {e}")
+        if hasattr(self, "feature_registry"):
+            try:
+                self.feature_registry.audit_system_features(self)
+            except Exception as e:
+                logger.warning(f"FeatureRegistry audit failed: {e}")
 
         logger.info("Presence locked to DND. Slash command tree initialized.")
 
