@@ -780,8 +780,16 @@ class GuildPlayer:
         if reason and str(reason).lower() in ("replaced", "cleanup"):
             return
 
-        if reason and str(reason).lower() in ("loadfailed", "load_failed"):
-            logger.warning(f"Guild {self.guild.id}: Lavalink reported track loadFailed.")
+        if reason and str(reason).lower() in ("loadfailed", "load_failed", "stuck", "error"):
+            logger.warning(f"Guild {self.guild.id}: Lavalink reported track {reason}.")
+            if self.voice_client and hasattr(self.voice_client, "skip"):
+                try:
+                    await asyncio.wait_for(
+                        self.voice_client.skip(force=True),
+                        timeout=LAVALINK_OP_TIMEOUT,
+                    )
+                except Exception as e:
+                    logger.debug(f"Guild {self.guild.id}: voice skip cleanup notice: {e}")
             next_track = await self.pop_next_track()
             if next_track:
                 await self.play_track(next_track)

@@ -46,13 +46,13 @@ YDL_OPTIONS = {
     "no_warnings": True,
     "extract_flat": False,
     "skip_download": True,
-    "socket_timeout": 6,
+    "socket_timeout": 10,
     "source_address": "0.0.0.0",
     "youtube_include_dash_manifest": False,
     "ignoreerrors": True,
     "extractor_args": {
         "youtube": {
-            "player_client": ["android"],
+            "player_client": ["android", "web", "tv_embedded"],
         }
     },
 }
@@ -958,10 +958,10 @@ class NativeExtractor:
             "skip_download": True,
             "extract_flat": True,
             "ignoreerrors": True,
-            "socket_timeout": 6,
+            "socket_timeout": 10,
             "extractor_args": {
                 "youtube": {
-                    "player_client": ["android"],
+                    "player_client": ["android", "ios", "web"],
                 }
             },
         }

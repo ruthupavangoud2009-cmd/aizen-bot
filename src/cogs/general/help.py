@@ -733,18 +733,29 @@ class Help(commands.Cog):
                     cmd_list.extend(_collect_all(sub_cmd))
             return cmd_list
 
+        # Collect from all cogs and bot commands to ensure 100% directory completeness
+        seen_cmd_names: set[str] = set()
+        
+        all_root_cmds: list[commands.Command] = list(self.bot.commands)
         for cog_name, cog in self.bot.cogs.items():
             if cog_name.lower() in ["errorhandler"]:
                 continue
-
             for cmd in cog.get_commands():
-                for c in _collect_all(cmd):
-                    if self._can_run_command(c, ctx):
-                        target_cat = self._resolve_category(c)
-                        if target_cat not in categories:
-                            categories[target_cat] = []
-                        if c not in categories[target_cat]:
-                            categories[target_cat].append(c)
+                if cmd not in all_root_cmds:
+                    all_root_cmds.append(cmd)
+
+        for cmd in all_root_cmds:
+            cog = getattr(cmd, "cog", None)
+            if cog and getattr(cog, "qualified_name", "").lower() in ["errorhandler"]:
+                continue
+            for c in _collect_all(cmd):
+                if self._can_run_command(c, ctx):
+                    target_cat = self._resolve_category(c)
+                    if target_cat not in categories:
+                        categories[target_cat] = []
+                    if c not in categories[target_cat] and c.qualified_name not in seen_cmd_names:
+                        categories[target_cat].append(c)
+                        seen_cmd_names.add(c.qualified_name)
 
         # Retain only non-empty categories following exact priority order
         ordered_categories: dict[str, list[commands.Command]] = {}
@@ -1908,6 +1919,83 @@ class Help(commands.Cog):
         color = 0x2B0938 if success else 0xED4245
         embed = discord.Embed(title="Custom Help Categories Reset", description=f"> {msg}", color=color)
         await ctx.send(embed=embed)
+
+    def audit_command_tree(self) -> dict[str, Any]:
+        """
+        Audit the bot's registered command tree against the centralized category registry.
+        Detects:
+        - Total registered commands
+        - Registered commands missing from help categorization
+        - Vouch commands in ⭐・VOUCHES & REPUTATION
+        - Bill commands in 🧾・BLOX FRUITS SERVICE BILLS
+        - Cross-contamination (e.g. AI commands in Music)
+        - Commands without descriptions or usage signatures
+        - Category command counts
+        """
+        def _collect_all(cmd_obj: commands.Command) -> list[commands.Command]:
+            cmd_list = [cmd_obj]
+            if isinstance(cmd_obj, commands.Group):
+                for sub_cmd in sorted(cmd_obj.commands, key=lambda s: s.qualified_name):
+                    cmd_list.extend(_collect_all(sub_cmd))
+            return cmd_list
+
+        all_cmds: list[commands.Command] = []
+        for cmd in self.bot.commands:
+            for c in _collect_all(cmd):
+                if c not in all_cmds:
+                    all_cmds.append(c)
+
+        for cog in self.bot.cogs.values():
+            if getattr(cog, "qualified_name", "").lower() in ["errorhandler"]:
+                continue
+            for cmd in cog.get_commands():
+                for c in _collect_all(cmd):
+                    if c not in all_cmds:
+                        all_cmds.append(c)
+
+        category_distribution: dict[str, list[str]] = {}
+        missing_from_help: list[str] = []
+        missing_descriptions: list[str] = []
+        music_contamination: list[str] = []
+        vouch_commands: list[str] = []
+        bill_commands: list[str] = []
+
+        for c in all_cmds:
+            tag = self._resolve_category(c)
+            if not tag:
+                missing_from_help.append(c.qualified_name)
+                continue
+            if tag not in category_distribution:
+                category_distribution[tag] = []
+            category_distribution[tag].append(c.qualified_name)
+
+            if not (c.description or c.help):
+                missing_descriptions.append(c.qualified_name)
+
+            # Check cross contamination
+            if tag == "🎵・MUSIC":
+                qname = c.qualified_name.lower()
+                cog_name = getattr(getattr(c, "cog", None), "qualified_name", "").lower()
+                if "ai" in qname or "gemini" in qname or cog_name not in ("music", ""):
+                    music_contamination.append(c.qualified_name)
+
+            if tag == "⭐・VOUCHES & REPUTATION":
+                vouch_commands.append(c.qualified_name)
+
+            if tag == "🧾・BLOX FRUITS SERVICE BILLS":
+                bill_commands.append(c.qualified_name)
+
+        return {
+            "total_registered": len(all_cmds),
+            "total_categorized": sum(len(cmds) for cmds in category_distribution.values()),
+            "missing_from_help": missing_from_help,
+            "category_distribution": category_distribution,
+            "missing_descriptions": missing_descriptions,
+            "music_contamination": music_contamination,
+            "vouch_commands": vouch_commands,
+            "bill_commands": bill_commands,
+            "is_complete": len(missing_from_help) == 0 and len(music_contamination) == 0,
+        }
 
 
 async def setup(bot: KyokaBot) -> None:
