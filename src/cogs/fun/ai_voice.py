@@ -23,6 +23,7 @@ from discord.ext import commands
 
 import static_ffmpeg
 import wavelink
+from src.ui.asset_manager import AssetManager
 from gtts import gTTS
 
 try:
@@ -227,8 +228,12 @@ class AIVoice(commands.Cog, name="AIVoice"):
             ),
             color=PURPLE,
         )
+        banner_file = AssetManager.attach_feature_banner(embed, "ai_banner")
         embed.set_footer(text=f"Requested by {ctx.author.display_name} • Neural AI Voice")
-        await ctx.send(embed=embed)
+        if banner_file:
+            await ctx.send(embed=embed, file=banner_file)
+        else:
+            await ctx.send(embed=embed)
 
     @aivoice_group.command(name="join", aliases=["connect"], description="Connect KYOKA to your current voice channel.")
     async def voice_join(self, ctx: CustomContext) -> None:

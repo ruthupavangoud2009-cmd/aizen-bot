@@ -37,9 +37,12 @@ class AutoEvents(commands.Cog):
         embed_group = self.bot.get_command("embed")
         if embed_group and isinstance(embed_group, commands.Group):
             if not embed_group.get_command("announce"):
-                cmd = self.embed_announce_cmd.copy()
-                cmd.cog = self
-                embed_group.add_command(cmd)
+                try:
+                    cmd = self.embed_announce_cmd.copy()
+                    cmd.cog = self
+                    embed_group.add_command(cmd)
+                except TypeError:
+                    pass
 
     async def cog_unload(self) -> None:
         """Detach dynamic announce command on cog unload."""

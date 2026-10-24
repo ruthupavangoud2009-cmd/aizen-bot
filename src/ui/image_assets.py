@@ -1,14 +1,20 @@
 """
-Kyoka 3.0 - Image Assets Registry
-Maintains centralized URLs and fallback assets for Aizen-themed embeds, tickets, and banners.
+Kyoka 3.0 - Image Assets Registry & Artwork Gateway
+Maintains centralized URLs and connects with AssetManager for localized Aizen artwork.
 """
 
 from __future__ import annotations
+
 import os
+from pathlib import Path
+from typing import Optional
+import discord
+
+from src.ui.asset_manager import AssetManager
 
 
 class ImageAssets:
-    """Configured and safe fallback image asset URLs."""
+    """Configured and safe fallback image asset URLs and local artwork files."""
 
     # Default URLs (can be overridden via environment variables)
     AIZEN_PORTRAIT: str = os.getenv(
@@ -40,3 +46,18 @@ class ImageAssets:
     def get_asset(cls, key: str, fallback: str = "") -> str:
         """Fetch asset by key or return fallback."""
         return getattr(cls, key.upper(), fallback)
+
+    @classmethod
+    def get_feature_banner_file(cls, feature_id: str) -> Optional[discord.File]:
+        """Fetch localized feature banner discord.File."""
+        return AssetManager.create_feature_file(feature_id)
+
+    @classmethod
+    def attach_feature_banner(cls, embed: discord.Embed, feature_id: str) -> Optional[discord.File]:
+        """Safely attach localized feature banner to an embed."""
+        return AssetManager.attach_feature_banner(embed, feature_id)
+
+    @classmethod
+    def attach_help_banner(cls, embed: discord.Embed, category_id: str) -> Optional[discord.File]:
+        """Safely attach localized category banner to an embed."""
+        return AssetManager.attach_help_banner(embed, category_id)

@@ -2,7 +2,7 @@
 Kyoka 3.0 - Help Embed Renderer
 Renders compact, beautiful Aizen-themed category lists, home panels, and detailed command cards.
 Adheres strictly to the 5-15 commands per page rule, showing descriptions, usage examples,
-aliases, and prefix/slash information.
+aliases, and prefix/slash information with localized feature artwork.
 """
 
 from __future__ import annotations
@@ -12,8 +12,19 @@ from typing import Any, Dict, List, Optional
 import discord
 
 from src.ui.theme import KyokaTheme
+from src.ui.asset_manager import AssetManager
+from src.ui.categories import CATEGORY_BY_TAG, get_category_by_query
 
 logger = logging.getLogger("Kyoka.UI.HelpRenderer")
+
+
+class KyokaHelpEmbed(discord.Embed):
+    """Subclass of discord.Embed that supports banner_file attribute without violating __slots__."""
+    __slots__ = ("banner_file",)
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.banner_file: Optional[discord.File] = None
 
 
 class HelpRenderer:
@@ -26,23 +37,35 @@ class HelpRenderer:
         total_commands: int,
         total_categories: int,
         guild_name: Optional[str] = None,
-    ) -> discord.Embed:
-        """Render the compact home console embed."""
-        embed = discord.Embed(
-            title=f"🌀 KYOKA 3.0 • Command Console",
+    ) -> KyokaHelpEmbed:
+        """Render the compact home console embed with high-res Aizen hero banner."""
+        embed = KyokaHelpEmbed(
+            title="⛩️ KYOKA 3.0 • Command Console",
             description=(
-                f"Welcome to **KYOKA 3.0 (Aizen Edition)**{f' in **{guild_name}**' if guild_name else ''}.\n"
-                f"A production-grade Discord bot featuring high-fidelity music, enterprise tickets, "
-                f"anti-nuke, AI, and advanced server utilities.\n\n"
-                f"> **Prefix:** `{prefix}` (Also accepts mentions & slash commands)\n"
-                f"> **Total Commands:** `{total_commands}` registered across `{total_categories}` categories\n"
-                f"> **Quick Start:** Select a category below or type `{prefix}help <command>`"
+                f"*\"Power isn't given. It's taken.\"* — **Aizen**\n\n"
+                f"> **More Than a Bot, It's a Presence.**{f' Serving **{guild_name}**.' if guild_name else ''}\n"
+                f"> Built for high-performance communities: high-fidelity audio, Blox Fruits AI,\n"
+                f"> automated moderation, enterprise tickets, and community entertainment.\n\n"
+                f"⚡ **Quick Start:**\n"
+                f"• **Get Started:** Type `{prefix}help` to open the command menu\n"
+                f"• **Use Prefix:** All commands work with `{prefix}` (e.g. `{prefix}play`, `{prefix}ai`)\n"
+                f"• **Explore Categories:** Use the interactive menu or `{prefix}hca` for full archive\n"
+                f"• **Need Support?** Type `{prefix}ticket` or join our official support server"
             ),
             color=KyokaTheme.PRIMARY,
         )
 
         embed.add_field(
-            name="📚 Core Navigation",
+            name="📊 System Status & Metrics",
+            value=(
+                f"• **Prefix:** `{prefix}` | **Slash:** `/[cmd]`\n"
+                f"• **Available Commands:** `{total_commands}` across `{total_categories}` categories"
+            ),
+            inline=False,
+        )
+
+        embed.add_field(
+            name="✨ Core Navigation",
             value=(
                 "• Use the **Category Dropdown** below to inspect a module.\n"
                 "• Use **◀️ / ▶️** buttons to page through commands (5–15 per page).\n"
@@ -50,6 +73,9 @@ class HelpRenderer:
             ),
             inline=False,
         )
+
+        banner_file = AssetManager.attach_help_banner(embed, "home")
+        embed.banner_file = banner_file
 
         if bot_user and bot_user.display_avatar:
             embed.set_thumbnail(url=bot_user.display_avatar.url)
@@ -64,19 +90,26 @@ class HelpRenderer:
         page: int,
         total_pages: int,
         prefix: str,
-    ) -> discord.Embed:
+    ) -> KyokaHelpEmbed:
         """
         Render a category page with 5-15 commands, each displaying:
         - Name & Aliases
         - Short description
         - Usage example
         - Prefix / Slash badge
+        - Distinct category artwork
         """
-        embed = discord.Embed(
+        clean_title = category_name.split("・", 1)[-1].strip() if "・" in category_name else category_name
+        embed = KyokaHelpEmbed(
             title=f"🌀 {category_name.upper()} MODULE",
             description=f"Showing page **{page}** of **{max(1, total_pages)}** • Use `{prefix}help <cmd>` for deep inspect.",
             color=KyokaTheme.PRIMARY,
         )
+
+        cat_meta = CATEGORY_BY_TAG.get(category_name) or get_category_by_query(clean_title)
+        image_key = cat_meta.image_key if cat_meta else "general"
+        banner_file = AssetManager.attach_help_banner(embed, image_key)
+        embed.banner_file = banner_file
 
         if not command_entries:
             embed.description = "*No commands available or authorized in this category.*"

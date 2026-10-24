@@ -18,6 +18,7 @@ from discord.ext import commands
 
 logger = logging.getLogger("Kyoka.BloxFruitsAI")
 PURPLE = discord.Color.from_rgb(111, 67, 190)
+from src.ui.asset_manager import AssetManager
 
 # ─────────────────────────────────────────────────────────────────────────────
 # BLOX FRUITS ENCYCLOPEDIA (OFFLINE 100% ACCURATE KNOWLEDGE BASE)
@@ -407,9 +408,12 @@ class BloxFruitsAI(commands.Cog):
                 color=PURPLE,
                 timestamp=discord.utils.utcnow()
             )
-            embed.set_thumbnail(url="https://media.giphy.com/media/d4zHnLJcd45n663K/giphy.gif")
+            banner_file = AssetManager.attach_feature_banner(embed, "blox_fruits_ai")
             embed.set_footer(text=f"Requested by {ctx.author.display_name} • KYOKA Blox Fruits Engine")
-            await ctx.reply(embed=embed, mention_author=False)
+            if banner_file:
+                await ctx.reply(embed=embed, file=banner_file, mention_author=False)
+            else:
+                await ctx.reply(embed=embed, mention_author=False)
 
     # ─── 2. +fruitinfo <fruit> ────────────────────────────────────────────────
 
