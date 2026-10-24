@@ -86,6 +86,15 @@ def err_text(exc: BaseException) -> str:
     return f"{name}: {text}"
 
 
+def _default_user_id() -> str:
+    """Resolve the Discord client ID snowflake for Lavalink websocket handshakes."""
+    from src.core.config import Config
+    client_id = getattr(Config, "CLIENT_ID", None)
+    if client_id:
+        return str(client_id)
+    return "1562505487214321714"
+
+
 def candidates() -> list[tuple[str, str]]:
     """Return the primary Lavalink URI first, then any configured fallbacks."""
     from src.core.config import Config
@@ -98,9 +107,18 @@ def candidates() -> list[tuple[str, str]]:
 
     fallback_str = getattr(Config, "LAVALINK_FALLBACK_URIS", "") or ""
     for raw in fallback_str.split(","):
-        uri = raw.strip()
-        if uri and all(uri != known for known, _ in result):
-            result.append((uri, password))
+        entry = raw.strip()
+        if not entry:
+            continue
+        if "|" in entry:
+            parts = entry.split("|", 1)
+            f_uri = parts[0].strip()
+            f_pw = parts[1].strip() or password
+        else:
+            f_uri = entry
+            f_pw = password
+        if f_uri and all(f_uri != known for known, _ in result):
+            result.append((f_uri, f_pw))
 
     return result
 
@@ -337,7 +355,7 @@ async def check_websocket(
     uri: str,
     password: str,
     timeout: float = 8.0,
-    user_id: str = "100000000000000001",
+    user_id: Optional[str] = None,
 ) -> tuple[bool, str]:
     """
     Verify that a node accepts a WebSocket upgrade before we rely on it.
@@ -350,9 +368,10 @@ async def check_websocket(
     The ``User-Id`` header is mandatory: some nodes reject the handshake with
     401 when it is missing, even though the password is correct.
     """
+    effective_user_id = str(user_id or _default_user_id())
     headers = {
         "Authorization": password,
-        "User-Id": str(user_id),
+        "User-Id": effective_user_id,
         "Client-Name": "Wavelink/3.5.2",
     }
     try:
@@ -375,7 +394,7 @@ async def probe_candidate_node(
     uri: str,
     password: str,
     timeout: float = 8.0,
-    user_id: str = "100000000000000001",
+    user_id: Optional[str] = None,
 ) -> tuple[bool, str]:
     """
     Fully verify a Lavalink node: websocket 'ready' + REST + YouTube source.
@@ -386,11 +405,10 @@ async def probe_candidate_node(
     ``ready`` op. A node that answers the handshake but never sends ``ready``
     cannot play anything.
     """
+    effective_user_id = str(user_id or _default_user_id())
     headers = {
         "Authorization": password,
-        # Lavalink closes the socket without this header, and it also rejects
-        # non-snowflake values, so a realistic id is used for the probe.
-        "User-Id": str(user_id),
+        "User-Id": effective_user_id,
         "Client-Name": "Wavelink/3.5.2",
     }
     try:
@@ -459,6 +477,13 @@ async def connect_lavalink_node(
     op AND its REST API answers - a node whose REST is hung cannot play music.
     """
     from src.core.config import Config
+
+    if bot is None:
+        try:
+            from src.main import get_current_bot
+            bot = get_current_bot()
+        except Exception:
+            bot = None
 
     failures: list[str] = []
     tried: set[str] = set()

@@ -77,7 +77,23 @@ async def execute_play(cog: Music, ctx: commands.Context, query: Optional[str] =
         await player.connect_voice(voice_channel)
     except Exception as e:
         logger.warning(f"Voice connect error in guild {ctx.guild.id}: {e}")
+        from src.core.lavalink import LavalinkUnavailable
         agent = getattr(cog, "agent", None)
+        if isinstance(e, LavalinkUnavailable):
+            if agent:
+                card = agent.build_maintenance_card(
+                    title="Audio Streaming Node Reconnecting",
+                    issue_desc=f"`{e}`",
+                    action_taken="Re-synchronizing primary and fallback Lavalink clusters.",
+                    advice="The audio engine is establishing connection. Please retry your song in a few seconds.",
+                )
+                await send_container_response(ctx, card)
+            else:
+                container = KyroContainer(accent_color=None)
+                container.add_text(f"⚠️ **Audio Streaming Engine Offline:** `{e}`\n> Reconnecting cluster nodes...")
+                await send_container_response(ctx, container)
+            return
+
         if agent:
             # A dead audio engine is a different failure than a voice gateway
             # problem: no amount of voice state purging will make the node serve

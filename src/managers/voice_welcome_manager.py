@@ -15,6 +15,7 @@ import time
 from typing import TYPE_CHECKING, Any, Optional
 
 import discord
+import wavelink
 from gtts import gTTS
 
 if TYPE_CHECKING:
@@ -22,6 +23,18 @@ if TYPE_CHECKING:
     from src.database.postgres import PostgresDatabase
 
 logger = logging.getLogger("Kyoka.Managers.VoiceWelcome")
+
+
+def _is_vc_connected(vc: Any) -> bool:
+    """Safe connection check that supports both discord.VoiceClient and wavelink.Player."""
+    if not vc:
+        return False
+    if hasattr(vc, "is_connected") and callable(vc.is_connected):
+        try:
+            return vc.is_connected()
+        except Exception:
+            pass
+    return bool(getattr(vc, "connected", False))
 
 
 class VoiceWelcomeManager:
@@ -148,11 +161,15 @@ class VoiceWelcomeManager:
 
     def is_music_active(self, guild: discord.Guild) -> bool:
         """Check if music is currently active or playing in the guild."""
-        if not guild.voice_client or not guild.voice_client.is_connected():
+        if not _is_vc_connected(guild.voice_client):
             return False
 
+        # If voice client is a wavelink.Player, music owns the connection
+        if isinstance(guild.voice_client, wavelink.Player):
+            return True
+
         # Check if voice client itself is currently transmitting audio
-        if guild.voice_client.is_playing():
+        if hasattr(guild.voice_client, "is_playing") and guild.voice_client.is_playing():
             return True
 
         # Check music controller player state if available
@@ -161,6 +178,8 @@ class VoiceWelcomeManager:
             player = music_ctrl.get_player(guild.id)
             if player:
                 if getattr(player, "is_playing", False) or getattr(player, "current_track", None) is not None:
+                    return True
+                if getattr(player, "queue", []):
                     return True
                 if getattr(player, "is_247", False):
                     return True
@@ -334,6 +353,9 @@ class VoiceWelcomeManager:
 
                 # Connect or reuse voice client if not used by music
                 if guild.voice_client:
+                    if isinstance(guild.voice_client, wavelink.Player):
+                        logger.debug("[VoiceWelcome] Voice client is wavelink.Player; deferring greeting.")
+                        return False
                     if guild.voice_client.channel.id != channel.id:
                         # Connected to different channel; check if music is using it
                         if self.is_music_active(guild):
@@ -344,7 +366,7 @@ class VoiceWelcomeManager:
                     voice_client = await channel.connect(timeout=10.0, reconnect=False)
                     we_connected = True
 
-                if not voice_client or not voice_client.is_connected():
+                if not voice_client or not voice_client.is_connected() or not isinstance(voice_client, discord.VoiceClient):
                     return False
 
                 # Play audio asynchronously
@@ -380,7 +402,7 @@ class VoiceWelcomeManager:
                         pass
 
                 # Disconnect only if we established the connection and music didn't claim it
-                if we_connected and voice_client and voice_client.is_connected():
+                if we_connected and _is_vc_connected(voice_client):
                     if not self.is_music_active(guild):
                         try:
                             await voice_client.disconnect(force=True)

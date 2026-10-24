@@ -123,9 +123,12 @@ class Config:
     DISCORD_PROXY: str | None = _clean_proxy_url(os.getenv("DISCORD_PROXY"))
 
     # Lavalink / Audio Settings
-    LAVALINK_URI: str = os.getenv("LAVALINK_URI", "http://lava2.kasawa.pro:2334").strip()
-    LAVALINK_PASSWORD: str = os.getenv("LAVALINK_PASSWORD", "youshallnotpass").strip()
-    LAVALINK_FALLBACK_URIS: str = os.getenv("LAVALINK_FALLBACK_URIS", "").strip()
+    LAVALINK_URI: str = os.getenv("LAVALINK_URI", "http://lavalinkv4.serenetia.com:80").strip()
+    LAVALINK_PASSWORD: str = os.getenv("LAVALINK_PASSWORD", "https://seretia.link/discord").strip()
+    LAVALINK_FALLBACK_URIS: str = os.getenv(
+        "LAVALINK_FALLBACK_URIS",
+        "https://lavalinkv4.serenetia.com:443|https://seretia.link/discord,https://lavalink.nazha.online:443|nazhafreelava"
+    ).strip()
     LAVALINK_AUTO_DISCOVER: bool = os.getenv("LAVALINK_AUTO_DISCOVER", "1").lower() in ("1", "true", "yes")
     LAVALINK_PUBLIC_LIST_URL: str = os.getenv(
         "LAVALINK_PUBLIC_LIST_URL",

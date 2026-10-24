@@ -347,6 +347,29 @@ class Music(commands.Cog):
             logger.debug(f"Guild {guild.id}: Skipping auto_connect_voice because Meeting is active/connecting.")
             return
 
+        # Voice Client Collision Safety: Do not connect music if AI voice is using voice
+        ai_voice_cog = self.bot.get_cog("AIVoice")
+        if ai_voice_cog:
+            vc = guild.voice_client
+            if vc and isinstance(vc, discord.VoiceClient) and not isinstance(vc, wavelink.Player):
+                logger.debug(f"Guild {guild.id}: Skipping auto_connect_voice because non-music VoiceClient is active.")
+                return
+
+        # Check if a Lavalink node is online before auto-connecting
+        import wavelink
+        has_node = False
+        try:
+            for n in wavelink.Pool.nodes.values():
+                if n.status == wavelink.NodeStatus.CONNECTED:
+                    has_node = True
+                    break
+        except Exception:
+            pass
+
+        if not has_node:
+            logger.debug(f"Guild {guild.id}: Skipping auto_connect_voice because no Lavalink node is currently online.")
+            return
+
         try:
             player = self.controller.get_or_create_player(guild)
             if player.voice_client and getattr(player.voice_client, "connected", False):
@@ -640,6 +663,57 @@ class Music(commands.Cog):
     async def stay_247(self, ctx: CustomContext) -> None:
         """Toggle 24/7 voice stay mode."""
         await execute_stay(self, ctx)
+
+    @commands.hybrid_command(
+        name="musicdiag",
+        aliases=["audiodiag", "mudiag"],
+        description="Run real-time diagnostics on the music audio engine, Lavalink nodes, and voice gateway.",
+    )
+    async def musicdiag(self, ctx: CustomContext) -> None:
+        """Inspect real-time health of Lavalink nodes, voice gateway, and Opus engine."""
+        import wavelink
+        from src.core.lavalink import candidates, probe_node
+
+        node_info = "None"
+        node_status = "Disconnected"
+        rest_status = "Unknown"
+        try:
+            node = wavelink.Pool.get_node()
+            if node:
+                node_info = getattr(node, "uri", "Unknown")
+                node_status = getattr(node.status, "name", str(node.status))
+                rest_ok = await probe_node(node, timeout=3.0)
+                rest_status = "Responsive (HTTP 200)" if rest_ok else "Unresponsive"
+        except Exception as e:
+            node_status = f"Error: {e}"
+
+        configured_nodes = candidates()
+        opus_loaded = discord.opus.is_loaded()
+        vc = ctx.guild.voice_client if ctx.guild else None
+        vc_type = type(vc).__name__ if vc else "None"
+        vc_connected = getattr(vc, "is_connected", lambda: getattr(vc, "connected", False))() if vc else False
+        vc_channel = vc.channel.name if (vc and getattr(vc, "channel", None)) else "None"
+
+        player = self.controller.get_player(ctx.guild.id) if ctx.guild else None
+        player_playing = player.is_playing if player else False
+        player_queue_len = len(player.queue) if player else 0
+
+        container = KyroContainer(accent_color=0x7C3AED)
+        container.add_section(
+            content=(
+                "**🎵 KYOKA Audio Engine & Voice Diagnostics**\n\n"
+                f"**Active Lavalink Node:** `{node_info}`\n"
+                f"**Node WebSocket State:** `{node_status}`\n"
+                f"**Node REST API:** `{rest_status}`\n"
+                f"**Configured Cluster Nodes:** `{len(configured_nodes)} configured`\n\n"
+                f"**Discord Opus Engine:** `{'Loaded & Active' if opus_loaded else 'Not Loaded'}`\n"
+                f"**Voice Client Type:** `{vc_type}`\n"
+                f"**Voice Channel:** `{vc_channel}` (Connected: `{vc_connected}`)\n"
+                f"**Playback State:** `{'Streaming' if player_playing else 'Idle'}`\n"
+                f"**Queue Depth:** `{player_queue_len} track(s)`"
+            )
+        )
+        await send_container_response(ctx, container)
 
     # ── Universal Music Cog Error Shield ──
 

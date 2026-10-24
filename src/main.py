@@ -35,6 +35,8 @@ if sys.platform == "win32" and hasattr(os, "add_dll_directory"):
 
 if not discord.opus.is_loaded():
     possible_opus_paths = [
+        str(Path(sys.prefix) / "Lib/site-packages/discord/bin/libopus-0.x64.dll"),
+        str(Path(sys.prefix) / "Lib/site-packages/discord/bin/libopus-0.x86.dll"),
         str(BASE_DIR / "opus.dll"),
         str(BASE_DIR / "libopus.so.0"),
         str(BASE_DIR / "libopus.so"),
@@ -47,6 +49,7 @@ if not discord.opus.is_loaded():
         "libopus.so.0",
         "libopus.so",
         "libopus-0.dll",
+        "libopus-0.x64.dll",
     ]
     import ctypes.util
     opus_lib = ctypes.util.find_library("opus")

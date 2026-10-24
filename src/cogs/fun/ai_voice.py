@@ -22,6 +22,7 @@ from discord import app_commands
 from discord.ext import commands
 
 import static_ffmpeg
+import wavelink
 from gtts import gTTS
 
 try:
@@ -41,6 +42,19 @@ try:
     static_ffmpeg.add_paths()
 except Exception:
     pass
+
+
+def _is_vc_connected(vc: Any) -> bool:
+    """Safe connection check that supports both discord.VoiceClient and wavelink.Player."""
+    if not vc:
+        return False
+    if hasattr(vc, "is_connected") and callable(vc.is_connected):
+        try:
+            return vc.is_connected()
+        except Exception:
+            pass
+    return bool(getattr(vc, "connected", False))
+
 
 # Ensure Discord Opus is loaded on Windows
 if not discord.opus.is_loaded():
@@ -132,6 +146,20 @@ class AIVoice(commands.Cog, name="AIVoice"):
         key = self._guild_voices.get(guild_id, "aizen")
         return AVAILABLE_VOICES.get(key, AVAILABLE_VOICES["aizen"])["id"]
 
+    def _is_music_active(self, guild: discord.Guild) -> bool:
+        """Check if guild voice client is owned or actively used by Music subsystem."""
+        vc = guild.voice_client
+        if not vc:
+            return False
+        if isinstance(vc, wavelink.Player):
+            return True
+        music_ctrl = getattr(self.bot, "_music_controller", None)
+        if music_ctrl and hasattr(music_ctrl, "get_player"):
+            player = music_ctrl.get_player(guild.id)
+            if player and (player.is_playing or player.queue or getattr(player, "is_247", False)):
+                return True
+        return False
+
     async def _synthesize_audio(self, text: str, voice_id: str, output_path: str) -> bool:
         """Synthesize text to mp3 using Edge-TTS or gTTS fallback."""
         if HAS_EDGE_TTS:
@@ -154,6 +182,10 @@ class AIVoice(commands.Cog, name="AIVoice"):
 
     async def _play_audio_file(self, voice_client: discord.VoiceClient, file_path: str) -> None:
         """Play local audio file through VoiceClient with completion await."""
+        if not isinstance(voice_client, discord.VoiceClient):
+            logger.warning("Attempted to play audio file on non-discord.VoiceClient instance.")
+            return
+
         ffmpeg_bin = shutil.which("ffmpeg") or "ffmpeg"
         source = discord.FFmpegPCMAudio(file_path, executable=ffmpeg_bin)
         done_event = asyncio.Event()
@@ -215,8 +247,18 @@ class AIVoice(commands.Cog, name="AIVoice"):
             return await ctx.send_error(f"I need **Connect** and **Speak** permissions in {target_channel.mention}!")
 
         # Check if voice client exists
+        if self._is_music_active(ctx.guild):
+            return await ctx.send_error(
+                "A Music session is currently active in this server. "
+                "Stop music with `+stop` before connecting AI Voice."
+            )
+
         vc = ctx.guild.voice_client
-        if vc and vc.is_connected():
+        if _is_vc_connected(vc):
+            if isinstance(vc, wavelink.Player):
+                return await ctx.send_error(
+                    "A Music player is currently in voice. Use `+stop` or `+leave` before using AI Voice."
+                )
             if vc.channel.id == target_channel.id:
                 return await ctx.send_success(f"Already connected to {target_channel.mention}!")
             await vc.move_to(target_channel)
@@ -235,11 +277,17 @@ class AIVoice(commands.Cog, name="AIVoice"):
         if not ctx.guild:
             return
         vc = ctx.guild.voice_client
-        if not vc or not vc.is_connected():
+        if not _is_vc_connected(vc):
             return await ctx.send_error("I am not connected to any voice channel in this server.")
 
+        # Guard: never disconnect or crash a Music wavelink player
+        if isinstance(vc, wavelink.Player):
+            return await ctx.send_error(
+                "KYOKA is connected to a Music session. Use `+leave` or `+stop` to disconnect music."
+            )
+
         # Stop playback and cleanup
-        if vc.is_playing():
+        if hasattr(vc, "is_playing") and vc.is_playing():
             vc.stop()
         await vc.disconnect(force=True)
         await ctx.send_success("Disconnected from voice channel.")
@@ -256,8 +304,18 @@ class AIVoice(commands.Cog, name="AIVoice"):
         if len(text) > 400:
             text = text[:400] + "..."
 
+        if self._is_music_active(ctx.guild):
+            return await ctx.send_error(
+                "Music is currently active in this server. Please pause or stop music before using AI Voice TTS."
+            )
+
         vc = ctx.guild.voice_client
-        if not vc or not vc.is_connected():
+        if vc and isinstance(vc, wavelink.Player):
+            return await ctx.send_error(
+                "Cannot speak while Music player is connected. Use `+stop` first."
+            )
+
+        if not _is_vc_connected(vc):
             # Auto-join if author is in voice
             if ctx.author.voice and ctx.author.voice.channel:
                 try:
@@ -281,7 +339,7 @@ class AIVoice(commands.Cog, name="AIVoice"):
         async def _speak_task() -> None:
             async with lock:
                 try:
-                    if vc and vc.is_connected():
+                    if _is_vc_connected(vc) and isinstance(vc, discord.VoiceClient):
                         await self._play_audio_file(vc, temp_path)
                 finally:
                     if os.path.exists(temp_path):
@@ -306,8 +364,18 @@ class AIVoice(commands.Cog, name="AIVoice"):
         if not question.strip():
             return await ctx.send_error("Please ask a question!")
 
+        if self._is_music_active(ctx.guild):
+            return await ctx.send_error(
+                "Music is currently active in this server. Please pause or stop music before using AI Voice TTS."
+            )
+
         vc = ctx.guild.voice_client
-        if not vc or not vc.is_connected():
+        if vc and isinstance(vc, wavelink.Player):
+            return await ctx.send_error(
+                "Cannot speak while Music player is connected. Use `+stop` first."
+            )
+
+        if not _is_vc_connected(vc):
             if ctx.author.voice and ctx.author.voice.channel:
                 try:
                     vc = await ctx.author.voice.channel.connect()
@@ -352,7 +420,7 @@ class AIVoice(commands.Cog, name="AIVoice"):
         async def _speak_task() -> None:
             async with lock:
                 try:
-                    if vc and vc.is_connected():
+                    if _is_vc_connected(vc) and isinstance(vc, discord.VoiceClient):
                         await self._play_audio_file(vc, temp_path)
                 finally:
                     if os.path.exists(temp_path):
@@ -431,7 +499,7 @@ class AIVoice(commands.Cog, name="AIVoice"):
         ffmpeg_bin = shutil.which("ffmpeg")
         opus_loaded = discord.opus.is_loaded()
         vc = ctx.guild.voice_client if ctx.guild else None
-        connected = vc.is_connected() if vc else False
+        connected = _is_vc_connected(vc)
         channel_name = vc.channel.name if (vc and vc.channel) else "None"
         ping = round(vc.latency * 1000) if (vc and hasattr(vc, "latency") and vc.latency) else "N/A"
 

@@ -21,6 +21,7 @@ from src.core.lavalink import (
     LAVALINK_OP_TIMEOUT,
     LAVALINK_PLAY_TIMEOUT,
     LAVALINK_RESOLVE_TIMEOUT,
+    LavalinkUnavailable,
     close_pool_nodes,
     connect_lavalink_node,
     err_text,
@@ -247,6 +248,7 @@ class GuildPlayer:
                     )
                 except Exception as e:
                     logger.error(f"On-demand Lavalink node connect error: {err_text(e)}")
+                    node = None
 
             # ── Node REST health probe ──
             # The Wavelink voice handshake only completes once the node answers the
@@ -268,6 +270,27 @@ class GuildPlayer:
                     node = wavelink.Pool.get_node()
                 except Exception:
                     node = None
+
+            # Critical validation before touching Discord voice gateway:
+            # If no node is connected, calling channel.connect(cls=wavelink.Player) puts the bot in VC
+            # with an orange warning indicator [!] because Lavalink never opens the RTC session.
+            if not node or node.status != wavelink.NodeStatus.CONNECTED:
+                stale_vc = self.guild.voice_client
+                if stale_vc:
+                    self._disconnect_expected_until = time.monotonic() + 5.0
+                    try:
+                        await asyncio.wait_for(stale_vc.disconnect(force=True), timeout=LAVALINK_OP_TIMEOUT)
+                    except Exception:
+                        pass
+                try:
+                    self.bot._connection._remove_voice_client(self.guild.id)
+                except Exception:
+                    pass
+                self.voice_client = None
+                raise LavalinkUnavailable(
+                    "Audio streaming engine (Lavalink) is currently unreachable. "
+                    "Cannot establish voice audio connection without an active node."
+                )
 
             # Connect as Wavelink Player with automatic retry on temporary Discord gateway blip
             last_error: Optional[BaseException] = None
@@ -325,6 +348,19 @@ class GuildPlayer:
 
             if last_error is not None:
                 logger.error(f"Guild {self.guild.id}: Wavelink connect error: {last_error}")
+                # Ensure no lingering ghost connection exists on Discord's side
+                try:
+                    ghost_vc = self.guild.voice_client
+                    if ghost_vc:
+                        self._disconnect_expected_until = time.monotonic() + 5.0
+                        await asyncio.wait_for(ghost_vc.disconnect(force=True), timeout=LAVALINK_OP_TIMEOUT)
+                except Exception:
+                    pass
+                try:
+                    self.bot._connection._remove_voice_client(self.guild.id)
+                except Exception:
+                    pass
+                self.voice_client = None
                 if hasattr(self.bot, "sentinel") and self.bot.sentinel:
                     from src.sentinel.models import SubsystemType, IncidentSeverity
                     self.bot.sentinel.record_incident(
