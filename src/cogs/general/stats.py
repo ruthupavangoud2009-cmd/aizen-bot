@@ -121,7 +121,7 @@ class Stats(commands.Cog, name="General-Stats"):
         if Config.SUPPORT_URL:
             view.add_item(
                 discord.ui.Button(
-                    label="Support Server",
+                    label="Join Support Server",
                     url=Config.SUPPORT_URL,
                     style=discord.ButtonStyle.link,
                 )

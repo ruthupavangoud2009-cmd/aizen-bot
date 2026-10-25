@@ -85,14 +85,14 @@ CATEGORY_DESCRIPTIONS: dict[str, str] = {
     "🎫・TICKETS & SUPPORT": "Interactive support ticket panels, claims & automated transcripts",
     "🎭・REACTION ROLES": "Self-service role menus, reaction assignment & interactive panels",
     "🎉・GIVEAWAYS & EVENTS": "Giveaway creation, requirement validation, timers & winner rerolls",
-    "⭐・LEVELS & COMMUNITY": "XP rewards, rank cards, level-up announcements & leaderboards",
+    "⭐・LEVELS & COMMUNITY": "Optional XP progression (disabled by default), custom rank cards & leaderboards",
     "🎵・MUSIC": "High-fidelity audio playback, queues, volume, filters & 24/7 radio",
     "💤・AFK": "Status notices, AFK reason tracking, mentions & return alerts",
     "⭐・VOUCHES & REPUTATION": "Verified member vouches, Blox Fruits trust profiles & leaderboards",
     "🧾・BLOX FRUITS SERVICE BILLS": "Blox Fruits service invoices, itemized receipts, fruits & Robux payment",
     "🍎・BLOX FRUITS AI": "Specialized Blox Fruits AI, fruit guides, trade calculator & builds",
     "🎙️・AI VOICE": "Neural Text-To-Speech, voice channel interaction, AI speech responses & diagnostics",
-    "📊・LEVELING & LEADERBOARDS": "XP rewards, rank cards, level-up announcements & leaderboards",
+    "📊・LEVELING & LEADERBOARDS": "Optional XP progression (disabled by default), rank cards & leaderboards",
     "🤖・ARTIFICIAL INTELLIGENCE": "Aizen Gemini AI engine, 10 personalities & auto channels",
     "🖼️・IMAGES & AVATARS": "Anime reaction GIFs, avatar grabbers, banners & memes",
     "💬・SOCIAL & FUN": "Mini-games, truth-or-dare, relationship stats & trivia",
@@ -281,7 +281,7 @@ class HelpView(discord.ui.View):
         if Config.SUPPORT_URL:
             self.add_item(
                 discord.ui.Button(
-                    label="Support Server",
+                    label="Join Support Server",
                     url=Config.SUPPORT_URL,
                     style=discord.ButtonStyle.link,
                     row=2,

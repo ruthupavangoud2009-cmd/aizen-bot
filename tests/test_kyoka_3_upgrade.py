@@ -946,7 +946,8 @@ async def test_leveling_manager_math_and_cooldown():
     assert level_from_total_xp(50) == (1, 50, 155)
     assert level_from_total_xp(155) == (2, 0, 220)
 
-    # 2. Awarding message XP with cooldown
+    # 2. Awarding message XP with cooldown (opt-in enabled)
+    await mgr.set_guild_enabled(1, True)
     mock_db.fetch_one.return_value = None
     awarded, new_total_xp, new_level, leveled_up = await mgr.award_message_xp(guild_id=1, user_id=42)
     assert awarded is True

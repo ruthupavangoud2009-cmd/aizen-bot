@@ -11,7 +11,7 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger("Kyoka.Greetings")
 AIZEN_ART = os.getenv("AIZEN_IMAGE_URL", "").strip()
-SUPPORT_URL = "https://discord.gg/5DBQTQJa9"
+SUPPORT_URL = Config.SUPPORT_URL or "https://discord.gg/msH67hUx6G"
 
 
 def _valid_http_url(value: str) -> bool:
@@ -40,7 +40,7 @@ async def send_bot_mention_card(bot: KyokaBot, message: discord.Message) -> None
     view = discord.ui.View(timeout=None)
     if Config.INVITE_URL:
         view.add_item(discord.ui.Button(label="Invite KYOKA", style=discord.ButtonStyle.link, url=Config.INVITE_URL, emoji="✦"))
-    view.add_item(discord.ui.Button(label="Support Server", style=discord.ButtonStyle.link, url=SUPPORT_URL, emoji="💜"))
+    view.add_item(discord.ui.Button(label="Join Support Server", style=discord.ButtonStyle.link, url=SUPPORT_URL, emoji="💜"))
     try:
         await message.reply(embed=embed, view=view, mention_author=False)
     except (discord.HTTPException, discord.Forbidden):

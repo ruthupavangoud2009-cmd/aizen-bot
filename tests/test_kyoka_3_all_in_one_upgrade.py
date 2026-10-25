@@ -35,12 +35,12 @@ from src.managers.top_manager import TopManager
 # 1. PRESENCE & ACTIVITY TESTS
 # ─────────────────────────────────────────────────────────────────────────────
 
-def test_bot_initial_presence_is_online_with_kyoka_game():
-    """Verify default initial presence is configured as discord.Status.online and Playing game."""
+def test_bot_initial_presence_is_online_with_watching_activity():
+    """Verify default initial presence is configured as discord.Status.online and Watching activity."""
     bot = KyokaBot()
     assert bot.status == discord.Status.online
-    assert isinstance(bot.activity, discord.Game)
-    assert bot.activity.name == "KYOKA | The Ultimate Bot"
+    assert bot.activity.type == discord.ActivityType.watching
+    assert "servers" in bot.activity.name
 
 
 def test_no_legacy_listening_to_help_presence_remains():
@@ -57,8 +57,8 @@ def test_no_legacy_listening_to_help_presence_remains():
 
 
 @pytest.mark.asyncio
-async def test_rotate_presence_maintains_online_and_kyoka_game():
-    """Verify presence rotation task reliably enforces Online and 'KYOKA | The Ultimate Bot'."""
+async def test_rotate_presence_maintains_online_and_dynamic_watching():
+    """Verify presence rotation task reliably enforces Online and dynamic Watching presence."""
     bot = KyokaBot()
     bot.change_presence = AsyncMock()
 
@@ -68,8 +68,8 @@ async def test_rotate_presence_maintains_online_and_kyoka_game():
     kwargs = bot.change_presence.call_args[1]
     assert kwargs.get("status") == discord.Status.online
     activity = kwargs.get("activity")
-    assert isinstance(activity, discord.Game)
-    assert activity.name == "KYOKA | The Ultimate Bot"
+    assert activity.type == discord.ActivityType.watching
+    assert "servers" in activity.name
 
 
 # ─────────────────────────────────────────────────────────────────────────────

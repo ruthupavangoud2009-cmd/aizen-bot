@@ -27,7 +27,7 @@ class InviteView(discord.ui.View):
         if support_url:
             self.add_item(
                 discord.ui.Button(
-                    label="Support Server",
+                    label="Join Support Server",
                     style=discord.ButtonStyle.link,
                     url=support_url,
                 )
@@ -56,7 +56,7 @@ class Invite(commands.Cog):
             )
             return
 
-        support_url = Config.SUPPORT_URL or "https://discord.gg/kBKnvBVCj7"
+        support_url = Config.SUPPORT_URL or "https://discord.gg/msH67hUx6G"
 
         bot_avatar = self.bot.user.display_avatar.url if self.bot.user else None
         guilds_count = len(self.bot.guilds)

@@ -255,7 +255,7 @@ class BotEditView(discord.ui.View):
         prompt_card.add_section(
             content=(
                 "**Edit Bot Status**\n"
-                "> Type the new activity/status text in this channel (e.g. `KYOKA | The Ultimate Bot`).\n"
+                "> Type the new activity/status text in this channel (or `reset` to restore dynamic statistics).\n"
                 "> Type `cancel` to abort."
             )
         )
@@ -282,22 +282,23 @@ class BotEditView(discord.ui.View):
             return
 
         is_reset = text_val.lower() in ("reset", "default", "none")
-        target_text = "KYOKA | The Ultimate Bot" if is_reset else text_val
 
         try:
             self.bot.custom_status = None if is_reset else text_val
             if is_reset:
                 await self.bot.db.execute("DELETE FROM system_state WHERE key = 'bot_status';")
+                await self.bot.update_dynamic_presence()
+                target_text = "Dynamic Live Statistics (Watching over servers | members)"
             else:
                 await self.bot.db.execute(
                     "INSERT INTO system_state (key, value) VALUES ('bot_status', $1) ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value;",
                     text_val,
                 )
-
-            await self.bot.change_presence(
-                status=discord.Status.online,
-                activity=discord.Game(name=target_text),
-            )
+                await self.bot.change_presence(
+                    status=discord.Status.online,
+                    activity=discord.Game(name=text_val),
+                )
+                target_text = text_val
             success_card = KyokaContainer(accent_color=None)
             success_card.add_section(
                 content=(
@@ -341,7 +342,7 @@ class IdentityCog(commands.Cog, name="Developer-Identity"):
         current_name = bot_user.name if bot_user else "Kyoka"
 
         # Resolve current custom activity name
-        activity_str = "KYOKA | The Ultimate Bot"
+        activity_str = "Watching over servers | members"
         if self.bot.guilds and self.bot.guilds[0].me.activity:
             act = self.bot.guilds[0].me.activity
             activity_str = getattr(act, "name", str(act))
@@ -480,22 +481,23 @@ class IdentityCog(commands.Cog, name="Developer-Identity"):
         """Update bot presence status text."""
         clean_status = new_status.strip()
         is_reset = clean_status.lower() in ("reset", "default", "none")
-        target_text = "KYOKA | The Ultimate Bot" if is_reset else clean_status
 
         try:
             self.bot.custom_status = None if is_reset else clean_status
             if is_reset:
                 await self.bot.db.execute("DELETE FROM system_state WHERE key = 'bot_status';")
+                await self.bot.update_dynamic_presence()
+                target_text = "Dynamic Live Statistics (Watching over servers | members)"
             else:
                 await self.bot.db.execute(
                     "INSERT INTO system_state (key, value) VALUES ('bot_status', $1) ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value;",
                     clean_status,
                 )
-
-            await self.bot.change_presence(
-                status=discord.Status.online,
-                activity=discord.Game(name=target_text),
-            )
+                await self.bot.change_presence(
+                    status=discord.Status.online,
+                    activity=discord.Game(name=clean_status),
+                )
+                target_text = clean_status
             container = KyokaContainer(accent_color=None)
             container.add_section(
                 content=(

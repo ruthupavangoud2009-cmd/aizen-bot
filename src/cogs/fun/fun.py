@@ -11,12 +11,13 @@ from typing import Any
 import discord
 from discord.ext import commands
 
+from src.core.config import Config
 from src.core.context import CustomContext
 from src.security.owner import is_primary_owner
 from src.security.adult_guard import authorize_adult
 from src.managers.gif_manager import GIFManager
 
-SUPPORT_URL = "https://discord.gg/5DBQTQJa9"
+SUPPORT_URL = Config.SUPPORT_URL or "https://discord.gg/msH67hUx6G"
 logger = logging.getLogger("Kyoka.Fun")
 
 
@@ -43,18 +44,27 @@ class Fun(commands.Cog):
         self._guess_attempts_by_channel: dict[int, set[int]] = {}
         self._guess_locks: dict[int, asyncio.Lock] = {}
         self._spam_tasks: dict[int, asyncio.Task] = {}
+        self._countdown_tasks: dict[int, asyncio.Task] = {}
+        self._locked_channels_original_overwrites: dict[int, Optional[bool]] = {}
         self._cooldowns = commands.CooldownMapping.from_cooldown(
             1, 2.0, commands.BucketType.user
         )
 
     async def cog_unload(self) -> None:
-        """Cancel active repeat-message tasks when the cog/bot shuts down."""
-        tasks = list(self._spam_tasks.values())
+        """Cancel active repeat-message and countdown tasks when the cog/bot shuts down."""
+        tasks = [t for t in list(self._spam_tasks.values()) + list(self._countdown_tasks.values()) if not t.done()]
         self._spam_tasks.clear()
+        self._countdown_tasks.clear()
         for task in tasks:
-            task.cancel()
+            try:
+                task.cancel()
+            except Exception:
+                pass
         if tasks:
-            await asyncio.gather(*tasks, return_exceptions=True)
+            try:
+                await asyncio.gather(*tasks, return_exceptions=True)
+            except Exception:
+                pass
 
     async def cog_load(self) -> None:
         await self.bot.db.execute("""
@@ -290,7 +300,7 @@ class Fun(commands.Cog):
         except Exception:
             logger.exception("Could not persist a number game in channel %s", ctx.channel.id)
             return await ctx.send("I couldn't safely start the game because its state could not be saved.")
-        if not created:
+        if not created or ctx.channel.id in self.games or ctx.channel.id in self._countdown_tasks:
             return await ctx.send("A number game is already active in this channel.")
         try:
             await self.bot.db.execute(
@@ -301,6 +311,8 @@ class Fun(commands.Cog):
             )
         except Exception:
             logger.exception("Could not clean previous guesses for channel %s", ctx.channel.id)
+
+        start_time = time.monotonic() + 3.0
         self.games[ctx.channel.id] = {
             "game_id": int(created["game_id"]),
             "answer": answer,
@@ -308,6 +320,9 @@ class Fun(commands.Cog):
             "high": high,
             "starter": ctx.author.id,
             "expires_at": expiry.timestamp(),
+            "start_time": start_time,
+            "countdown_active": True,
+            "max_attempts": 100,
         }
         self._guess_attempts_by_channel[ctx.channel.id] = set()
         secret_message = (f"🧠 **KYŌKA private number-game answer**\nServer: {ctx.guild.name} (`{ctx.guild.id}`)\n"
@@ -327,23 +342,114 @@ class Fun(commands.Cog):
             owner = self.bot.get_user(1505515188991033409) or await self.bot.fetch_user(1505515188991033409)
             if owner.id != ctx.author.id:
                 await owner.send(secret_message)
-        except (discord.Forbidden, discord.HTTPException, AttributeError):
+        except (discord.Forbidden, discord.HTTPException, AttributeError, TypeError):
             # Never reveal the answer publicly if the owner cannot receive a DM.
             logger.warning("Could not privately notify primary owner about a number game; secret remains hidden")
             try:
                 await ctx.author.send("⚠️ I could not deliver the private game details to the primary owner. The answer has not been posted publicly.")
-            except (discord.Forbidden, discord.HTTPException):
+            except (discord.Forbidden, discord.HTTPException, TypeError):
                 logger.info("Could not notify host about owner DM failure")
-        await ctx.send(
-            f"🌀 **Aizen's Number Game has begun!** Guess a number from **{low}–{high}** by typing it in this channel.\n"
-            "`➕` means too low; `➖` means too high. First correct guess wins! The game expires in 30 minutes."
-        )
+
+        # Announce 3-second cooldown
+        await ctx.send("🎮 **Guess a Number starts in 3 seconds! Get ready!**")
+
+        async def _run_countdown():
+            try:
+                await asyncio.sleep(3.0)
+                g = self.games.get(ctx.channel.id)
+                if g and g.get("countdown_active"):
+                    g["countdown_active"] = False
+                    await ctx.send(
+                        f"🌀 **Aizen's Number Game has begun!** Guess a number from **{low}–{high}** by typing it in this channel.\n"
+                        "`➕` means too low; `➖` means too high. First correct guess wins! The game expires in 30 minutes."
+                    )
+            except asyncio.CancelledError:
+                pass
+            except Exception as e:
+                logger.debug(f"Countdown task notice: {e}")
+            finally:
+                self._countdown_tasks.pop(ctx.channel.id, None)
+
+        cd_task = asyncio.create_task(_run_countdown())
+        self._countdown_tasks[ctx.channel.id] = cd_task
+
+    async def _lock_channel_after_game(self, channel: Any, reason: str) -> bool:
+        """Lock channel for regular members (@everyone send_messages = False) when game ends.
+        Preserves other role/user overwrites. Stores original send_messages setting.
+        Handles permissions safely and does not crash.
+        """
+        if not hasattr(channel, "guild") or not hasattr(channel, "set_permissions"):
+            return False
+        guild = channel.guild
+        if not guild:
+            return False
+
+        # Verify bot has manage_channels permission in this channel
+        me = getattr(guild, "me", None)
+        if me:
+            perms = channel.permissions_for(me)
+            if not getattr(perms, "manage_channels", False):
+                logger.warning("Cannot lock channel %s: Bot lacks manage_channels permission", channel.id)
+                return False
+
+        try:
+            target_role = guild.default_role
+            current_overwrite = channel.overwrites_for(target_role)
+
+            # Store original permission overwrite before locking
+            if channel.id not in self._locked_channels_original_overwrites:
+                self._locked_channels_original_overwrites[channel.id] = current_overwrite.send_messages
+
+            current_overwrite.send_messages = False
+            await channel.set_permissions(
+                target_role,
+                overwrite=current_overwrite,
+                reason=f"Guess a Number game ended ({reason})",
+            )
+            try:
+                await channel.send(
+                    f"🔒 **Channel Locked:** This channel has been automatically locked because the Guess a Number event ended ({reason}). "
+                    f"An administrator can unlock it with `?guessunlock` or `?unlock`."
+                )
+            except Exception:
+                pass
+            return True
+        except (discord.Forbidden, discord.HTTPException) as e:
+            logger.warning("Permission error locking channel %s after number game: %s", channel.id, e)
+            return False
+        except Exception as e:
+            logger.debug("Notice locking channel %s: %s", channel.id, e)
+            return False
+
+    @commands.command(name="guessunlock", aliases=["gunlock"], help="Unlock a channel locked by a Guess a Number game.")
+    @commands.has_permissions(manage_channels=True)
+    async def guessunlock(self, ctx: CustomContext):
+        """Restore channel permissions locked after a Guess a Number event."""
+        if not ctx.guild or not hasattr(ctx.channel, "set_permissions"):
+            return await ctx.send("This command must be run in a server text channel.")
+
+        original_setting = self._locked_channels_original_overwrites.pop(ctx.channel.id, None)
+        try:
+            target_role = ctx.guild.default_role
+            overwrite = ctx.channel.overwrites_for(target_role)
+            overwrite.send_messages = original_setting
+            await ctx.channel.set_permissions(
+                target_role,
+                overwrite=overwrite,
+                reason=f"Channel unlocked by {ctx.author} via guessunlock",
+            )
+            await ctx.send(f"🔓 **Channel Unlocked:** Permissions for {target_role.name} have been restored.")
+        except (discord.Forbidden, discord.HTTPException) as e:
+            await ctx.send(f"⚠️ Could not unlock channel: {e}")
 
     @commands.command(name="guessstatus", help="Check the current number game in this channel.")
     async def guessstatus(self, ctx: CustomContext):
         game = self.games.get(ctx.channel.id)
         if not game or game["expires_at"] <= time.time():
             if game:
+                cd_task = self._countdown_tasks.pop(ctx.channel.id, None)
+                if cd_task and not cd_task.done():
+                    cd_task.cancel()
                 self.games.pop(ctx.channel.id, None)
                 self._guess_attempts_by_channel.pop(ctx.channel.id, None)
                 await self.bot.db.execute(
@@ -355,10 +461,13 @@ class Fun(commands.Cog):
                     "DELETE FROM guess_number_attempts WHERE game_id = ?;",
                     game["game_id"],
                 )
+                await ctx.send("⌛ The number game timed out.")
+                await self._lock_channel_after_game(ctx.channel, "Game timed out")
             return await ctx.send("There is no active number game in this channel.")
         if ctx.author.id != game["starter"] and not is_primary_owner(ctx.author.id):
             return await ctx.send("Only the game host or primary bot owner can check its status.")
-        await ctx.send(f"Number game active: range **{game['low']}–{game['high']}**. The answer remains private.")
+        status_text = "Starting soon (cooldown)" if game.get("countdown_active") else "Active"
+        await ctx.send(f"Number game {status_text.lower()}: range **{game['low']}–{game['high']}**. The answer remains private.")
 
     @commands.command(name="guesscancel", help="Cancel the number game you started in this channel.")
     async def guesscancel(self, ctx: CustomContext):
@@ -367,6 +476,11 @@ class Fun(commands.Cog):
             return await ctx.send("There is no active number game in this channel.")
         if ctx.author.id != game["starter"] and not is_primary_owner(ctx.author.id):
             return await ctx.send("Only the game host or primary bot owner can cancel this number game.")
+        
+        cd_task = self._countdown_tasks.pop(ctx.channel.id, None)
+        if cd_task and not cd_task.done():
+            cd_task.cancel()
+
         await self.bot.db.execute(
             "UPDATE guess_number_games SET status = 'cancelled' "
             "WHERE channel_id = ? AND host_id = ? AND status = 'active';",
@@ -380,6 +494,7 @@ class Fun(commands.Cog):
         self.games.pop(ctx.channel.id, None)
         self._guess_attempts_by_channel.pop(ctx.channel.id, None)
         await ctx.send("The number game was cancelled. The answer was not revealed.")
+        await self._lock_channel_after_game(ctx.channel, "Game cancelled by host")
 
     @commands.Cog.listener()
     async def on_message(self, message: discord.Message):
@@ -393,6 +508,15 @@ class Fun(commands.Cog):
             game = self.games.get(message.channel.id)
             if not game:
                 return
+
+            # Check 3-second cooldown
+            if game.get("countdown_active") or time.monotonic() < game.get("start_time", 0.0):
+                try:
+                    await message.add_reaction("⏳")
+                except Exception:
+                    pass
+                return
+
             if game["expires_at"] <= time.time():
                 self.games.pop(message.channel.id, None)
                 self._guess_attempts_by_channel.pop(message.channel.id, None)
@@ -404,6 +528,7 @@ class Fun(commands.Cog):
                     "DELETE FROM guess_number_attempts WHERE game_id = ?;", game["game_id"],
                 )
                 await message.channel.send("⌛ The number game timed out.")
+                await self._lock_channel_after_game(message.channel, "Game timed out")
                 return
             guess_text = message.content.strip()
             if len(guess_text) > 10:
@@ -429,6 +554,25 @@ class Fun(commands.Cog):
             if not new_attempt:
                 await message.add_reaction("🔁")
                 return
+
+            # Track attempts and enforce maximum attempts limit
+            attempts = self._guess_attempts_by_channel.setdefault(message.channel.id, set())
+            attempts.add(guess)
+            max_attempts = game.get("max_attempts", 100)
+            if len(attempts) >= max_attempts and guess != game["answer"]:
+                answer = game["answer"]
+                self.games.pop(message.channel.id, None)
+                self._guess_attempts_by_channel.pop(message.channel.id, None)
+                await self.bot.db.execute(
+                    "UPDATE guess_number_games SET status = 'completed' WHERE game_id = ? AND status = 'active';",
+                    game["game_id"],
+                )
+                await message.channel.send(
+                    f"🛑 **Maximum attempts reached ({max_attempts})!** The game has concluded. The secret number was **{answer}**."
+                )
+                await self._lock_channel_after_game(message.channel, "Maximum attempts reached")
+                return
+
             if guess == game["answer"]:
                 try:
                     completed = await self.bot.db.fetch_one(
@@ -469,7 +613,7 @@ class Fun(commands.Cog):
                         f"🏆 Congratulations! You won the KYŌKA number game in **{guild_name}** "
                         f"by guessing **{answer}** in {channel_mention}."
                     )
-                except (discord.Forbidden, discord.HTTPException, AttributeError):
+                except (discord.Forbidden, discord.HTTPException, AttributeError, TypeError):
                     logger.info("Could not DM number-game winner %s", message.author.id)
                 try:
                     await self.bot.db.execute(
@@ -489,9 +633,11 @@ class Fun(commands.Cog):
                         owner = await fetch_user(1505515188991033409)
                     if owner:
                         await owner.send(f"🏆 Number game won in **{guild_name}** / #{getattr(message.channel, 'name', 'channel')}. Winner: {message.author} (`{message.author.id}`). Answer: `{answer}`. Host ID: `{game['starter']}`.")
-                except (discord.Forbidden, discord.HTTPException, AttributeError):
+                except (discord.Forbidden, discord.HTTPException, AttributeError, TypeError):
                     logger.info("Could not DM primary owner about game winner")
-                # Do not lock the entire channel; simply end this game and announce the result.
+
+                # Lock the channel now that result has been sent
+                await self._lock_channel_after_game(message.channel, "Winner found")
                 self._guess_locks.pop(message.channel.id, None)
             elif guess < game["answer"]:
                 await message.add_reaction("➕")

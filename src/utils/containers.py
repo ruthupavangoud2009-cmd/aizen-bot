@@ -490,8 +490,8 @@ async def send_container_response(
             return msg_data
         except discord.Forbidden:
             raise
-        except discord.HTTPException as e:
-            if e.status == 429:
+        except (discord.HTTPException, TypeError, AttributeError) as e:
+            if isinstance(e, discord.HTTPException) and e.status == 429:
                 logger.error(f"Discord 429 Too Many Requests (Rate limit / Cloudflare): {e}")
                 raise
             logger.warning(f"Raw Components V2 HTTP request failed ({e}), attempting standard send fallback...")

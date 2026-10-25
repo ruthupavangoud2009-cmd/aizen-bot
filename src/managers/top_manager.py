@@ -95,6 +95,45 @@ class MultiCalculationResult:
     condition_note: str = ""
     category: str = "Multi-Service Package"
     quantity: int = 1
+    # Unified contract with CalculationResult
+    is_clarification: bool = False
+    clarification_title: str = ""
+    clarification_options: list[str] = field(default_factory=list)
+    is_provisional: bool = False
+    baseline_price: float = 0.0
+    baseline_display: str = ""
+    extra_charges: float = 0.0
+    extra_charges_display: str = ""
+    custom_quote: bool = False
+    unit_price: float = 0.0
+    unit_display: str = ""
+
+    def __post_init__(self) -> None:
+        has_clarif = (
+            self.clarification_needed
+            or self.is_clarification
+            or any(getattr(c, "is_clarification", False) for c in self.items)
+            or bool(self.clarifications)
+        )
+        if has_clarif:
+            self.is_clarification = True
+            self.clarification_needed = True
+            if not self.clarification_title:
+                self.clarification_title = "❓ TOP AI MANAGER • CLARIFICATION NEEDED"
+            if not self.clarification_options:
+                all_opts: list[str] = []
+                for c in (self.clarifications or self.items):
+                    if getattr(c, "is_clarification", False) and getattr(c, "clarification_options", None):
+                        all_opts.extend(c.clarification_options)
+                self.clarification_options = all_opts
+        if any(getattr(c, "is_provisional", False) for c in self.items):
+            self.is_provisional = True
+        if any(getattr(c, "custom_quote", False) for c in self.items):
+            self.custom_quote = True
+        if not self.unit_price and self.subtotal:
+            self.unit_price = self.subtotal
+        if not self.unit_display and self.subtotal_display:
+            self.unit_display = self.subtotal_display
 
 
 
@@ -2518,22 +2557,34 @@ class TopManager:
                 elif qty == 1 or "1 trial" in norm or "one trial" in norm or "single trial" in norm:
                     item = self.get_price("trial_1")
                 else:
-                    item = self.get_price("trial_1")
-                    subtotal = item.price_amount * qty
-                    tax_amt, tot = self.calculate_tax(subtotal, tax_rate)
+                    # Unlisted trials package (catalogue defines 1, 2, 3 trials and Max Trial)
+                    provisional_subtotal = qty * 20.0
+                    tax_amt, tot = self.calculate_tax(provisional_subtotal, tax_rate)
                     calc = CalculationResult(
-                        service_name=f"{qty} Trials",
+                        service_name=f"{qty} Trials [Unlisted Package]",
                         category="Trials",
                         quantity=qty,
-                        unit_price=item.price_amount,
-                        unit_display=item.price_display,
-                        subtotal=subtotal,
-                        subtotal_display=self.format_price(subtotal),
+                        unit_price=20.0,
+                        unit_display="20M/trial (Provisional)",
+                        subtotal=provisional_subtotal,
+                        subtotal_display=f"{self.format_price(provisional_subtotal)} (Provisional)",
                         tax_rate=tax_rate,
                         tax_amount=tax_amt,
                         tax_display=self.format_price(tax_amt) if tax_amt > 0 else "0M",
                         total=tot,
-                        total_display=self.format_price(tot),
+                        total_display=f"{self.format_price(tot)} (Provisional)",
+                        is_provisional=True,
+                        is_clarification=True,
+                        clarification_title=f"❓ CLARIFICATION NEEDED • {qty} Trials",
+                        clarification_options=[
+                            f"The catalogue defines 1 Trial (20M), 2 Trials (40M), 3 Trials (60M), and Max Trial (100M).",
+                            f"• **Provisional Calculation:** **{self.format_price(provisional_subtotal)}** ({qty}x 20M/trial)",
+                            f"• **Or choose listed package:** **Max Trial (100M)** for all remaining trials",
+                            f"*Please confirm with staff for unlisted quantities.*",
+                        ],
+                        condition_note=f"The catalogue does not define a {qty}-trial package. Provisional quote at 20M/trial; consider Max Trial (100M).",
+                        pricing_explanation=f"Catalogue does not list a {qty}-trial package. Provisional rate at 20M per trial or consider Max Trial (100M).",
+                        requires_staff_approval=True,
                     )
                     return {"intent": "make_bill" if is_make_bill else "price_lookup", "calculation": calc, "quantity": qty, "tax_rate": tax_rate, "raw_query": raw}
 

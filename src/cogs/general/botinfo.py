@@ -15,7 +15,7 @@ from src.utils.containers import KyokaContainer, send_container_response
 if TYPE_CHECKING:
     from src.core.bot import KyokaBot
 
-SUPPORT_URL = "https://discord.gg/5DBQTQJa9"
+SUPPORT_URL = Config.SUPPORT_URL or "https://discord.gg/msH67hUx6G"
 OWNER_ID = 1505515188991033409
 
 
@@ -41,7 +41,7 @@ class BotInfoView(discord.ui.View):
             )
         self.add_item(
             discord.ui.Button(
-                label="Support Server",
+                label="Join Support Server",
                 style=discord.ButtonStyle.link,
                 url=SUPPORT_URL,
             )
@@ -102,7 +102,7 @@ def build_botinfo_container(bot: KyokaBot, guild_id: int | None = None) -> Kyoka
         f"**Commands & Premium**\n"
         f"> **Prefix:** `{prefix}` • **Help:** `{prefix}help` or `/help`\n"
         f"> **Premium:** {premium_status}\n\n"
-        f"-# Made by Aizen • [Support Server]({SUPPORT_URL})"
+        f"-# Made by Aizen • [Join Support Server]({SUPPORT_URL})"
     )
     return container
 

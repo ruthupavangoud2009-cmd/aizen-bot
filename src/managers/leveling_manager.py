@@ -60,13 +60,13 @@ class LevelingManager:
     async def load_cache(self) -> None:
         """Load guild leveling configurations into memory cache."""
         try:
-            # Ensure leveling_settings table exists
+            # Ensure leveling_settings table exists with disabled by default
             await self.db.execute(
                 """
                 CREATE TABLE IF NOT EXISTS leveling_settings (
                     guild_id BIGINT PRIMARY KEY,
-                    enabled BOOLEAN DEFAULT TRUE,
-                    announce_level_up BOOLEAN DEFAULT TRUE,
+                    enabled BOOLEAN DEFAULT FALSE,
+                    announce_level_up BOOLEAN DEFAULT FALSE,
                     channel_id BIGINT,
                     cooldown_seconds INT DEFAULT 60,
                     min_xp INT DEFAULT 15,
@@ -80,8 +80,8 @@ class LevelingManager:
                 self._guild_settings.clear()
                 for r in rows:
                     self._guild_settings[int(r["guild_id"])] = {
-                        "enabled": bool(r.get("enabled", True)),
-                        "announce": bool(r.get("announce_level_up", True)),
+                        "enabled": bool(r.get("enabled", False)),
+                        "announce": bool(r.get("announce_level_up", False)),
                         "channel_id": int(r["channel_id"]) if r.get("channel_id") else None,
                         "cooldown": int(r.get("cooldown_seconds", 60)),
                         "min_xp": int(r.get("min_xp", 15)),
@@ -92,18 +92,47 @@ class LevelingManager:
             logger.debug(f"Notice loading leveling settings: {e}")
 
     def get_guild_settings(self, guild_id: int) -> dict[str, Any]:
-        """Fetch cached settings with default values."""
+        """Fetch cached settings with default values (Leveling is disabled by default)."""
         return self._guild_settings.get(
             guild_id,
             {
-                "enabled": True,
-                "announce": True,
+                "enabled": False,
+                "announce": False,
                 "channel_id": None,
                 "cooldown": 60,
                 "min_xp": 15,
                 "max_xp": 25,
             },
         )
+
+    def is_enabled(self, guild_id: int) -> bool:
+        """Check if leveling is enabled for a given guild (defaults to False)."""
+        return bool(self.get_guild_settings(guild_id).get("enabled", False))
+
+    async def set_guild_enabled(self, guild_id: int, enabled: bool, announce: Optional[bool] = None) -> dict[str, Any]:
+        """Explicitly enable or disable leveling for a specific guild independently."""
+        cur = self.get_guild_settings(guild_id)
+        new_announce = announce if announce is not None else (cur.get("announce", False) if enabled else False)
+        await self.db.execute(
+            """
+            INSERT INTO leveling_settings (guild_id, enabled, announce_level_up, updated_at)
+            VALUES ($1, $2, $3, CURRENT_TIMESTAMP)
+            ON CONFLICT (guild_id) DO UPDATE SET
+                enabled = EXCLUDED.enabled,
+                announce_level_up = EXCLUDED.announce_level_up,
+                updated_at = CURRENT_TIMESTAMP;
+            """,
+            guild_id,
+            enabled,
+            new_announce,
+        )
+        async with self._lock:
+            self._guild_settings[guild_id] = {
+                **cur,
+                "enabled": enabled,
+                "announce": new_announce,
+            }
+        return self._guild_settings[guild_id]
 
     async def award_message_xp(
         self,
@@ -115,13 +144,10 @@ class LevelingManager:
         Evaluate and award XP for a qualifying guild message.
         Returns: (awarded: bool, new_total_xp: int, new_level: int, leveled_up: bool)
         """
-        if is_opted_out:
+        if is_opted_out or not self.is_enabled(guild_id):
             return False, 0, 1, False
 
         settings = self.get_guild_settings(guild_id)
-        if not settings["enabled"]:
-            return False, 0, 1, False
-
         now = time.monotonic()
         key = (guild_id, user_id)
         last_time = self._cooldowns.get(key, 0.0)
@@ -187,7 +213,7 @@ class LevelingManager:
                 guild_id,
                 total_xp,
             )
-            server_rank = int(rank_row["rank"]) if rank_row else 1
+            server_rank = int(rank_row.get("rank", 1)) if rank_row else 1
 
             return {
                 "user_id": user_id,

@@ -105,8 +105,9 @@ class KyokaBot(commands.Bot):
                 users=True,
                 replied_user=True,
             ),
-            activity=discord.Game(
-                name="KYOKA | The Ultimate Bot",
+            activity=discord.Activity(
+                type=discord.ActivityType.watching,
+                name="over servers | members",
             ),
         )
 
@@ -297,7 +298,7 @@ class KyokaBot(commands.Bot):
                 except Exception as e:
                     logger.debug(f"Activity logging notice: {e}")
 
-            if hasattr(self, "leveling_mgr"):
+            if hasattr(self, "leveling_mgr") and self.leveling_mgr.is_enabled(message.guild.id):
                 try:
                     asyncio.create_task(self._process_message_xp(message))
                 except Exception as e:
@@ -309,13 +310,17 @@ class KyokaBot(commands.Bot):
     async def _process_message_xp(self, message: discord.Message) -> None:
         """Process XP gain and optional level-up alerts safely in the background."""
         try:
+            if not message.guild or not hasattr(self, "leveling_mgr"):
+                return
+            if not self.leveling_mgr.is_enabled(message.guild.id):
+                return
             is_opt = self.activity_mgr.is_opted_out(message.author.id) if hasattr(self, "activity_mgr") else False
             awarded, new_xp, new_lvl, leveled_up = await self.leveling_mgr.award_message_xp(
                 message.guild.id, message.author.id, is_opted_out=is_opt
             )
             if leveled_up and message.guild:
                 cfg = self.leveling_mgr.get_guild_settings(message.guild.id)
-                if cfg.get("announce", True):
+                if cfg.get("announce", False):
                     ch = message.guild.get_channel(cfg.get("channel_id") or message.channel.id)
                     if ch:
                         await ch.send(f"🎉 Congratulations {message.author.mention}, you leveled up to **Level {new_lvl}**!")
@@ -468,17 +473,66 @@ class KyokaBot(commands.Bot):
             if not content.strip():
                 self.task_mgr.cancel_by_message_id(payload.message_id, reason="initiating_message_emptied")
 
-    @tasks.loop(seconds=60)
-    async def _rotate_presence(self) -> None:
-        """Maintain persistent bot presence and Online status."""
+    def calculate_presence_stats(self) -> tuple[int, int]:
+        """Calculate the connected server count and managed member count safely.
+        Accounts for unavailable guilds and missing member_count data.
+        Does not make excessive API requests; utilizes cached guild data.
+        Excludes the bot's own account from managed member counts.
+        """
+        valid_guilds = [g for g in self.guilds if not getattr(g, "unavailable", False)]
+        server_count = len(valid_guilds)
+
+        total_members = 0
+        for g in valid_guilds:
+            count = getattr(g, "member_count", None)
+            if isinstance(count, int) and count > 0:
+                # Exclude the bot itself from managed members
+                managed = max(0, count - 1)
+                total_members += managed
+
+        return server_count, total_members
+
+    def format_presence_activity_text(self, servers: int, members: int) -> str:
+        """Format the dynamic Watching activity text.
+        Uses the longest format fitting Discord's limits (max 128 chars).
+        e.g. 'over 125 servers | 45,680 members'
+        """
+        srv_str = "1 server" if servers == 1 else f"{servers:,} servers"
+        mbr_str = "1 member" if members == 1 else f"{members:,} members"
+
+        full_text = f"over {srv_str} | {mbr_str}"
+        if len(full_text) <= 128 and members > 0:
+            return full_text
+
+        fallback = f"over {srv_str}"
+        return fallback[:128]
+
+    async def update_dynamic_presence(self) -> None:
+        """Central presence manager: updates Discord presence with live statistics."""
         try:
-            status_text = self.custom_status or "KYOKA | The Ultimate Bot"
+            if self.custom_status:
+                await self.change_presence(
+                    status=discord.Status.online,
+                    activity=discord.Game(name=self.custom_status),
+                )
+                return
+
+            servers, members = self.calculate_presence_stats()
+            activity_text = self.format_presence_activity_text(servers, members)
             await self.change_presence(
                 status=discord.Status.online,
-                activity=discord.Game(name=status_text),
+                activity=discord.Activity(
+                    type=discord.ActivityType.watching,
+                    name=activity_text,
+                ),
             )
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug(f"Dynamic presence update notice: {e}")
+
+    @tasks.loop(minutes=5)
+    async def _rotate_presence(self) -> None:
+        """Maintain persistent dynamic bot presence and Online status."""
+        await self.update_dynamic_presence()
 
 
     @_rotate_presence.before_loop
@@ -505,15 +559,8 @@ class KyokaBot(commands.Bot):
             except Exception as e:
                 logger.debug(f"Notice snapshotting guild {g.id}: {e}")
 
-        # Immediately lock presence to Online with persistent status
-        try:
-            status_text = self.custom_status or "KYOKA | The Ultimate Bot"
-            await self.change_presence(
-                status=discord.Status.online,
-                activity=discord.Game(name=status_text),
-            )
-        except Exception as e:
-            logger.warning(f"Could not enforce Online presence: {e}")
+        # Immediately lock presence to Online with dynamic live statistics
+        await self.update_dynamic_presence()
         if not self._rotate_presence.is_running():
             self._rotate_presence.start()
 
@@ -544,12 +591,16 @@ class KyokaBot(commands.Bot):
             except Exception as e:
                 logger.warning(f"FeatureRegistry audit failed: {e}")
 
-        logger.info("Presence locked to DND. Slash command tree initialized.")
+        logger.info("Dynamic presence active. Slash command tree initialized.")
 
     async def on_guild_join(self, guild: discord.Guild) -> None:
         """Fired when Kyoka is invited to a new server."""
         from src.core.greetings import send_guild_welcome_card
         await send_guild_welcome_card(self, guild)
+        try:
+            await self.update_dynamic_presence()
+        except Exception as e:
+            logger.debug(f"Notice updating presence on guild join: {e}")
 
     async def on_guild_remove(self, guild: discord.Guild) -> None:
         """Fired when Kyoka is removed from a server."""
@@ -564,6 +615,10 @@ class KyokaBot(commands.Bot):
                 except Exception:
                     pass
                 music_cog.controller._players.pop(guild.id, None)
+        try:
+            await self.update_dynamic_presence()
+        except Exception as e:
+            logger.debug(f"Notice updating presence on guild remove: {e}")
 
 
 # Backward Compatibility Alias

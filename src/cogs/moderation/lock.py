@@ -93,7 +93,13 @@ class LockCog(commands.Cog):
             return
 
         overwrite = target_channel.overwrites_for(ctx.guild.default_role)
-        overwrite.send_messages = None
+        # Check if Fun cog has a recorded original overwrite from a Guess a Number event
+        fun_cog = getattr(self.bot, "get_cog", lambda _: None)("Fun")
+        if fun_cog and hasattr(fun_cog, "_locked_channels_original_overwrites"):
+            original = fun_cog._locked_channels_original_overwrites.pop(target_channel.id, None)
+            overwrite.send_messages = original
+        else:
+            overwrite.send_messages = None
         await target_channel.set_permissions(ctx.guild.default_role, overwrite=overwrite, reason=f"{ctx.author}: {reason}")
 
         await dispatch_mod_log(

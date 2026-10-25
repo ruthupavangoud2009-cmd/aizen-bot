@@ -157,7 +157,7 @@ CATEGORIES: list[CategoryMeta] = [
         name="Levels & Community",
         tag="⭐・LEVELS & COMMUNITY",
         emoji="⭐",
-        description="Member XP progression, custom rank cards, and competitive server leaderboards",
+        description="Optional member XP progression (disabled by default), custom rank cards & leaderboards",
         image_key="leveling",
         priority=15,
     ),

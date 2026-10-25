@@ -473,7 +473,7 @@ KYOKA 3.0 reports real, transparent system performance:
 - **Bot Name**: `KYOKA 3.0`
 - **Creator**: `Aizen`
 - **Primary Owner ID**: `1505515188991033409`
-- **Support Server**: `https://discord.gg/5DBQTQJa9`
+- **Support Server**: `https://discord.gg/msH67hUx6G`
 - **Framework**: `discord.py 2.7+` with Components V2 cards
 - **Database**: `PostgreSQL` / `Supabase` with `asyncpg`
 

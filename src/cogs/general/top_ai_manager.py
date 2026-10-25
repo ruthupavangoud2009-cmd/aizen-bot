@@ -1714,13 +1714,19 @@ class TopAIManager(commands.Cog, name="TopAIManager"):
                 f"• Duplicate clicks are automatically locked and prevented.\n\n"
                 f"**⚙️ Currency & In-Game Values:**\n"
                 f"• All prices are quoted in **Millions (M)** or **Billions (B)** of in-game Beli or Fruits.\n"
-                f"• Never converts to or uses real-world USD currency."
+                f"• Never converts to or uses real-world USD currency.\n\n"
+                f"• **Official Support:** [Join Support Server]({Config.SUPPORT_URL or 'https://discord.gg/msH67hUx6G'})"
             ),
             color=KyokaTheme.PRIMARY,
         )
         embed.set_thumbnail(url=AIZEN_THUMBNAIL_URL)
         embed.set_footer(text=f"Kyoka 3.0 • AI Top Assistant • Requested by {ctx.author.display_name}")
-        await ctx.reply(embed=embed, mention_author=False)
+        view = discord.ui.View(timeout=None)
+        support_url = Config.SUPPORT_URL or "https://discord.gg/msH67hUx6G"
+        view.add_item(discord.ui.Button(label="Join Support Server", style=discord.ButtonStyle.link, url=support_url, emoji="💜"))
+        if Config.INVITE_URL:
+            view.add_item(discord.ui.Button(label="Invite KYOKA", style=discord.ButtonStyle.link, url=Config.INVITE_URL, emoji="✦"))
+        await ctx.reply(embed=embed, view=view, mention_author=False)
 
     @bill_cmd.command(name="view")
     async def bill_view_cmd(self, ctx: CustomContext, bill_id: str):
@@ -2146,7 +2152,10 @@ class TopAIManager(commands.Cog, name="TopAIManager"):
         if help_cog and hasattr(help_cog, "help_command"):
             await help_cog.help_command(ctx, command_or_module=command_or_module)
         else:
-            await ctx.reply("ℹ️ Loading command directory...", mention_author=False)
+            view = discord.ui.View(timeout=None)
+            support_url = Config.SUPPORT_URL or "https://discord.gg/msH67hUx6G"
+            view.add_item(discord.ui.Button(label="Join Support Server", style=discord.ButtonStyle.link, url=support_url, emoji="💜"))
+            await ctx.reply("ℹ️ Command directory is loading. Need assistance? Join our official support server below!", view=view, mention_author=False)
 
     async def _send_blox_fruits_revenue_embed(self, ctx: CustomContext, rep: dict[str, Any], title: str):
         """Send formatted Blox Fruits revenue report embed."""
