@@ -3,6 +3,8 @@ from __future__ import annotations
 import asyncio
 import logging
 import os
+import random
+import signal
 import sys
 from pathlib import Path
 
@@ -77,8 +79,37 @@ def get_current_bot() -> KyokaBot | None:
     return active_bot
 
 
+# Transient aiohttp network errors that are safe to retry with backoff.
+# These cover: proxy timeouts, DNS failures, connection refused, TLS errors.
+_TRANSIENT_AIOHTTP_ERRORS: tuple[type[Exception], ...] = ()
+try:
+    import aiohttp
+    _TRANSIENT_AIOHTTP_ERRORS = (
+        aiohttp.ServerTimeoutError,
+        aiohttp.ClientConnectorError,
+        aiohttp.ClientConnectionError,
+        aiohttp.ClientOSError,
+        aiohttp.ServerDisconnectedError,
+        aiohttp.TooManyRedirects,
+    )
+except ImportError:
+    pass
+
+
+def _jittered_backoff(base: float, attempt: int, cap: float = 300.0) -> float:
+    """Full-jitter exponential backoff: uniform(0, min(cap, base * 2^attempt)).
+
+    - Starts at base seconds, doubles each attempt, caps at `cap` seconds.
+    - Full jitter spreads retry storms across multiple reconnect attempts.
+    - Does NOT use random seeds tied to secrets or tokens.
+    """
+    ceiling = min(cap, base * (2.0 ** attempt))
+    return random.uniform(0.0, ceiling)
+
+
 async def run_bot_loop() -> None:
-    """Run bot with smart exponential backoff for Cloudflare / Discord 429 rate limits."""
+    """Run bot with bounded exponential backoff for transient network errors,
+    Cloudflare / Discord 429 rate limits, and gateway disconnects."""
     global active_bot
 
     try:
@@ -87,17 +118,24 @@ async def run_bot_loop() -> None:
         logger.critical(f"Configuration error: {e}")
         return
 
-    delay = 15.0
+    # Backoff state — reset on successful connect+ready, increased on failure
+    backoff_base = 15.0     # seconds base for transient-error backoff
+    backoff_attempt = 0     # how many consecutive transient failures
+    use_proxy = bool(Config.DISCORD_PROXY)
 
     while True:
         try:
-            bot = KyokaBot()
+            active_proxy = Config.DISCORD_PROXY if use_proxy else None
+            bot = KyokaBot(proxy=active_proxy)
             active_bot = bot
-            logger.info(f"Connecting {Config.BOT_NAME} in [{Config.ENVIRONMENT.upper()}] mode to Discord Gateway...")
+            route_desc = "via proxy" if active_proxy else "direct connection"
+            logger.info(f"Connecting {Config.BOT_NAME} in [{Config.ENVIRONMENT.upper()}] mode to Discord Gateway ({route_desc})...")
             async with bot:
                 await bot.start(Config.TOKEN)
-            delay = 15.0
+            # Clean exit: reset backoff
+            backoff_attempt = 0
             await asyncio.sleep(5)
+
         except discord.HTTPException as e:
             if e.status == 429:
                 retry_after = getattr(e, "retry_after", None)
@@ -125,32 +163,96 @@ async def run_bot_loop() -> None:
                         f"(TIP: Change Render service Region to Singapore, Ohio, or Oregon in Settings to get an unblocked IP instantly!)"
                     )
                 else:
-                    wait_time = max(retry_after if retry_after else delay, 45.0)
+                    wait_time = max(retry_after if retry_after else backoff_base, 45.0)
                     logger.warning(
                         f"Discord Gateway Rate Limit (429) active: {response_text}. "
                         f"Cooling down for {wait_time:.0f}s before reconnecting to allow Discord rate-limit window to reset..."
                     )
 
                 await asyncio.sleep(wait_time)
-                delay = min(max(delay * 2.0, wait_time), 900.0)
+                backoff_attempt = min(backoff_attempt + 1, 6)
+
             else:
                 logger.error(f"Discord HTTP Exception ({e.status}): {e}. Retrying in 15s...")
                 await asyncio.sleep(15)
+                backoff_attempt = 0
+
         except discord.LoginFailure as e:
             logger.critical(f"FATAL: Discord Login Failure (Invalid Token): {e}")
             break
+
         except (asyncio.CancelledError, KeyboardInterrupt):
             logger.info("Bot execution cancelled.")
             break
+
+        except _TRANSIENT_AIOHTTP_ERRORS as e:
+            # These are transient network failures (proxy timeout, DNS, TLS, etc.).
+            # Apply bounded exponential backoff with full jitter and route failover.
+            exc_type = type(e).__name__
+            wait = _jittered_backoff(backoff_base, backoff_attempt)
+            backoff_attempt = min(backoff_attempt + 1, 6)
+            if Config.DISCORD_PROXY:
+                use_proxy = not use_proxy
+                next_route = "proxy" if use_proxy else "direct connection"
+                logger.warning(
+                    f"Transient network error ({exc_type}): {e}. "
+                    f"Retrying in {wait:.1f}s (attempt {backoff_attempt}, switching next attempt to {next_route})..."
+                )
+            else:
+                logger.warning(
+                    f"Transient network error ({exc_type}): {e}. "
+                    f"Retrying in {wait:.1f}s (attempt {backoff_attempt}, direct connection)..."
+                )
+            await asyncio.sleep(wait)
+
         except Exception as e:
-            logger.error(f"Connection glitch: {e}. Retrying in 10s...", exc_info=e)
-            await asyncio.sleep(10)
+            # Unknown / unexpected error — log type and message for diagnosis, retry with backoff.
+            exc_type = type(e).__name__
+            exc_str = str(e)
+            if "Connection timeout to host" in exc_str or "Cannot connect to host" in exc_str or "TimeoutError" in exc_type:
+                wait = _jittered_backoff(backoff_base, backoff_attempt)
+                backoff_attempt = min(backoff_attempt + 1, 6)
+                if Config.DISCORD_PROXY:
+                    use_proxy = not use_proxy
+                    next_route = "proxy" if use_proxy else "direct connection"
+                    logger.warning(
+                        f"Network connection timeout ({exc_type}): {exc_str[:200]}. "
+                        f"Retrying in {wait:.1f}s (attempt {backoff_attempt}, switching next attempt to {next_route})..."
+                    )
+                else:
+                    logger.warning(
+                        f"Network connection timeout ({exc_type}): {exc_str[:200]}. "
+                        f"Retrying in {wait:.1f}s (attempt {backoff_attempt}, direct connection)..."
+                    )
+                await asyncio.sleep(wait)
+            else:
+                logger.error(
+                    f"Unexpected {exc_type}: {exc_str[:300]}. Retrying in 15s...",
+                    exc_info=e
+                )
+                backoff_attempt = 0
+                await asyncio.sleep(15)
+
         finally:
             active_bot = None
 
 
 async def main() -> None:
     """Launch 24/7 Web Server and resilient bot loop."""
+    # Register SIGTERM handler for graceful container replacement on Render
+    main_task = asyncio.current_task()
+
+    def _sigterm_handler(*_):
+        logger.info("Received termination signal (SIGTERM). Initiating graceful shutdown...")
+        if main_task and not main_task.done():
+            main_task.cancel()
+
+    if hasattr(signal, "SIGTERM"):
+        try:
+            signal.signal(signal.SIGTERM, _sigterm_handler)
+        except Exception:
+            pass
+
     # start Web Server first so Render Port Scan passes immediately (<1s)
     server = HealthServer(bot_getter=get_current_bot)
     await server.start()
@@ -158,6 +260,8 @@ async def main() -> None:
     # run bot loop
     try:
         await run_bot_loop()
+    except (asyncio.CancelledError, KeyboardInterrupt):
+        logger.info("Bot execution cancelled. Cleaning up services...")
     finally:
         await server.stop()
 

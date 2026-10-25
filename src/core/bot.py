@@ -74,16 +74,22 @@ async def get_prefix(bot: KyokaBot, message: discord.Message) -> list[str]:
     return prefixes
 
 
+_DEFAULT_PROXY_SENTINEL = object()
+
+
 class KyokaBot(commands.Bot):
     """Production-grade custom Discord bot class for Kyoka."""
 
-    def __init__(self) -> None:
+    def __init__(self, proxy: Any = _DEFAULT_PROXY_SENTINEL) -> None:
         intents = discord.Intents.default()
         intents.message_content = True
         intents.members = True
         intents.presences = True
 
-        proxy_url = Config.DISCORD_PROXY or os.getenv("DISCORD_PROXY", "").strip() or None
+        if proxy is _DEFAULT_PROXY_SENTINEL:
+            proxy_url = Config.DISCORD_PROXY or os.getenv("DISCORD_PROXY", "").strip() or None
+        else:
+            proxy_url = proxy
         if proxy_url:
             # Mask credentials if present for security in logs
             import urllib.parse
