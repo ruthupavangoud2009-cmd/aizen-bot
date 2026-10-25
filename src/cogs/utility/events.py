@@ -21,6 +21,8 @@ from src.cogs.utility.embed_builder import ContainerDraft
 from src.utils.containers import KyokaContainer, send_container_response
 from src.utils.placeholders import resolve_placeholders
 
+from src.ui.cards.welcome_card import render_welcome_card_async
+
 logger = logging.getLogger("Kyoka.Events")
 
 
@@ -128,16 +130,39 @@ class AutoEvents(commands.Cog):
             except Exception as e:
                 logger.warning(f"Template loading error for '{embed_name}' in guild {guild.id}: {e}. Using native fallback card.")
 
+        welcome_file: Optional[discord.File] = None
+        if event_type == "welcome":
+            try:
+                av_url = str(member.display_avatar.url) if hasattr(member, "display_avatar") and member.display_avatar else None
+                cfg_step = (config.get("next_step") if config else None) or "Read #rules & complete verification to begin"
+                cfg_bg = config.get("custom_background") if config else None
+                m_count = getattr(guild, "member_count", 1) or 1
+
+                buf = await render_welcome_card_async(
+                    username=member.name,
+                    guild_name=guild.name,
+                    member_count=m_count,
+                    avatar_url=av_url,
+                    next_step=cfg_step,
+                    custom_bg_path=cfg_bg,
+                )
+                welcome_file = discord.File(buf, filename="kyoka_welcome.png")
+            except Exception as e:
+                logger.error(f"Failed to generate custom Aizen welcome card: {e}")
+                welcome_file = None
+
         if not container:
             container = KyokaContainer(accent_color=None)
             if event_type == "welcome":
                 container.add_section(
                     content=(
-                        f"**Welcome to {guild.name}!**\n"
+                        f"**⛩️ Welcome to {guild.name}!**\n"
                         f"> Hey {member.mention}, welcome to the server!\n"
                         f"> You are our **{guild.member_count:,}th** member."
                     )
                 )
+                if welcome_file:
+                    container.add_image("attachment://kyoka_welcome.png")
             elif event_type == "leave":
                 container.add_section(
                     content=(
@@ -171,6 +196,7 @@ class AutoEvents(commands.Cog):
                     channel,
                     container,
                     content=outer_content,
+                    file=welcome_file,
                     allowed_mentions=discord.AllowedMentions(users=True, roles=False, everyone=False),
                 )
             except Exception as wh_err:
@@ -179,7 +205,7 @@ class AutoEvents(commands.Cog):
 
         if target_msg is None:
             # Resilient native Discord Embed fallback (guaranteed to deliver without webhooks)
-            fallback_title = f"🌸 Welcome to {guild.name}!" if event_type == "welcome" else (
+            fallback_title = f"⛩️ Welcome to {guild.name}!" if event_type == "welcome" else (
                 f"👋 Farewell from {guild.name}" if event_type == "leave" else f"🚀 Server Boost!"
             )
             fallback_desc = (
@@ -190,18 +216,27 @@ class AutoEvents(commands.Cog):
             fb_embed = discord.Embed(
                 title=fallback_title,
                 description=fallback_desc,
-                color=0x2B0938,
+                color=0x7C3AED if event_type == "welcome" else 0x2B0938,
             )
             if hasattr(member, "display_avatar") and member.display_avatar:
                 fb_embed.set_thumbnail(url=member.display_avatar.url)
+            if welcome_file:
+                # Reset stream pointer in case it was read
+                try:
+                    welcome_file.fp.seek(0)
+                except Exception:
+                    pass
+                fb_embed.set_image(url="attachment://kyoka_welcome.png")
+
             fb_embed.set_footer(
-                text=f"{guild.name} • Kyoka 3.0",
+                text=f"{guild.name} • Kyoka 3.0 — Aizen Edition",
                 icon_url=guild.icon.url if guild.icon else None,
             )
             try:
                 target_msg = await channel.send(
                     content=outer_content,
                     embed=fb_embed,
+                    file=welcome_file,
                     allowed_mentions=discord.AllowedMentions(users=True, roles=False, everyone=False),
                 )
             except Exception as send_err:
@@ -825,6 +860,35 @@ class AutoEvents(commands.Cog):
         """Clear welcome configuration."""
         await self.bot.event_mgr.delete_event_config(ctx.guild.id, "welcome")
         await ctx.send_success("Welcome event configuration has been reset.", title="Welcome Reset")
+
+    @welcome_group.command(
+        name="step",
+        aliases=["nextstep", "advice"],
+        description="Set the instruction text displayed on the Aizen welcome card.",
+    )
+    @commands.has_permissions(manage_guild=True)
+    async def welcome_step(self, ctx: CustomContext, *, step_text: str) -> None:
+        """Set custom advice/next step text for the welcome image."""
+        config = await self.bot.event_mgr.get_event_config(ctx.guild.id, "welcome")
+        prefix = self.bot.guild_mgr.get_prefix(ctx.guild.id)
+        if not config or not config.get("channel_id"):
+            return await ctx.send_warning(f"Please configure a welcome channel first with `{prefix}welcome set #channel`.")
+
+        try:
+            await self.bot.db.execute("ALTER TABLE server_events ADD COLUMN next_step TEXT DEFAULT '';")
+        except Exception:
+            pass
+
+        await self.bot.db.execute(
+            "UPDATE server_events SET next_step = $1 WHERE guild_id = $2 AND event_type = 'welcome';",
+            step_text[:100],
+            ctx.guild.id,
+        )
+        # Update cache
+        if hasattr(self.bot, "event_mgr"):
+            self.bot.event_mgr._cache.pop((ctx.guild.id, "welcome"), None)
+
+        await ctx.send_success(f"Welcome card instruction updated to:\n> **{step_text[:100]}**", title="Welcome Card Configured")
 
     @welcome_group.command(
         name="announce",

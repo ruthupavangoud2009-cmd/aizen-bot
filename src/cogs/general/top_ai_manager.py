@@ -18,7 +18,7 @@ from discord.ext import commands
 
 from src.core.config import Config
 from src.core.context import CustomContext
-from src.managers.top_manager import TopManager, CalculationResult, PriceItem
+from src.managers.top_manager import TopManager, CalculationResult, MultiCalculationResult, PriceItem, PRIMARY_OWNER_ID
 from src.security.adult_guard import add_adult_user, remove_adult_user, list_adult_users
 from src.ui.theme import KyokaTheme
 
@@ -653,7 +653,331 @@ def format_single_price_embed(calc: CalculationResult) -> discord.Embed:
     return embed
 
 
+def format_quote_embed(calc: Union[CalculationResult, MultiCalculationResult]) -> discord.Embed:
+    """Format single-service or multi-service quote embed with itemized breakdown and smart pricing."""
+    if isinstance(calc, MultiCalculationResult):
+        if calc.comparison_mode:
+            embed = discord.Embed(
+                title="⚖️ SERVICE PRICE COMPARISON",
+                description="Comparing requested services from the authoritative catalogue:\n",
+                color=KyokaTheme.PRIMARY,
+            )
+            for item in calc.items:
+                if item.is_clarification:
+                    embed.add_field(
+                        name=f"❓ {item.service_name}",
+                        value="\n".join(item.clarification_options[:4]),
+                        inline=False,
+                    )
+                else:
+                    embed.add_field(
+                        name=f"📦 {item.service_name}",
+                        value=f"• **Category:** `{item.category}`\n• **Price:** **{item.subtotal_display}**\n• *{item.condition_note or 'Catalogue price'}*",
+                        inline=True,
+                    )
+            embed.set_thumbnail(url=AIZEN_THUMBNAIL_URL)
+            embed.set_footer(text="Kyoka Top AI Manager • Blox Fruits Comparison")
+            return embed
+
+        if calc.clarification_needed:
+            desc_lines = ["**Your request contains multiple services. Some items require clarification:**\n"]
+            for item in calc.items:
+                if item.is_clarification:
+                    desc_lines.append(f"**❓ {item.service_name}:**")
+                    desc_lines.extend(item.clarification_options[:4])
+                    desc_lines.append("")
+                else:
+                    desc_lines.append(f"• **{item.service_name}:** **{item.subtotal_display}** ({item.condition_note or 'Confirmed'})")
+            embed = discord.Embed(
+                title="❓ TOP AI MANAGER • ITEMIZE QUOTE & CLARIFICATION",
+                description="\n".join(desc_lines),
+                color=KyokaTheme.PRIMARY,
+            )
+            embed.set_thumbnail(url=AIZEN_THUMBNAIL_URL)
+            embed.set_footer(text="Kyoka Top AI Manager")
+            return embed
+
+        # Standard Multi-Item Breakdown
+        embed = discord.Embed(
+            title="⛩️ TOP AI MANAGER • ITEMIZED QUOTE",
+            description="Itemized quote for requested Blox Fruits services:\n",
+            color=KyokaTheme.PRIMARY,
+        )
+        for idx, item in enumerate(calc.items, 1):
+            prov_tag = " `[Provisional]`" if getattr(item, "is_provisional", False) else ""
+            embed.add_field(
+                name=f"{idx}. {item.service_name}{prov_tag}",
+                value=(
+                    f"• **Qty:** `{item.quantity}` | **Unit:** `{item.unit_display}`\n"
+                    f"• **Subtotal:** **{item.subtotal_display}**\n"
+                    f"• *{item.condition_note or 'Authoritative catalogue rate'}*"
+                ),
+                inline=False,
+            )
+        tax_str = f"Tax ({calc.tax_rate:g}%): **+{calc.tax_display}**\n" if calc.tax_rate > 0 else ""
+        tot_text = (
+            f"━━━━━━━━━━━━━━━━━━\n"
+            f"• **Subtotal:** `{calc.subtotal_display}`\n"
+            f"{tax_str}"
+            f"• **Final Total:** **{calc.total_display} Beli**\n"
+            f"━━━━━━━━━━━━━━━━━━"
+        )
+        if getattr(calc, "requires_staff_approval", False):
+            tot_text += "\n⚠️ *Note: High-value quote or custom work requires staff confirmation.*"
+        embed.add_field(name="💰 Pricing Summary", value=tot_text, inline=False)
+        embed.set_thumbnail(url=AIZEN_THUMBNAIL_URL)
+        embed.set_footer(text="Kyoka Top AI Manager • Click [Create Bill] below to generate invoice")
+        return embed
+
+    # Single-item calculation
+    if calc.is_clarification:
+        return format_single_price_embed(calc)
+
+    embed = format_single_price_embed(calc)
+    if getattr(calc, "is_provisional", False):
+        embed.title = f"🏷️ {calc.category.upper()} [Provisional Quote]"
+        if getattr(calc, "pricing_explanation", ""):
+            embed.add_field(
+                name="💡 Pricing Explanation",
+                value=f"> {calc.pricing_explanation}",
+                inline=False,
+            )
+    return embed
+
+
+class EditQuantityModal(discord.ui.Modal, title="✏️ Edit Quote Quantity"):
+    quantity_input = discord.ui.TextInput(
+        label="New Quantity",
+        placeholder="Enter positive integer (e.g. 5, 10)",
+        min_length=1,
+        max_length=6,
+        required=True,
+    )
+
+    def __init__(self, quote_view: InteractiveQuoteView):
+        super().__init__()
+        self.quote_view = quote_view
+
+    async def on_submit(self, interaction: discord.Interaction):
+        try:
+            new_qty = int(self.quantity_input.value.strip())
+            if new_qty < 1 or new_qty > 10000:
+                return await interaction.response.send_message("❌ Quantity must be between 1 and 10,000.", ephemeral=True)
+            await self.quote_view.update_quantity(interaction, new_qty)
+        except ValueError:
+            await interaction.response.send_message("❌ Invalid quantity. Please enter a valid number.", ephemeral=True)
+
+
+class SetCustomerModal(discord.ui.Modal, title="👥 Set Customer"):
+    customer_input = discord.ui.TextInput(
+        label="Customer Mention or Discord ID",
+        placeholder="e.g. @Member or 123456789012345678",
+        min_length=2,
+        max_length=40,
+        required=True,
+    )
+
+    def __init__(self, quote_view: InteractiveQuoteView):
+        super().__init__()
+        self.quote_view = quote_view
+
+    async def on_submit(self, interaction: discord.Interaction):
+        val = self.customer_input.value.strip()
+        m = re.search(r'\b(\d{17,20})\b', val)
+        if m:
+            cid = int(m.group(1))
+            self.quote_view.customer_id = cid
+            cuser = interaction.client.get_user(cid)
+            self.quote_view.customer_name = str(cuser) if cuser else f"User {cid}"
+            await interaction.response.send_message(f"✅ Customer set to <@{cid}>.", ephemeral=True)
+        else:
+            self.quote_view.customer_name = val
+            await interaction.response.send_message(f"✅ Customer set to `{val}`.", ephemeral=True)
+        await self.quote_view.refresh_display(interaction)
+
+
+class InteractiveQuoteView(discord.ui.View):
+    """Interactive Quote View with One-Click Bill Creation, Server-Side Revalidation, and Duplicate Protection."""
+
+    def __init__(
+        self,
+        top_mgr: TopManager,
+        quote: Union[CalculationResult, MultiCalculationResult],
+        author_id: int,
+        guild_id: int,
+        customer_id: Optional[int] = None,
+        customer_name: str = "",
+        timeout: float = 300.0,
+    ):
+        super().__init__(timeout=timeout)
+        self.top_mgr = top_mgr
+        self.quote = quote
+        self.author_id = author_id
+        self.guild_id = guild_id
+        self.customer_id = customer_id
+        self.customer_name = customer_name
+        self.is_created = False
+        self._lock = asyncio.Lock()
+        self.message: Optional[discord.Message] = None
+
+    async def update_quantity(self, interaction: discord.Interaction, new_qty: int):
+        """Recalculate quote on server with updated quantity."""
+        if isinstance(self.quote, CalculationResult):
+            recalculated = self.top_mgr.calculate_service_price(
+                self.quote.service_name,
+                quantity=new_qty,
+                tax_rate=self.quote.tax_rate,
+            )
+            self.quote = recalculated
+        embed = format_quote_embed(self.quote)
+        await interaction.response.edit_message(embed=embed, view=self)
+
+    async def refresh_display(self, interaction: discord.Interaction):
+        """Refresh quote display embed."""
+        embed = format_quote_embed(self.quote)
+        try:
+            if self.message:
+                await self.message.edit(embed=embed, view=self)
+            elif interaction.message:
+                await interaction.message.edit(embed=embed, view=self)
+        except Exception:
+            pass
+
+    async def interaction_check(self, interaction: discord.Interaction) -> bool:
+        """Enforce author or staff access to quote controls."""
+        if interaction.user.id == self.author_id or interaction.user.id == PRIMARY_OWNER_ID:
+            return True
+        member = interaction.user if isinstance(interaction.user, discord.Member) else (
+            interaction.guild.get_member(interaction.user.id) if interaction.guild else None
+        )
+        if member:
+            perms = getattr(member, "guild_permissions", None)
+            if getattr(perms, "administrator", False) is True or getattr(perms, "manage_guild", False) is True:
+                return True
+        await interaction.response.send_message(
+            "❌ Only the quote requester or server staff can interact with this quote card.",
+            ephemeral=True,
+        )
+        return False
+
+    @discord.ui.button(label="Create Bill", emoji="🧾", style=discord.ButtonStyle.success, row=0)
+    async def btn_create_bill(self, interaction: discord.Interaction, button: Optional[discord.ui.Button] = None):
+        async with self._lock:
+            if self.is_created:
+                return await interaction.response.send_message("⚠️ A bill has already been created for this quote.", ephemeral=True)
+
+            # Check staff permission
+            member = interaction.user if isinstance(interaction.user, discord.Member) else (
+                interaction.guild.get_member(interaction.user.id) if interaction.guild else None
+            )
+            is_staff = False
+            if member:
+                is_staff = (
+                    member.id == PRIMARY_OWNER_ID
+                    or (hasattr(member, "guild_permissions") and (
+                        member.guild_permissions.administrator
+                        or member.guild_permissions.manage_guild
+                        or member.guild_permissions.manage_messages
+                    ))
+                    or any(r.name.lower() in ("staff", "admin", "moderator", "billing") for r in getattr(member, "roles", []))
+                )
+            elif interaction.user.id == PRIMARY_OWNER_ID:
+                is_staff = True
+
+            if not is_staff:
+                return await interaction.response.send_message(
+                    "❌ **Staff Authorization Required:** Only authorized staff or management can generate official server bills. Please contact a staff member to finalize this quote.",
+                    ephemeral=True,
+                )
+
+            # Check approval threshold for custom/high-value quotes
+            if getattr(self.quote, "requires_staff_approval", False) and member and getattr(member, "id", 0) != PRIMARY_OWNER_ID and not getattr(getattr(member, "guild_permissions", None), "administrator", False):
+                policy = self.top_mgr.get_pricing_policy(self.guild_id)
+                threshold = policy.get("approval_threshold_amount", 500.0)
+                if self.quote.total >= threshold:
+                    return await interaction.response.send_message(
+                        f"⚠️ **High-Value Approval Required:** Quotes exceeding {threshold}M Beli require Administrator or Owner approval before bill generation.",
+                        ephemeral=True,
+                    )
+
+            # Revalidate quote on server
+            try:
+                if isinstance(self.quote, MultiCalculationResult):
+                    bill = self.top_mgr.create_multi_bill(
+                        guild_id=self.guild_id,
+                        creator_id=interaction.user.id,
+                        creator_name=str(interaction.user),
+                        multi_calc=self.quote,
+                        customer_id=self.customer_id,
+                        customer_name=self.customer_name,
+                    )
+                else:
+                    bill = self.top_mgr.create_bill(
+                        guild_id=self.guild_id,
+                        creator_id=interaction.user.id,
+                        creator_name=str(interaction.user),
+                        service_name=self.quote.service_name,
+                        quantity=self.quote.quantity,
+                        tax_rate=self.quote.tax_rate,
+                        customer_id=self.customer_id,
+                        customer_name=self.customer_name,
+                        condition_notes=self.quote.condition_note,
+                        custom_price=self.quote.unit_price if self.quote.custom_quote else None,
+                        custom_price_display=self.quote.unit_display if self.quote.custom_quote else None,
+                    )
+
+                self.is_created = True
+                if button:
+                    button.disabled = True
+                    button.label = "Bill Created"
+                for item in self.children:
+                    if isinstance(item, discord.ui.Button) and item.style != discord.ButtonStyle.link:
+                        item.disabled = True
+
+                cust_mention = f"<@{self.customer_id}>" if self.customer_id else (f"`{self.customer_name}`" if self.customer_name else "*Not specified*")
+                confirm_embed = discord.Embed(
+                    title=f"🧾 OFFICIAL BILL GENERATED • {bill['id']}",
+                    description=(
+                        f"**Service:** `{bill['service_name']}`\n"
+                        f"**Quantity:** `{bill['quantity']}`\n"
+                        f"**Subtotal:** `{bill['subtotal_display']}`\n"
+                        f"**Tax ({bill['tax_rate']}%):** `{bill['tax_display']}`\n"
+                        f"**Final Total:** **{bill['total_display']}**\n\n"
+                        f"• **Customer:** {cust_mention}\n"
+                        f"• **Staff Creator:** {interaction.user.mention}\n"
+                        f"• **Status:** 🟡 **UNPAID**\n"
+                        f"• **Audit Trail:** Bill recorded in persistent ledger.\n"
+                        f"• **Mark as Paid:** `?top paid {bill['id']} <payment_message_id>`"
+                    ),
+                    color=KyokaTheme.PRIMARY,
+                    timestamp=discord.utils.utcnow(),
+                )
+                confirm_embed.set_thumbnail(url=AIZEN_THUMBNAIL_URL)
+                confirm_embed.set_footer(text=f"Bill ID: {bill['id']} • Kyoka Top AI Manager")
+                await interaction.response.edit_message(embed=confirm_embed, view=self)
+            except Exception as ex:
+                logger.error(f"Error creating bill from interactive quote: {ex}", exc_info=True)
+                await interaction.response.send_message(f"❌ Error creating bill: {ex}", ephemeral=True)
+
+    @discord.ui.button(label="Set Customer", emoji="👥", style=discord.ButtonStyle.secondary, row=0)
+    async def btn_set_customer(self, interaction: discord.Interaction, button: discord.ui.Button):
+        await interaction.response.send_modal(SetCustomerModal(self))
+
+    @discord.ui.button(label="Edit Quantity", emoji="✏️", style=discord.ButtonStyle.secondary, row=0)
+    async def btn_edit_quantity(self, interaction: discord.Interaction, button: discord.ui.Button):
+        await interaction.response.send_modal(EditQuantityModal(self))
+
+    @discord.ui.button(label="Cancel", emoji="❌", style=discord.ButtonStyle.danger, row=0)
+    async def btn_cancel(self, interaction: discord.Interaction, button: discord.ui.Button):
+        for item in self.children:
+            if isinstance(item, discord.ui.Button):
+                item.disabled = True
+        self.stop()
+        await interaction.response.edit_message(view=self)
+
+
 def format_beli_amount(amount_m: float) -> str:
+
     """Format Beli currency: 30.0 (millions) -> 30,000,000 Beli."""
     if amount_m <= 0:
         return "0 Beli"
@@ -1110,6 +1434,36 @@ class TopAIManager(commands.Cog, name="TopAIManager"):
         try:
             parsed = self.top_mgr.parse_top_query(query)
         except KeyError as ke:
+            # Check if Gemini AI can interpret free-form pricing questions or strategy inquiries
+            ai_mgr = getattr(self.bot, "ai_mgr", None)
+            api_key = os.getenv("GEMINI_API_KEY", "").strip()
+            if ai_mgr and api_key:
+                try:
+                    system_prompt = (
+                        "You are Kyoka 3.0, the Aizen Edition Blox Fruits service assistant. "
+                        "You advise clients and staff on Blox Fruits services, pricing rules, raids, trials, and builds. "
+                        "All prices are in Millions (M) or Billions (B) of in-game Beli/currency or Fruits. "
+                        "Never mention USD, dollars, or real-world money. "
+                        "Keep answers concise, direct, helpful, and anime-styled."
+                    )
+                    ai_reply = await ai_mgr.get_response(
+                        guild_id=ctx.guild.id if ctx.guild else 0,
+                        channel_id=ctx.channel.id,
+                        user_id=ctx.author.id,
+                        user_message=f"{system_prompt}\n\nUser Question: {query}",
+                        persona="aizen",
+                    )
+                    ai_emb = discord.Embed(
+                        title="⛩️ KYOKA AI ASSISTANT",
+                        description=ai_reply[:2000],
+                        color=KyokaTheme.PRIMARY,
+                    )
+                    ai_emb.set_thumbnail(url=AIZEN_THUMBNAIL_URL)
+                    ai_emb.set_footer(text=f"Kyoka 3.0 AI • Query: {query[:50]}")
+                    return await ctx.reply(embed=ai_emb, mention_author=False)
+                except Exception as ai_ex:
+                    logger.debug(f"AI fallback failed: {ai_ex}")
+
             err_emb = discord.Embed(
                 title="⚠️ Service Not Found",
                 description=f"{ke}\n\n*Type `{p}top prices` to view the complete price catalogue or contact staff.*",
@@ -1119,99 +1473,254 @@ class TopAIManager(commands.Cog, name="TopAIManager"):
         except Exception as e:
             return await ctx.reply(f"❌ Could not interpret query: {e}", mention_author=False)
 
-        calc: CalculationResult = parsed["calculation"]
+        calc = parsed["calculation"]
 
         # If user intended to create a bill
         if parsed["intent"] == "make_bill":
             if not self.is_bot_staff(ctx):
-                # Inform that only staff create official bills, but show the calculated pricing
-                unauth_emb = discord.Embed(
-                    title="⛩️ TOP AI MANAGER • PRICE CALCULATION",
-                    description=(
-                        f"**Note:** Official bills must be generated by authorized staff.\n"
-                        f"Here is your exact calculated price:\n\n"
-                        f"• **Service:** `{calc.service_name}`\n"
-                        f"• **Quantity:** `{calc.quantity}`\n"
-                        f"• **Unit Price:** `{calc.unit_display}`\n"
-                        f"• **Subtotal:** `{calc.subtotal_display}`\n"
-                        f"• **Tax:** `{calc.tax_rate}%` (`+{calc.tax_display}`)\n"
-                        f"• **Final Total:** **{calc.total_display}**"
-                    ),
-                    color=KyokaTheme.PRIMARY,
+                unauth_emb = format_quote_embed(calc)
+                view = InteractiveQuoteView(
+                    self.top_mgr, calc, ctx.author.id, ctx.guild.id if ctx.guild else 0
                 )
-                if calc.condition_note:
-                    unauth_emb.add_field(name="📌 Condition Note", value=f"> {calc.condition_note}", inline=False)
-                return await ctx.reply(embed=unauth_emb, mention_author=False)
+                msg = await ctx.reply(
+                    content="ℹ️ *Official bills must be generated by authorized staff. Here is your itemized quote:*",
+                    embed=unauth_emb,
+                    view=view,
+                    mention_author=False,
+                )
+                view.message = msg
+                return
 
             # Staff creating bill via natural language
-            bill = self.top_mgr.create_bill(
-                guild_id=ctx.guild.id if ctx.guild else 0,
-                creator_id=ctx.author.id,
-                creator_name=str(ctx.author),
-                service_name=calc.service_name,
-                quantity=calc.quantity,
-                tax_rate=calc.tax_rate,
-                condition_notes=calc.condition_note,
-            )
+            if isinstance(calc, MultiCalculationResult):
+                bill = self.top_mgr.create_multi_bill(
+                    guild_id=ctx.guild.id if ctx.guild else 0,
+                    creator_id=ctx.author.id,
+                    creator_name=str(ctx.author),
+                    multi_calc=calc,
+                )
+            else:
+                bill = self.top_mgr.create_bill(
+                    guild_id=ctx.guild.id if ctx.guild else 0,
+                    creator_id=ctx.author.id,
+                    creator_name=str(ctx.author),
+                    service_name=calc.service_name,
+                    quantity=calc.quantity,
+                    tax_rate=calc.tax_rate,
+                    condition_notes=calc.condition_note,
+                )
 
-            bill_emb = discord.Embed(
-                title=f"🧾 SERVICE BILL GENERATED • {bill['id']}",
-                description=(
-                    f"**Service:** `{bill['service_name']}`\n"
-                    f"**Quantity:** `{bill['quantity']}`\n"
-                    f"**Subtotal:** `{bill['subtotal_display']}`\n"
-                    f"**Tax ({bill['tax_rate']}%):** `{bill['tax_display']}`\n"
-                    f"**Amount Due:** **{bill['total_display']}**\n\n"
-                    f"• **Status:** 🟡 **UNPAID**\n"
-                    f"• **Staff Creator:** {ctx.author.mention}\n"
-                    f"• **To Pay:** Send payment proof message ID: `{p}top paid {bill['id']} <message_id>`"
-                ),
-                color=KyokaTheme.PRIMARY,
-                timestamp=discord.utils.utcnow(),
-            )
-            bill_emb.set_thumbnail(url=AIZEN_THUMBNAIL_URL)
-            bill_emb.set_footer(text=f"Bill ID: {bill['id']} • Kyoka Top AI Manager")
-            return await ctx.reply(embed=bill_emb, mention_author=False)
+            bill_emb = format_blox_fruits_bill_embed(bill, customer_user=None, creator_user=ctx.author, guild=ctx.guild)
+            msg = await ctx.reply(embed=bill_emb, mention_author=False)
+            self.top_mgr.set_bill_posted_message(bill["id"], ctx.channel.id, msg.id)
+            return
 
-        # Standard Price Inquiry Response (Strictly single-service requested result)
-        embed = format_single_price_embed(calc)
-        await ctx.reply(embed=embed, mention_author=False)
+        # Standard Price Inquiry Response with Interactive Quote View
+        embed = format_quote_embed(calc)
+        if not getattr(calc, "is_clarification", False) and not getattr(calc, "clarification_needed", False):
+            view = InteractiveQuoteView(
+                self.top_mgr, calc, ctx.author.id, ctx.guild.id if ctx.guild else 0
+            )
+            msg = await ctx.reply(embed=embed, view=view, mention_author=False)
+            view.message = msg
+        else:
+            await ctx.reply(embed=embed, mention_author=False)
 
     # ── SUBCOMMAND: ?top bill ──────────────────────────────────────────────────
     @top_group.group(name="bill", invoke_without_command=True)
     async def bill_cmd(
         self,
         ctx: CustomContext,
-        service: str,
-        quantity: int = 1,
-        tax: float = 0.0,
-        customer: Optional[Union[discord.Member, discord.User]] = None,
+        *,
+        raw_input: Optional[str] = None,
     ):
-        """Create a new service bill.
+        """Create a new service bill or view billing console.
         
         Usage: +top bill <service> [quantity] [tax%] [@customer]
-        Example: +top bill "2 trials" 1 5 @User
+        Examples:
+        • +top bill 10 normal raids and 1 max race @Customer
+        • +top bill "2 trials" 1 5% @Customer
+        • +top bill 2 trials @Customer
+        • +top bill dough king
         """
-        if not self.is_bot_staff(ctx):
-            return await ctx.reply("❌ Staff permissions required to create official bills.", mention_author=False)
+        p = ctx.prefix or Config.DEFAULT_PREFIX
+        if not raw_input or not raw_input.strip():
+            embed = discord.Embed(
+                title="🧾 BLOX FRUITS SERVICE BILLING CONSOLE",
+                description=(
+                    "> **Create and manage itemized in-game service bills.**\n\n"
+                    f"**📌 Command Syntax:**\n"
+                    f"• `{p}top bill <service> [quantity] [tax%] [@customer]`\n"
+                    f"• `{p}top bill 10 normal raids and 1 max race @Customer`\n"
+                    f"• `{p}top bill 2 trials 5% @Customer`\n\n"
+                    f"**🔍 Bill Management:**\n"
+                    f"• `{p}top bill view <bill_id>` — View itemized bill details\n"
+                    f"• `{p}top bill list [status]` — List recent server bills\n"
+                    f"• `{p}top paid <bill_id> <message_id>` — Confirm payment proof"
+                ),
+                color=KyokaTheme.PRIMARY,
+            )
+            embed.set_thumbnail(url=AIZEN_THUMBNAIL_URL)
+            embed.set_footer(text="Kyoka Top AI Manager")
+            return await ctx.reply(embed=embed, mention_author=False)
 
+        customer = None
+        cleaned_input = raw_input.strip()
+
+        # Parse user mention or user ID safely
+        mention_match = re.search(r'<@!?(\d{17,20})>', cleaned_input)
+        if mention_match:
+            uid = int(mention_match.group(1))
+            if ctx.guild:
+                customer = ctx.guild.get_member(uid)
+            if not customer:
+                try:
+                    customer = await self.bot.fetch_user(uid)
+                except Exception:
+                    pass
+            cleaned_input = cleaned_input.replace(mention_match.group(0), "").strip()
+        else:
+            id_match = re.search(r'\b(\d{17,20})\b', cleaned_input)
+            if id_match:
+                uid = int(id_match.group(1))
+                if ctx.guild:
+                    customer = ctx.guild.get_member(uid)
+                if not customer:
+                    try:
+                        customer = await self.bot.fetch_user(uid)
+                    except Exception:
+                        pass
+                cleaned_input = cleaned_input.replace(id_match.group(0), "").strip()
+
+        # Parse tax percentage if present
+        tax = 0.0
+        tax_m = re.search(r'(\d+(?:\.\d+)?)\s*%', cleaned_input)
+        if tax_m:
+            try:
+                tax = float(tax_m.group(1))
+                cleaned_input = cleaned_input.replace(tax_m.group(0), "").strip()
+            except ValueError:
+                pass
+
+        # Permission check
+        if not self.is_bot_staff(ctx):
+            try:
+                parsed = self.top_mgr.parse_top_query(cleaned_input, tax_override=tax)
+                calc = parsed["calculation"]
+                embed = format_quote_embed(calc)
+                view = InteractiveQuoteView(
+                    self.top_mgr, calc, ctx.author.id, ctx.guild.id if ctx.guild else 0,
+                    customer_id=customer.id if customer else None,
+                    customer_name=str(customer) if customer else "",
+                )
+                msg = await ctx.reply(
+                    content="ℹ️ *Official bills must be generated by authorized staff. Here is your itemized quote:*",
+                    embed=embed,
+                    view=view,
+                    mention_author=False,
+                )
+                view.message = msg
+                return
+            except Exception as e:
+                return await ctx.reply(f"❌ Staff permissions required to create official bills. (Could not calculate quote: {e})", mention_author=False)
+
+        # Staff workflow: First try parsing as a natural multi-service or catalogue query
+        try:
+            parsed = self.top_mgr.parse_top_query(cleaned_input, tax_override=tax)
+            calc = parsed["calculation"]
+            if isinstance(calc, MultiCalculationResult):
+                bill = self.top_mgr.create_multi_bill(
+                    guild_id=ctx.guild.id if ctx.guild else 0,
+                    creator_id=ctx.author.id,
+                    creator_name=str(ctx.author),
+                    multi_calc=calc,
+                    customer_id=customer.id if customer else None,
+                    customer_name=str(customer) if customer else "",
+                )
+            else:
+                bill = self.top_mgr.create_bill(
+                    guild_id=ctx.guild.id if ctx.guild else 0,
+                    creator_id=ctx.author.id,
+                    creator_name=str(ctx.author),
+                    service_name=calc.service_name,
+                    quantity=calc.quantity,
+                    tax_rate=tax or calc.tax_rate,
+                    customer_id=customer.id if customer else None,
+                    customer_name=str(customer) if customer else "",
+                    condition_notes=calc.condition_note,
+                )
+            embed = format_blox_fruits_bill_embed(bill, customer_user=customer, creator_user=ctx.author, guild=ctx.guild)
+            msg = await ctx.reply(embed=embed, mention_author=False)
+            self.top_mgr.set_bill_posted_message(bill["id"], ctx.channel.id, msg.id)
+            return
+        except Exception:
+            pass
+
+        # Fallback structured parsing: service_name and trailing quantity
+        parts = cleaned_input.split()
+        if not parts:
+            return await ctx.reply(f"❌ Invalid bill parameters. Usage: `{p}top bill <service> [quantity] [tax%] [@customer]`", mention_author=False)
+
+        qty = 1
+        if len(parts) > 1 and parts[-1].isdigit():
+            qty = int(parts.pop())
+            if qty < 1 or qty > 10000:
+                return await ctx.reply("❌ Quantity must be between 1 and 10,000.", mention_author=False)
+
+        service_name = " ".join(parts).strip().strip('"\'')
         try:
             bill = self.top_mgr.create_bill(
                 guild_id=ctx.guild.id if ctx.guild else 0,
                 creator_id=ctx.author.id,
                 creator_name=str(ctx.author),
-                service_name=service,
-                quantity=quantity,
+                service_name=service_name,
+                quantity=qty,
                 tax_rate=tax,
                 customer_id=customer.id if customer else None,
                 customer_name=str(customer) if customer else "",
             )
+            embed = format_blox_fruits_bill_embed(bill, customer_user=customer, creator_user=ctx.author, guild=ctx.guild)
+            msg = await ctx.reply(embed=embed, mention_author=False)
+            self.top_mgr.set_bill_posted_message(bill["id"], ctx.channel.id, msg.id)
         except Exception as e:
             return await ctx.reply(f"⚠️ **Error creating bill:** {e}", mention_author=False)
 
-        embed = format_blox_fruits_bill_embed(bill, customer_user=customer, creator_user=ctx.author, guild=ctx.guild)
-        msg = await ctx.reply(embed=embed, mention_author=False)
-        self.top_mgr.set_bill_posted_message(bill["id"], ctx.channel.id, msg.id)
+
+    @commands.hybrid_command(
+        name="aihelp",
+        aliases=["tophelp", "helpai"],
+        description="Comprehensive guide to Blox Fruits pricing AI assistant, personalities, and voice TTS.",
+    )
+    async def aihelp_cmd(self, ctx: CustomContext):
+        """Display dedicated AI Blox Fruits pricing and assistant guide."""
+        p = ctx.prefix or Config.DEFAULT_PREFIX
+        embed = discord.Embed(
+            title="⛩️ KYOKA 3.0 • AI TOP ASSISTANT & PRICING MANUAL",
+            description=(
+                "> **Intelligent Natural Language Pricing Assistant & In-Game Service Billing**\n"
+                "> Kyoka understands free-form queries, itemizes package deals, calculates decimal-safe taxes, "
+                "and generates interactive official bills using the authoritative Throne of Pirate catalogue.\n\n"
+                f"**💬 Natural Language Examples:**\n"
+                f"• `{p}top price of 10 normal raids and 1 max race` — Itemized multi-service quote\n"
+                f"• `{p}top how much for 5 normal raids?` — Instant tier calculation\n"
+                f"• `{p}top price of max race with 3 extra trainings` — Package rules & training math\n"
+                f"• `{p}top how much is Dough King?` — Boss bounty lookup\n"
+                f"• `{p}top compare the price of 5 raids with 10 raids` — Interactive comparison\n"
+                f"• `{p}top price of 2 trials with 5% tax` — Decimal-safe tax calculation\n"
+                f"• `{p}top make a bill for 10 normal raids and 1 Max Race package` — Direct invoice quote\n\n"
+                f"**🧾 One-Click Bill Generation:**\n"
+                f"• Every quote provides an interactive **`[ 🧾 Create Bill ]`** button.\n"
+                f"• Staff can set customer mentions, adjust quantities, and generate permanent audit bills.\n"
+                f"• Duplicate clicks are automatically locked and prevented.\n\n"
+                f"**⚙️ Currency & In-Game Values:**\n"
+                f"• All prices are quoted in **Millions (M)** or **Billions (B)** of in-game Beli or Fruits.\n"
+                f"• Never converts to or uses real-world USD currency."
+            ),
+            color=KyokaTheme.PRIMARY,
+        )
+        embed.set_thumbnail(url=AIZEN_THUMBNAIL_URL)
+        embed.set_footer(text=f"Kyoka 3.0 • AI Top Assistant • Requested by {ctx.author.display_name}")
+        await ctx.reply(embed=embed, mention_author=False)
 
     @bill_cmd.command(name="view")
     async def bill_view_cmd(self, ctx: CustomContext, bill_id: str):

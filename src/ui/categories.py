@@ -258,7 +258,7 @@ CATEGORY_SEARCH_ALIASES: dict[str, str] = {
     "vlb": "vouches", "vouchinfo": "vouches", "vouchhistory": "vouches", "vouchimport": "vouches",
     # Service Bills
     "bill": "service_bills", "bills": "service_bills", "invoice": "service_bills", "service": "service_bills", "billing": "service_bills",
-    "top": "service_bills", "topai": "service_bills", "topmanager": "service_bills", "toptiers": "service_bills",
+    "top": "service_bills", "topai": "service_bills", "topmanager": "service_bills", "toptiers": "service_bills", "aihelp": "service_bills",
     # Staff Applications
     "staff": "staff_applications", "apply": "staff_applications", "apps": "staff_applications",
     "application": "staff_applications", "applications": "staff_applications", "staffapp": "staff_applications",

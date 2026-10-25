@@ -65,6 +65,37 @@ class CalculationResult:
     is_clarification: bool = False
     clarification_title: str = ""
     clarification_options: list[str] = field(default_factory=list)
+    # Smart pricing fields
+    is_provisional: bool = False
+    baseline_price: float = 0.0
+    baseline_display: str = ""
+    extra_charges: float = 0.0
+    extra_charges_display: str = ""
+    pricing_explanation: str = ""
+    requires_staff_approval: bool = False
+
+
+@dataclass
+class MultiCalculationResult:
+    items: list[CalculationResult]
+    subtotal: float
+    subtotal_display: str
+    tax_rate: float
+    tax_amount: float
+    tax_display: str
+    total: float
+    total_display: str
+    service_name: str = ""
+    is_multi: bool = True
+    comparison_mode: bool = False
+    clarification_needed: bool = False
+    clarifications: list[CalculationResult] = field(default_factory=list)
+    requires_staff_approval: bool = False
+    pricing_explanation: str = ""
+    condition_note: str = ""
+    category: str = "Multi-Service Package"
+    quantity: int = 1
+
 
 
 
@@ -695,7 +726,7 @@ INITIAL_PRICES: list[dict[str, Any]] = [
         "category": "Swords",
         "service_key": "sword_cdk",
         "service_name": "CDK",
-        "aliases": ["cdk", "cursed dual katana"],
+        "aliases": ["cdk", "cursed dual katana", "cdk from start", "cdk from the start"],
         "price_amount": 600.0,
         "price_display": "600M",
         "unit_desc": "",
@@ -1613,10 +1644,20 @@ class TopManager:
                 conn.execute("ALTER TABLE top_bills ADD COLUMN posted_channel_id INTEGER DEFAULT 0;")
             if "posted_message_id" not in cols_bills:
                 conn.execute("ALTER TABLE top_bills ADD COLUMN posted_message_id TEXT DEFAULT '';")
-            conn.execute("CREATE INDEX IF NOT EXISTS idx_top_bills_posted_msg ON top_bills(posted_message_id);")
-
+            conn.execute("""
+                CREATE TABLE IF NOT EXISTS top_pricing_policy (
+                    guild_id INTEGER PRIMARY KEY,
+                    custom_markup_pct REAL DEFAULT 0.0,
+                    large_order_surcharge_pct REAL DEFAULT 0.0,
+                    max_auto_increase_pct REAL DEFAULT 50.0,
+                    approval_threshold_amount REAL DEFAULT 500.0,
+                    updated_at REAL NOT NULL,
+                    updated_by INTEGER
+                );
+            """)
 
             # Seed initial catalogue if table is empty
+
             count = conn.execute("SELECT COUNT(*) FROM top_prices").fetchone()[0]
             if count == 0:
                 now = time.time()
@@ -1816,9 +1857,95 @@ class TopManager:
         cleaned = re.sub(r'[?.,!]', ' ', cleaned).strip()
         norm = re.sub(r'\s+', ' ', cleaned).strip()
 
+        # Comparison Query: e.g. "compare 5 raids with 10 raids" or "compare the price of 5 normal raids with 10 normal raids"
+        comp_m = re.match(r'^compare\b(?:\s+the)?(?:\s+(?:price|cost))?(?:\s+of)?\s+(.+?)\s+(?:with|to|vs|and)\s+(.+)$', norm, re.I)
+        if comp_m:
+            item1_str = comp_m.group(1).strip()
+            item2_str = comp_m.group(2).strip()
+            try:
+                res1 = self.parse_top_query(item1_str, tax_override=tax_rate)
+                res2 = self.parse_top_query(item2_str, tax_override=tax_rate)
+                c1 = res1["calculation"]
+                c2 = res2["calculation"]
+                multi_comp = MultiCalculationResult(
+                    items=[c1, c2],
+                    subtotal=0.0,
+                    subtotal_display="",
+                    tax_rate=tax_rate,
+                    tax_amount=0.0,
+                    tax_display="",
+                    total=0.0,
+                    total_display="",
+                    service_name=f"Comparison: {c1.service_name} vs {c2.service_name}",
+                    comparison_mode=True,
+                    clarification_needed=(c1.is_clarification or c2.is_clarification),
+                    clarifications=[c for c in (c1, c2) if c.is_clarification],
+                )
+                return {
+                    "intent": "price_lookup",
+                    "calculation": multi_comp,
+                    "multi_calculation": multi_comp,
+                    "quantity": 2,
+                    "tax_rate": tax_rate,
+                    "raw_query": raw,
+                }
+            except Exception:
+                pass
+
+        # Multi-Item Query: e.g. "10 normal raids and 1 max race" or "2 trials and dough king"
+        # We split on ' and ' or ',' or ' + ' (ignoring composite names like 'mirage + blue gear')
+        if (" and " in norm or ", " in norm or (" + " in norm and "mirage" not in norm)) and "mirage and blue gear" not in norm and "mirage + blue gear" not in norm and "mirage plus blue gear" not in norm:
+            multi_parts = [p.strip() for p in re.split(r'\s+and\s+|,\s*|\s*\+\s*', norm) if p.strip()]
+            if len(multi_parts) > 1:
+                item_calcs: list[CalculationResult] = []
+                all_ok = True
+                for part in multi_parts:
+                    try:
+                        part_res = self.parse_top_query(part, tax_override=0.0)
+                        part_calc = part_res.get("calculation")
+                        if isinstance(part_calc, CalculationResult):
+                            item_calcs.append(part_calc)
+                        elif isinstance(part_calc, MultiCalculationResult):
+                            item_calcs.extend(part_calc.items)
+                        else:
+                            all_ok = False
+                            break
+                    except Exception:
+                        all_ok = False
+                        break
+
+                if all_ok and len(item_calcs) > 1:
+                    subtot = sum(c.subtotal for c in item_calcs)
+                    tax_amt, tot = self.calculate_tax(subtot, tax_rate)
+                    has_custom = any(c.custom_quote for c in item_calcs)
+                    clarifs = [c for c in item_calcs if c.is_clarification]
+                    multi_calc = MultiCalculationResult(
+                        items=item_calcs,
+                        subtotal=subtot,
+                        subtotal_display=self.format_price(subtot) if not has_custom else "Custom Quote",
+                        tax_rate=tax_rate,
+                        tax_amount=tax_amt,
+                        tax_display=self.format_price(tax_amt) if tax_amt > 0 else "0M",
+                        total=tot,
+                        total_display=self.format_price(tot) if not has_custom else "Custom Quote",
+                        service_name=" + ".join(c.service_name for c in item_calcs),
+                        clarification_needed=len(clarifs) > 0,
+                        clarifications=clarifs,
+                        requires_staff_approval=any(c.requires_staff_approval for c in item_calcs) or tot >= 500.0,
+                    )
+                    return {
+                        "intent": "make_bill" if is_make_bill else "price_lookup",
+                        "calculation": multi_calc,
+                        "multi_calculation": multi_calc,
+                        "quantity": sum(c.quantity for c in item_calcs),
+                        "tax_rate": tax_rate,
+                        "raw_query": raw,
+                    }
+
         # ─────────────────────────────────────────────────────────────────────
         # A. BELI FARMING
         # ─────────────────────────────────────────────────────────────────────
+
         if "beli" in norm or "money" in norm:
             m_amt = re.search(r'\b(5|10|15|20|25|30)\s*(?:m|million)?\b', norm)
             target_amt = int(m_amt.group(1)) if m_amt else 10
@@ -2266,7 +2393,7 @@ class TopManager:
         # ─────────────────────────────────────────────────────────────────────
         # E. TRIALS
         # ─────────────────────────────────────────────────────────────────────
-        if "trial" in norm or "trials" in norm:
+        if "trial" in norm or "trials" in norm or "max race" in norm:
             if "draco" in norm:
                 m_q = re.search(r'\b(\d+)\b', norm)
                 qty = int(m_q.group(1)) if m_q else 1
@@ -2331,8 +2458,53 @@ class TopManager:
                 )
                 return {"intent": "make_bill" if is_make_bill else "price_lookup", "calculation": calc, "quantity": qty, "tax_rate": tax_rate, "raw_query": raw}
             elif "max race package" in norm or "max race" in norm or "race package" in norm:
+                m_extra = re.search(r'(?:with|\+)\s*(\d+)\s*(?:extra\s*)?training', norm)
+                if m_extra:
+                    extra_count = int(m_extra.group(1))
+                    item = self.get_price("trial_max_race_package")
+                    tax_amt, tot = self.calculate_tax(item.price_amount, tax_rate)
+                    calc = CalculationResult(
+                        service_name="Max Race Package (Training Included)",
+                        category="Trials",
+                        quantity=1,
+                        unit_price=item.price_amount,
+                        unit_display=item.price_display,
+                        subtotal=item.price_amount,
+                        subtotal_display=item.price_display,
+                        tax_rate=tax_rate,
+                        tax_amount=tax_amt,
+                        tax_display=self.format_price(tax_amt) if tax_amt > 0 else "0M",
+                        total=tot,
+                        total_display=self.format_price(tot),
+                        condition_note=f"Max Race Package ({item.price_display}) explicitly includes full training. No additional charge added for {extra_count} trainings.",
+                        pricing_explanation="Complete training is already included in the 150M Max Race Package.",
+                    )
+                    return {"intent": "make_bill" if is_make_bill else "price_lookup", "calculation": calc, "quantity": 1, "tax_rate": tax_rate, "raw_query": raw}
                 item = self.get_price("trial_max_race_package")
             elif "max trial" in norm or "max trials" in norm or "full trial" in norm:
+                m_extra = re.search(r'(?:with|\+)\s*(\d+)\s*(?:extra\s*)?training', norm)
+                if m_extra:
+                    extra_count = int(m_extra.group(1))
+                    training_cost = extra_count * 10.0
+                    subtotal = 100.0 + training_cost
+                    tax_amt, tot = self.calculate_tax(subtotal, tax_rate)
+                    calc = CalculationResult(
+                        service_name=f"Max Trial + {extra_count} Extra Trainings",
+                        category="Trials",
+                        quantity=1,
+                        unit_price=subtotal,
+                        unit_display=self.format_price(subtotal),
+                        subtotal=subtotal,
+                        subtotal_display=self.format_price(subtotal),
+                        tax_rate=tax_rate,
+                        tax_amount=tax_amt,
+                        tax_display=self.format_price(tax_amt) if tax_amt > 0 else "0M",
+                        total=tot,
+                        total_display=self.format_price(tot),
+                        condition_note=f"Max Trial: 100M (training not included) + {extra_count} gear trainings (+{int(training_cost)}M)",
+                        pricing_explanation=f"Base Max Trial (100M) + {extra_count}x 10M gear training.",
+                    )
+                    return {"intent": "make_bill" if is_make_bill else "price_lookup", "calculation": calc, "quantity": 1, "tax_rate": tax_rate, "raw_query": raw}
                 item = self.get_price("trial_max")
             elif "training" in norm:
                 item = self.get_price("trial_training")
@@ -2704,6 +2876,125 @@ class TopManager:
             conn.commit()
 
         return self.get_bill(bill_id)
+
+    def create_multi_bill(
+        self,
+        guild_id: int,
+        creator_id: int,
+        creator_name: str,
+        multi_calc: MultiCalculationResult,
+        customer_id: Optional[int] = None,
+        customer_name: str = "",
+        payment_type: str = "Beli",
+        notes: str = "",
+        posted_channel_id: int = 0,
+        posted_message_id: str = "",
+    ) -> dict[str, Any]:
+        """Create and persist a multi-item service bill in UNPAID status."""
+        itemized_lines = [f"• {item.service_name} (Qty: {item.quantity}): {item.subtotal_display}" for item in multi_calc.items]
+        combined_notes = "\n".join(itemized_lines)
+        if notes:
+            combined_notes += f"\nNotes: {notes}"
+
+        bill_id = self.generate_bill_id()
+        now = time.time()
+        service_title = multi_calc.service_name[:100]
+
+        with self._get_connection() as conn:
+            conn.execute("""
+                INSERT INTO top_bills (
+                    id, guild_id, customer_id, customer_name, service_name, category,
+                    quantity, unit_price, unit_price_display, subtotal, subtotal_display,
+                    tax_rate, tax_amount, tax_display, total, total_display, status,
+                    condition_notes, notes, creator_id, creator_name, created_at, updated_at,
+                    payment_type, currency_unit, fruit_details, posted_channel_id, posted_message_id
+                ) VALUES (?, ?, ?, ?, ?, 'Multi-Service Package', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'UNPAID', ?, ?, ?, ?, ?, ?, ?, ?, '', ?, ?)
+            """, (
+                bill_id,
+                guild_id,
+                customer_id,
+                customer_name,
+                service_title,
+                len(multi_calc.items),
+                multi_calc.subtotal,
+                multi_calc.subtotal_display,
+                multi_calc.subtotal,
+                multi_calc.subtotal_display,
+                multi_calc.tax_rate,
+                multi_calc.tax_amount,
+                multi_calc.tax_display,
+                multi_calc.total,
+                multi_calc.total_display,
+                combined_notes,
+                notes,
+                creator_id,
+                creator_name,
+                now,
+                now,
+                payment_type or "Beli",
+                "Beli",
+                posted_channel_id,
+                str(posted_message_id) if posted_message_id else "",
+            ))
+
+            conn.execute("""
+                INSERT INTO top_bill_audit (
+                    bill_id, guild_id, staff_id, action, old_status, new_status, details, timestamp
+                ) VALUES (?, ?, ?, 'CREATED', NULL, 'UNPAID', ?, ?)
+            """, (bill_id, guild_id, creator_id, f"Created multi-item bill for {len(multi_calc.items)} services (Total: {multi_calc.total_display})", now))
+
+            conn.commit()
+
+        return self.get_bill(bill_id)
+
+    def get_pricing_policy(self, guild_id: int) -> dict[str, Any]:
+        """Fetch server-specific pricing markup and surcharge policy."""
+        with self._get_connection() as conn:
+            row = conn.execute("SELECT * FROM top_pricing_policy WHERE guild_id = ?", (guild_id,)).fetchone()
+            if row:
+                return dict(row)
+            return {
+                "guild_id": guild_id,
+                "custom_markup_pct": 0.0,
+                "large_order_surcharge_pct": 0.0,
+                "max_auto_increase_pct": 50.0,
+                "approval_threshold_amount": 500.0,
+            }
+
+    def update_pricing_policy(
+        self,
+        guild_id: int,
+        updated_by: int,
+        custom_markup_pct: Optional[float] = None,
+        large_order_surcharge_pct: Optional[float] = None,
+        max_auto_increase_pct: Optional[float] = None,
+        approval_threshold_amount: Optional[float] = None,
+    ) -> dict[str, Any]:
+        """Update configurable price policy parameters."""
+        now = time.time()
+        curr = self.get_pricing_policy(guild_id)
+        new_markup = custom_markup_pct if custom_markup_pct is not None else curr["custom_markup_pct"]
+        new_surch = large_order_surcharge_pct if large_order_surcharge_pct is not None else curr["large_order_surcharge_pct"]
+        new_max = max_auto_increase_pct if max_auto_increase_pct is not None else curr["max_auto_increase_pct"]
+        new_thresh = approval_threshold_amount if approval_threshold_amount is not None else curr["approval_threshold_amount"]
+
+        with self._get_connection() as conn:
+            conn.execute("""
+                INSERT INTO top_pricing_policy (
+                    guild_id, custom_markup_pct, large_order_surcharge_pct,
+                    max_auto_increase_pct, approval_threshold_amount, updated_at, updated_by
+                ) VALUES (?, ?, ?, ?, ?, ?, ?)
+                ON CONFLICT(guild_id) DO UPDATE SET
+                    custom_markup_pct = excluded.custom_markup_pct,
+                    large_order_surcharge_pct = excluded.large_order_surcharge_pct,
+                    max_auto_increase_pct = excluded.max_auto_increase_pct,
+                    approval_threshold_amount = excluded.approval_threshold_amount,
+                    updated_at = excluded.updated_at,
+                    updated_by = excluded.updated_by
+            """, (guild_id, new_markup, new_surch, new_max, new_thresh, now, updated_by))
+            conn.commit()
+        return self.get_pricing_policy(guild_id)
+
 
 
     def get_bill(self, bill_id: str) -> Optional[dict[str, Any]]:
@@ -3463,3 +3754,53 @@ class TopManager:
             conn.commit()
 
         return self.get_billing_config(guild_id)
+
+    def get_pricing_policy(self, guild_id: int) -> dict[str, Any]:
+        """Get guild smart pricing policy (custom markup, surcharge, max auto increase, staff approval threshold)."""
+        with self._get_connection() as conn:
+            row = conn.execute("SELECT * FROM top_pricing_policy WHERE guild_id = ?", (guild_id,)).fetchone()
+            if row:
+                d = dict(row)
+                d["custom_order_markup_percent"] = d.get("custom_markup_pct", 0.0)
+                d["requires_staff_approval_above_beli"] = d.get("approval_threshold_amount", 500.0)
+                return d
+            return {
+                "guild_id": guild_id,
+                "custom_markup_pct": 0.0,
+                "custom_order_markup_percent": 0.0,
+                "large_order_surcharge_pct": 0.0,
+                "max_auto_increase_pct": 50.0,
+                "approval_threshold_amount": 500.0,
+                "requires_staff_approval_above_beli": 500.0,
+                "updated_at": time.time(),
+                "updated_by": None,
+            }
+
+    def update_pricing_policy(
+        self,
+        guild_id: int,
+        custom_markup: float = 0.0,
+        large_order_surcharge: float = 0.0,
+        max_auto_increase: float = 50.0,
+        staff_approval_threshold: float = 500.0,
+        updated_by: Optional[int] = None,
+    ) -> dict[str, Any]:
+        """Update or insert guild pricing policy."""
+        now = time.time()
+        with self._get_connection() as conn:
+            conn.execute("""
+                INSERT INTO top_pricing_policy (
+                    guild_id, custom_markup_pct, large_order_surcharge_pct,
+                    max_auto_increase_pct, approval_threshold_amount, updated_at, updated_by
+                ) VALUES (?, ?, ?, ?, ?, ?, ?)
+                ON CONFLICT(guild_id) DO UPDATE SET
+                    custom_markup_pct = excluded.custom_markup_pct,
+                    large_order_surcharge_pct = excluded.large_order_surcharge_pct,
+                    max_auto_increase_pct = excluded.max_auto_increase_pct,
+                    approval_threshold_amount = excluded.approval_threshold_amount,
+                    updated_at = excluded.updated_at,
+                    updated_by = excluded.updated_by
+            """, (guild_id, custom_markup, large_order_surcharge, max_auto_increase, staff_approval_threshold, now, updated_by))
+            conn.commit()
+        return self.get_pricing_policy(guild_id)
+

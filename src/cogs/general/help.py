@@ -928,8 +928,8 @@ class Help(commands.Cog):
         container = KyokaContainer(accent_color=None)
         container.add_section(
             content=(
-                f"**⛩️ Kyoka 3.0 — Ultimate All-In-One Discord Bot**\n"
-                f"> Clean onboarding, automatic AI companions, robust moderation, and community entertainment."
+                f"**Hey, I'm {Config.BOT_NAME}**\n"
+                f"> Built for our community — keeping your server safe, active, and effortlessly connected."
             )
         )
         container.add_separator(divider=True)
@@ -937,8 +937,7 @@ class Help(commands.Cog):
         container.add_text(
             f"{dot} **Latency:** `{ws_ping}ms`\n"
             f"{dot} **Prefix:** `{current_prefix}` | **Slash:** `/`\n"
-            f"{dot} **Categories:** `{len(visible_categories)}` | **Available Commands:** `{total_commands}`\n"
-            f"{dot} **Quick Start:** Type `{current_prefix}quickstart` or `{current_prefix}setup` to configure your server in minutes!"
+            f"{dot} **Available Commands:** `{total_commands}`"
         )
         container.add_separator(divider=True)
         container.add_text(f"-# **Requested by {author.display_name} • Type {current_prefix}help <command> for details**")
@@ -1063,18 +1062,25 @@ class Help(commands.Cog):
 
         embed = KyokaHelpEmbed(
             title="⛩️ KYOKA HELP — Kyoka 3.0",
-            description="> Choose a category below to explore commands.",
+            description=(
+                f"**Hey, I'm {Config.BOT_NAME}**\n"
+                f"> Built for our community — keeping your server safe, active, and effortlessly connected.\n\n"
+                f"> Choose a category below to explore commands.\n\n"
+                f"• **Latency:** `{ws_ping}ms`\n"
+                f"• **Prefix:** `{p}` | **Slash:** `/`\n"
+                f"• **Available Commands:** `{total_commands}`"
+            ),
             color=0x2B0938,
         )
 
         embed.add_field(
             name="📊 System Status",
-            value=f"• **Ping:** `{ws_ping}ms` • **Prefix:** `{p}` • **Commands:** `{total_commands}`",
+            value=f"• **Latency:** `{ws_ping}ms` • **Prefix:** `{p}` • **Commands:** `{total_commands}`",
             inline=True,
         )
         embed.add_field(
             name="✨ Key Features",
-            value=f"• Select a module from the dropdown below\n• Type `{p}help <command>` for detailed manual",
+            value=f"• Select a module from the dropdown below\n• Type `{p}help <command>` for detailed manual\n• Type `{p}aihelp` for Blox Fruits AI assistance",
             inline=True,
         )
 
