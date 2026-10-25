@@ -239,51 +239,26 @@ class KyokaBot(commands.Bot):
         return True
 
     async def _handle_bot_mention(self, message: discord.Message) -> None:
-        """Respond to bot mention with friendly greeting and interactive help dashboard."""
-        greeting_text = "Hey! I'm KYOKA — The Ultimate Bot. Need help? Explore my commands and features below."
-        try:
-            help_cog = self.get_cog("Help")
-            if help_cog:
-                ctx = await self.get_context(message)
-                visible_categories = await help_cog._get_visible_categories(ctx)
-                from src.cogs.general.help import HelpView
-                view = HelpView(
-                    cog=help_cog,
-                    ctx=ctx,
-                    visible_categories=visible_categories,
-                    current_category="home",
-                )
-                embed = help_cog.build_home_embed(ctx, visible_categories)
-                banner_file = getattr(embed, "banner_file", None)
-                if banner_file:
-                    msg = await message.reply(
-                        content=greeting_text,
-                        embed=embed,
-                        file=banner_file,
-                        view=view,
-                        mention_author=False,
-                    )
-                else:
-                    msg = await message.reply(
-                        content=greeting_text,
-                        embed=embed,
-                        view=view,
-                        mention_author=False,
-                    )
-                view.message = msg
-                return
-        except (discord.Forbidden, discord.HTTPException) as e:
-            logger.debug(f"Permission or network notice sending mention help dashboard: {e}")
+        """Respond to bot mention with a short, clean, rate-limited Aizen card.
+        Does not spam the channel with the entire help UI or heavy banners.
+        """
+        # Deduplication guard: never process the same message ID twice
+        if not hasattr(self, "_processed_mentions"):
+            self._processed_mentions = set()
+        if message.id in self._processed_mentions:
             return
-        except Exception as e:
-            logger.debug(f"Fallback on bot mention: {e}")
+        self._processed_mentions.add(message.id)
+        if len(self._processed_mentions) > 1000:
+            self._processed_mentions.clear()
 
-        # Fallback if Help cog unavailable
         try:
             from src.core.greetings import send_bot_mention_card
             await send_bot_mention_card(self, message)
-        except Exception:
-            pass
+        except (discord.Forbidden, discord.HTTPException) as e:
+            logger.debug(f"Permission or network notice sending bot mention card: {e}")
+        except Exception as e:
+            logger.debug(f"Notice on bot mention response: {e}")
+
 
     async def on_message(self, message: discord.Message) -> None:
         """Handle bot mentions and process prefix/mention commands."""

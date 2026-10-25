@@ -431,6 +431,9 @@ class Verification(commands.Cog):
                 f"> **Verified Role:** {verified_role.mention}\n"
                 f"> **Unverified Role:** {unverified_role.mention if unverified_role else '`None`'}\n"
                 f"> **Channel:** {target_channel.mention}\n\n"
+                f"💡 **Discord Channel Permission Reminder:**\n"
+                f"> To complete channel isolation, ensure your private channels deny **View Channel** to `{unverified_role.name if unverified_role else '@everyone'}` "
+                f"and allow **View Channel** to `{verified_role.name}`. Do not forget to keep {target_channel.mention} visible to unverified members!\n\n"
                 f"Use `+verify panel` in {target_channel.mention} to post the interactive verification card."
             )
         )

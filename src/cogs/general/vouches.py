@@ -1,4 +1,6 @@
 from __future__ import annotations
+import asyncio
+import logging
 import math
 import re
 import sqlite3
@@ -11,6 +13,7 @@ from discord.ext import commands
 from src.ui.theme import KyokaTheme
 from src.ui.asset_manager import AssetManager
 
+logger = logging.getLogger("Kyoka.Vouches")
 DB = Path('data/kyoka_reputation.sqlite3')
 PURPLE = discord.Color.from_rgb(111, 67, 190)
 
@@ -47,7 +50,8 @@ def conn():
             imported_at REAL,
             channel_id INTEGER,
             origin_guild_name TEXT,
-            is_active INTEGER DEFAULT 1
+            is_active INTEGER DEFAULT 1,
+            message_id TEXT DEFAULT ''
         );
         CREATE TABLE IF NOT EXISTS vouch_cooldowns(
             guild_id INTEGER NOT NULL,
@@ -70,6 +74,15 @@ def conn():
             min_age_days INTEGER DEFAULT 0,
             log_channel_id INTEGER
         );
+        CREATE TABLE IF NOT EXISTS vouch_scan_state(
+            guild_id INTEGER PRIMARY KEY,
+            channel_id INTEGER NOT NULL,
+            last_scanned_message_id TEXT,
+            total_scanned INTEGER DEFAULT 0,
+            total_imported INTEGER DEFAULT 0,
+            total_skipped INTEGER DEFAULT 0,
+            last_scanned_at REAL NOT NULL
+        );
         CREATE TABLE IF NOT EXISTS vouch_audit_log(
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             guild_id INTEGER NOT NULL,
@@ -91,11 +104,17 @@ def conn():
         ("channel_id", "INTEGER"),
         ("origin_guild_name", "TEXT"),
         ("is_active", "INTEGER DEFAULT 1"),
+        ("message_id", "TEXT DEFAULT ''"),
     ]:
         try:
             c.execute(f"ALTER TABLE vouches ADD COLUMN {col_name} {col_def}")
         except sqlite3.OperationalError:
             pass
+
+    try:
+        c.execute("CREATE INDEX IF NOT EXISTS idx_vouches_msg_id ON vouches(message_id)")
+    except sqlite3.OperationalError:
+        pass
 
     return c
 
@@ -614,6 +633,190 @@ class Vouches(commands.Cog, name="Vouches"):
         embed.set_footer(text=f'Staff Audit ID #{vid:04d} • KYŌKA Global Reputation System')
         banner_file = AssetManager.attach_feature_banner(embed, "vouches")
         await ctx.reply(embed=embed, file=banner_file, mention_author=False)
+
+    def _extract_vouch_from_message(self, msg: discord.Message) -> Optional[tuple[int, int, str, str]]:
+        """
+        Intelligently extract target_id, voucher_id, reason, and service_type from a historical message or embed.
+        Returns (target_id, voucher_id, reason, service_type) or None if not a valid vouch.
+        """
+        # 1. Check embedded vouches
+        if msg.embeds:
+            for emb in msg.embeds:
+                full_text = f"{emb.title or ''} {emb.description or ''}"
+                for f in emb.fields:
+                    full_text += f" {f.name} {f.value}"
+
+                if any(w in full_text.lower() for w in ("vouch", "rep", "reputation", "trade", "delivery", "proof")):
+                    target_match = re.search(r"<@!?(\d{17,20})>", full_text)
+                    if target_match:
+                        target_id = int(target_match.group(1))
+                        reason = (emb.description or full_text)[:250].strip()
+                        service_type, clean_reason = self._parse_service_and_reason(reason)
+                        return target_id, msg.author.id, clean_reason or "Verified Service Vouch", service_type
+
+        # 2. Check plain text patterns
+        content = (msg.content or "").strip()
+        if not content:
+            return None
+
+        pats = [
+            r"^(?:[+!?/]vouch|vouch)\s+<@!?(\d{17,20})>\s*(.*)$",
+            r"^<@!?(\d{17,20})>\s+(?:[+!?]rep|rep|vouch)\s*(.*)$",
+            r"^(?:[+!?]rep|rep)\s+<@!?(\d{17,20})>\s*(.*)$",
+            r"^vouched?\s+for\s+<@!?(\d{17,20})>\s*(.*)$",
+        ]
+        for pat in pats:
+            m = re.match(pat, content, flags=re.IGNORECASE)
+            if m:
+                target_id = int(m.group(1))
+                reason = m.group(2).strip() or "Verified Service Vouch"
+                service_type, clean_reason = self._parse_service_and_reason(reason)
+                return target_id, msg.author.id, clean_reason or "Verified Service Vouch", service_type
+
+        if msg.mentions and any(w in content.lower() for w in ("vouch", "+rep", "legit", "fast raid", "fast carry", "delivered", "trusted")):
+            target_id = msg.mentions[0].id
+            clean_content = re.sub(r"<@!?\d{17,20}>", "", content).strip()
+            service_type, clean_reason = self._parse_service_and_reason(clean_content)
+            return target_id, msg.author.id, clean_reason or "Verified Service Vouch", service_type
+
+        return None
+
+    @commands.command(name='vouchregister', aliases=['vouchscan', 'scanvouches', 'registervouches'])
+    @commands.guild_only()
+    async def vouchregister(
+        self,
+        ctx,
+        channel: Optional[discord.TextChannel] = None,
+        limit: int = 150,
+    ):
+        """Scan historical messages in a vouch channel and register valid vouches into the persistent database.
+        
+        Requirements:
+        • Authorized staff only.
+        • Deduplication via Message IDs.
+        • Safe rate limits.
+        • Never wipes or resets existing vouches.
+        """
+        if not self.is_bot_staff(ctx):
+            return await ctx.reply('❌ Access Denied: Only server staff or administrators can run vouch registration.', mention_author=False)
+
+        target_ch = channel
+        if not target_ch:
+            with conn() as c:
+                cfg = c.execute('SELECT channel_id FROM vouch_config WHERE guild_id=?', (ctx.guild.id,)).fetchone()
+                if cfg and cfg['channel_id']:
+                    target_ch = ctx.guild.get_channel(cfg['channel_id'])
+        if not target_ch:
+            target_ch = ctx.channel
+
+        if not target_ch.permissions_for(ctx.guild.me).read_message_history:
+            return await ctx.reply(f'❌ Missing Permissions: I do not have permission to read message history in {target_ch.mention}.', mention_author=False)
+
+        status_msg = await ctx.reply(f'🔍 Starting vouch scanning in {target_ch.mention} (Limit: `{limit}` messages)...', mention_author=False)
+
+        scanned = 0
+        imported = 0
+        skipped = 0
+        now = time.time()
+        last_scanned_id = ""
+
+        try:
+            async for msg in target_ch.history(limit=min(1000, max(10, limit)), oldest_first=False):
+                scanned += 1
+                msg_id_str = str(msg.id)
+                last_scanned_id = msg_id_str
+
+                if self.bot.user and msg.author.id == self.bot.user.id:
+                    skipped += 1
+                    continue
+
+                # Check deduplication
+                with conn() as c:
+                    existing = c.execute('SELECT id FROM vouches WHERE message_id=?', (msg_id_str,)).fetchone()
+                    if existing:
+                        skipped += 1
+                        continue
+
+                parsed = self._extract_vouch_from_message(msg)
+                if not parsed:
+                    skipped += 1
+                    continue
+
+                target_id, voucher_id, reason_text, service_type = parsed
+
+                if target_id == voucher_id:
+                    skipped += 1
+                    continue
+
+                with conn() as c:
+                    c.execute(
+                        '''INSERT INTO vouches(
+                            guild_id, voucher_id, target_id, reason, created, held,
+                            service_type, rating, source, staff_id, imported_at, channel_id,
+                            origin_guild_name, is_active, message_id
+                        ) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)''',
+                        (
+                            ctx.guild.id,
+                            voucher_id,
+                            target_id,
+                            reason_text,
+                            msg.created_at.timestamp(),
+                            0,
+                            service_type,
+                            5,
+                            'scanned_channel',
+                            ctx.author.id,
+                            now,
+                            target_ch.id,
+                            ctx.guild.name,
+                            1,
+                            msg_id_str,
+                        )
+                    )
+                    c.execute(
+                        'INSERT INTO vouch_audit_log(guild_id, mod_id, action, vouch_id, reason, created) VALUES(?,?,?,?,?,?)',
+                        (ctx.guild.id, ctx.author.id, 'SCAN_REGISTER', msg.id, f"Scanned from {target_ch.id} (msg {msg.id})", now)
+                    )
+
+                imported += 1
+
+                if scanned % 40 == 0:
+                    await asyncio.sleep(0.4)
+
+            with conn() as c:
+                c.execute(
+                    '''INSERT INTO vouch_scan_state(
+                        guild_id, channel_id, last_scanned_message_id, total_scanned, total_imported, total_skipped, last_scanned_at
+                    ) VALUES(?,?,?,?,?,?,?)
+                    ON CONFLICT(guild_id) DO UPDATE SET
+                        channel_id=excluded.channel_id,
+                        last_scanned_message_id=excluded.last_scanned_message_id,
+                        total_scanned=total_scanned + excluded.total_scanned,
+                        total_imported=total_imported + excluded.total_imported,
+                        total_skipped=total_skipped + excluded.total_skipped,
+                        last_scanned_at=excluded.last_scanned_at''',
+                    (ctx.guild.id, target_ch.id, last_scanned_id, scanned, imported, skipped, now)
+                )
+
+        except Exception as ex:
+            logger.error(f"Error during vouch registration scan: {ex}")
+            return await status_msg.edit(content=f"⚠️ Scanning interrupted due to error: `{ex}`. Progress up to that point was safely persisted.")
+
+        embed = discord.Embed(
+            title="✦ KYŌKA • VOUCH CHANNEL SCAN REPORT",
+            description=(
+                f"Historical message registration complete for {target_ch.mention}.\n\n"
+                f"• **Messages Scanned:** `{scanned}`\n"
+                f"• **Valid Vouches Imported:** `+{imported}`\n"
+                f"• **Skipped / Duplicates:** `{skipped}`\n\n"
+                f"✅ **Database persisted safely.** All existing and newly scanned vouches are intact."
+            ),
+            color=KyokaTheme.SUCCESS if imported > 0 else KyokaTheme.PRIMARY,
+            timestamp=discord.utils.utcnow(),
+        )
+        embed.set_footer(text=f"Initiated by {ctx.author} • KYŌKA Persistent Vouch System")
+        banner_file = AssetManager.attach_feature_banner(embed, "vouches")
+        await status_msg.edit(content=None, embed=embed)
 
     # ── 6. VOUCH REMOVAL (STAFF / MOD) ────────────────────────────────────────
     @commands.command(name='vouchremove')

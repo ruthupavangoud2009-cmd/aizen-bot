@@ -19,30 +19,36 @@ def _valid_http_url(value: str) -> bool:
     return parsed.scheme in {"http", "https"} and bool(parsed.netloc)
 
 async def send_bot_mention_card(bot: KyokaBot, message: discord.Message) -> None:
-    """Show bot help and useful links when a user mentions Kyoka."""
+    """Show bot prefix and quick links when a user mentions Kyoka."""
     prefix = bot.guild_mgr.get_prefix(message.guild.id if message.guild else None)
-    latency = round(bot.latency * 1000) if bot.latency == bot.latency else 0
+    latency = round(bot.latency * 1000) if bot.latency and bot.latency == bot.latency else 0
     embed = discord.Embed(
-        title=f"⟡  {Config.BOT_NAME} • The Illusion Begins",
+        title=f"⟡  {Config.BOT_NAME} • Aizen Edition",
         description=(
-            "Aizen-inspired power. A smarter, safer, more connected server.\n\n"
-            f"**Prefix:** `{prefix}`  •  **Slash commands:** `/`\n"
-            f"**Quick start:** `{prefix}help`\n**Latency:** `{latency} ms`"
-        ), color=discord.Color.from_rgb(100, 55, 180)
+            f"**Greetings, {message.author.mention}.**\n"
+            f"> A smarter, safer, and more connected Blox Fruits community experience.\n\n"
+            f"• **Current Prefix:** `{prefix}`\n"
+            f"• **Slash Commands:** `/`\n"
+            f"• **Command Directory:** `{prefix}help`\n"
+            f"• **WebSocket Latency:** `{latency} ms`"
+        ),
+        color=discord.Color.from_rgb(124, 58, 237),
     )
-    if bot.user:
+    if bot.user and hasattr(bot.user, "display_avatar"):
         embed.set_thumbnail(url=bot.user.display_avatar.url)
-    if _valid_http_url(AIZEN_ART):
-        embed.set_image(url=AIZEN_ART)
-    embed.set_footer(text=f"Requested by {message.author.display_name} • Made by Aizen")
+    embed.set_footer(text=f"Requested by {message.author.display_name} • KYOKA 3.0")
     view = discord.ui.View(timeout=None)
     if Config.INVITE_URL:
         view.add_item(discord.ui.Button(label="Invite KYOKA", style=discord.ButtonStyle.link, url=Config.INVITE_URL, emoji="✦"))
     view.add_item(discord.ui.Button(label="Support Server", style=discord.ButtonStyle.link, url=SUPPORT_URL, emoji="💜"))
     try:
-        await message.channel.send(embed=embed, view=view)
-    except Exception:
-        logger.exception("Failed to send bot mention embed")
+        await message.reply(embed=embed, view=view, mention_author=False)
+    except (discord.HTTPException, discord.Forbidden):
+        try:
+            await message.channel.send(embed=embed, view=view)
+        except Exception:
+            pass
+
 
 async def send_guild_welcome_card(bot: KyokaBot, guild: discord.Guild) -> None:
     """Thank the server for inviting KYOKA, using a standard Discord embed for compatibility."""

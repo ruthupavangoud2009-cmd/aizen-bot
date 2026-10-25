@@ -43,10 +43,11 @@ def db():
         CREATE TABLE IF NOT EXISTS config(
             guild INTEGER PRIMARY KEY,
             name TEXT DEFAULT 'KYŌKA BLOX FRUITS SERVICES',
-            currency TEXT DEFAULT 'USD',
+            currency TEXT DEFAULT 'Beli',
             payment TEXT DEFAULT 'Trade fruits in-game or send payment per staff instructions',
             taxes TEXT DEFAULT 'APA:0,Conglomerate:0,Priority:0'
         );
+        UPDATE config SET currency = 'Beli' WHERE currency = 'USD';
         CREATE TABLE IF NOT EXISTS bills(
             id TEXT PRIMARY KEY,
             guild INTEGER,
@@ -202,7 +203,7 @@ class Bills(commands.Cog, name="Bills"):
                         f"**Payment Instructions:**\n> {cfg['payment']}\n\n"
                         f"**Configuration Commands:**\n"
                         f"• `+billname <business_name>` — Update server shop/service name\n"
-                        f"• `+billcurrency <code>` — Set default currency (e.g. `ROBUX`, `USD`, `FRUIT`)\n"
+                        f"• `+billcurrency <code>` — Set default currency (e.g. `BELI`, `FRUIT`, `ROBUX`)\n"
                         f"• `+billpayment <instructions>` — Set accepted fruit/payment instructions\n"
                         f"• `+billtax <name> <percent>` — Set optional surcharge/tax rate",
             color=KyokaTheme.PRIMARY
@@ -225,7 +226,7 @@ class Bills(commands.Cog, name="Bills"):
     @commands.guild_only()
     @commands.has_guild_permissions(administrator=True)
     async def billcurrency(self, ctx, code: str):
-        """Set default currency or payment unit (e.g. ROBUX, USD, FRUIT)."""
+        """Set default currency or payment unit (e.g. BELI, FRUIT, ROBUX)."""
         code_clean = code.upper()[:12].strip()
         with db() as c:
             c.execute('INSERT OR IGNORE INTO config(guild) VALUES(?)', (ctx.guild.id,))

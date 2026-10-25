@@ -19,6 +19,7 @@ from discord.ext import commands
 from src.core.config import Config
 from src.core.context import CustomContext
 from src.managers.top_manager import TopManager, CalculationResult, PriceItem
+from src.security.adult_guard import add_adult_user, remove_adult_user, list_adult_users
 from src.ui.theme import KyokaTheme
 
 logger = logging.getLogger("Kyoka.TopAIManager")
@@ -652,6 +653,369 @@ def format_single_price_embed(calc: CalculationResult) -> discord.Embed:
     return embed
 
 
+def format_beli_amount(amount_m: float) -> str:
+    """Format Beli currency: 30.0 (millions) -> 30,000,000 Beli."""
+    if amount_m <= 0:
+        return "0 Beli"
+    if amount_m >= 100000:
+        full_beli = int(amount_m)
+    else:
+        full_beli = int(round(amount_m * 1_000_000))
+    return f"{full_beli:,} Beli"
+
+
+def format_blox_fruits_bill_embed(
+    bill: dict[str, Any],
+    customer_user: Optional[Any] = None,
+    creator_user: Optional[Any] = None,
+    guild: Optional[discord.Guild] = None,
+) -> discord.Embed:
+    """Construct professional Blox Fruits service bill embed."""
+    status = bill.get("status", "UNPAID").upper()
+    is_paid = status == "PAID"
+    color = KyokaTheme.SUCCESS if is_paid else (KyokaTheme.ERROR if status == "CANCELLED" else KyokaTheme.PRIMARY)
+    status_label = "PAID" if is_paid else ("CANCELLED" if status == "CANCELLED" else "UNPAID")
+
+    cust_id = bill.get("customer_id")
+    customer_str = f"<@{cust_id}>" if cust_id else (bill.get("customer_name") or "Not Specified")
+
+    creator_id = bill.get("creator_id")
+    creator_str = f"<@{creator_id}>" if creator_id else (bill.get("creator_name") or "Staff")
+
+    qty = bill.get("quantity", 1)
+    subtotal = bill.get("subtotal", 0.0)
+    tax_rate = bill.get("tax_rate", 0.0)
+    tax_amount = bill.get("tax_amount", 0.0)
+    total = bill.get("total", 0.0)
+    pay_type = bill.get("payment_type", "Beli")
+    fruit_details = bill.get("fruit_details", "")
+
+    if pay_type.lower() == "fruits" or fruit_details:
+        service_price_str = fruit_details or bill.get("subtotal_display") or "Agreed Fruits"
+        tax_str = f"{tax_rate:g}%" if tax_rate > 0 else "0%"
+        tax_amt_str = f"{format_beli_amount(tax_amount)}" if tax_amount > 0 else "None"
+        total_str = f"{service_price_str}" + (f" + {tax_amt_str}" if tax_amount > 0 else "")
+    else:
+        service_price_str = format_beli_amount(subtotal)
+        tax_str = f"{tax_rate:g}%"
+        tax_amt_str = format_beli_amount(tax_amount)
+        total_str = format_beli_amount(total)
+
+    created_ts = int(bill.get("created_at", time.time()))
+
+    embed = discord.Embed(
+        title="KYOKA — BLOX FRUITS SERVICE BILL",
+        description=(
+            f"• **Customer:** {customer_str}\n"
+            f"• **Service:** {qty}x {bill.get('service_name', 'Service')}\n"
+            f"• **Service price:** {service_price_str}\n"
+            f"• **Service fee/tax:** {tax_str}\n"
+            f"• **Tax amount:** {tax_amt_str}\n"
+            f"• **Total:** **{total_str}**\n"
+            f"• **Payment status:** {status_label}\n"
+            f"• **Bill ID:** `{bill['id']}`\n"
+            f"• **Created by:** {creator_str}\n"
+            f"• **Created at:** <t:{created_ts}:F> (<t:{created_ts}:R>)"
+        ),
+        color=color,
+        timestamp=discord.utils.utcnow(),
+    )
+
+    if is_paid:
+        paid_ts = int(bill.get("paid_at", time.time()))
+        paid_by = bill.get("paid_by_name") or f"<@{bill.get('paid_by_id')}>"
+        msg_id = bill.get("payment_message_id", "Verified")
+        embed.add_field(
+            name="🟢 Payment Verification",
+            value=f"• **Confirmed By:** {paid_by}\n• **Verified At:** <t:{paid_ts}:R>\n• **Payment Message ID:** `{msg_id}`",
+            inline=False,
+        )
+    elif status == "UNPAID":
+        embed.set_footer(text=f"Mark as paid: ?top billpaid {bill.get('posted_message_id') or bill['id']} • Kyoka 3.0")
+    else:
+        embed.set_footer(text=f"Status: {status} • Kyoka 3.0")
+
+    embed.set_thumbnail(url=AIZEN_THUMBNAIL_URL)
+    return embed
+
+
+def check_is_staff(user: Any, guild: Optional[discord.Guild], top_mgr: TopManager, bot: Any = None) -> bool:
+    """Helper to check if user has staff privileges for billing & application interactions."""
+    if getattr(user, "id", 0) == 1505515188991033409:
+        return True
+    if guild and hasattr(user, "guild_permissions"):
+        if user.guild_permissions.administrator or user.guild_permissions.manage_guild or user.guild_permissions.manage_messages:
+            return True
+        cfg = top_mgr.get_app_config(guild.id)
+        rev_role = cfg.get("reviewer_role_id")
+        if rev_role and hasattr(user, "roles") and any(r.id == rev_role for r in user.roles):
+            return True
+    if bot:
+        perm_mgr = getattr(bot, "perm_mgr", None)
+        if perm_mgr and hasattr(perm_mgr, "is_developer_sync"):
+            try:
+                if perm_mgr.is_developer_sync(user.id) is True:
+                    return True
+            except Exception:
+                pass
+    return False
+
+
+class BillLauncherView(discord.ui.View):
+    """Persistent view with [ 🧾 Create Bill ] button for staff."""
+
+    def __init__(self, top_mgr: TopManager):
+        super().__init__(timeout=None)
+        self.top_mgr = top_mgr
+
+    @discord.ui.button(
+        label="Create Bill",
+        style=discord.ButtonStyle.primary,
+        emoji="🧾",
+        custom_id="kyoka:bill:open_creator",
+    )
+    async def create_bill_button(self, interaction: discord.Interaction, button: discord.ui.Button):
+        if not check_is_staff(interaction.user, interaction.guild, self.top_mgr, interaction.client):
+            return await interaction.response.send_message(
+                "❌ **Staff Access Only:** Only authorized Blox Fruits service staff or administrators can issue bills.",
+                ephemeral=True,
+            )
+        cfg = self.top_mgr.get_billing_config(interaction.guild.id) if interaction.guild else {}
+        def_tax = cfg.get("tax_rate", 5.0)
+        modal = CreateBillModal(self.top_mgr, default_tax=def_tax)
+        await interaction.response.send_modal(modal)
+
+
+class CreateBillModal(discord.ui.Modal, title="🧾 Create Blox Fruits Service Bill"):
+    """Guided modal for staff to create Blox Fruits service invoices."""
+
+    def __init__(self, top_mgr: TopManager, default_tax: float = 5.0):
+        super().__init__()
+        self.top_mgr = top_mgr
+        self.default_tax = default_tax
+
+        self.customer_input = discord.ui.TextInput(
+            label="Customer (@mention, User ID, or Name)",
+            placeholder="e.g. @Customer or 123456789012345678",
+            required=True,
+            max_length=100,
+        )
+        self.service_input = discord.ui.TextInput(
+            label="Service / Item",
+            placeholder="e.g. 2 Trials, Dough Raid, Race V4, Leviathan",
+            required=True,
+            max_length=150,
+        )
+        self.quantity_input = discord.ui.TextInput(
+            label="Quantity",
+            placeholder="1",
+            default="1",
+            required=True,
+            max_length=5,
+        )
+        self.price_input = discord.ui.TextInput(
+            label="Price / Unit (Beli or Fruits, blank=catalogue)",
+            placeholder="e.g. 30M, 30000000 Beli, or Kitsune Fruit",
+            required=False,
+            max_length=100,
+        )
+        self.tax_input = discord.ui.TextInput(
+            label="Tax / Service Fee % (0 for none)",
+            placeholder=f"{self.default_tax}",
+            default=f"{self.default_tax}",
+            required=False,
+            max_length=10,
+        )
+
+        self.add_item(self.customer_input)
+        self.add_item(self.service_input)
+        self.add_item(self.quantity_input)
+        self.add_item(self.price_input)
+        self.add_item(self.tax_input)
+
+    async def on_submit(self, interaction: discord.Interaction):
+        try:
+            qty = max(1, int(self.quantity_input.value.strip()))
+        except ValueError:
+            return await interaction.response.send_message("❌ Quantity must be a positive integer.", ephemeral=True)
+
+        try:
+            tax_rate = float(self.tax_input.value.strip() or "0")
+            if tax_rate < 0 or tax_rate > 100:
+                return await interaction.response.send_message("❌ Tax rate must be between 0% and 100%.", ephemeral=True)
+        except ValueError:
+            tax_rate = 0.0
+
+        raw_cust = self.customer_input.value.strip()
+        cust_id = None
+        cust_name = raw_cust
+        match_id = re.search(r"\d{17,20}", raw_cust)
+        if match_id:
+            cust_id = int(match_id.group())
+            if interaction.guild:
+                member = interaction.guild.get_member(cust_id)
+                if member:
+                    cust_name = str(member)
+
+        service_str = self.service_input.value.strip()
+        price_val_str = self.price_input.value.strip()
+
+        is_fruit = False
+        fruit_keywords = ["fruit", "kitsune", "dragon", "leopard", "dough", "mammoth", "t-rex", "portal", "spirit", "venom", "shadow", "buddha", "blizzard", "sound"]
+        if any(k in price_val_str.lower() for k in fruit_keywords) or any(k in service_str.lower() and "fruit" in price_val_str.lower() for k in fruit_keywords):
+            is_fruit = True
+
+        custom_price = None
+        custom_display = None
+        payment_type = "Fruits" if is_fruit else "Beli"
+        fruit_details = ""
+
+        if is_fruit:
+            fruit_details = price_val_str or "In-Game Fruits"
+            custom_price = 0.0
+            custom_display = fruit_details
+            subtotal = 0.0
+            tax_amt = 0.0
+            total = 0.0
+        elif price_val_str:
+            cleaned = re.sub(r"[^\d.]", "", price_val_str.lower().replace("m", "000000").replace("k", "000"))
+            try:
+                num = float(cleaned)
+                if num >= 100000:
+                    unit_m = num / 1_000_000.0
+                else:
+                    unit_m = num
+                custom_price = unit_m
+                custom_display = format_beli_amount(unit_m)
+                subtotal = unit_m * qty
+                tax_amt, total = self.top_mgr.calculate_tax(subtotal, tax_rate)
+            except Exception:
+                custom_price = 0.0
+                custom_display = price_val_str
+                subtotal = 0.0
+                tax_amt = 0.0
+                total = 0.0
+        else:
+            try:
+                calc = self.top_mgr.calculate_service_price(service_str, quantity=qty, tax_rate=tax_rate)
+                service_str = calc.service_name
+                subtotal = calc.subtotal
+                tax_amt = calc.tax_amount
+                total = calc.total
+                custom_price = calc.unit_price
+                custom_display = format_beli_amount(calc.unit_price)
+            except Exception:
+                subtotal = 0.0
+                tax_amt = 0.0
+                total = 0.0
+
+        bill_data = {
+            "guild_id": interaction.guild_id or 0,
+            "creator_id": interaction.user.id,
+            "creator_name": str(interaction.user),
+            "customer_id": cust_id,
+            "customer_name": cust_name,
+            "service_name": service_str,
+            "quantity": qty,
+            "tax_rate": tax_rate,
+            "payment_type": payment_type,
+            "fruit_details": fruit_details,
+            "custom_price": custom_price,
+            "custom_price_display": custom_display,
+            "unit_price": custom_price or 0.0,
+            "subtotal": subtotal,
+            "tax_amount": tax_amt,
+            "total": total,
+            "status": "UNPAID",
+            "created_at": time.time(),
+            "id": "PREVIEW",
+        }
+
+        preview_embed = format_blox_fruits_bill_embed(bill_data, guild=interaction.guild)
+        preview_embed.title = "🔍 PREVIEW — BLOX FRUITS SERVICE BILL"
+        preview_embed.description = "Review the bill details below before issuing to the customer:\n\n" + preview_embed.description
+
+        view = BillConfirmationView(self.top_mgr, bill_data)
+        await interaction.response.send_message(embed=preview_embed, view=view, ephemeral=True)
+
+
+class BillConfirmationView(discord.ui.View):
+    """Confirmation view to safely issue and post the bill without duplicates."""
+
+    def __init__(self, top_mgr: TopManager, bill_data: dict[str, Any]):
+        super().__init__(timeout=180)
+        self.top_mgr = top_mgr
+        self.bill_data = bill_data
+        self.is_confirmed = False
+
+    @discord.ui.button(label="Confirm & Issue Bill", style=discord.ButtonStyle.success, emoji="✅", custom_id="kyoka:bill:confirm")
+    async def confirm_button(self, interaction: discord.Interaction, button: discord.ui.Button):
+        if self.is_confirmed:
+            return await interaction.response.send_message("⚠️ This bill has already been created.", ephemeral=True)
+        self.is_confirmed = True
+        button.disabled = True
+
+        guild = interaction.guild
+        cfg = self.top_mgr.get_billing_config(guild.id) if guild else {}
+        target_ch_id = cfg.get("billing_channel_id")
+        target_ch = guild.get_channel(target_ch_id) if (guild and target_ch_id) else interaction.channel
+
+        if not target_ch or not isinstance(target_ch, (discord.TextChannel, discord.Thread)):
+            target_ch = interaction.channel
+
+        bill = self.top_mgr.create_bill(
+            guild_id=self.bill_data["guild_id"],
+            creator_id=self.bill_data["creator_id"],
+            creator_name=self.bill_data["creator_name"],
+            service_name=self.bill_data["service_name"],
+            quantity=self.bill_data["quantity"],
+            tax_rate=self.bill_data["tax_rate"],
+            customer_id=self.bill_data["customer_id"],
+            customer_name=self.bill_data["customer_name"],
+            payment_type=self.bill_data["payment_type"],
+            fruit_details=self.bill_data["fruit_details"],
+            custom_price=self.bill_data["custom_price"],
+            custom_price_display=self.bill_data["custom_price_display"],
+            posted_channel_id=target_ch.id if target_ch else 0,
+        )
+
+        bill_embed = format_blox_fruits_bill_embed(bill, guild=guild)
+
+        try:
+            posted_msg = await target_ch.send(
+                content=f"🔔 <@{bill['customer_id']}> Your official Blox Fruits service bill has been issued by <@{bill['creator_id']}>:" if bill.get("customer_id") else "",
+                embed=bill_embed,
+            )
+            self.top_mgr.set_bill_posted_message(bill["id"], target_ch.id, posted_msg.id)
+            bill["posted_message_id"] = str(posted_msg.id)
+            bill["posted_channel_id"] = target_ch.id
+        except Exception as ex:
+            logger.warning(f"Failed to post bill to channel: {ex}")
+            posted_msg = None
+
+        amt_display = format_beli_amount(bill['total']) if bill['payment_type'] == 'Beli' else bill.get('fruit_details')
+        success_emb = discord.Embed(
+            title="✅ Bill Issued Successfully",
+            description=(
+                f"• **Bill ID:** `{bill['id']}`\n"
+                f"• **Service:** `{bill['service_name']}`\n"
+                f"• **Total Amount:** **{amt_display}**\n"
+                f"• **Channel:** {target_ch.mention if hasattr(target_ch, 'mention') else 'Current Channel'}\n"
+                f"• **Posted Message ID:** `{posted_msg.id if posted_msg else 'N/A'}`\n\n"
+                f"To mark as paid once payment is received:\n"
+                f"> `?top billpaid {posted_msg.id if posted_msg else bill['id']}`"
+            ),
+            color=KyokaTheme.SUCCESS,
+        )
+        await interaction.response.edit_message(embed=success_emb, view=None)
+
+    @discord.ui.button(label="Cancel", style=discord.ButtonStyle.secondary, emoji="❌", custom_id="kyoka:bill:cancel")
+    async def cancel_button(self, interaction: discord.Interaction, button: discord.ui.Button):
+        for child in self.children:
+            child.disabled = True
+        await interaction.response.edit_message(content="🚫 Bill creation cancelled.", embed=None, view=None)
+
+
 # ─────────────────────────────────────────────────────────────────────────────
 # 2. MAIN TOP AI MANAGER COG
 # ─────────────────────────────────────────────────────────────────────────────
@@ -664,8 +1028,9 @@ class TopAIManager(commands.Cog, name="TopAIManager"):
     def __init__(self, bot: commands.Bot):
         self.bot = bot
         self.top_mgr = TopManager()
-        # Register persistent application button view
+        # Register persistent application and bill creator button views
         self.bot.add_view(StaffApplicationPanelView(self.top_mgr))
+        self.bot.add_view(BillLauncherView(self.top_mgr))
 
     def is_bot_staff(self, ctx: commands.Context) -> bool:
         """Verify author has authoritative staff or administrator privileges."""
@@ -844,26 +1209,9 @@ class TopAIManager(commands.Cog, name="TopAIManager"):
         except Exception as e:
             return await ctx.reply(f"⚠️ **Error creating bill:** {e}", mention_author=False)
 
-        p = ctx.prefix or Config.DEFAULT_PREFIX
-        embed = discord.Embed(
-            title=f"🧾 SERVICE BILL GENERATED • {bill['id']}",
-            description=(
-                f"**Customer:** {customer.mention if customer else 'Not specified'}\n"
-                f"**Service:** `{bill['service_name']}`\n"
-                f"**Quantity:** `{bill['quantity']}`\n"
-                f"**Subtotal:** `{bill['subtotal_display']}`\n"
-                f"**Tax ({bill['tax_rate']}%):** `{bill['tax_display']}`\n"
-                f"**Total Amount Due:** **{bill['total_display']}**\n\n"
-                f"• **Status:** 🟡 **UNPAID**\n"
-                f"• **Creator:** {ctx.author.mention}\n"
-                f"• **Mark as Paid:** `{p}top paid {bill['id']} <message_id>`"
-            ),
-            color=KyokaTheme.PRIMARY,
-            timestamp=discord.utils.utcnow(),
-        )
-        embed.set_thumbnail(url=AIZEN_THUMBNAIL_URL)
-        embed.set_footer(text=f"Bill ID: {bill['id']} • Kyoka Top AI Manager")
-        await ctx.reply(embed=embed, mention_author=False)
+        embed = format_blox_fruits_bill_embed(bill, customer_user=customer, creator_user=ctx.author, guild=ctx.guild)
+        msg = await ctx.reply(embed=embed, mention_author=False)
+        self.top_mgr.set_bill_posted_message(bill["id"], ctx.channel.id, msg.id)
 
     @bill_cmd.command(name="view")
     async def bill_view_cmd(self, ctx: CustomContext, bill_id: str):
@@ -989,6 +1337,350 @@ class TopAIManager(commands.Cog, name="TopAIManager"):
         except Exception as e:
             await ctx.reply(f"⚠️ {e}", mention_author=False)
 
+    @bill_cmd.command(name="paid")
+    async def bill_sub_paid_cmd(self, ctx: CustomContext, message_id: str):
+        """Mark bill as paid using Discord message ID: ?top bill paid <message_id>"""
+        await self.billpaid_cmd(ctx, message_id)
+
+    @bill_cmd.command(name="today")
+    async def bill_today_subcmd(self, ctx: CustomContext):
+        """View today's Blox Fruits revenue: ?top bill today"""
+        rep = self.top_mgr.get_today_report(ctx.guild.id if ctx.guild else None)
+        await self._send_blox_fruits_revenue_embed(ctx, rep, "TODAY'S BLOX FRUITS REVENUE")
+
+    @bill_cmd.command(name="month")
+    async def bill_month_subcmd(self, ctx: CustomContext):
+        """View monthly Blox Fruits revenue: ?top bill month"""
+        rep = self.top_mgr.get_monthly_report(ctx.guild.id if ctx.guild else None)
+        await self._send_blox_fruits_revenue_embed(ctx, rep, "MONTHLY BLOX FRUITS REVENUE")
+
+    # ── SUBCOMMAND: ?top billpaid <message_id> ────────────────────────────────
+    @top_group.command(name="billpaid", aliases=["paidbill"])
+    async def billpaid_cmd(self, ctx: CustomContext, message_id: str):
+        """Find the bill associated with a Discord message ID and mark it as PAID.
+        
+        Usage: ?top billpaid <message_id>
+        """
+        if not self.is_bot_staff(ctx):
+            return await ctx.reply("❌ Staff permissions required to confirm bill payments.", mention_author=False)
+
+        clean_mid = message_id.strip()
+        matching_bills = self.top_mgr.find_bill_by_message_id(clean_mid)
+        if not matching_bills:
+            return await ctx.reply(
+                f"❌ No service bill found matching message ID or bill ID: `{clean_mid}`.\n"
+                f"Please verify the Discord message ID belongs to an official Kyoka bill.",
+                mention_author=False,
+            )
+
+        bill_to_pay = matching_bills[0]
+        if bill_to_pay.get("status") == "PAID":
+            paid_ts = int(bill_to_pay.get("paid_at", time.time()))
+            staff_str = bill_to_pay.get("paid_by_name") or f"<@{bill_to_pay.get('paid_by_id')}>"
+            return await ctx.reply(
+                f"ℹ️ Bill **`{bill_to_pay['id']}`** has **already been marked as PAID** on <t:{paid_ts}:f> by `{staff_str}`.\n"
+                f"*(Duplicate revenue counting prevented)*",
+                mention_author=False,
+            )
+
+        try:
+            paid_bill = self.top_mgr.mark_bill_paid_by_message_id(
+                clean_mid,
+                staff_id=ctx.author.id,
+                staff_name=str(ctx.author),
+            )
+        except Exception as ex:
+            return await ctx.reply(f"⚠️ Error confirming payment: {ex}", mention_author=False)
+
+        # Attempt to edit original message embed
+        posted_ch_id = paid_bill.get("posted_channel_id") or (ctx.channel.id if ctx.channel else None)
+        target_mid = int(clean_mid) if clean_mid.isdigit() else (int(paid_bill["posted_message_id"]) if str(paid_bill.get("posted_message_id", "")).isdigit() else None)
+
+        if posted_ch_id and target_mid and ctx.guild:
+            ch = ctx.guild.get_channel(posted_ch_id)
+            if ch and isinstance(ch, (discord.TextChannel, discord.Thread)):
+                try:
+                    orig_msg = await ch.fetch_message(target_mid)
+                    if orig_msg:
+                        new_embed = format_blox_fruits_bill_embed(paid_bill, guild=ctx.guild)
+                        await orig_msg.edit(embed=new_embed)
+                except Exception as ex:
+                    logger.debug(f"Could not edit original bill message: {ex}")
+
+        amt_display = format_beli_amount(paid_bill['total']) if paid_bill['payment_type'] == 'Beli' else paid_bill.get('fruit_details')
+        confirm_embed = discord.Embed(
+            title=f"🟢 BILL MARKED AS PAID • {paid_bill['id']}",
+            description=(
+                f"• **Bill ID:** `{paid_bill['id']}`\n"
+                f"• **Customer:** <@{paid_bill.get('customer_id')}>\n"
+                f"• **Service:** `{paid_bill.get('service_name')}`\n"
+                f"• **Amount Paid:** **{amt_display}**\n"
+                f"• **Verified By:** {ctx.author.mention}\n"
+                f"• **Payment Message ID:** `{clean_mid}`\n\n"
+                f"✅ **Recorded in accounting ledger & duplicate revenue prevented.**"
+            ),
+            color=KyokaTheme.SUCCESS,
+            timestamp=discord.utils.utcnow(),
+        )
+        confirm_embed.set_thumbnail(url=AIZEN_THUMBNAIL_URL)
+        confirm_embed.set_footer(text="Kyoka 3.0 Blox Fruits Ledger • Status: PAID")
+        await ctx.reply(embed=confirm_embed, mention_author=False)
+
+    # ── SUBCOMMAND: ?top bills [today/month] ───────────────────────────────────
+    @top_group.group(name="bills", aliases=["invoices"], invoke_without_command=True)
+    async def bills_group(self, ctx: CustomContext, mode: Optional[str] = None):
+        """Blox Fruits Billing and Revenue Directory.
+        
+        Usage:
+        • ?top bills today - View today's Blox Fruits revenue
+        • ?top bill month - View current month's Blox Fruits revenue
+        """
+        if mode and mode.lower() == "today":
+            rep = self.top_mgr.get_today_report(ctx.guild.id if ctx.guild else None)
+            return await self._send_blox_fruits_revenue_embed(ctx, rep, "TODAY'S BLOX FRUITS REVENUE")
+        if mode and mode.lower() in ("month", "monthly"):
+            rep = self.top_mgr.get_monthly_report(ctx.guild.id if ctx.guild else None)
+            return await self._send_blox_fruits_revenue_embed(ctx, rep, "MONTHLY BLOX FRUITS REVENUE")
+
+        rep = self.top_mgr.get_today_report(ctx.guild.id if ctx.guild else None)
+        await self._send_blox_fruits_revenue_embed(ctx, rep, "TODAY'S BLOX FRUITS REVENUE")
+
+    @bills_group.command(name="today")
+    async def bills_today_cmd(self, ctx: CustomContext):
+        """Calculate total revenue from bills paid today (?top bills today)."""
+        rep = self.top_mgr.get_today_report(ctx.guild.id if ctx.guild else None)
+        await self._send_blox_fruits_revenue_embed(ctx, rep, "TODAY'S BLOX FRUITS REVENUE")
+
+    @bills_group.command(name="month")
+    async def bills_month_cmd(self, ctx: CustomContext):
+        """Calculate total paid revenue for current month (?top bills month)."""
+        rep = self.top_mgr.get_monthly_report(ctx.guild.id if ctx.guild else None)
+        await self._send_blox_fruits_revenue_embed(ctx, rep, "MONTHLY BLOX FRUITS REVENUE")
+
+    # ── SUBCOMMAND: ?top billpanel ────────────────────────────────────────────
+    @top_group.command(name="billpanel")
+    async def billpanel_cmd(self, ctx: CustomContext, channel: Optional[discord.TextChannel] = None):
+        """Deploy interactive Blox Fruits Bill Creator panel with [ 🧾 Create Bill ] button.
+        
+        Usage: ?top billpanel [#channel]
+        """
+        if not self.is_bot_staff(ctx):
+            return await ctx.reply("❌ Staff permissions required to deploy billing panel.", mention_author=False)
+
+        target_ch = channel or ctx.channel
+        embed = discord.Embed(
+            title="⛩️ KYOKA — BLOX FRUITS SERVICE BILLING",
+            description=(
+                "Welcome to the official **Blox Fruits Service Billing Desk**.\n\n"
+                "Staff members can issue professional, itemized service invoices for:\n"
+                "• **Trials & Race V4 Services**\n"
+                "• **Normal, Advance & Order Raids**\n"
+                "• **Beli & Fragment Farming**\n"
+                "• **Sea Events, Leviathan & Boss Grinds**\n"
+                "• **Physical Fruit & In-Game Payment Trades**\n\n"
+                "Click the button below to generate a new invoice."
+            ),
+            color=KyokaTheme.PRIMARY,
+        )
+        embed.set_thumbnail(url=AIZEN_THUMBNAIL_URL)
+        embed.set_footer(text="Kyoka 3.0 • Aizen Billing Engine")
+
+        view = BillLauncherView(self.top_mgr)
+        await target_ch.send(embed=embed, view=view)
+        if target_ch.id != ctx.channel.id:
+            await ctx.reply(f"✅ Billing creator panel deployed to {target_ch.mention}.", mention_author=False)
+
+    # ── SUBCOMMAND: ?top billsetup ────────────────────────────────────────────
+    @top_group.command(name="billsetup")
+    async def billsetup_cmd(self, ctx: CustomContext, channel: Optional[discord.TextChannel] = None, tax: Optional[float] = None):
+        """Configure default Blox Fruits billing channel and tax rate.
+        
+        Usage: ?top billsetup [#billing-channel] [tax_rate%]
+        """
+        if not self.is_bot_staff(ctx):
+            return await ctx.reply("❌ Staff permissions required to configure billing settings.", mention_author=False)
+
+        cfg = self.top_mgr.set_billing_config(
+            guild_id=ctx.guild.id if ctx.guild else 0,
+            billing_channel_id=channel.id if channel else None,
+            tax_rate=tax if tax is not None else None,
+        )
+
+        ch_str = f"<#{cfg['billing_channel_id']}>" if cfg.get("billing_channel_id") else "*Current Channel*"
+        embed = discord.Embed(
+            title="⚙️ BLOX FRUITS BILLING CONFIGURATION",
+            description=(
+                f"• **Billing Channel:** {ch_str}\n"
+                f"• **Default Service Tax:** `{cfg.get('tax_rate', 5.0)}%`\n"
+                f"• **Currency Unit:** `{cfg.get('currency_unit', 'Beli')}`\n\n"
+                f"Deploy creator panel anytime with: `?top billpanel`"
+            ),
+            color=KyokaTheme.PRIMARY,
+        )
+        await ctx.reply(embed=embed, mention_author=False)
+
+    # ── SUBCOMMAND: ?top addadult <user> ──────────────────────────────────────
+    @top_group.command(name="addadult")
+    async def addadult_cmd(self, ctx: CustomContext, user: Union[discord.Member, discord.User, str], *, notes: str = ""):
+        """Grant a user access to restricted adult commands (Owner Only).
+        
+        Usage: ?top addadult <@user/user_id> [reason]
+        """
+        if ctx.author.id != 1505515188991033409:
+            return await ctx.reply("❌ **Access Denied:** Only the Primary Bot Owner can grant adult command permissions.", mention_author=False)
+
+        uid = None
+        if isinstance(user, (discord.Member, discord.User)):
+            uid = user.id
+        else:
+            match = re.search(r"\d{17,20}", str(user))
+            if match:
+                uid = int(match.group())
+            else:
+                return await ctx.reply("❌ Invalid user provided. Please mention a user or provide a valid Discord user ID.", mention_author=False)
+
+        success = add_adult_user(uid, added_by=ctx.author.id, notes=notes)
+        if success:
+            await ctx.reply(f"✅ User <@{uid}> (`{uid}`) has been **authorized** for restricted adult commands.\n*(Immediate effect persisted)*", mention_author=False)
+        else:
+            await ctx.reply("❌ Failed to add user to adult allowlist database.", mention_author=False)
+
+    # ── SUBCOMMAND: ?top removeadult <user> ───────────────────────────────────
+    @top_group.command(name="removeadult")
+    async def removeadult_cmd(self, ctx: CustomContext, user: Union[discord.Member, discord.User, str], *, notes: str = ""):
+        """Revoke a user's access to restricted adult commands (Owner Only).
+        
+        Usage: ?top removeadult <@user/user_id> [reason]
+        """
+        if ctx.author.id != 1505515188991033409:
+            return await ctx.reply("❌ **Access Denied:** Only the Primary Bot Owner can revoke adult command permissions.", mention_author=False)
+
+        uid = None
+        if isinstance(user, (discord.Member, discord.User)):
+            uid = user.id
+        else:
+            match = re.search(r"\d{17,20}", str(user))
+            if match:
+                uid = int(match.group())
+            else:
+                return await ctx.reply("❌ Invalid user provided.", mention_author=False)
+
+        if uid == 1505515188991033409:
+            return await ctx.reply("❌ Cannot revoke the Primary Bot Owner.", mention_author=False)
+
+        success = remove_adult_user(uid, removed_by=ctx.author.id, notes=notes)
+        if success:
+            await ctx.reply(f"🚫 User <@{uid}> (`{uid}`) access has been **REVOKED** immediately.\n*(Zero-delay enforcement active)*", mention_author=False)
+        else:
+            await ctx.reply("❌ Failed to revoke user from adult allowlist.", mention_author=False)
+
+    # ── SUBCOMMAND: ?top listadult ────────────────────────────────────────────
+    @top_group.command(name="listadult")
+    async def listadult_cmd(self, ctx: CustomContext):
+        """List all accounts authorized for restricted adult commands (Owner Only).
+        
+        Usage: ?top listadult
+        """
+        if ctx.author.id != 1505515188991033409:
+            return await ctx.reply("❌ **Access Denied:** Only the Primary Bot Owner can view the adult allowlist.", mention_author=False)
+
+        users = list_adult_users()
+        lines = [f"• <@{1505515188991033409}> (`1505515188991033409`) — **Primary Owner**"]
+        for u in users:
+            if u["user_id"] != 1505515188991033409:
+                ts = int(u["added_at"])
+                note_str = f" — *{u['notes']}*" if u.get("notes") else ""
+                lines.append(f"• <@{u['user_id']}> (`{u['user_id']}`) — Added <t:{ts}:R>{note_str}")
+
+        embed = discord.Embed(
+            title="🔒 RESTRICTED ADULT COMMAND ALLOWLIST",
+            description=f"Total Authorized Users: `{len(lines)}`\n\n" + "\n".join(lines),
+            color=KyokaTheme.PRIMARY,
+            timestamp=discord.utils.utcnow(),
+        )
+        embed.set_footer(text="Confidential Owner Console • Never Exposed Publicly")
+
+        try:
+            if ctx.guild:
+                await ctx.author.send(embed=embed)
+                await ctx.reply("📬 The adult allowlist has been delivered confidentially to your DM.", mention_author=False)
+            else:
+                await ctx.reply(embed=embed, mention_author=False)
+        except Exception:
+            await ctx.reply(embed=embed, mention_author=False)
+
+    # ── SUBCOMMAND: ?top vouchregister ────────────────────────────────────────
+    @top_group.command(name="vouchregister", aliases=["vouchscan", "scanvouches"])
+    async def top_vouchregister_cmd(
+        self,
+        ctx: CustomContext,
+        channel: Optional[discord.TextChannel] = None,
+        limit: int = 150,
+    ):
+        """Scan historical messages in a vouch channel and register valid vouches.
+        
+        Usage: ?top vouchregister [#channel] [limit]
+        """
+        vouch_cog = self.bot.get_cog("Vouches")
+        if not vouch_cog:
+            return await ctx.reply("❌ Vouch subsystem is currently loading or unavailable.", mention_author=False)
+        await vouch_cog.vouchregister(ctx, channel=channel, limit=limit)
+
+    # ── SUBCOMMAND: ?top help ─────────────────────────────────────────────────
+    @top_group.command(name="help")
+    async def top_help_subcmd(self, ctx: CustomContext, *, command_or_module: Optional[str] = None):
+        """Display the complete Kyoka command directory organized by category.
+        
+        Usage: ?top help [category/command]
+        """
+        help_cog = self.bot.get_cog("Help")
+        if help_cog and hasattr(help_cog, "help_command"):
+            await help_cog.help_command(ctx, command_or_module=command_or_module)
+        else:
+            await ctx.reply("ℹ️ Loading command directory...", mention_author=False)
+
+    async def _send_blox_fruits_revenue_embed(self, ctx: CustomContext, rep: dict[str, Any], title: str):
+        """Send formatted Blox Fruits revenue report embed."""
+        paid_rev_beli = rep.get("received_revenue_m", 0.0)
+        formatted_paid_rev = format_beli_amount(paid_rev_beli)
+        tax_collected_m = rep.get("tax_collected_m", 0.0)
+        formatted_tax = format_beli_amount(tax_collected_m)
+
+        lines = [
+            f"• **Bills Created Today:** `{rep.get('created_count', 0)}`" if "TODAY" in title.upper() else f"• **Bills Created:** `{rep.get('created_count', 0)}`",
+            f"• **Bills Paid:** `{rep.get('paid_count', 0)}`",
+            f"• **Unpaid Bills Created:** `{rep.get('unpaid_created_in_period', rep.get('unpaid_count', 0))}`",
+            f"• **Total Paid Revenue:** **{formatted_paid_rev}**",
+            f"• **Total Tax/Fees Collected:** `{formatted_tax}`",
+        ]
+
+        embed = discord.Embed(
+            title=f"📊 {title}",
+            description="\n".join(lines),
+            color=KyokaTheme.PRIMARY,
+            timestamp=discord.utils.utcnow(),
+        )
+
+        rev_by_type = rep.get("revenue_by_payment_type", {})
+        if rev_by_type:
+            type_lines = []
+            for p_type, val_m in rev_by_type.items():
+                type_lines.append(f"• **{p_type}:** {format_beli_amount(val_m)}")
+            embed.add_field(name="💰 Revenue by Payment Type", value="\n".join(type_lines), inline=False)
+
+        fruit_sum = rep.get("fruit_summary", {})
+        if fruit_sum:
+            fruit_lines = [f"• **{f_name}:** `{cnt}x received`" for f_name, cnt in list(fruit_sum.items())[:10]]
+            embed.add_field(name="🍎 Physical Fruit Payments", value="\n".join(fruit_lines), inline=False)
+
+        if self.is_bot_staff(ctx) and rep.get("staff_payments"):
+            staff_lines = [f"• **{st}:** {format_beli_amount(val)}" for st, val in rep["staff_payments"].items()]
+            embed.add_field(name="👥 Collections by Staff", value="\n".join(staff_lines), inline=False)
+
+        embed.set_thumbnail(url=AIZEN_THUMBNAIL_URL)
+        embed.set_footer(text="Kyoka 3.0 Blox Fruits Ledger • 100% Audit Precision")
+        await ctx.reply(embed=embed, mention_author=False)
+
     # ── SUBCOMMAND: ?top paid ─────────────────────────────────────────────────
     @top_group.command(name="paid")
     async def paid_cmd(self, ctx: CustomContext, arg1: str, arg2: Optional[str] = None):
@@ -1003,32 +1695,13 @@ class TopAIManager(commands.Cog, name="TopAIManager"):
 
         p = ctx.prefix or Config.DEFAULT_PREFIX
 
-        # Workflow 1: +top paid <bill_id> <message_id>
         if arg2 is not None:
             bill_id = arg1
             message_id = arg2
         else:
-            # Workflow 2: +top paid <message_id>
-            # Check if arg1 is message_id (digits) or bill_id
             if arg1.isdigit():
                 message_id = arg1
-                # Find unpaid bills in this guild
-                unpaid = self.top_mgr.list_bills(guild_id=ctx.guild.id if ctx.guild else None, status="UNPAID", limit=5)
-                if not unpaid:
-                    return await ctx.reply(
-                        f"❌ No pending unpaid bills found in this server. Please provide the bill ID explicitly:\n"
-                        f"> `{p}top paid <bill_id> {message_id}`",
-                        mention_author=False,
-                    )
-                if len(unpaid) == 1:
-                    bill_id = unpaid[0]["id"]
-                else:
-                    options = "\n".join([f"• `{b['id']}`: **{b['total_display']}** ({b['service_name']})" for b in unpaid])
-                    return await ctx.reply(
-                        f"⚠️ Multiple pending bills found. Please specify which bill this payment message belongs to:\n{options}\n\n"
-                        f"Usage: `{p}top paid <bill_id> {message_id}`",
-                        mention_author=False,
-                    )
+                return await self.billpaid_cmd(ctx, message_id)
             else:
                 return await ctx.reply(f"❌ Please provide a payment proof Message ID:\n`{p}top paid {arg1} <message_id>`", mention_author=False)
 

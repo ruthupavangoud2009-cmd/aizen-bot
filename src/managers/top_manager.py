@@ -1445,8 +1445,8 @@ INITIAL_PRICES: list[dict[str, Any]] = [
 class TopManager:
     """Enterprise Manager for Top AI Manager, Pricing, Bills, and Staff Applications."""
 
-    def __init__(self, db_path: Path = DB_PATH):
-        self.db_path = db_path
+    def __init__(self, db_path: Path | str = DB_PATH):
+        self.db_path = Path(db_path)
         self._cache_prices: dict[str, PriceItem] = {}
         self._cache_aliases: dict[str, str] = {}  # alias -> service_key
         self._init_database()
@@ -1550,6 +1550,15 @@ class TopManager:
                     panel_channel_id INTEGER
                 );
 
+                CREATE TABLE IF NOT EXISTS top_billing_config (
+                    guild_id INTEGER PRIMARY KEY,
+                    billing_channel_id INTEGER,
+                    tax_rate REAL DEFAULT 5.0,
+                    currency_unit TEXT DEFAULT 'Beli',
+                    created_at REAL NOT NULL,
+                    updated_at REAL NOT NULL
+                );
+
                 CREATE TABLE IF NOT EXISTS top_applications (
                     id TEXT PRIMARY KEY,
                     guild_id INTEGER NOT NULL,
@@ -1591,6 +1600,21 @@ class TopManager:
             cols_app = {row[1] for row in conn.execute("PRAGMA table_info(top_applications)").fetchall()}
             if "review_message_id" not in cols_app:
                 conn.execute("ALTER TABLE top_applications ADD COLUMN review_message_id INTEGER;")
+
+            # Safe non-destructive schema migrations for Blox Fruits Billing System
+            cols_bills = {row[1] for row in conn.execute("PRAGMA table_info(top_bills)").fetchall()}
+            if "payment_type" not in cols_bills:
+                conn.execute("ALTER TABLE top_bills ADD COLUMN payment_type TEXT DEFAULT 'Beli';")
+            if "currency_unit" not in cols_bills:
+                conn.execute("ALTER TABLE top_bills ADD COLUMN currency_unit TEXT DEFAULT 'Beli';")
+            if "fruit_details" not in cols_bills:
+                conn.execute("ALTER TABLE top_bills ADD COLUMN fruit_details TEXT DEFAULT '';")
+            if "posted_channel_id" not in cols_bills:
+                conn.execute("ALTER TABLE top_bills ADD COLUMN posted_channel_id INTEGER DEFAULT 0;")
+            if "posted_message_id" not in cols_bills:
+                conn.execute("ALTER TABLE top_bills ADD COLUMN posted_message_id TEXT DEFAULT '';")
+            conn.execute("CREATE INDEX IF NOT EXISTS idx_top_bills_posted_msg ON top_bills(posted_message_id);")
+
 
             # Seed initial catalogue if table is empty
             count = conn.execute("SELECT COUNT(*) FROM top_prices").fetchone()[0]
@@ -2593,9 +2617,40 @@ class TopManager:
         customer_name: str = "",
         condition_notes: str = "",
         notes: str = "",
+        payment_type: str = "Beli",
+        fruit_details: str = "",
+        custom_price: Optional[float] = None,
+        custom_price_display: Optional[str] = None,
+        posted_channel_id: int = 0,
+        posted_message_id: str = "",
     ) -> dict[str, Any]:
-        """Create and persist a new bill in UNPAID status."""
-        calc = self.calculate_service_price(service_name, quantity=quantity, tax_rate=tax_rate)
+        """Create and persist a new bill in UNPAID status with Blox Fruits payment specifications."""
+        if custom_price is not None:
+            unit_price = float(custom_price)
+            unit_display = custom_price_display or f"{self.format_price(unit_price)}"
+            subtotal = unit_price * max(1, quantity)
+            subtotal_display = self.format_price(subtotal)
+            tax_amt, tot = self.calculate_tax(subtotal, tax_rate)
+            tax_display = self.format_price(tax_amt) if tax_amt > 0 else "0M"
+            total = tot
+            total_display = self.format_price(tot)
+            category = "Custom Services"
+            service = service_name
+            cond_note = condition_notes
+        else:
+            calc = self.calculate_service_price(service_name, quantity=quantity, tax_rate=tax_rate)
+            unit_price = calc.unit_price
+            unit_display = calc.unit_display
+            subtotal = calc.subtotal
+            subtotal_display = calc.subtotal_display
+            tax_rate = calc.tax_rate
+            tax_amt = calc.tax_amount
+            tax_display = calc.tax_display
+            total = calc.total
+            total_display = calc.total_display
+            category = calc.category
+            service = calc.service_name
+            cond_note = condition_notes or calc.condition_note
 
         bill_id = self.generate_bill_id()
         now = time.time()
@@ -2606,31 +2661,37 @@ class TopManager:
                     id, guild_id, customer_id, customer_name, service_name, category,
                     quantity, unit_price, unit_price_display, subtotal, subtotal_display,
                     tax_rate, tax_amount, tax_display, total, total_display, status,
-                    condition_notes, notes, creator_id, creator_name, created_at, updated_at
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'UNPAID', ?, ?, ?, ?, ?, ?)
+                    condition_notes, notes, creator_id, creator_name, created_at, updated_at,
+                    payment_type, currency_unit, fruit_details, posted_channel_id, posted_message_id
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'UNPAID', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """, (
                 bill_id,
                 guild_id,
                 customer_id,
                 customer_name,
-                calc.service_name,
-                calc.category,
+                service,
+                category,
                 quantity,
-                calc.unit_price,
-                calc.unit_display,
-                calc.subtotal,
-                calc.subtotal_display,
-                calc.tax_rate,
-                calc.tax_amount,
-                calc.tax_display,
-                calc.total,
-                calc.total_display,
-                condition_notes or calc.condition_note,
+                unit_price,
+                unit_display,
+                subtotal,
+                subtotal_display,
+                tax_rate,
+                tax_amt,
+                tax_display,
+                total,
+                total_display,
+                cond_note,
                 notes,
                 creator_id,
                 creator_name,
                 now,
                 now,
+                payment_type or "Beli",
+                "Beli" if payment_type.lower() == "beli" else payment_type,
+                fruit_details or "",
+                posted_channel_id,
+                str(posted_message_id) if posted_message_id else "",
             ))
 
             # Audit record
@@ -2638,11 +2699,12 @@ class TopManager:
                 INSERT INTO top_bill_audit (
                     bill_id, guild_id, staff_id, action, old_status, new_status, details, timestamp
                 ) VALUES (?, ?, ?, 'CREATED', NULL, 'UNPAID', ?, ?)
-            """, (bill_id, guild_id, creator_id, f"Created bill for {calc.service_name} (Total: {calc.total_display})", now))
+            """, (bill_id, guild_id, creator_id, f"Created bill for {service} (Total: {total_display}, Payment: {payment_type})", now))
 
             conn.commit()
 
         return self.get_bill(bill_id)
+
 
     def get_bill(self, bill_id: str) -> Optional[dict[str, Any]]:
         """Fetch bill record by exact ID."""
@@ -2723,11 +2785,70 @@ class TopManager:
         return self.get_bill(bill["id"])
 
     def find_bill_by_message_id(self, message_id: str | int) -> list[dict[str, Any]]:
-        """Search database for any bills associated with this payment message ID."""
+        """Search database for any bills associated with this payment or posted message ID or bill ID."""
         msg_id_str = str(message_id).strip()
         with self._get_connection() as conn:
-            rows = conn.execute("SELECT * FROM top_bills WHERE payment_message_id = ?", (msg_id_str,)).fetchall()
+            rows = conn.execute(
+                "SELECT * FROM top_bills WHERE payment_message_id = ? OR posted_message_id = ? OR id = ?",
+                (msg_id_str, msg_id_str, msg_id_str.upper())
+            ).fetchall()
             return [dict(r) for r in rows]
+
+    def set_bill_posted_message(self, bill_id: str, channel_id: int, message_id: int | str) -> None:
+        """Associate the created bill with its Discord message and channel."""
+        with self._get_connection() as conn:
+            conn.execute(
+                "UPDATE top_bills SET posted_channel_id = ?, posted_message_id = ?, payment_message_id = ? WHERE id = ?",
+                (int(channel_id), str(message_id), str(message_id), bill_id.strip().upper())
+            )
+            conn.commit()
+
+    def mark_bill_paid_by_message_id(
+        self,
+        message_id: str | int,
+        staff_id: int,
+        staff_name: str,
+    ) -> dict[str, Any]:
+        """Find bill by message ID and mark it as PAID, preventing duplicate revenue."""
+        bills = self.find_bill_by_message_id(message_id)
+        if not bills:
+            raise KeyError(f"No bill found associated with message ID '{message_id}'.")
+
+        bill = bills[0]
+        if bill["status"] == "PAID":
+            paid_ts = bill.get("paid_at") or 0.0
+            paid_str = dt.datetime.fromtimestamp(paid_ts, dt.timezone.utc).strftime('%Y-%m-%d %H:%M:%S UTC') if paid_ts else "earlier"
+            raise ValueError(f"Bill '{bill['id']}' has already been marked as PAID on {paid_str} by {bill.get('paid_by_name') or 'staff'}.")
+
+        if bill["status"] in ("CANCELLED", "REFUNDED"):
+            raise ValueError(f"Cannot mark bill '{bill['id']}' as PAID because it is currently {bill['status']}.")
+
+        msg_id_str = str(message_id).strip()
+        now = time.time()
+        with self._get_connection() as conn:
+            conn.execute("""
+                UPDATE top_bills
+                SET status = 'PAID', paid_at = ?, paid_by_id = ?, paid_by_name = ?,
+                    payment_message_id = ?, updated_at = ?
+                WHERE id = ?
+            """, (now, staff_id, staff_name, msg_id_str, now, bill["id"]))
+
+            conn.execute("""
+                INSERT INTO top_bill_audit (
+                    bill_id, guild_id, staff_id, action, old_status, new_status, details, timestamp
+                ) VALUES (?, ?, ?, 'PAID', ?, 'PAID', ?, ?)
+            """, (
+                bill["id"],
+                bill["guild_id"],
+                staff_id,
+                bill["status"],
+                f"Confirmed payment via Message ID: {msg_id_str}",
+                now,
+            ))
+            conn.commit()
+
+        return self.get_bill(bill["id"])
+
 
     def cancel_bill(self, bill_id: str, staff_id: int, reason: str) -> dict[str, Any]:
         """Cancel an UNPAID bill with reason and audit log."""
@@ -2875,6 +2996,32 @@ class TopManager:
                 st = b.get("paid_by_name") or f"Staff #{b.get('paid_by_id', 'Unknown')}"
                 staff_payments[st] = staff_payments.get(st, 0.0) + b["total"]
 
+            # Tax collected on bills paid in this period
+            tax_collected = sum(b.get("tax_amount", 0.0) or 0.0 for b in paid_in_period)
+
+            # Revenue grouped by payment type (Beli, Fruits, etc.)
+            revenue_by_payment_type: dict[str, float] = {}
+            fruit_summary: dict[str, int] = {}
+            for b in paid_in_period:
+                pt = b.get("payment_type") or "Beli"
+                revenue_by_payment_type[pt] = revenue_by_payment_type.get(pt, 0.0) + b["total"]
+                f_det = b.get("fruit_details") or ""
+                if f_det:
+                    for f_token in f_det.split(","):
+                        f_clean = f_token.strip()
+                        if f_clean:
+                            fruit_summary[f_clean] = fruit_summary.get(f_clean, 0) + 1
+
+            # Daily breakdown of paid revenue
+            daily_breakdown: dict[str, float] = {}
+            for b in paid_in_period:
+                if b.get("paid_at"):
+                    d_key = dt.datetime.fromtimestamp(b["paid_at"], dt.timezone.utc).strftime("%Y-%m-%d")
+                    daily_breakdown[d_key] = daily_breakdown.get(d_key, 0.0) + b["total"]
+
+            # Number of unpaid bills created specifically during this period
+            unpaid_created_in_period = sum(1 for b in created_bills if b["status"] == "UNPAID")
+
             return {
                 "period_name": period_name,
                 "start_time": start_timestamp,
@@ -2884,10 +3031,19 @@ class TopManager:
                 "created_total_display": self.format_price(total_created_value),
                 "paid_count": len(paid_in_period),
                 "received_revenue": received_revenue,
+                "received_revenue_m": received_revenue,
                 "received_revenue_display": self.format_price(received_revenue),
                 "unpaid_count": len(unpaid_bills),
+                "unpaid_created_count": unpaid_created_in_period,
+                "unpaid_created_in_period": unpaid_created_in_period,
                 "outstanding_amount": outstanding_amount,
                 "outstanding_display": self.format_price(outstanding_amount),
+                "tax_collected": tax_collected,
+                "tax_collected_m": tax_collected,
+                "tax_collected_display": self.format_price(tax_collected) if tax_collected > 0 else "0M",
+                "revenue_by_payment_type": revenue_by_payment_type,
+                "fruit_summary": fruit_summary,
+                "daily_breakdown": daily_breakdown,
                 "cancelled_count": sum(1 for b in created_bills if b["status"] == "CANCELLED"),
                 "refunded_count": len(refunded_in_period),
                 "refund_total": refund_total,
@@ -2899,25 +3055,38 @@ class TopManager:
                 "recent_bills": created_bills[:10],
             }
 
-    def get_today_report(self, guild_id: Optional[int]) -> dict[str, Any]:
-        """Report for current 24-hour UTC day."""
-        now = dt.datetime.now(dt.timezone.utc)
-        start_of_day = dt.datetime(now.year, now.month, now.day, tzinfo=dt.timezone.utc)
+    def get_today_report(self, guild_id: Optional[int], timezone_offset_hours: float = 0.0) -> dict[str, Any]:
+        """Report for current 24-hour UTC or server-configured day."""
+        tz = dt.timezone(dt.timedelta(hours=timezone_offset_hours))
+        now = dt.datetime.now(tz)
+        start_of_day = dt.datetime(now.year, now.month, now.day, tzinfo=tz)
         start_ts = start_of_day.timestamp()
         end_ts = start_ts + 86400
         return self.get_financial_report(guild_id, start_ts, end_ts, period_name="Today's Performance")
 
-    def get_weekly_report(self, guild_id: Optional[int]) -> dict[str, Any]:
+    def get_weekly_report(self, guild_id: Optional[int], timezone_offset_hours: float = 0.0) -> dict[str, Any]:
         """Report for the current 7-day period."""
-        now = dt.datetime.now(dt.timezone.utc)
+        tz = dt.timezone(dt.timedelta(hours=timezone_offset_hours))
+        now = dt.datetime.now(tz)
         start_of_week = now - dt.timedelta(days=7)
         return self.get_financial_report(guild_id, start_of_week.timestamp(), now.timestamp(), period_name="Weekly Performance (Last 7 Days)")
 
-    def get_monthly_report(self, guild_id: Optional[int]) -> dict[str, Any]:
-        """Report for the current 30-day period."""
-        now = dt.datetime.now(dt.timezone.utc)
-        start_of_month = now - dt.timedelta(days=30)
-        return self.get_financial_report(guild_id, start_of_month.timestamp(), now.timestamp(), period_name="Monthly Performance (Last 30 Days)")
+    def get_monthly_report(self, guild_id: Optional[int], timezone_offset_hours: float = 0.0) -> dict[str, Any]:
+        """Report for the current calendar month (1st of month to start of next month)."""
+        tz = dt.timezone(dt.timedelta(hours=timezone_offset_hours))
+        now = dt.datetime.now(tz)
+        start_of_month = dt.datetime(now.year, now.month, 1, tzinfo=tz)
+        if now.month == 12:
+            start_of_next_month = dt.datetime(now.year + 1, 1, 1, tzinfo=tz)
+        else:
+            start_of_next_month = dt.datetime(now.year, now.month + 1, 1, tzinfo=tz)
+        return self.get_financial_report(
+            guild_id,
+            start_of_month.timestamp(),
+            start_of_next_month.timestamp(),
+            period_name=f"{now.strftime('%B %Y')} Performance",
+        )
+
 
     # ─────────────────────────────────────────────────────────────────────────
     # 7. PRICE CATALOGUE MANAGEMENT (STAFF / OWNER WORKFLOW)
@@ -3250,3 +3419,47 @@ class TopManager:
             conn.commit()
 
         return self.get_app_config(guild_id)
+
+    def get_billing_config(self, guild_id: int) -> dict[str, Any]:
+        """Get guild billing configuration (billing channel, tax rate, currency unit)."""
+        with self._get_connection() as conn:
+            row = conn.execute("SELECT * FROM top_billing_config WHERE guild_id = ?", (guild_id,)).fetchone()
+            if row:
+                return dict(row)
+            return {
+                "guild_id": guild_id,
+                "billing_channel_id": None,
+                "tax_rate": 5.0,
+                "currency_unit": "Beli",
+                "created_at": time.time(),
+                "updated_at": time.time(),
+            }
+
+    def set_billing_config(
+        self,
+        guild_id: int,
+        billing_channel_id: Optional[int] = None,
+        tax_rate: Optional[float] = None,
+        currency_unit: Optional[str] = None,
+    ) -> dict[str, Any]:
+        """Update or insert guild billing configuration."""
+        cur = self.get_billing_config(guild_id)
+        b_ch = billing_channel_id if billing_channel_id is not None else cur.get("billing_channel_id")
+        t_rate = tax_rate if tax_rate is not None else cur.get("tax_rate", 5.0)
+        c_unit = currency_unit if currency_unit is not None else cur.get("currency_unit", "Beli")
+        now = time.time()
+
+        with self._get_connection() as conn:
+            conn.execute("""
+                INSERT INTO top_billing_config (
+                    guild_id, billing_channel_id, tax_rate, currency_unit, created_at, updated_at
+                ) VALUES (?, ?, ?, ?, ?, ?)
+                ON CONFLICT(guild_id) DO UPDATE SET
+                    billing_channel_id = excluded.billing_channel_id,
+                    tax_rate = excluded.tax_rate,
+                    currency_unit = excluded.currency_unit,
+                    updated_at = excluded.updated_at
+            """, (guild_id, b_ch, t_rate, c_unit, cur.get("created_at", now), now))
+            conn.commit()
+
+        return self.get_billing_config(guild_id)

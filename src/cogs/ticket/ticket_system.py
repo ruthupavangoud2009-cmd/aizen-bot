@@ -631,41 +631,27 @@ class TicketSetupWizard(discord.ui.View):
         panel_id = temp_row.get("id", 1)
 
         # Attach interactive category select dropdown
+        custom_cats = await self.bot.ticket_mgr.list_categories(interaction.guild.id, panel_name=panel_name)
+        cat_options = [
+            {
+                "label": cat["name"][:100],
+                "value": cat["name"][:100],
+                "description": (cat.get("description") or f"{cat['name']} inquiries")[:100],
+                "emoji": {"name": cat.get("emoji", "🎫")},
+            }
+            for cat in custom_cats[:25]
+        ]
+
         select_action_row: dict[str, Any] = {
             "type": 1,
             "components": [
                 {
                     "type": 3,
                     "custom_id": f"ticket_select_{panel_id}",
-                    "placeholder": "Select an inquiry category...",
+                    "placeholder": "Select an inquiry or service category...",
                     "min_values": 1,
                     "max_values": 1,
-                    "options": [
-                        {
-                            "label": "General Support",
-                            "value": "General Support",
-                            "description": "General questions, server guidance, and member help",
-                            "emoji": {"name": "💬"},
-                        },
-                        {
-                            "label": "Billing & Donations",
-                            "value": "Billing & Donations",
-                            "description": "Store purchases, Kyoka Prime perks, and subscription help",
-                            "emoji": {"name": "💎"},
-                        },
-                        {
-                            "label": "Bug Reports & Technical",
-                            "value": "Bug Reports",
-                            "description": "Report an issue, bug, or bot malfunction",
-                            "emoji": {"name": "🔧"},
-                        },
-                        {
-                            "label": "Staff Inquiry",
-                            "value": "Staff Inquiry",
-                            "description": "Direct private contact with server administrators",
-                            "emoji": {"name": "🛡️"},
-                        },
-                    ],
+                    "options": cat_options,
                 }
             ],
         }
@@ -826,8 +812,19 @@ class TicketSystem(commands.Cog):
             clean_user = re.sub(r"[^a-zA-Z0-9_-]", "", raw_user_name.lower()) or "user"
             channel_name = naming.replace("{count}", ticket_str).replace("{user}", clean_user)
 
+            # Check for custom category definition overrides
+            custom_cat_info: dict[str, Any] | None = None
+            try:
+                guild_cats = await self.bot.ticket_mgr.list_categories(interaction.guild.id, panel.get("panel_name", ""))
+                for gc in guild_cats:
+                    if gc.get("name", "").strip().lower() == chosen_category.strip().lower():
+                        custom_cat_info = gc
+                        break
+            except Exception as e:
+                logger.debug(f"Error fetching custom category info: {e}")
+
             # Resolve or auto-create target category
-            cat_id = panel.get("category_id")
+            cat_id = (custom_cat_info.get("category_channel_id") if custom_cat_info and custom_cat_info.get("category_channel_id") else None) or panel.get("category_id")
             category: discord.CategoryChannel | None = None
             if cat_id:
                 cat_obj = interaction.guild.get_channel(cat_id)
@@ -887,6 +884,19 @@ class TicketSystem(commands.Cog):
                         read_message_history=True,
                     )
 
+            # Apply category-specific staff role if configured
+            if custom_cat_info and custom_cat_info.get("staff_role_id"):
+                cat_staff_role = interaction.guild.get_role(custom_cat_info["staff_role_id"])
+                if cat_staff_role:
+                    overrides[cat_staff_role] = discord.PermissionOverwrite(
+                        view_channel=True,
+                        send_messages=True,
+                        manage_messages=True,
+                        attach_files=True,
+                        embed_links=True,
+                        read_message_history=True,
+                    )
+
             # Atomic creation with rollback guarantee on database or initialization failure
             ticket_channel: discord.TextChannel | None = None
             try:
@@ -932,14 +942,17 @@ class TicketSystem(commands.Cog):
 
             # Send welcome card in ticket channel
             arrow = self.bot.custom_emojis.get("icons_rightarrow", "›")
-            welcome_container = KyokaContainer(accent_color=None)
-            welcome_container.add_section(
-                content=(
+            welcome_msg_text = (
+                custom_cat_info.get("welcome_message")
+                if (custom_cat_info and custom_cat_info.get("welcome_message"))
+                else (
                     f"**Ticket #{ticket_str} • {interaction.user.display_name}**\n"
                     f"> Welcome to your private support ticket, {interaction.user.mention}.\n"
                     f"> Please describe your inquiry in detail. Our staff team will assist you shortly."
                 )
             )
+            welcome_container = KyokaContainer(accent_color=None)
+            welcome_container.add_section(content=welcome_msg_text)
             welcome_container.add_separator(divider=True)
             welcome_container.add_text(
                 f"{arrow} **Ticket ID:** `#{ticket_str}`\n"
@@ -1539,6 +1552,62 @@ class TicketSystem(commands.Cog):
         self.bot.ticket_mgr._panels_cache.pop(ctx.guild.id, None)
         status = "Unlimited" if limit == 0 else str(limit)
         await ctx.send_success(f"Ticket limit for panel `{clean_name}` set to **{status}** per user.")
+
+    @ticket_group.group(name="category", aliases=["cat", "categories"], invoke_without_command=True)
+    @commands.has_permissions(manage_channels=True)
+    async def ticket_category_group(self, ctx: CustomContext) -> None:
+        """Manage custom ticket categories for this server."""
+        await ctx.invoke(self.ticket_category_list_cmd)
+
+    @ticket_category_group.command(name="list", description="List all configured ticket categories.")
+    @commands.has_permissions(manage_channels=True)
+    async def ticket_category_list_cmd(self, ctx: CustomContext, panel_name: str = "") -> None:
+        """List all ticket categories."""
+        cats = await self.bot.ticket_mgr.list_categories(ctx.guild.id, panel_name=panel_name)
+        if not cats:
+            return await ctx.send_warning("No ticket categories configured.")
+        lines = []
+        for i, c in enumerate(cats, start=1):
+            emoji = c.get("emoji") or "🎫"
+            desc = c.get("description") or "No description"
+            lines.append(f"**{i}. {emoji} {c['name']}** — {desc}")
+
+        container = KyokaContainer()
+        container.add_section(
+            content=f"🎫 **Ticket Categories • {ctx.guild.name}**\n\n" + "\n".join(lines)
+        )
+        await send_container_response(ctx, container)
+
+    @ticket_category_group.command(name="add", description="Add a new custom ticket category. Usage: ?ticket category add <name> [emoji] [description]")
+    @commands.has_permissions(manage_channels=True)
+    async def ticket_category_add_cmd(
+        self,
+        ctx: CustomContext,
+        name: str,
+        emoji: str = "🎫",
+        *,
+        description: str = "Inquiry & services",
+    ) -> None:
+        """Add a custom ticket category."""
+        clean_name = name.strip()[:100]
+        await self.bot.ticket_mgr.add_category(
+            guild_id=ctx.guild.id,
+            name=clean_name,
+            description=description[:250],
+            emoji=emoji,
+        )
+        await ctx.send_success(f"Ticket category **{emoji} {clean_name}** added successfully!")
+
+    @ticket_category_group.command(name="delete", aliases=["remove"], description="Delete a ticket category.")
+    @commands.has_permissions(manage_channels=True)
+    async def ticket_category_delete_cmd(self, ctx: CustomContext, *, name: str) -> None:
+        """Delete a ticket category."""
+        clean_name = name.strip()
+        deleted = await self.bot.ticket_mgr.delete_category(ctx.guild.id, clean_name)
+        if deleted:
+            await ctx.send_success(f"Ticket category **{clean_name}** deleted.")
+        else:
+            await ctx.send_error(f"Category **{clean_name}** not found.")
 
 
 async def setup(bot: KyokaBot) -> None:

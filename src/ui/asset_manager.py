@@ -150,19 +150,65 @@ class AssetManager:
         return None
 
     @classmethod
+    def get_branding_image_path(cls, name: str) -> Optional[Path]:
+        """Return absolute Path to local Aizen branding artwork (logo, banner, background)."""
+        norm_key = name.lower().strip()
+        branding_dir = BASE_DIR / "assets" / "kyoka" / "branding"
+        if not branding_dir.is_dir():
+            return None
+        mapping = {
+            "avatar": "kyoka_logo.png",
+            "logo": "kyoka_logo.png",
+            "banner": "kyoka_banner.png",
+            "background": "kyoka_background.png",
+            "hero": "kyoka_banner.png",
+        }
+        fname = mapping.get(norm_key, f"kyoka_{norm_key}.png")
+        target = branding_dir / fname
+        if target.is_file():
+            return target
+        # Fallback to any file in branding
+        for f in branding_dir.glob("*.png"):
+            return f
+        return None
+
+    @classmethod
+    def create_branding_file(cls, name: str) -> Optional[discord.File]:
+        """Create a discord.File for the specified branding artwork."""
+        path = cls.get_branding_image_path(name)
+        if path and path.is_file():
+            try:
+                return discord.File(str(path), filename=path.name)
+            except Exception as e:
+                logger.error(f"Failed to create discord.File for branding {path}: {e}")
+        return None
+
+    @classmethod
     def attach_help_banner(cls, embed: discord.Embed, category_id: str) -> Optional[discord.File]:
         """
         Safely attach the category banner to the embed.
         If local file exists, sets attachment URL and returns discord.File.
         Otherwise falls back to hosted URL.
         """
+        # Legacy name remapping: avatar -> branding/kyoka_logo, banner -> branding/kyoka_banner
+        norm_key = category_id.lower().strip()
+        if norm_key in ("avatar", "logo"):
+            f_brand = cls.create_branding_file("logo")
+            if f_brand:
+                embed.set_thumbnail(url=f"attachment://{f_brand.filename}")
+                return f_brand
+        elif norm_key in ("banner", "hero"):
+            f_brand = cls.create_branding_file("banner")
+            if f_brand:
+                embed.set_image(url=f"attachment://{f_brand.filename}")
+                return f_brand
+
         file_obj = cls.create_help_file(category_id)
         if file_obj:
             embed.set_image(url=f"attachment://{file_obj.filename}")
             return file_obj
 
         # Fallback to hosted URL
-        norm_key = category_id.lower().strip()
         fallback_url = cls.FALLBACK_URLS.get(norm_key, cls.FALLBACK_URLS.get("home"))
         if fallback_url:
             embed.set_image(url=fallback_url)
@@ -174,13 +220,24 @@ class AssetManager:
         Safely attach a feature banner to the embed.
         If local file exists, sets attachment URL and returns discord.File.
         """
+        norm_key = feature_id.lower().strip()
+        if norm_key in ("avatar", "logo"):
+            f_brand = cls.create_branding_file("logo")
+            if f_brand:
+                embed.set_thumbnail(url=f"attachment://{f_brand.filename}")
+                return f_brand
+        elif norm_key in ("banner", "hero"):
+            f_brand = cls.create_branding_file("banner")
+            if f_brand:
+                embed.set_image(url=f"attachment://{f_brand.filename}")
+                return f_brand
+
         file_obj = cls.create_feature_file(feature_id)
         if file_obj:
             embed.set_image(url=f"attachment://{file_obj.filename}")
             return file_obj
 
         # Fallback
-        norm_key = feature_id.lower().strip()
         for k, v in cls.FALLBACK_URLS.items():
             if k in norm_key:
                 embed.set_image(url=v)
