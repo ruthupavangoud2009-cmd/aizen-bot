@@ -241,15 +241,16 @@ class AIVoice(commands.Cog, name="AIVoice"):
         if not ctx.guild:
             return await ctx.send_error("This command can only be used in a server.")
 
-        author_voice = ctx.author.voice
-        if not author_voice or not author_voice.channel:
+        author_voice = getattr(ctx.author, "voice", None)
+        target_channel = getattr(author_voice, "channel", None) if author_voice else None
+        if not author_voice or not target_channel or not getattr(target_channel, "id", None):
             return await ctx.send_error("You must be connected to a voice channel first!")
 
-        target_channel = author_voice.channel
-        me = ctx.guild.me
-        perms = target_channel.permissions_for(me)
-        if not perms.connect or not perms.speak:
-            return await ctx.send_error(f"I need **Connect** and **Speak** permissions in {target_channel.mention}!")
+        me = ctx.guild.me or (ctx.guild.get_member(self.bot.user.id) if (self.bot and self.bot.user) else None)
+        if me:
+            perms = target_channel.permissions_for(me)
+            if not perms.connect or not perms.speak:
+                return await ctx.send_error(f"I need **Connect** and **Speak** permissions in {target_channel.mention}!")
 
         # Check if voice client exists
         if self._is_music_active(ctx.guild):
@@ -264,7 +265,8 @@ class AIVoice(commands.Cog, name="AIVoice"):
                 return await ctx.send_error(
                     "A Music player is currently in voice. Use `+stop` or `+leave` before using AI Voice."
                 )
-            if vc.channel.id == target_channel.id:
+            vc_ch = getattr(vc, "channel", None)
+            if vc_ch and getattr(vc_ch, "id", None) == target_channel.id:
                 return await ctx.send_success(f"Already connected to {target_channel.mention}!")
             await vc.move_to(target_channel)
             return await ctx.send_success(f"Moved to {target_channel.mention}!")

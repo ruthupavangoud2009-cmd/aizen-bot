@@ -112,11 +112,16 @@ class MusicControlView(discord.ui.View):
         if member.guild_permissions.administrator or member.guild_permissions.manage_guild or has_dj:
             return None
 
-        user_vc = member.voice.channel if (member.voice and member.voice.channel) else None
-        if not user_vc:
-            return "You must be connected to a voice channel to use music controls."
+        voice_state = getattr(member, "voice", None)
+        user_vc = getattr(voice_state, "channel", None) if voice_state else None
+        if not user_vc or not getattr(user_vc, "id", None):
+            return "Join a voice channel first, then try again."
 
-        bot_vc = player.voice_client.channel
+        vc = getattr(player, "voice_client", None)
+        bot_vc = getattr(vc, "channel", None) if vc else None
+        if not bot_vc or not getattr(bot_vc, "id", None):
+            return "Kyro is not connected to a voice channel."
+
         if user_vc.id != bot_vc.id:
             return f"You must be in the same voice channel as Kyro ({bot_vc.mention}) to use music controls."
 

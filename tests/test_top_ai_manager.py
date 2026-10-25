@@ -81,10 +81,10 @@ def test_normal_raids_ranges_and_custom_boundary(temp_top_mgr: TopManager):
     assert res_20.total in (50.0, 60.0)
     assert res_20.ambiguity_note != "", "Expected overlap note at boundary 20"
 
-    # 25+ requires custom quote
+    # 25+ requires custom quote / estimated quote
     res_26 = temp_top_mgr.calculate_service_price("normal raids", quantity=30)
     assert res_26.custom_quote is True
-    assert res_26.total_display == "Custom Quote"
+    assert "Custom Quote" in res_26.total_display or "Estimated Quote" in res_26.total_display
 
 
 def test_advance_raids_and_order_raids(temp_top_mgr: TopManager):

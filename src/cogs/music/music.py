@@ -422,13 +422,20 @@ class Music(commands.Cog):
     )
     async def join(self, ctx: CustomContext) -> None:
         """Connect to voice channel with smart moving support."""
-        if not ctx.author.voice or not ctx.author.voice.channel:
+        if not ctx.guild or not getattr(ctx.guild, "id", None):
             container = KyroContainer(accent_color=None)
-            container.add_text("**You must be in a voice channel to use this command.**")
+            container.add_text("**This command can only be used in a server.**")
             await send_container_response(ctx, container)
             return
 
-        target_channel = ctx.author.voice.channel
+        member = ctx.author if isinstance(ctx.author, discord.Member) else (ctx.guild.get_member(ctx.author.id) if (ctx.author and getattr(ctx.author, "id", None)) else None)
+        voice_state = getattr(member, "voice", None)
+        target_channel = getattr(voice_state, "channel", None) if voice_state else None
+        if not member or not voice_state or not target_channel or not getattr(target_channel, "id", None):
+            container = KyroContainer(accent_color=None)
+            container.add_text("**Join a voice channel first, then try again.**")
+            await send_container_response(ctx, container)
+            return
 
         # Mutual exclusion: check if Voice Meeting Intelligence is actively recording
         meeting_cog = self.bot.get_cog("Meeting")
@@ -450,8 +457,10 @@ class Music(commands.Cog):
         player = self.controller.get_or_create_player(ctx.guild)
         player.home_channel = ctx.channel
 
-        bot_vc = ctx.guild.me.voice.channel if ctx.guild.me.voice else None
-        if bot_vc:
+        bot_member = ctx.guild.me or (ctx.guild.get_member(self.bot.user.id) if (self.bot and self.bot.user) else None)
+        bot_voice_state = getattr(bot_member, "voice", None) if bot_member else None
+        bot_vc = getattr(bot_voice_state, "channel", None) if bot_voice_state else None
+        if bot_vc and getattr(bot_vc, "id", None):
             if bot_vc.id == target_channel.id:
                 container = KyroContainer(accent_color=None)
                 container.add_text(f"**Already connected to** {target_channel.mention}.")
@@ -482,6 +491,10 @@ class Music(commands.Cog):
                     f"> Connected to {target_channel.mention}. Ready to play music!"
                 )
             )
+            await send_container_response(ctx, container)
+        except (RuntimeError, ValueError) as e:
+            container = KyroContainer(accent_color=None)
+            container.add_text(f"**Voice Connection Error:** {e}")
             await send_container_response(ctx, container)
         except Exception as e:
             container = KyroContainer(accent_color=None)

@@ -25,17 +25,26 @@ async def execute_play(cog: Music, ctx: commands.Context, query: Optional[str] =
         except Exception:
             pass
 
-    if not ctx.author.voice or not ctx.author.voice.channel:
+    if not ctx.guild or not getattr(ctx.guild, "id", None):
         container = KyroContainer(accent_color=None)
-        container.add_text("**You must be in a voice channel to play music.**")
+        container.add_text("**This command can only be used in a server.**")
         await send_container_response(ctx, container)
         return
 
-    voice_channel = ctx.author.voice.channel
+    member = ctx.author if isinstance(ctx.author, discord.Member) else (ctx.guild.get_member(ctx.author.id) if (ctx.author and getattr(ctx.author, "id", None)) else None)
+    voice_state = getattr(member, "voice", None)
+    voice_channel = getattr(voice_state, "channel", None) if voice_state else None
+    if not member or not voice_state or not voice_channel or not getattr(voice_channel, "id", None):
+        container = KyroContainer(accent_color=None)
+        container.add_text("**Join a voice channel first, then try again.**")
+        await send_container_response(ctx, container)
+        return
 
     # Check if bot is already connected to another VC in this guild
-    bot_vc = ctx.guild.me.voice.channel if ctx.guild.me.voice else None
-    if bot_vc and bot_vc.id != voice_channel.id:
+    bot_member = ctx.guild.me or (ctx.guild.get_member(cog.bot.user.id) if (cog.bot and cog.bot.user) else None)
+    bot_voice_state = getattr(bot_member, "voice", None) if bot_member else None
+    bot_vc = getattr(bot_voice_state, "channel", None) if bot_voice_state else None
+    if bot_vc and getattr(bot_vc, "id", None) and bot_vc.id != voice_channel.id:
         player_check = cog.controller.get_player(ctx.guild.id)
         current_listeners = [m for m in bot_vc.members if not m.bot]
         # Only block moving if actively streaming music AND has active human listeners
@@ -79,6 +88,12 @@ async def execute_play(cog: Music, ctx: commands.Context, query: Optional[str] =
         logger.warning(f"Voice connect error in guild {ctx.guild.id}: {e}")
         from src.core.lavalink import LavalinkUnavailable
         agent = getattr(cog, "agent", None)
+        if isinstance(e, (RuntimeError, ValueError)):
+            container = KyroContainer(accent_color=None)
+            container.add_text(f"**Voice Connection Error:** {e}")
+            await send_container_response(ctx, container)
+            return
+
         if isinstance(e, LavalinkUnavailable):
             if agent:
                 card = agent.build_maintenance_card(

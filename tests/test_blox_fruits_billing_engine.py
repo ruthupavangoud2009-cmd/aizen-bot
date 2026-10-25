@@ -4,11 +4,11 @@ from src.managers.top_manager import TopManager
 from src.cogs.general.top_ai_manager import format_beli_amount, format_blox_fruits_bill_embed
 
 def test_format_beli_amount():
-    assert format_beli_amount(0) == "0 Beli"
-    assert format_beli_amount(30.0) == "30,000,000 Beli"
-    assert format_beli_amount(1.5) == "1,500,000 Beli"
-    assert format_beli_amount(31.5) == "31,500,000 Beli"
-    assert format_beli_amount(30000000) == "30,000,000 Beli"
+    assert format_beli_amount(0) == "0M"
+    assert format_beli_amount(30.0) == "30M"
+    assert format_beli_amount(1.5) == "1.5M"
+    assert format_beli_amount(31.5) == "31.5M"
+    assert format_beli_amount(30000000) == "30M"
 
 def test_blox_fruits_billing_lifecycle(tmp_path):
     db_path = tmp_path / "test_billing.sqlite3"
@@ -41,11 +41,12 @@ def test_blox_fruits_billing_lifecycle(tmp_path):
     # 2. Check embed formatter
     embed = format_blox_fruits_bill_embed(bill)
     assert "KYOKA" in embed.title
-    assert "SERVICE BILL" in embed.title
-    assert "40,000,000 Beli" in embed.description
-    assert "2,000,000 Beli" in embed.description
-    assert "42,000,000 Beli" in embed.description
+    assert "SERVICE QUOTE" in embed.title
+    assert "40M" in embed.description
+    assert "2M" in embed.description
+    assert "42M" in embed.description
     assert "UNPAID" in embed.description
+    assert "Beli" not in embed.description
 
     # 3. Associate with posted Discord message ID (18-digit snowflake)
     message_id = "123456789012345678"

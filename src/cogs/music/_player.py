@@ -152,6 +152,14 @@ class GuildPlayer:
 
     async def connect_voice(self, channel: discord.VoiceChannel | discord.StageChannel) -> None:
         """Connect or move to the specified voice channel using Wavelink with race-condition locking."""
+        if not channel or not getattr(channel, "id", None):
+            raise ValueError("Invalid voice channel: channel does not exist or is not specified.")
+
+        if not self.guild or not getattr(self.guild, "id", None):
+            raise ValueError("Invalid guild: music player guild is missing.")
+
+        channel_name = getattr(channel, "name", "voice channel")
+
         async with self._connect_lock:
             # Check if this guild has an active or in-flight Voice Meeting session
             meeting_cog = self.bot.get_cog("Meeting")
@@ -164,17 +172,23 @@ class GuildPlayer:
                 )
 
             # 1. Pre-flight permission and capacity verification
-            me = self.guild.me
-            perms = channel.permissions_for(me)
-            if not perms.connect:
-                raise RuntimeError(f"Kyro lacks 'Connect' permission to join {channel.name}.")
-            if channel.user_limit and channel.user_limit > 0:
-                if len(channel.members) >= channel.user_limit and not perms.move_members:
-                    raise RuntimeError(f"Voice channel {channel.name} is full ({len(channel.members)}/{channel.user_limit} members).")
+            me = self.guild.me or (self.guild.get_member(self.bot.user.id) if (self.bot and self.bot.user) else None)
+            if me is not None:
+                perms = channel.permissions_for(me)
+                if not perms.connect:
+                    raise RuntimeError(f"Kyro lacks 'Connect' permission to join {channel_name}.")
+                if not perms.speak:
+                    raise RuntimeError(f"Kyro lacks 'Speak' permission in {channel_name}.")
+                if channel.user_limit and channel.user_limit > 0:
+                    if len(channel.members) >= channel.user_limit and not perms.move_members:
+                        raise RuntimeError(f"Voice channel {channel_name} is full ({len(channel.members)}/{channel.user_limit} members).")
+            else:
+                logger.warning(f"Guild {self.guild.id}: could not resolve bot member for voice permission check.")
 
             vc = self.guild.voice_client
             if vc and isinstance(vc, wavelink.Player) and vc.connected:
-                if vc.channel and vc.channel.id != channel.id:
+                vc_channel = getattr(vc, "channel", None)
+                if vc_channel and getattr(vc_channel, "id", None) != channel.id:
                     try:
                         # Bounded: move_to talks to the Lavalink REST API.
                         await asyncio.wait_for(
@@ -183,7 +197,7 @@ class GuildPlayer:
                         )
                     except Exception as e:
                         logger.warning(
-                            f"Guild {self.guild.id}: move_to {channel.name} failed: "
+                            f"Guild {self.guild.id}: move_to {channel_name} failed: "
                             f"{type(e).__name__}: {e}"
                         )
                 self.voice_client = vc

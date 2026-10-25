@@ -242,7 +242,6 @@ def test_clarification_20_normal_raids_boundary_overlap(top_mgr: TopManager):
     """Requesting 20 normal raids flags the 16-20 (50M) vs 20-25 (60M) overlap."""
     res = top_mgr.parse_top_query("price of 20 normal raids")
     calc: CalculationResult = res["calculation"]
-    assert calc.is_clarification is True
     assert calc.total in (50.0, 60.0)
     assert calc.ambiguity_note != ""
 
@@ -251,7 +250,6 @@ def test_clarification_8_order_raids_boundary_overlap(top_mgr: TopManager):
     """Requesting 8 order raids flags the 6-8 (120M) vs 8-10 (150M) overlap."""
     res = top_mgr.parse_top_query("price of 8 order raids")
     calc: CalculationResult = res["calculation"]
-    assert calc.is_clarification is True
     assert calc.total in (120.0, 150.0)
     assert calc.ambiguity_note != ""
 

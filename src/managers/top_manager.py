@@ -138,6 +138,33 @@ class MultiCalculationResult:
 
 
 
+def clean_service_display_name(name: str) -> str:
+    """Normalize catalogue service names for itemized display, removing raw tier ranges."""
+    if not name:
+        return ""
+    # Strip trailing tier ranges like " 1-5", " 6-10", " 11-15", " 16-20", " 20-25", " 25+"
+    cleaned = re.sub(r'\s+\d+[-–]\d+\+?', '', name).strip()
+    cleaned = re.sub(r'\s+\d+\+', '', cleaned).strip()
+
+    lower = cleaned.lower()
+    if "normal raid" in lower:
+        return "Normal Raids"
+    if "advance raid" in lower:
+        return "Advance Raids"
+    if "order raid" in lower:
+        return "Order Raids"
+    if lower in ("1 trial", "2 trials", "3 trials", "4 trials", "trial", "trials"):
+        return "Trials"
+    if "max race package" in lower or "max race" in lower:
+        return "Max Race Package"
+    if "max trial" in lower:
+        return "Max Trial"
+    if "draco" in lower:
+        return "Draco Trials"
+
+    return cleaned
+
+
 # ─────────────────────────────────────────────────────────────────────────────
 # 1. OFFICIAL AUTHORITATIVE INITIAL PRICE CATALOGUE
 # ─────────────────────────────────────────────────────────────────────────────
@@ -1931,10 +1958,16 @@ class TopManager:
             except Exception:
                 pass
 
-        # Multi-Item Query: e.g. "10 normal raids and 1 max race" or "2 trials and dough king"
-        # We split on ' and ' or ',' or ' + ' (ignoring composite names like 'mirage + blue gear')
-        if (" and " in norm or ", " in norm or (" + " in norm and "mirage" not in norm)) and "mirage and blue gear" not in norm and "mirage + blue gear" not in norm and "mirage plus blue gear" not in norm:
-            multi_parts = [p.strip() for p in re.split(r'\s+and\s+|,\s*|\s*\+\s*', norm) if p.strip()]
+        # Multi-Item Query: e.g. "10 normal raids and 1 max race" or "2 trials and dough king" or "30 normal raids with 4 trials"
+        split_pattern = r'\s+and\s+|,\s*|\s*\+\s*|\s+with\s+(?!(?:chalice|2x|blue\s*gear|gear|training|trainings|\d+\s*(?:extra\s*)?training|tax|\d+%))'
+        has_multi = (
+            (" and " in norm or ", " in norm or (" + " in norm and "mirage" not in norm) or bool(re.search(r'\s+with\s+(?!(?:chalice|2x|blue\s*gear|gear|training|trainings|\d+\s*(?:extra\s*)?training|tax|\d+%))', norm)))
+            and "mirage and blue gear" not in norm
+            and "mirage + blue gear" not in norm
+            and "mirage plus blue gear" not in norm
+        )
+        if has_multi:
+            multi_parts = [p.strip() for p in re.split(split_pattern, norm) if p.strip()]
             if len(multi_parts) > 1:
                 item_calcs: list[CalculationResult] = []
                 all_ok = True
@@ -1957,20 +1990,34 @@ class TopManager:
                     subtot = sum(c.subtotal for c in item_calcs)
                     tax_amt, tot = self.calculate_tax(subtot, tax_rate)
                     has_custom = any(c.custom_quote for c in item_calcs)
+                    has_prov = any(getattr(c, "is_provisional", False) or getattr(c, "custom_quote", False) for c in item_calcs)
                     clarifs = [c for c in item_calcs if c.is_clarification]
+
+                    if has_prov:
+                        subtot_disp = f"{self.format_price(subtot)} [Estimated Quote]"
+                        tot_disp = f"{self.format_price(tot)} [Estimated Total]"
+                    elif has_custom:
+                        subtot_disp = "Custom Quote"
+                        tot_disp = "Custom Quote"
+                    else:
+                        subtot_disp = self.format_price(subtot)
+                        tot_disp = self.format_price(tot)
+
                     multi_calc = MultiCalculationResult(
                         items=item_calcs,
                         subtotal=subtot,
-                        subtotal_display=self.format_price(subtot) if not has_custom else "Custom Quote",
+                        subtotal_display=subtot_disp,
                         tax_rate=tax_rate,
                         tax_amount=tax_amt,
                         tax_display=self.format_price(tax_amt) if tax_amt > 0 else "0M",
                         total=tot,
-                        total_display=self.format_price(tot) if not has_custom else "Custom Quote",
-                        service_name=" + ".join(c.service_name for c in item_calcs),
+                        total_display=tot_disp,
+                        service_name=" + ".join(clean_service_display_name(c.service_name) for c in item_calcs),
                         clarification_needed=len(clarifs) > 0,
                         clarifications=clarifs,
                         requires_staff_approval=any(c.requires_staff_approval for c in item_calcs) or tot >= 500.0,
+                        is_provisional=has_prov,
+                        custom_quote=has_custom,
                     )
                     return {
                         "intent": "make_bill" if is_make_bill else "price_lookup",
@@ -2280,9 +2327,9 @@ class TopManager:
                     p_tier2 = self.get_price("normal_raid_20_25")
                     tax_amt, tot = self.calculate_tax(p_tier1.price_amount, tax_rate)
                     return {
-                        "intent": "price_lookup",
+                        "intent": "make_bill" if is_make_bill else "price_lookup",
                         "calculation": CalculationResult(
-                            service_name="20 Normal Raids",
+                            service_name="Normal Raids",
                             category="Normal Raids",
                             quantity=20,
                             unit_price=p_tier1.price_amount,
@@ -2294,37 +2341,55 @@ class TopManager:
                             tax_display=self.format_price(tax_amt) if tax_amt > 0 else "0M",
                             total=tot,
                             total_display=self.format_price(tot),
-                            ambiguity_note="Overlapping tier at 20 raids: Tier 16–20 (50M) vs Tier 20–25 (60M). Defaulting to 50M.",
-                            is_clarification=True,
-                            clarification_title="❓ TOP AI MANAGER • OVERLAPPING BOUNDARY",
-                            clarification_options=[
-                                "Normal Raids has overlapping tiers at **20 raids** in the official price list:",
-                                f"• **Tier 16–20:** **{p_tier1.price_display}**",
-                                f"• **Tier 20–25:** **{p_tier2.price_display}**",
-                                "*(Defaulting to 50M per tier 16–20. Please confirm with staff if tier 20–25 applies.)*",
-                            ],
+                            ambiguity_note="Overlapping tier at 20 raids: Tier 16–20 (50M) vs Tier 20–25 (60M). Resolved to Tier 16–20 (50M) per lower-tier default policy.",
+                            condition_note="Tier 16–20 (50M) applied by default policy. Tier 20–25 is 60M.",
+                            is_clarification=False,
                         ),
                         "quantity": 20,
                         "tax_rate": tax_rate,
                         "raw_query": raw,
                     }
                 if qty > 25:
+                    blocks = qty // 25
+                    rem = qty % 25
+                    cost_blocks = blocks * 60.0
+                    rem_cost = 0.0
+                    if 1 <= rem <= 5:
+                        rem_cost = 10.0
+                    elif 6 <= rem <= 10:
+                        rem_cost = 20.0
+                    elif 11 <= rem <= 15:
+                        rem_cost = 30.0
+                    elif 16 <= rem <= 20:
+                        rem_cost = 50.0
+                    elif 21 <= rem <= 24:
+                        rem_cost = 60.0
+
+                    subtotal = cost_blocks + rem_cost
+                    tax_amt, tot = self.calculate_tax(subtotal, tax_rate)
+                    rem_desc = f" + {rem} raids ({int(rem_cost)}M)" if rem > 0 else ""
+                    sub_str = f"{int(subtotal) if subtotal.is_integer() else subtotal}M [Estimated Quote]"
+                    tot_str = f"{int(tot) if tot.is_integer() else tot}M [Estimated Quote]"
                     calc = CalculationResult(
-                        service_name=f"{qty} Normal Raids",
+                        service_name="Normal Raids",
                         category="Normal Raids",
                         quantity=qty,
-                        unit_price=0.0,
-                        unit_display="Custom Quote",
-                        subtotal=0.0,
-                        subtotal_display="Custom Quote",
+                        unit_price=subtotal,
+                        unit_display=sub_str,
+                        subtotal=subtotal,
+                        subtotal_display=sub_str,
                         tax_rate=tax_rate,
-                        tax_amount=0.0,
-                        tax_display="Custom Quote",
-                        total=0.0,
-                        total_display="Custom Quote",
+                        tax_amount=tax_amt,
+                        tax_display=self.format_price(tax_amt) if tax_amt > 0 else "0M",
+                        total=tot,
+                        total_display=tot_str,
+                        condition_note=f"Estimated quote based on {blocks * 25} raids ({int(cost_blocks)}M){rem_desc}. Above catalogue max (25).",
+                        is_provisional=True,
                         custom_quote=True,
+                        requires_staff_approval=True,
+                        is_clarification=False,
                     )
-                    return {"intent": "price_lookup", "calculation": calc, "quantity": qty, "tax_rate": tax_rate, "raw_query": raw}
+                    return {"intent": "make_bill" if is_make_bill else "price_lookup", "calculation": calc, "quantity": qty, "tax_rate": tax_rate, "raw_query": raw}
                 elif qty >= 21: item = self.get_price("normal_raid_20_25")
                 elif qty >= 16: item = self.get_price("normal_raid_16_20")
                 elif qty >= 11: item = self.get_price("normal_raid_11_15")
@@ -2360,9 +2425,9 @@ class TopManager:
                     p_tier2 = self.get_price("order_raid_8_10")
                     tax_amt, tot = self.calculate_tax(p_tier1.price_amount, tax_rate)
                     return {
-                        "intent": "price_lookup",
+                        "intent": "make_bill" if is_make_bill else "price_lookup",
                         "calculation": CalculationResult(
-                            service_name="8 Order Raids",
+                            service_name="Order Raids",
                             category="Order Raids",
                             quantity=8,
                             unit_price=p_tier1.price_amount,
@@ -2374,15 +2439,9 @@ class TopManager:
                             tax_display=self.format_price(tax_amt) if tax_amt > 0 else "0M",
                             total=tot,
                             total_display=self.format_price(tot),
-                            ambiguity_note="Overlapping tier at 8 raids: Tier 6–8 (120M) vs Tier 8–10 (150M). Defaulting to 120M.",
-                            is_clarification=True,
-                            clarification_title="❓ TOP AI MANAGER • OVERLAPPING BOUNDARY",
-                            clarification_options=[
-                                "Order Raids has overlapping tiers at **8 raids** in the official price list:",
-                                f"• **Tier 6–8:** **{p_tier1.price_display}**",
-                                f"• **Tier 8–10:** **{p_tier2.price_display}**",
-                                "*(Defaulting to 120M per tier 6–8. Please confirm with staff if tier 8–10 applies.)*",
-                            ],
+                            ambiguity_note="Overlapping tier at 8 raids: Tier 6–8 (120M) vs Tier 8–10 (150M). Resolved to Tier 6–8 (120M) per lower-tier default policy.",
+                            condition_note="Tier 6–8 (120M) applied by default policy. Tier 8–10 is 150M.",
+                            is_clarification=False,
                         ),
                         "quantity": 8,
                         "tax_rate": tax_rate,
@@ -2414,7 +2473,7 @@ class TopManager:
             if item:
                 tax_amt, tot = self.calculate_tax(item.price_amount, tax_rate)
                 calc = CalculationResult(
-                    service_name=item.service_name,
+                    service_name=clean_service_display_name(item.service_name),
                     category=item.category,
                     quantity=qty,
                     unit_price=item.price_amount,
@@ -2557,34 +2616,27 @@ class TopManager:
                 elif qty == 1 or "1 trial" in norm or "one trial" in norm or "single trial" in norm:
                     item = self.get_price("trial_1")
                 else:
-                    # Unlisted trials package (catalogue defines 1, 2, 3 trials and Max Trial)
+                    # Unlisted trials package (e.g. 4 trials; catalogue defines 1, 2, 3 trials and Max Trial)
                     provisional_subtotal = qty * 20.0
                     tax_amt, tot = self.calculate_tax(provisional_subtotal, tax_rate)
                     calc = CalculationResult(
-                        service_name=f"{qty} Trials [Unlisted Package]",
+                        service_name=f"{qty} Trials",
                         category="Trials",
                         quantity=qty,
                         unit_price=20.0,
-                        unit_display="20M/trial (Provisional)",
+                        unit_display="20M",
                         subtotal=provisional_subtotal,
-                        subtotal_display=f"{self.format_price(provisional_subtotal)} (Provisional)",
+                        subtotal_display=f"{int(provisional_subtotal)}M [Estimated Quote]",
                         tax_rate=tax_rate,
                         tax_amount=tax_amt,
                         tax_display=self.format_price(tax_amt) if tax_amt > 0 else "0M",
                         total=tot,
-                        total_display=f"{self.format_price(tot)} (Provisional)",
+                        total_display=f"{int(tot)}M [Estimated Quote]",
                         is_provisional=True,
-                        is_clarification=True,
-                        clarification_title=f"❓ CLARIFICATION NEEDED • {qty} Trials",
-                        clarification_options=[
-                            f"The catalogue defines 1 Trial (20M), 2 Trials (40M), 3 Trials (60M), and Max Trial (100M).",
-                            f"• **Provisional Calculation:** **{self.format_price(provisional_subtotal)}** ({qty}x 20M/trial)",
-                            f"• **Or choose listed package:** **Max Trial (100M)** for all remaining trials",
-                            f"*Please confirm with staff for unlisted quantities.*",
-                        ],
-                        condition_note=f"The catalogue does not define a {qty}-trial package. Provisional quote at 20M/trial; consider Max Trial (100M).",
-                        pricing_explanation=f"Catalogue does not list a {qty}-trial package. Provisional rate at 20M per trial or consider Max Trial (100M).",
+                        is_clarification=False,
                         requires_staff_approval=True,
+                        condition_note=f"Estimated quote based on {qty} × 20M per trial (unlisted package in official catalogue).",
+                        pricing_explanation=f"Catalogue lists 1-3 trials and Max Trial. Extrapolated at 20M per trial.",
                     )
                     return {"intent": "make_bill" if is_make_bill else "price_lookup", "calculation": calc, "quantity": qty, "tax_rate": tax_rate, "raw_query": raw}
 
@@ -2862,6 +2914,8 @@ class TopManager:
             cond_note = condition_notes
         else:
             calc = self.calculate_service_price(service_name, quantity=quantity, tax_rate=tax_rate)
+            if quantity == 1 and calc.quantity > 1:
+                quantity = calc.quantity
             unit_price = calc.unit_price
             unit_display = calc.unit_display
             subtotal = calc.subtotal
@@ -2872,7 +2926,7 @@ class TopManager:
             total = calc.total
             total_display = calc.total_display
             category = calc.category
-            service = calc.service_name
+            service = clean_service_display_name(calc.service_name)
             cond_note = condition_notes or calc.condition_note
 
         bill_id = self.generate_bill_id()
@@ -2910,8 +2964,8 @@ class TopManager:
                 creator_name,
                 now,
                 now,
-                payment_type or "Beli",
-                "Beli" if payment_type.lower() == "beli" else payment_type,
+                payment_type or "In-Game Service Value",
+                "In-Game Value" if payment_type.lower() in ("beli", "in-game value", "in-game service value") else payment_type,
                 fruit_details or "",
                 posted_channel_id,
                 str(posted_message_id) if posted_message_id else "",
@@ -2936,20 +2990,33 @@ class TopManager:
         multi_calc: MultiCalculationResult,
         customer_id: Optional[int] = None,
         customer_name: str = "",
-        payment_type: str = "Beli",
+        payment_type: str = "In-Game Service Value",
         notes: str = "",
         posted_channel_id: int = 0,
         posted_message_id: str = "",
     ) -> dict[str, Any]:
         """Create and persist a multi-item service bill in UNPAID status."""
-        itemized_lines = [f"• {item.service_name} (Qty: {item.quantity}): {item.subtotal_display}" for item in multi_calc.items]
+        itemized_lines = [f"• {clean_service_display_name(item.service_name)} (Qty: {item.quantity}): {item.subtotal_display}" for item in multi_calc.items]
         combined_notes = "\n".join(itemized_lines)
         if notes:
             combined_notes += f"\nNotes: {notes}"
 
         bill_id = self.generate_bill_id()
         now = time.time()
-        service_title = multi_calc.service_name[:100]
+        service_title = " + ".join(clean_service_display_name(item.service_name) for item in multi_calc.items)[:100]
+
+        itemized_data = [
+            {
+                "service_name": clean_service_display_name(item.service_name),
+                "quantity": item.quantity,
+                "unit_price": item.unit_price,
+                "unit_display": item.unit_display,
+                "subtotal": item.subtotal,
+                "subtotal_display": item.subtotal_display,
+            }
+            for item in multi_calc.items
+        ]
+        fruit_details_str = json.dumps(itemized_data)
 
         with self._get_connection() as conn:
             conn.execute("""
@@ -2959,14 +3026,14 @@ class TopManager:
                     tax_rate, tax_amount, tax_display, total, total_display, status,
                     condition_notes, notes, creator_id, creator_name, created_at, updated_at,
                     payment_type, currency_unit, fruit_details, posted_channel_id, posted_message_id
-                ) VALUES (?, ?, ?, ?, ?, 'Multi-Service Package', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'UNPAID', ?, ?, ?, ?, ?, ?, ?, ?, '', ?, ?)
+                ) VALUES (?, ?, ?, ?, ?, 'Multi-Service Package', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'UNPAID', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """, (
                 bill_id,
                 guild_id,
                 customer_id,
                 customer_name,
                 service_title,
-                len(multi_calc.items),
+                sum(item.quantity for item in multi_calc.items),
                 multi_calc.subtotal,
                 multi_calc.subtotal_display,
                 multi_calc.subtotal,
@@ -2982,8 +3049,9 @@ class TopManager:
                 creator_name,
                 now,
                 now,
-                payment_type or "Beli",
-                "Beli",
+                payment_type or "In-Game Service Value",
+                "In-Game Value",
+                fruit_details_str,
                 posted_channel_id,
                 str(posted_message_id) if posted_message_id else "",
             ))

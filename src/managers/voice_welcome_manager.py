@@ -352,11 +352,15 @@ class VoiceWelcomeManager:
                 temp_path = await asyncio.to_thread(self.generate_tts_file, spoken_text, lang)
 
                 # Connect or reuse voice client if not used by music
+                if not channel or not getattr(channel, "id", None):
+                    return False
+
                 if guild.voice_client:
                     if isinstance(guild.voice_client, wavelink.Player):
                         logger.debug("[VoiceWelcome] Voice client is wavelink.Player; deferring greeting.")
                         return False
-                    if guild.voice_client.channel.id != channel.id:
+                    vc_ch = getattr(guild.voice_client, "channel", None)
+                    if vc_ch and getattr(vc_ch, "id", None) != channel.id:
                         # Connected to different channel; check if music is using it
                         if self.is_music_active(guild):
                             return False

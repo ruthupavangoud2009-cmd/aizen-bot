@@ -69,10 +69,15 @@ async def execute_saved_playlist_playback(
             await send_container_response(channel, c)
         return
 
-    member = guild.get_member(user.id)
-    if not member or not member.voice or not member.voice.channel:
+    if not guild or not getattr(guild, "id", None):
+        return
+
+    member = guild.get_member(user.id) if (guild and user and getattr(user, "id", None)) else None
+    voice_state = getattr(member, "voice", None) if member else None
+    user_vc = getattr(voice_state, "channel", None) if voice_state else None
+    if not member or not voice_state or not user_vc or not getattr(user_vc, "id", None):
         c = KyroContainer()
-        c.add_section(content="**Voice Error**\n> You must be connected to a voice channel to play music.")
+        c.add_section(content="**Voice Error**\n> Join a voice channel first, then try again.")
         if interaction:
             await send_container_response(interaction, c, ephemeral=True)
         else:
@@ -86,7 +91,15 @@ async def execute_saved_playlist_playback(
     player.home_channel = channel
 
     try:
-        await player.connect_voice(member.voice.channel)
+        await player.connect_voice(user_vc)
+    except (RuntimeError, ValueError) as e:
+        c = KyroContainer()
+        c.add_section(content=f"**Voice Connection Error**\n> {e}")
+        if interaction:
+            await send_container_response(interaction, c, ephemeral=True)
+        else:
+            await send_container_response(channel, c)
+        return
     except Exception as e:
         c = KyroContainer()
         c.add_section(content=f"**Connection Error**\n> Failed to connect to voice channel: `{e}`")

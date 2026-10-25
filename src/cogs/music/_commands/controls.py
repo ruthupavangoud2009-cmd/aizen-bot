@@ -4,6 +4,7 @@ import logging
 import random
 import time
 from typing import TYPE_CHECKING, Optional
+import discord
 from discord.ext import commands
 
 from src.utils.containers import KyroContainer, send_container_response
@@ -21,11 +22,21 @@ _247_DEBOUNCE_SECONDS: float = 3.0
 
 def check_voice_channel(ctx: commands.Context) -> tuple[bool, str | None]:
     """Verify that author is in the same voice channel as the bot."""
-    if not ctx.author.voice or not ctx.author.voice.channel:
-        return False, "You must be connected to a voice channel to use music commands."
-    if ctx.guild.me.voice and ctx.guild.me.voice.channel:
-        if ctx.guild.me.voice.channel.id != ctx.author.voice.channel.id:
-            return False, f"You must be in the same voice channel as Kyro ({ctx.guild.me.voice.channel.mention})."
+    if not ctx.guild:
+        return False, "This command can only be used in a server."
+
+    member = ctx.author if isinstance(ctx.author, discord.Member) else (ctx.guild.get_member(ctx.author.id) if (ctx.author and getattr(ctx.author, "id", None)) else None)
+    author_vs = getattr(member, "voice", None) if member else None
+    author_vc = getattr(author_vs, "channel", None) if author_vs else None
+    if not author_vc or not getattr(author_vc, "id", None):
+        return False, "Join a voice channel first, then try again."
+
+    bot_member = ctx.guild.me or (ctx.guild.get_member(ctx.bot.user.id) if (ctx.bot and ctx.bot.user) else None)
+    bot_vs = getattr(bot_member, "voice", None) if bot_member else None
+    bot_vc = getattr(bot_vs, "channel", None) if bot_vs else None
+    if bot_vc and getattr(bot_vc, "id", None):
+        if bot_vc.id != author_vc.id:
+            return False, f"You must be in the same voice channel as Kyro ({bot_vc.mention})."
     return True, None
 
 

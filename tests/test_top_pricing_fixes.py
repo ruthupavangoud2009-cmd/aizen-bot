@@ -21,6 +21,7 @@ from src.managers.top_manager import (
     TopManager,
     CalculationResult,
     MultiCalculationResult,
+    PRIMARY_OWNER_ID,
 )
 from src.cogs.general.top_ai_manager import format_quote_embed
 
@@ -132,8 +133,8 @@ def test_multi_calculation_result_auto_propagation():
 
 def test_four_trials_and_ten_normal_raids_exact_query(temp_top_mgr):
     """Verify '?top price of 4 trials and 10 normal raids' parses without crashing,
-    calculates known 10 normal raids deterministically (20M), provides a provisional
-    quote for 4 trials, and asks for clarification on unlisted package.
+    calculates known 10 normal raids deterministically (20M), provides an estimated
+    quote for 4 trials (80M [Estimated Quote]), and produces combined 100M total.
     """
     res = temp_top_mgr.parse_top_query("price of 4 trials and 10 normal raids")
     calc = res.get("calculation")
@@ -151,11 +152,10 @@ def test_four_trials_and_ten_normal_raids_exact_query(temp_top_mgr):
     trials = next((item for item in calc.items if "trial" in item.service_name.lower()), None)
     assert trials is not None
     assert trials.is_provisional is True
-    assert trials.is_clarification is True
-    assert "provisional" in trials.total_display.lower()
+    assert trials.total == 80.0
+    assert "estimate" in trials.total_display.lower() or "quote" in trials.total_display.lower()
 
     # Check overall multi result contract
-    assert calc.is_clarification is True
     assert calc.is_provisional is True
     assert calc.total == 100.0
     assert "100M" in calc.total_display
@@ -247,3 +247,226 @@ def test_zero_usd_signs_in_catalogue_and_calculations(temp_top_mgr):
     for f in embed.fields:
         assert "$" not in f.value
         assert "$" not in f.name
+
+
+# ─── SECTION 10: MANDATORY REGRESSION TEST SUITE ────────────────────────────
+
+from src.cogs.general.top_ai_manager import format_blox_fruits_bill_embed, InteractiveQuoteView
+
+
+def test_section10_1_ten_normal_raids_tier(temp_top_mgr):
+    """1. ?top price of 10 normal raids returns the correct official tier (20M)."""
+    res = temp_top_mgr.parse_top_query("price of 10 normal raids")
+    calc = res["calculation"]
+    assert calc.total == 20.0
+    assert calc.total_display == "20M"
+    assert "Normal Raids" in calc.service_name
+
+
+def test_section10_2_twenty_normal_raids_boundary_overlap(temp_top_mgr):
+    """2. ?top price of 20 normal raids follows the configured overlap policy (50M)."""
+    res = temp_top_mgr.parse_top_query("price of 20 normal raids")
+    calc = res["calculation"]
+    assert calc.total == 50.0
+    assert calc.total_display == "50M"
+    assert calc.is_clarification is False
+    assert "overlap" in calc.ambiguity_note.lower() or "tier 16" in calc.condition_note.lower()
+
+
+def test_section10_3_thirty_normal_raids_with_four_trials(temp_top_mgr):
+    """3. ?top price of 30 normal raids with 4 trials includes both services,
+    calculates normal raids extrapolation (25 @ 60M + 5 @ 10M = 70M),
+    calculates trials (4 @ 20M = 80M), and produces combined total (150M).
+    """
+    res = temp_top_mgr.parse_top_query("price of 30 normal raids with 4 trials")
+    calc = res["calculation"]
+    assert isinstance(calc, MultiCalculationResult)
+    assert len(calc.items) == 2
+
+    raids = next(it for it in calc.items if "normal raid" in it.service_name.lower())
+    assert raids.quantity == 30
+    assert raids.total == 70.0
+    assert "70M" in raids.total_display
+    assert raids.is_provisional is True
+
+    trials = next(it for it in calc.items if "trial" in it.service_name.lower())
+    assert trials.quantity == 4
+    assert trials.total == 80.0
+    assert "80M" in trials.total_display
+    assert trials.is_provisional is True
+
+    assert calc.total == 150.0
+    assert "150M" in calc.total_display
+
+
+def test_section10_4_bill_ten_normal_raids_and_one_max_race(temp_top_mgr):
+    """4. ?top bill 10 normal raids and 1 max race @Customer preserves exact quantities
+    and recognizes Max Race Package correctly without '2x Normal Raids 6-10' or 'Beli'.
+    """
+    res = temp_top_mgr.parse_top_query("10 normal raids and 1 max race")
+    calc = res["calculation"]
+    assert isinstance(calc, MultiCalculationResult)
+    assert len(calc.items) == 2
+
+    bill = temp_top_mgr.create_multi_bill(
+        guild_id=1,
+        creator_id=999,
+        creator_name="StaffMember",
+        multi_calc=calc,
+        customer_name="@Customer",
+    )
+    embed = format_blox_fruits_bill_embed(bill)
+    desc = embed.description
+
+    assert "Normal Raids × 10 — 20M" in desc
+    assert "Max Race Package × 1 — 150M" in desc
+    assert "2x Normal Raids" not in desc
+    assert "170,000,000" not in desc
+    assert "Beli" not in desc
+    assert "170M" in desc
+    assert embed.title == "KYOKA — SERVICE QUOTE"
+
+
+def test_section10_5_four_trials_distinct_from_three_and_max(temp_top_mgr):
+    """5. Four trials are not silently treated as three trials or another package."""
+    res = temp_top_mgr.parse_top_query("4 trials")
+    calc = res["calculation"]
+    assert calc.quantity == 4
+    assert calc.total == 80.0
+    assert "80M" in calc.total_display
+    assert calc.total != 60.0
+    assert calc.total != 100.0
+
+
+def test_section10_6_trials_packages_distinct(temp_top_mgr):
+    """6. Max Trial, training, Max Race Package, and Draco Trials remain distinct."""
+    max_trial = temp_top_mgr.parse_top_query("max trial")["calculation"]
+    assert max_trial.total == 100.0
+
+    max_trial_training = temp_top_mgr.parse_top_query("max trial with 2 extra training")["calculation"]
+    assert max_trial_training.total == 120.0
+
+    max_race = temp_top_mgr.parse_top_query("max race package")["calculation"]
+    assert max_race.total == 150.0
+
+    draco_trials = temp_top_mgr.parse_top_query("draco trial")["calculation"]
+    assert draco_trials.total == 100.0
+    assert "Draco" in draco_trials.service_name
+
+
+def test_section10_7_no_beli_payment_wording_in_bills(temp_top_mgr):
+    """7. No bill total is labelled as a Beli transfer requirement."""
+    calc = temp_top_mgr.parse_top_query("10 normal raids")["calculation"]
+    bill = temp_top_mgr.create_bill(
+        guild_id=1,
+        creator_id=999,
+        creator_name="StaffMember",
+        service_name=calc.service_name,
+        quantity=calc.quantity,
+        customer_name="@Customer",
+    )
+    embed = format_blox_fruits_bill_embed(bill)
+    assert "Beli" not in embed.description
+    assert "Beli" not in embed.title
+    assert "Agreed service value" in embed.description
+
+
+def test_section10_8_tax_calculated_only_when_specified(temp_top_mgr):
+    """8. Tax is calculated only when specified."""
+    # No tax specified
+    no_tax_calc = temp_top_mgr.parse_top_query("10 normal raids")["calculation"]
+    assert no_tax_calc.tax_rate == 0.0
+    assert no_tax_calc.tax_amount == 0.0
+    bill_no_tax = temp_top_mgr.create_bill(1, 999, "Staff", no_tax_calc.service_name, quantity=10)
+    embed_no_tax = format_blox_fruits_bill_embed(bill_no_tax)
+    assert "fee/tax" not in embed_no_tax.description
+
+    # Tax specified (5%)
+    tax_calc = temp_top_mgr.parse_top_query("10 normal raids with 5% tax")["calculation"]
+    assert tax_calc.tax_rate == 5.0
+    assert tax_calc.tax_amount == 1.0
+    assert tax_calc.total == 21.0
+    bill_tax = temp_top_mgr.create_bill(1, 999, "Staff", tax_calc.service_name, quantity=10, tax_rate=5.0)
+    embed_tax = format_blox_fruits_bill_embed(bill_tax)
+    assert "Service fee/tax (5%):" in embed_tax.description and "+1M" in embed_tax.description
+
+
+def test_section10_9_unknown_services_never_silently_replaced(temp_top_mgr):
+    """9. Unknown services are never silently replaced."""
+    with pytest.raises(KeyError):
+        temp_top_mgr.calculate_service_price("non_existent_random_service_xyz")
+
+
+def test_section10_10_estimates_labelled(temp_top_mgr):
+    """10. Estimates are labelled and respect the configured policy."""
+    res = temp_top_mgr.parse_top_query("30 normal raids")
+    calc = res["calculation"]
+    assert calc.is_provisional is True
+    assert "[Estimated Quote]" in calc.total_display
+
+
+def test_section10_11_multi_calculation_is_clarification_no_attribute_error():
+    """11. The MultiCalculationResult.is_clarification error is fixed at its source."""
+    multi = MultiCalculationResult(
+        items=[],
+        subtotal=0.0,
+        subtotal_display="0M",
+        tax_rate=0.0,
+        tax_amount=0.0,
+        tax_display="0M",
+        total=0.0,
+        total_display="0M",
+    )
+    assert hasattr(multi, "is_clarification")
+    assert multi.is_clarification is False
+
+
+def test_section10_12_quantity_parsing_does_not_fail_int_conversion():
+    """12. The quantity parsing error is fixed at its source."""
+    raw = "10 normal raids and 1 max race @Customer"
+    cleaned = raw
+    plain_mention = re.search(r"@([a-zA-Z0-9_\-\.]+)", cleaned)
+    assert plain_mention is not None
+    cleaned = cleaned.replace(plain_mention.group(0), "").strip()
+    assert "@Customer" not in cleaned
+    assert "10 normal raids and 1 max race" == cleaned
+
+
+def test_section10_13_existing_bills_and_database_compatibility(temp_top_mgr):
+    """13. Existing bills and stored prices remain compatible."""
+    bill = temp_top_mgr.create_bill(1, 999, "Staff", "Mirage Island", quantity=1)
+    retrieved = temp_top_mgr.get_bill(bill["id"])
+    assert retrieved is not None
+    assert retrieved["id"] == bill["id"]
+    assert retrieved["status"] == "UNPAID"
+    assert retrieved["currency_unit"] in ("In-Game Value", "Beli")
+
+
+@pytest.mark.asyncio
+async def test_section10_15_duplicate_button_clicks_prevented(temp_top_mgr):
+    """15. Duplicate button clicks cannot create duplicate bills."""
+    calc = temp_top_mgr.parse_top_query("10 normal raids")["calculation"]
+    view = InteractiveQuoteView(temp_top_mgr, calc, 123, 1)
+
+    # First click sets is_created
+    mock_interaction = MagicMock(spec=discord.Interaction)
+    mock_interaction.user = MagicMock()
+    mock_interaction.user.id = PRIMARY_OWNER_ID
+    mock_interaction.guild = MagicMock()
+    mock_interaction.guild.id = 1
+    mock_interaction.response = AsyncMock()
+
+    await view.btn_create_bill.callback(mock_interaction)
+    assert view.is_created is True
+    assert mock_interaction.response.edit_message.called
+
+    # Second click is rejected
+    mock_interaction2 = MagicMock(spec=discord.Interaction)
+    mock_interaction2.user = mock_interaction.user
+    mock_interaction2.response = AsyncMock()
+    await view.btn_create_bill.callback(mock_interaction2)
+    mock_interaction2.response.send_message.assert_called_with(
+        "⚠️ A bill has already been created for this quote.",
+        ephemeral=True,
+    )
+

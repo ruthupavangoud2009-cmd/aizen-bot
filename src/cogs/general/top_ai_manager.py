@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import asyncio
 import datetime as dt
+import json
 import logging
 import re
 import time
@@ -18,7 +19,7 @@ from discord.ext import commands
 
 from src.core.config import Config
 from src.core.context import CustomContext
-from src.managers.top_manager import TopManager, CalculationResult, MultiCalculationResult, PriceItem, PRIMARY_OWNER_ID
+from src.managers.top_manager import TopManager, CalculationResult, MultiCalculationResult, PriceItem, PRIMARY_OWNER_ID, clean_service_display_name
 from src.security.adult_guard import add_adult_user, remove_adult_user, list_adult_users
 from src.ui.theme import KyokaTheme
 
@@ -705,8 +706,11 @@ def format_quote_embed(calc: Union[CalculationResult, MultiCalculationResult]) -
         )
         for idx, item in enumerate(calc.items, 1):
             prov_tag = " `[Provisional]`" if getattr(item, "is_provisional", False) else ""
+            item_title = item.service_name
+            if item.quantity > 1 and not item.service_name.lower().startswith(str(item.quantity)):
+                item_title = f"{item.quantity} {item.service_name}"
             embed.add_field(
-                name=f"{idx}. {item.service_name}{prov_tag}",
+                name=f"{idx}. {item_title}{prov_tag}",
                 value=(
                     f"• **Qty:** `{item.quantity}` | **Unit:** `{item.unit_display}`\n"
                     f"• **Subtotal:** **{item.subtotal_display}**\n"
@@ -719,7 +723,7 @@ def format_quote_embed(calc: Union[CalculationResult, MultiCalculationResult]) -
             f"━━━━━━━━━━━━━━━━━━\n"
             f"• **Subtotal:** `{calc.subtotal_display}`\n"
             f"{tax_str}"
-            f"• **Final Total:** **{calc.total_display} Beli**\n"
+            f"• **Final Quoted Value:** **{calc.total_display}**\n"
             f"━━━━━━━━━━━━━━━━━━"
         )
         if getattr(calc, "requires_staff_approval", False):
@@ -896,7 +900,7 @@ class InteractiveQuoteView(discord.ui.View):
                 threshold = policy.get("approval_threshold_amount", 500.0)
                 if self.quote.total >= threshold:
                     return await interaction.response.send_message(
-                        f"⚠️ **High-Value Approval Required:** Quotes exceeding {threshold}M Beli require Administrator or Owner approval before bill generation.",
+                        f"⚠️ **High-Value Approval Required:** Quotes exceeding {threshold}M in service value require Administrator or Owner approval before bill generation.",
                         ephemeral=True,
                     )
 
@@ -976,16 +980,20 @@ class InteractiveQuoteView(discord.ui.View):
         await interaction.response.edit_message(view=self)
 
 
-def format_beli_amount(amount_m: float) -> str:
-
-    """Format Beli currency: 30.0 (millions) -> 30,000,000 Beli."""
+def format_service_value(amount_m: float) -> str:
+    """Format numeric in-game service value: 20.0 -> '20M', 150.0 -> '150M', 1200.0 -> '1.2B'."""
     if amount_m <= 0:
-        return "0 Beli"
-    if amount_m >= 100000:
-        full_beli = int(amount_m)
-    else:
-        full_beli = int(round(amount_m * 1_000_000))
-    return f"{full_beli:,} Beli"
+        return "0M"
+    if amount_m >= 1_000_000:
+        amount_m = amount_m / 1_000_000
+
+    if amount_m >= 1000:
+        val_b = amount_m / 1000
+        return f"{val_b:g}B"
+    return f"{amount_m:g}M"
+
+
+format_beli_amount = format_service_value
 
 
 def format_blox_fruits_bill_embed(
@@ -994,7 +1002,7 @@ def format_blox_fruits_bill_embed(
     creator_user: Optional[Any] = None,
     guild: Optional[discord.Guild] = None,
 ) -> discord.Embed:
-    """Construct professional Blox Fruits service bill embed."""
+    """Construct professional Blox Fruits service quote & bill embed without misleading Beli labels."""
     status = bill.get("status", "UNPAID").upper()
     is_paid = status == "PAID"
     color = KyokaTheme.SUCCESS if is_paid else (KyokaTheme.ERROR if status == "CANCELLED" else KyokaTheme.PRIMARY)
@@ -1011,36 +1019,57 @@ def format_blox_fruits_bill_embed(
     tax_rate = bill.get("tax_rate", 0.0)
     tax_amount = bill.get("tax_amount", 0.0)
     total = bill.get("total", 0.0)
-    pay_type = bill.get("payment_type", "Beli")
     fruit_details = bill.get("fruit_details", "")
+    condition_notes = bill.get("condition_notes", "")
 
-    if pay_type.lower() == "fruits" or fruit_details:
-        service_price_str = fruit_details or bill.get("subtotal_display") or "Agreed Fruits"
-        tax_str = f"{tax_rate:g}%" if tax_rate > 0 else "0%"
-        tax_amt_str = f"{format_beli_amount(tax_amount)}" if tax_amount > 0 else "None"
-        total_str = f"{service_price_str}" + (f" + {tax_amt_str}" if tax_amount > 0 else "")
-    else:
-        service_price_str = format_beli_amount(subtotal)
-        tax_str = f"{tax_rate:g}%"
-        tax_amt_str = format_beli_amount(tax_amount)
-        total_str = format_beli_amount(total)
+    # Parse itemized lines if available in fruit_details JSON
+    item_lines: list[str] = []
+    if fruit_details:
+        try:
+            items_data = json.loads(fruit_details)
+            if isinstance(items_data, list):
+                for it in items_data:
+                    s_name = it.get("service_name") or "Service"
+                    s_qty = it.get("quantity", 1)
+                    s_price = it.get("subtotal_display") or format_service_value(it.get("subtotal", 0.0))
+                    item_lines.append(f"  • {s_name} × {s_qty} — {s_price}")
+        except Exception:
+            item_lines.append(f"  • {clean_service_display_name(bill.get('service_name', 'Service'))} × {qty} — {fruit_details}")
+
+    if not item_lines:
+        clean_name = clean_service_display_name(bill.get("service_name", "Service"))
+        sub_disp = bill.get("subtotal_display") or format_service_value(subtotal)
+        item_lines.append(f"  • {clean_name} × {qty} — {sub_disp}")
+
+    # Build description lines
+    desc_lines = [
+        f"• **Customer:** {customer_str}",
+        "• **Agreed service value:**",
+    ]
+    desc_lines.extend(item_lines)
+    desc_lines.append(f"• **Subtotal:** {format_service_value(subtotal)}")
+
+    # Tax, only if explicitly requested (> 0)
+    if tax_rate > 0:
+        desc_lines.append(f"• **Service fee/tax ({tax_rate:g}%):** +{format_service_value(tax_amount)}")
+
+    # Final quoted total
+    is_estimated = "estimated" in str(bill.get("total_display", "")).lower() or "[estimated" in str(bill.get("subtotal_display", "")).lower()
+    tot_label = "Estimated total" if is_estimated else "Total agreed value"
+    desc_lines.append(f"• **{tot_label}:** **{bill.get('total_display') or format_service_value(total)}**")
+    desc_lines.append(f"• **Payment status:** `{status_label}`")
+    desc_lines.append(f"• **Bill ID:** `{bill['id']}`")
+    desc_lines.append(f"• **Created by:** {creator_str}")
 
     created_ts = int(bill.get("created_at", time.time()))
+    desc_lines.append(f"• **Created at:** <t:{created_ts}:F> (<t:{created_ts}:R>)")
+
+    if condition_notes and not fruit_details:
+        desc_lines.append(f"• **Notes:** *{condition_notes}*")
 
     embed = discord.Embed(
-        title="KYOKA — BLOX FRUITS SERVICE BILL",
-        description=(
-            f"• **Customer:** {customer_str}\n"
-            f"• **Service:** {qty}x {bill.get('service_name', 'Service')}\n"
-            f"• **Service price:** {service_price_str}\n"
-            f"• **Service fee/tax:** {tax_str}\n"
-            f"• **Tax amount:** {tax_amt_str}\n"
-            f"• **Total:** **{total_str}**\n"
-            f"• **Payment status:** {status_label}\n"
-            f"• **Bill ID:** `{bill['id']}`\n"
-            f"• **Created by:** {creator_str}\n"
-            f"• **Created at:** <t:{created_ts}:F> (<t:{created_ts}:R>)"
-        ),
+        title="KYOKA — SERVICE QUOTE" if not is_paid else "KYOKA — SERVICE QUOTE [PAID]",
+        description="\n".join(desc_lines),
         color=color,
         timestamp=discord.utils.utcnow(),
     )
@@ -1567,7 +1596,7 @@ class TopAIManager(commands.Cog, name="TopAIManager"):
         customer = None
         cleaned_input = raw_input.strip()
 
-        # Parse user mention or user ID safely
+        # Parse user mention, user ID, or plain @username safely
         mention_match = re.search(r'<@!?(\d{17,20})>', cleaned_input)
         if mention_match:
             uid = int(mention_match.group(1))
@@ -1591,6 +1620,26 @@ class TopAIManager(commands.Cog, name="TopAIManager"):
                     except Exception:
                         pass
                 cleaned_input = cleaned_input.replace(id_match.group(0), "").strip()
+            else:
+                plain_mention = re.search(r'@([a-zA-Z0-9_\-\.]+)', cleaned_input)
+                if plain_mention:
+                    c_name = plain_mention.group(1)
+                    if ctx.guild:
+                        customer = discord.utils.find(
+                            lambda m: m.name.lower() == c_name.lower() or m.display_name.lower() == c_name.lower(),
+                            ctx.guild.members,
+                        )
+                    if not customer:
+                        class _PlaceholderCustomer:
+                            def __init__(self, name: str):
+                                self.id = None
+                                self.name = name
+                                self.display_name = name
+                                self.mention = f"@{name}"
+                            def __str__(self):
+                                return f"@{self.name}"
+                        customer = _PlaceholderCustomer(c_name)
+                    cleaned_input = cleaned_input.replace(plain_mention.group(0), "").strip()
 
         # Parse tax percentage if present
         tax = 0.0
@@ -1610,7 +1659,7 @@ class TopAIManager(commands.Cog, name="TopAIManager"):
                 embed = format_quote_embed(calc)
                 view = InteractiveQuoteView(
                     self.top_mgr, calc, ctx.author.id, ctx.guild.id if ctx.guild else 0,
-                    customer_id=customer.id if customer else None,
+                    customer_id=customer.id if getattr(customer, "id", None) else None,
                     customer_name=str(customer) if customer else "",
                 )
                 msg = await ctx.reply(
@@ -1634,7 +1683,7 @@ class TopAIManager(commands.Cog, name="TopAIManager"):
                     creator_id=ctx.author.id,
                     creator_name=str(ctx.author),
                     multi_calc=calc,
-                    customer_id=customer.id if customer else None,
+                    customer_id=customer.id if getattr(customer, "id", None) else None,
                     customer_name=str(customer) if customer else "",
                 )
             else:
@@ -1645,7 +1694,7 @@ class TopAIManager(commands.Cog, name="TopAIManager"):
                     service_name=calc.service_name,
                     quantity=calc.quantity,
                     tax_rate=tax or calc.tax_rate,
-                    customer_id=customer.id if customer else None,
+                    customer_id=customer.id if getattr(customer, "id", None) else None,
                     customer_name=str(customer) if customer else "",
                     condition_notes=calc.condition_note,
                 )
@@ -1676,7 +1725,7 @@ class TopAIManager(commands.Cog, name="TopAIManager"):
                 service_name=service_name,
                 quantity=qty,
                 tax_rate=tax,
-                customer_id=customer.id if customer else None,
+                customer_id=customer.id if getattr(customer, "id", None) else None,
                 customer_name=str(customer) if customer else "",
             )
             embed = format_blox_fruits_bill_embed(bill, customer_user=customer, creator_user=ctx.author, guild=ctx.guild)
