@@ -586,6 +586,87 @@ async def handle_update_settings(request: web.Request) -> web.Response:
             "bot_role_id": _clean_snowflake(rc.get("bot_role_id")),
         }
 
+    # 13. Leveling & XP Validation
+    if "leveling" in payload:
+        lvl = payload["leveling"]
+        if isinstance(lvl, dict):
+            validated_lvl = {
+                "enabled": bool(lvl.get("enabled", True)),
+            }
+            if "xp_rate" in lvl:
+                try:
+                    validated_lvl["xp_rate"] = max(0.1, min(10.0, float(lvl["xp_rate"])))
+                except (ValueError, TypeError):
+                    validated_lvl["xp_rate"] = 1.0
+            if "cooldown_seconds" in lvl:
+                try:
+                    validated_lvl["cooldown_seconds"] = max(5, min(600, int(lvl["cooldown_seconds"])))
+                except (ValueError, TypeError):
+                    validated_lvl["cooldown_seconds"] = 60
+            if "announcement_channel_id" in lvl:
+                validated_lvl["announcement_channel_id"] = _clean_snowflake(lvl.get("announcement_channel_id"))
+            if "role_rewards" in lvl and isinstance(lvl["role_rewards"], list):
+                rewards = []
+                for item in lvl["role_rewards"][:50]:
+                    if isinstance(item, dict) and "level" in item and "role_id" in item:
+                        try:
+                            lvl_num = int(item["level"])
+                            role_id = _clean_snowflake(item["role_id"])
+                            if role_id:
+                                rewards.append({"level": lvl_num, "role_id": role_id})
+                        except (ValueError, TypeError):
+                            pass
+                validated_lvl["role_rewards"] = rewards
+            validated_updates["leveling"] = validated_lvl
+
+    # 14. Giveaways Validation
+    if "giveaways" in payload:
+        gw = payload["giveaways"]
+        if isinstance(gw, dict):
+            validated_gw = {}
+            if "default_channel_id" in gw:
+                validated_gw["default_channel_id"] = _clean_snowflake(gw.get("default_channel_id"))
+            if "embed_color" in gw:
+                validated_gw["embed_color"] = str(gw.get("embed_color", "#7C3AED"))[:10]
+            if "claim_deadline_seconds" in gw:
+                try:
+                    validated_gw["claim_deadline_seconds"] = max(60, min(604800, int(gw["claim_deadline_seconds"])))
+                except (ValueError, TypeError):
+                    validated_gw["claim_deadline_seconds"] = 86400
+            validated_updates["giveaways"] = validated_gw
+
+    # 15. Reaction Roles Validation
+    if "reaction_roles" in payload:
+        rr = payload["reaction_roles"]
+        if isinstance(rr, dict):
+            validated_rr = {}
+            if "panels" in rr and isinstance(rr["panels"], list):
+                panels = []
+                for p in rr["panels"][:50]:
+                    if isinstance(p, dict):
+                        panels.append({
+                            "channel_id": _clean_snowflake(p.get("channel_id")),
+                            "message_id": _clean_snowflake(p.get("message_id")),
+                            "emoji": str(p.get("emoji", "⭐"))[:64],
+                            "role_id": _clean_snowflake(p.get("role_id")),
+                            "mode": str(p.get("mode", "normal"))[:32],
+                        })
+                validated_rr["panels"] = panels
+            validated_updates["reaction_roles"] = validated_rr
+
+    # 16. Prefix & Commands Validation
+    if "prefix_commands" in payload:
+        pc = payload["prefix_commands"]
+        if isinstance(pc, dict):
+            validated_pc = {}
+            if "prefix" in pc:
+                validated_pc["prefix"] = str(pc["prefix"]).strip()[:10] or "+"
+            if "disabled_commands" in pc and isinstance(pc["disabled_commands"], list):
+                validated_pc["disabled_commands"] = [
+                    str(c).strip().lower()[:32] for c in pc["disabled_commands"] if str(c).strip()
+                ][:100]
+            validated_updates["prefix_commands"] = validated_pc
+
     db = request.app["db"]
 
     # Server-Side Entitlement Enforcement for Kyoka Pro / Ultimate Features

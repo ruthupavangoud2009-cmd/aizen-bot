@@ -277,8 +277,8 @@ function renderServerSelector(container) {
   renderGuildCards(state.guilds, grid, container);
 
   document.getElementById('server-filter')?.addEventListener('input', (e) => {
-    const q = e.target.value.toLowerCase();
-    const filtered = state.guilds.filter(g => g.name.toLowerCase().includes(q));
+    const q = (e.target.value || '').toLowerCase();
+    const filtered = state.guilds.filter(g => (g.name || '').toLowerCase().includes(q));
     renderGuildCards(filtered, grid, container);
   });
 }
@@ -393,9 +393,11 @@ async function selectGuild(guildId, container) {
 }
 
 function renderWorkspace(container, guild) {
-  const iconHtml = guild.icon_url
-    ? `<img src="${guild.icon_url}" alt="${guild.name}" class="guild-header-icon" />`
-    : `<div class="server-icon-placeholder" style="width: 60px; height: 60px; font-size: 1.5rem;">${guild.name.charAt(0)}</div>`;
+  const guildName = (guild && guild.name) ? String(guild.name) : 'Server';
+  const initial = guildName.charAt(0).toUpperCase() || 'S';
+  const iconHtml = (guild && guild.icon_url)
+    ? `<img src="${guild.icon_url}" alt="${guildName}" class="guild-header-icon" />`
+    : `<div class="server-icon-placeholder" style="width: 60px; height: 60px; font-size: 1.5rem;">${initial}</div>`;
 
   container.innerHTML = `
     <div class="guild-workspace">
@@ -403,7 +405,7 @@ function renderWorkspace(container, guild) {
       <div class="dashboard-breadcrumbs">
         <a href="/dashboard.html" id="breadcrumb-servers">Servers</a>
         <span class="separator">/</span>
-        <span style="color: var(--text-main); font-weight: 600;">${guild.name}</span>
+        <span style="color: var(--text-main); font-weight: 600;">${guildName}</span>
         <span class="separator">/</span>
         <span id="breadcrumb-section" style="color: var(--purple-light);">Overview</span>
       </div>
@@ -432,8 +434,8 @@ function renderWorkspace(container, guild) {
           </button>
           ${iconHtml}
           <div class="guild-header-details">
-            <h3>${guild.name}</h3>
-            <p>ID: ${guild.id} • ${guild.is_owner ? '👑 Server Owner' : '🛡️ Administrator'}</p>
+            <h3>${guildName}</h3>
+            <p>ID: ${guild ? guild.id : ''} • ${guild && guild.is_owner ? '👑 Server Owner' : '🛡️ Administrator'}</p>
           </div>
         </div>
         <div style="display: flex; gap: 0.5rem; align-items: center; flex-wrap: wrap;">
@@ -516,6 +518,7 @@ function renderWorkspace(container, guild) {
           <div id="tab-premium" class="tab-panel"></div>
           <div id="tab-embeds" class="tab-panel"></div>
           <div id="tab-roles_channels" class="tab-panel"></div>
+          <div id="tab-roles_utilities" class="tab-panel"></div>
           <div id="tab-diagnostics" class="tab-panel"></div>
         </section>
       </div>

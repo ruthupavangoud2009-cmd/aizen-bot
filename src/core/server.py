@@ -125,6 +125,8 @@ class HealthServer:
                 ("terms", "terms.html"),
                 ("dashboard", "dashboard.html"),
                 ("owner", "owner.html"),
+                ("tickets", "tickets.html"),
+                ("staff", "staff.html"),
             ]
             for clean_route, filename in named_pages:
                 page_path = os.path.join(website_dir, filename)

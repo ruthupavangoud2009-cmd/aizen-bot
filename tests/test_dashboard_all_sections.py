@@ -278,3 +278,57 @@ class TestDashboardAllSections(AioHTTPTestCase):
         resp_cross = await self.client.get("/api/guilds/2002/wizard", headers=headers)
         self.assertEqual(resp_cross.status, 403)
 
+    async def test_update_leveling_and_giveaways_and_prefix_commands(self):
+        """Verify leveling, giveaways, reaction_roles, and prefix_commands persist."""
+        headers = self._create_auth_headers("1001")
+        update_payload = {
+            "leveling": {
+                "enabled": True,
+                "xp_rate": 2.5,
+                "cooldown_seconds": 45,
+                "announcement_channel_id": "999888777666555444",
+                "role_rewards": [{"level": 10, "role_id": "111222333444555666"}],
+            },
+            "giveaways": {
+                "default_channel_id": "888777666555444333",
+                "embed_color": "#A855F7",
+                "claim_deadline_seconds": 3600,
+            },
+            "prefix_commands": {
+                "prefix": "!",
+                "disabled_commands": ["ban", "kick"],
+            },
+            "reaction_roles": {
+                "panels": [
+                    {
+                        "channel_id": "555666777888999000",
+                        "message_id": "666777888999000111",
+                        "emoji": "⚔️",
+                        "role_id": "777888999000111222",
+                        "mode": "toggle",
+                    }
+                ]
+            },
+        }
+        resp = await self.client.patch("/api/guilds/1001/settings", json=update_payload, headers=headers)
+        self.assertEqual(resp.status, 200)
+        data = await resp.json()
+        self.assertTrue(data["success"])
+
+        # Check returned settings
+        s = data["settings"]
+        self.assertEqual(s["leveling"]["xp_rate"], 2.5)
+        self.assertEqual(s["leveling"]["cooldown_seconds"], 45)
+        self.assertEqual(s["leveling"]["announcement_channel_id"], "999888777666555444")
+        self.assertEqual(len(s["leveling"]["role_rewards"]), 1)
+
+        self.assertEqual(s["giveaways"]["default_channel_id"], "888777666555444333")
+        self.assertEqual(s["giveaways"]["embed_color"], "#A855F7")
+        self.assertEqual(s["giveaways"]["claim_deadline_seconds"], 3600)
+
+        self.assertEqual(s["prefix_commands"]["prefix"], "!")
+        self.assertIn("ban", s["prefix_commands"]["disabled_commands"])
+
+        self.assertEqual(len(s["reaction_roles"]["panels"]), 1)
+        self.assertEqual(s["reaction_roles"]["panels"][0]["emoji"], "⚔️")
+

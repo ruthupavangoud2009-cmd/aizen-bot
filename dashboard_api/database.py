@@ -1108,6 +1108,93 @@ class PostgresDatabaseAdapter(BaseDatabaseAdapter):
                         guild_id, p_color
                     )
 
+                # 11. Update Prefix & Commands
+                if "prefix_commands" in updates:
+                    pc = updates["prefix_commands"]
+                    pfx = str(pc.get("prefix", "+"))[:10]
+                    d_cmds = pc.get("disabled_commands", [])
+                    d_str = ",".join(d_cmds) if isinstance(d_cmds, list) else str(d_cmds or "")
+                    await conn.execute(
+                        """
+                        INSERT INTO guild_settings (guild_id, prefix, disabled_commands)
+                        VALUES ($1, $2, $3)
+                        ON CONFLICT (guild_id) DO UPDATE SET
+                            prefix = EXCLUDED.prefix,
+                            disabled_commands = EXCLUDED.disabled_commands;
+                        """,
+                        guild_id, pfx, d_str
+                    )
+
+                # 12. Update Roles & Channels
+                if "roles_channels" in updates:
+                    rc = updates["roles_channels"]
+                    m_role = int(rc["mod_role_id"]) if rc.get("mod_role_id") else None
+                    h_role = int(rc["human_role_id"]) if rc.get("human_role_id") else None
+                    b_role = int(rc["bot_role_id"]) if rc.get("bot_role_id") else None
+                    if m_role is not None:
+                        await conn.execute(
+                            """
+                            INSERT INTO guild_settings (guild_id, mod_role_id)
+                            VALUES ($1, $2)
+                            ON CONFLICT (guild_id) DO UPDATE SET
+                                mod_role_id = EXCLUDED.mod_role_id;
+                            """,
+                            guild_id, m_role
+                        )
+                    if h_role is not None or b_role is not None:
+                        await conn.execute(
+                            """
+                            INSERT INTO guild_autoroles (guild_id, human_role_id, bot_role_id)
+                            VALUES ($1, $2, $3)
+                            ON CONFLICT (guild_id) DO UPDATE SET
+                                human_role_id = COALESCE(EXCLUDED.human_role_id, guild_autoroles.human_role_id),
+                                bot_role_id = COALESCE(EXCLUDED.bot_role_id, guild_autoroles.bot_role_id),
+                                updated_at = CURRENT_TIMESTAMP;
+                            """,
+                            guild_id, h_role, b_role
+                        )
+
+                # 13. Update Giveaways
+                if "giveaways" in updates:
+                    gw = updates["giveaways"]
+                    e_color = str(gw.get("embed_color", "#7C3AED"))[:10]
+                    gw_ch = int(gw["default_channel_id"]) if gw.get("default_channel_id") else None
+                    await conn.execute(
+                        """
+                        INSERT INTO server_giveaway_config (guild_id, embed_color, giveaway_channel_id)
+                        VALUES ($1, $2, $3)
+                        ON CONFLICT (guild_id) DO UPDATE SET
+                            embed_color = EXCLUDED.embed_color,
+                            giveaway_channel_id = COALESCE(EXCLUDED.giveaway_channel_id, server_giveaway_config.giveaway_channel_id),
+                            updated_at = CURRENT_TIMESTAMP;
+                        """,
+                        guild_id, e_color, gw_ch
+                    )
+
+                # 14. Update Reaction Roles
+                if "reaction_roles" in updates:
+                    rr = updates["reaction_roles"]
+                    panels = rr.get("panels", [])
+                    if isinstance(panels, list):
+                        for p in panels[:20]:
+                            if isinstance(p, dict) and p.get("channel_id") and p.get("message_id") and p.get("role_id"):
+                                try:
+                                    ch = int(p["channel_id"])
+                                    msg = int(p["message_id"])
+                                    emoji = str(p.get("emoji", "⭐"))[:64]
+                                    role = int(p["role_id"])
+                                    mode = str(p.get("mode", "normal"))[:32]
+                                    await conn.execute(
+                                        """
+                                        INSERT INTO reaction_roles (guild_id, channel_id, message_id, emoji, role_id, mode)
+                                        VALUES ($1, $2, $3, $4, $5, $6)
+                                        ON CONFLICT DO NOTHING;
+                                        """,
+                                        guild_id, ch, msg, emoji, role, mode
+                                    )
+                                except (ValueError, TypeError):
+                                    pass
+
         return await self.get_guild_settings(guild_id)
 
     # Setup Wizard Methods for PostgresDatabaseAdapter
