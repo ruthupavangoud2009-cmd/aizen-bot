@@ -111,9 +111,22 @@ async def on_startup(app: web.Application) -> None:
     """Initialize HTTP client session and database connector on startup."""
     app["http_session"] = aiohttp.ClientSession()
 
-    db: BaseDatabaseAdapter = app["db"]
-    await db.connect()
-    logger.info("KYOKA 3.0 Dashboard API startup sequence completed.")
+    try:
+        db: BaseDatabaseAdapter = app["db"]
+        await db.connect()
+        logger.info("KYOKA 3.0 Dashboard API startup sequence completed.")
+    except Exception as exc:
+        logger.critical(f"KYOKA 3.0 Dashboard API startup failed: {exc}")
+        # Reliably close client session immediately on startup failure to eliminate unclosed session warnings
+        if "http_session" in app and not app["http_session"].closed:
+            await app["http_session"].close()
+        db_adapter = app.get("db")
+        if db_adapter:
+            try:
+                await db_adapter.close()
+            except Exception:
+                pass
+        raise
 
 
 async def on_cleanup(app: web.Application) -> None:
@@ -139,6 +152,11 @@ def create_app(
         if cfg.database_url:
             db_adapter = PostgresDatabaseAdapter(cfg.database_url)
         else:
+            if cfg.is_production:
+                raise RuntimeError(
+                    "DATABASE_URL environment variable is required in production mode. "
+                    "Cannot start the KYOKA Dashboard in production with in-memory storage."
+                )
             logger.warning("No DATABASE_URL configured. Initializing in-memory mock database for tests/offline dev.")
             db_adapter = MockDatabaseAdapter()
     else:

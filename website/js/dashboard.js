@@ -898,9 +898,22 @@ function renderWelcomeLeaveTab(panel, s) {
       </div>
     </div>
 
+    <div class="setting-row">
+      <div class="setting-info">
+        <label>Direct Message (DM) Greeting</label>
+        <p>Send greeting message directly to the new member's Discord DMs in addition to channel announcement.</p>
+      </div>
+      <div class="setting-control">
+        <label class="switch">
+          <input type="checkbox" id="wl-dm-en" ${wl.dm_enabled ? 'checked' : ''} />
+          <span class="slider"></span>
+        </label>
+      </div>
+    </div>
+
     <!-- Live Discord Embed Preview Simulator -->
     <div style="margin-top: 1rem;">
-      <label style="font-weight: 700; color: var(--purple-light); font-size: 0.85rem; text-transform: uppercase;">Live Discord Simulator Preview</label>
+      <label style="font-weight: 700; color: var(--purple-light); font-size: 0.85rem; text-transform: uppercase;">Live Welcome Embed Preview</label>
       <div class="embed-preview-container">
         <div class="embed-preview-card">
           <div class="embed-preview-content">
@@ -918,9 +931,51 @@ function renderWelcomeLeaveTab(panel, s) {
       </div>
     </div>
 
-    <div style="margin-top: 1.5rem; display: flex; gap: 1rem;">
+    <!-- Departure Announcements Section -->
+    <div class="panel-header" style="margin-top: 2rem; border-top: 1px solid rgba(255,255,255,0.08); padding-top: 1.5rem;">
+      <h4>Departure & Leave Announcements</h4>
+      <p>Configure farewell messages when members leave or are removed from your server.</p>
+    </div>
+
+    <div class="setting-row">
+      <div class="setting-info">
+        <label>Enable Departure Announcements</label>
+        <p>Broadcast notification when a member leaves the server.</p>
+      </div>
+      <div class="setting-control">
+        <label class="switch">
+          <input type="checkbox" id="wl-leave-en" ${wl.leave_enabled !== false ? 'checked' : ''} />
+          <span class="slider"></span>
+        </label>
+      </div>
+    </div>
+
+    <div class="setting-row">
+      <div class="setting-info">
+        <label>Departure Channel Snowflake</label>
+        <p>Discord text channel snowflake ID where departure messages are published.</p>
+      </div>
+      <div class="setting-control">
+        <input type="text" id="wl-leave-ch" class="form-input" value="${wl.leave_channel_id || ''}" placeholder="e.g. 123456789012345678" />
+      </div>
+    </div>
+
+    <div class="setting-row">
+      <div class="setting-info">
+        <label>Departure Message Template</label>
+        <p>Supports tokens: <code>{user}</code>, <code>{server}</code>, <code>{member_count}</code>.</p>
+      </div>
+      <div class="setting-control" style="width: 100%;">
+        <textarea id="wl-leave-msg" class="form-input" rows="3" style="width: 100%; resize: vertical;">${wl.leave_message || '{user} has departed from {server}. We are down to {member_count} members.'}</textarea>
+      </div>
+    </div>
+
+    <div style="margin-top: 1.5rem; display: flex; gap: 1rem; flex-wrap: wrap;">
       <button id="test-welcome-sim-btn" class="btn btn-secondary btn-sm">
-        🚀 Test Event Simulation
+        🚀 Test Welcome Simulation
+      </button>
+      <button id="test-leave-sim-btn" class="btn btn-secondary btn-sm">
+        👋 Test Departure Simulation
       </button>
     </div>
   `;
@@ -949,10 +1004,40 @@ function renderWelcomeLeaveTab(panel, s) {
     markChanged();
   });
 
+  document.getElementById('wl-dm-en')?.addEventListener('change', (e) => {
+    wl.dm_enabled = e.target.checked;
+    markChanged();
+  });
+
+  document.getElementById('wl-leave-en')?.addEventListener('change', (e) => {
+    wl.leave_enabled = e.target.checked;
+    markChanged();
+  });
+
+  document.getElementById('wl-leave-ch')?.addEventListener('input', (e) => {
+    wl.leave_channel_id = e.target.value.trim();
+    markChanged();
+  });
+
+  const leaveMsgInput = document.getElementById('wl-leave-msg');
+  leaveMsgInput?.addEventListener('input', (e) => {
+    wl.leave_message = e.target.value;
+    markChanged();
+  });
+
   document.getElementById('test-welcome-sim-btn')?.addEventListener('click', async () => {
     try {
       const res = await testEventSimulation(state.selectedGuildId, 'welcome');
       showToast(res.note || 'Test welcome simulation generated successfully!', 'success');
+    } catch (err) {
+      showToast(err.message, 'error');
+    }
+  });
+
+  document.getElementById('test-leave-sim-btn')?.addEventListener('click', async () => {
+    try {
+      const res = await testEventSimulation(state.selectedGuildId, 'leave');
+      showToast(res.note || 'Test departure simulation generated successfully!', 'success');
     } catch (err) {
       showToast(err.message, 'error');
     }

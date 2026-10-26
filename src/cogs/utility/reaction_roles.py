@@ -139,8 +139,7 @@ class ReactionRoles(commands.Cog, name="Reaction Roles"):
 
     @commands.Cog.listener()
     async def on_raw_reaction_add(self, payload: discord.RawReactionActionEvent) -> None:
-        """Handle role assignment on reaction add."""
-        if not payload.guild_id or payload.user_id == self.bot.user.id:
+        if not payload.guild_id or (self.bot.user and payload.user_id == self.bot.user.id):
             return
 
         norm_emoji = normalize_emoji(payload.emoji)
@@ -205,8 +204,7 @@ class ReactionRoles(commands.Cog, name="Reaction Roles"):
 
     @commands.Cog.listener()
     async def on_raw_reaction_remove(self, payload: discord.RawReactionActionEvent) -> None:
-        """Handle role removal on reaction remove."""
-        if not payload.guild_id or payload.user_id == self.bot.user.id:
+        if not payload.guild_id or (self.bot.user and payload.user_id == self.bot.user.id):
             return
 
         norm_emoji = normalize_emoji(payload.emoji)

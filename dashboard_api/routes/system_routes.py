@@ -81,20 +81,31 @@ async def handle_health(request: web.Request) -> web.Response:
     if db:
         try:
             if hasattr(db, "pool") and db.pool:
-                async with db.pool.acquire() as conn:
-                    await conn.execute("SELECT 1;")
-                db_connected = True
+                if not getattr(db.pool, "_closed", False):
+                    async with db.pool.acquire(timeout=4.0) as conn:
+                        await conn.execute("SELECT 1;")
+                    db_connected = True
+                else:
+                    db_connected = False
+            elif hasattr(db, "is_connected"):
+                db_connected = bool(db.is_connected)
             elif hasattr(db, "settings_store"):
-                db_connected = True
+                db_connected = getattr(db, "_is_connected", True)
         except Exception:
             db_connected = False
 
+    config = request.app.get("config")
+    is_prod = getattr(config, "is_production", False)
+
+    status = "healthy" if db_connected else ("unhealthy" if is_prod else "degraded")
+    http_code = 200 if (db_connected or not is_prod) else 503
+
     return web.json_response({
-        "status": "healthy",
+        "status": status,
         "service": "kyoka-dashboard-api",
         "version": "3.0.0",
         "database_connected": db_connected
-    })
+    }, status=http_code)
 
 
 async def handle_stats(request: web.Request) -> web.Response:

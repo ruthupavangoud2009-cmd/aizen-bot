@@ -39,13 +39,7 @@ class PostgresDatabase(BaseDatabase):
             for attempt, delay in enumerate(delays, 1):
                 try:
                     logger.info(f"Self-healing database pool reconnecting (attempt {attempt}/{len(delays)})...")
-                    self.pool = await asyncpg.create_pool(
-                        clean_dsn,
-                        min_size=2,
-                        max_size=10,
-                        command_timeout=30,
-                        statement_cache_size=0,
-                    )
+                    self.pool = await self._create_pool(clean_dsn)
                     logger.info("Database pool self-healed and reconnected successfully.")
                     return
                 except Exception as e:
@@ -54,17 +48,79 @@ class PostgresDatabase(BaseDatabase):
 
             raise ConnectionError("Database pool could not be auto-healed after multiple backoff attempts.")
 
-    async def connect(self) -> None:
-        """Create an asynchronous PostgreSQL connection pool."""
+    async def _create_pool(self, clean_dsn: str) -> asyncpg.Pool:
+        """Create pool with dual-stack address diagnosis and IPv4 fallback for Render."""
+        import socket
+        import urllib.parse
+
         try:
-            clean_dsn = self.dsn.replace("postgresql+asyncpg://", "postgresql://")
-            self.pool = await asyncpg.create_pool(
+            return await asyncpg.create_pool(
                 clean_dsn,
                 min_size=2,
                 max_size=10,
                 command_timeout=30,
                 statement_cache_size=0,
             )
+        except OSError as e:
+            is_unreachable = getattr(e, "errno", None) in (101, 10051) or "unreachable" in str(e).lower()
+            if not is_unreachable:
+                raise
+
+            parsed = urllib.parse.urlparse(clean_dsn)
+            host = parsed.hostname or "unknown"
+            port = parsed.port or 5432
+
+            ipv4_addrs = []
+            ipv6_addrs = []
+            try:
+                loop = asyncio.get_running_loop()
+                addr_infos = await loop.getaddrinfo(host, port, family=socket.AF_UNSPEC, type=socket.SOCK_STREAM)
+                for item in addr_infos:
+                    fam, _, _, _, sockaddr = item
+                    ip = sockaddr[0]
+                    if fam == socket.AF_INET and ip not in ipv4_addrs:
+                        ipv4_addrs.append(ip)
+                    elif fam == socket.AF_INET6 and ip not in ipv6_addrs:
+                        ipv6_addrs.append(ip)
+            except Exception as dns_err:
+                logger.warning(f"DNS check for '{host}' encountered: {dns_err}")
+
+            if ipv4_addrs:
+                logger.warning(
+                    f"Network unreachable connecting to '{host}:{port}' via IPv6. "
+                    f"Retrying connection via resolved IPv4 address '{ipv4_addrs[0]}'..."
+                )
+                try:
+                    userinfo = f"{parsed.username or ''}:{parsed.password or ''}@" if parsed.username else ""
+                    netloc = f"{userinfo}{ipv4_addrs[0]}:{port}"
+                    ipv4_dsn = parsed._replace(netloc=netloc).geturl()
+                    return await asyncpg.create_pool(
+                        ipv4_dsn,
+                        min_size=2,
+                        max_size=10,
+                        command_timeout=30,
+                        statement_cache_size=0,
+                    )
+                except Exception as ipv4_err:
+                    logger.error(f"IPv4 fallback connection attempt to '{ipv4_addrs[0]}' failed: {ipv4_err}")
+
+            if "supabase.co" in host.lower() and host.lower().startswith("db."):
+                logger.critical(
+                    f"CRITICAL: Database connection failed: [Errno 101] Network is unreachable to host '{host}'.\n"
+                    f"DNS lookup confirmed '{host}' only provides IPv6 addresses ({ipv6_addrs}).\n"
+                    "Render containers lack outbound IPv6 routing.\n"
+                    "To resolve: Update DATABASE_URL in Render to use your Supabase Connection Pooler:\n"
+                    "  postgresql://postgres.<project_ref>:[YOUR-PASSWORD]@aws-0-<region>.pooler.supabase.com:5432/postgres\n"
+                    "  (or port 6543 for transaction mode)."
+                )
+
+            raise
+
+    async def connect(self) -> None:
+        """Create an asynchronous PostgreSQL connection pool."""
+        try:
+            clean_dsn = self.dsn.replace("postgresql+asyncpg://", "postgresql://")
+            self.pool = await self._create_pool(clean_dsn)
             logger.info("Connected to PostgreSQL / Supabase cloud database pool.")
             await self.initialize_tables()
         except Exception as e:

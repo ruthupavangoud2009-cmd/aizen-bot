@@ -159,8 +159,12 @@ async def handle_get_playback(request: web.Request) -> web.Response:
         session["is_connected"] = True
         session["volume"] = player.volume
         session["loop_mode"] = getattr(player, "loop_mode", "off")
-        vc = player.guild.voice_client if hasattr(player, "guild") and player.guild else None
-        session["status"] = "paused" if vc and vc.is_paused() else ("playing" if vc and vc.is_playing() else "idle")
+        is_paused = bool(getattr(player, "paused", False) or getattr(player, "is_paused", False))
+        is_playing = bool(
+            (getattr(player, "playing", False) or getattr(player, "is_playing", False))
+            and not is_paused
+        )
+        session["status"] = "paused" if is_paused else ("playing" if is_playing else "idle")
 
         if player.current:
             c = player.current
@@ -265,9 +269,11 @@ async def handle_control_playback(request: web.Request) -> web.Response:
     # 1. Action: Pause
     if action == "pause":
         if player and player.is_connected:
-            vc = player.guild.voice_client
-            if vc:
-                await vc.pause(True)
+            try:
+                await player.pause(True)
+            except TypeError:
+                # wavelink 3 player.pause() takes no arguments on some builds
+                await player.pause()
         session["status"] = "paused"
         pb = _format_playback_payload(session)
         return web.json_response({"success": True, "action": "pause", "playback": pb, **pb, "message": "Playback paused."})
@@ -275,9 +281,12 @@ async def handle_control_playback(request: web.Request) -> web.Response:
     # 2. Action: Resume / Play
     elif action in ("resume", "play"):
         if player and player.is_connected:
-            vc = player.guild.voice_client
-            if vc:
-                await vc.pause(False)
+            try:
+                await player.pause(False)
+            except TypeError:
+                # wavelink 3.x uses resume() for un-pausing
+                if hasattr(player, "resume"):
+                    await player.resume()
         session["status"] = "playing"
         session["last_updated"] = time.time()
         pb = _format_playback_payload(session)
@@ -355,9 +364,10 @@ async def handle_control_playback(request: web.Request) -> web.Response:
             return web.json_response({"success": False, "error": f"Seek position must be between 0:00 and {duration // 60}:{duration % 60:02d}."}, status=400)
 
         if player and player.is_connected:
-            vc = player.guild.voice_client
-            if vc:
-                await vc.seek(seek_sec * 1000)
+            try:
+                await player.seek(seek_sec * 1000)
+            except Exception as seek_err:
+                logger.debug(f"Guild {guild_id}: seek failed: {seek_err}")
 
         cur["position"] = seek_sec
         session["last_updated"] = time.time()
@@ -383,7 +393,15 @@ async def handle_control_playback(request: web.Request) -> web.Response:
             return web.json_response({"success": False, "error": "Volume must be an integer between 0 and 150."}, status=400)
 
         if player and player.is_connected:
-            player.set_volume(vol_int)
+            try:
+                await player.set_volume(vol_int)
+            except TypeError:
+                try:
+                    player.volume = vol_int
+                except Exception:
+                    pass
+            except Exception as vol_err:
+                logger.debug(f"Guild {guild_id}: set_volume failed: {vol_err}")
 
         session["volume"] = vol_int
         pb = _format_playback_payload(session)
@@ -407,7 +425,15 @@ async def handle_control_playback(request: web.Request) -> web.Response:
             mode = valid_modes[(idx + 1) % len(valid_modes)]
 
         if player and player.is_connected:
-            player.set_loop_mode(mode)
+            try:
+                if hasattr(player, "set_loop_mode"):
+                    player.set_loop_mode(mode)
+                elif hasattr(player, "queue") and hasattr(player.queue, "mode"):
+                    import wavelink
+                    mode_map = {"off": wavelink.QueueMode.normal, "track": wavelink.QueueMode.loop, "queue": wavelink.QueueMode.loop_all}
+                    player.queue.mode = mode_map.get(mode, wavelink.QueueMode.normal)
+            except Exception as loop_err:
+                logger.debug(f"Guild {guild_id}: set_loop_mode failed: {loop_err}")
 
         session["loop_mode"] = mode
         pb = _format_playback_payload(session)
@@ -424,7 +450,13 @@ async def handle_control_playback(request: web.Request) -> web.Response:
         import random
         random.shuffle(session["queue"])
         if player and player.is_connected:
-            await player.shuffle_queue()
+            try:
+                if hasattr(player, "shuffle_queue"):
+                    await player.shuffle_queue()
+                elif hasattr(player, "queue") and hasattr(player.queue, "shuffle"):
+                    player.queue.shuffle()
+            except Exception as shuf_err:
+                logger.debug(f"Guild {guild_id}: shuffle failed: {shuf_err}")
         session["shuffle"] = not session.get("shuffle", False)
         pb = _format_playback_payload(session)
         return web.json_response({

@@ -207,8 +207,11 @@ class Music(commands.Cog):
         if before.channel == after.channel:
             return
 
+        # Resolve bot user ID safely without raising NoneType error
+        bot_user_id = self.bot.user.id if (self.bot and self.bot.user) else getattr(self.bot, "application_id", None)
+
         # bot itself was disconnected from voice
-        if member.id == self.bot.user.id and after.channel is None:
+        if bot_user_id and member.id == bot_user_id and after.channel is None:
             player = self.controller.get_player(member.guild.id)
             if player:
                 # A null voice state is ALSO the delayed answer to a disconnect Kyro
@@ -260,7 +263,7 @@ class Music(commands.Cog):
             return
 
         # bot itself was moved INTO a voice channel (added by a user, no ?join used)
-        if member.id == self.bot.user.id and after.channel is not None:
+        if bot_user_id and member.id == bot_user_id and after.channel is not None:
             guild = after.channel.guild
 
             # Meeting Safety: Never hijack voice or auto-connect music if a Meeting is active or connecting

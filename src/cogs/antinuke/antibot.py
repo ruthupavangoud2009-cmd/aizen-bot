@@ -60,10 +60,10 @@ class AntiBotCog(commands.Cog):
 
         # 2. If mass raid, sweep and ban any other unauthorized bots added in the last 60 seconds
         extra_banned = []
-        if is_mass_bot_raid:
             now_ts = discord.utils.utcnow()
+            bot_id = self.bot.user.id if (self.bot and self.bot.user) else None
             for m in list(guild.members):
-                if m.bot and m.id != self.bot.user.id and m.id != member.id:
+                if m.bot and (bot_id is None or m.id != bot_id) and m.id != member.id:
                     if m.joined_at and (now_ts - m.joined_at).total_seconds() <= 60.0:
                         try:
                             await m.ban(reason="Kyoka Antinuke: Mass Bot Raid Sweep", delete_message_seconds=0)

@@ -32,8 +32,8 @@ class MusicAnalytics:
         genre: str = "general",
         source: str = "bot",
     ) -> None:
-        """Record track play or Spotify listening activity into database."""
-        if not track_title or not artist or user_id == self.bot.user.id:
+        bot_id = self.bot.user.id if (self.bot and self.bot.user) else None
+        if not track_title or not artist or (bot_id is not None and user_id == bot_id):
             return
 
         clean_title = track_title.strip()[:200]
