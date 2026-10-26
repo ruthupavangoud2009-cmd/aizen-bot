@@ -154,23 +154,29 @@ class AutoEvents(commands.Cog):
         if not container:
             container = KyokaContainer(accent_color=None)
             if event_type == "welcome":
-                container.add_section(
-                    content=(
+                # Use dashboard-saved message template if available, else hardcoded fallback
+                if msg_template and msg_template.strip().lower() not in ["none", "no_ping", "silent"]:
+                    card_body = resolve_placeholders(msg_template, user=member, guild=guild, extra=extra)
+                else:
+                    card_body = (
                         f"**⛩️ Welcome to {guild.name}!**\n"
                         f"> Hey {member.mention}, welcome to the server!\n"
                         f"> You are our **{guild.member_count:,}th** member."
                     )
-                )
+                container.add_section(content=card_body)
                 if welcome_file:
                     container.add_image("attachment://kyoka_welcome.png")
             elif event_type == "leave":
-                container.add_section(
-                    content=(
+                # Use dashboard-saved leave message template if available
+                if msg_template and msg_template.strip().lower() not in ["none", "no_ping", "silent"]:
+                    card_body = resolve_placeholders(msg_template, user=member, guild=guild, extra=extra)
+                else:
+                    card_body = (
                         f"**Goodbye!**\n"
                         f"> **{member.name}** has left **{guild.name}**.\n"
                         f"> We now have **{guild.member_count:,}** members."
                     )
-                )
+                container.add_section(content=card_body)
             elif event_type == "boost":
                 container.add_section(
                     content=(
@@ -205,14 +211,24 @@ class AutoEvents(commands.Cog):
 
         if target_msg is None:
             # Resilient native Discord Embed fallback (guaranteed to deliver without webhooks)
+            # Use dashboard-saved template in description if available
             fallback_title = f"⛩️ Welcome to {guild.name}!" if event_type == "welcome" else (
                 f"👋 Farewell from {guild.name}" if event_type == "leave" else f"🚀 Server Boost!"
             )
-            fallback_desc = (
-                f"Hey {member.mention}, welcome to **{guild.name}**!\n> You are our **{guild.member_count:,}th** member."
-                if event_type == "welcome"
-                else (f"**{member.name}** has left the server.\n> We now have **{guild.member_count:,}** members." if event_type == "leave" else f"Thank you {member.mention} for boosting the server!")
-            )
+            if msg_template and msg_template.strip().lower() not in ["none", "no_ping", "silent", ""]:
+                fallback_desc = resolve_placeholders(msg_template, user=member, guild=guild, extra=extra)
+            elif event_type == "welcome":
+                fallback_desc = (
+                    f"Hey {member.mention}, welcome to **{guild.name}**!\n"
+                    f"> You are our **{guild.member_count:,}th** member."
+                )
+            elif event_type == "leave":
+                fallback_desc = (
+                    f"**{member.name}** has left the server.\n"
+                    f"> We now have **{guild.member_count:,}** members."
+                )
+            else:
+                fallback_desc = f"Thank you {member.mention} for boosting the server!"
             fb_embed = discord.Embed(
                 title=fallback_title,
                 description=fallback_desc,

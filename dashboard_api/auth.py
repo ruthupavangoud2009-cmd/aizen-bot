@@ -1,0 +1,299 @@
+"""Discord OAuth2 state generation, token exchange, and HMAC-signed session security.
+
+Guarantees:
+- Strict CSRF protection via timestamped HMAC state nonces.
+- Encrypted/signed tamper-proof session cookies (no arbitrary client modifications).
+- Secure Discord v10 OAuth2 token exchange without leaking credentials to the browser.
+"""
+from __future__ import annotations
+
+import base64
+import hashlib
+import hmac
+import json
+import secrets
+import time
+from typing import Any, Dict, Optional
+import aiohttp
+
+DISCORD_API_BASE: str = "https://discord.com/api/v10"
+DISCORD_TOKEN_URL: str = f"{DISCORD_API_BASE}/oauth2/token"
+DISCORD_USER_URL: str = f"{DISCORD_API_BASE}/users/@me"
+DISCORD_GUILDS_URL: str = f"{DISCORD_API_BASE}/users/@me/guilds"
+
+
+# --- OAuth2 State Nonce (CSRF Protection) ---
+
+def create_oauth_state(secret_key: str) -> str:
+    """Generate a tamper-proof timestamped OAuth state parameter with HMAC signature."""
+    nonce = secrets.token_urlsafe(16)
+    timestamp = str(int(time.time()))
+    payload = f"{nonce}:{timestamp}"
+    signature = hmac.new(
+        secret_key.encode("utf-8"),
+        payload.encode("utf-8"),
+        hashlib.sha256
+    ).hexdigest()
+    return f"{nonce}.{timestamp}.{signature}"
+
+
+def verify_oauth_state(state: str, secret_key: str, max_age_seconds: int = 600) -> bool:
+    """Verify state parameter integrity, signature, and expiration."""
+    if not state or not isinstance(state, str):
+        return False
+    parts = state.split(".")
+    if len(parts) != 3:
+        return False
+
+    nonce, timestamp_str, received_sig = parts
+    try:
+        ts = int(timestamp_str)
+    except ValueError:
+        return False
+
+    # Check age
+    now = int(time.time())
+    age = now - ts
+    if age > max_age_seconds or (max_age_seconds <= 0 and age >= 0) or ts > now + 30:  # allows 30s clock skew
+        return False
+
+    # Check HMAC
+    payload = f"{nonce}:{timestamp_str}"
+    expected_sig = hmac.new(
+        secret_key.encode("utf-8"),
+        payload.encode("utf-8"),
+        hashlib.sha256
+    ).hexdigest()
+
+    return hmac.compare_digest(expected_sig, received_sig)
+
+
+# --- Tamper-Proof Signed Session Tokens ---
+
+def create_session_token(data: Dict[str, Any], secret_key: str) -> str:
+    """Create a signed session token containing user payload and expiration timestamp."""
+    payload_dict = {
+        **data,
+        "_created_at": int(time.time())
+    }
+    raw_json = json.dumps(payload_dict, separators=(",", ":")).encode("utf-8")
+    b64_payload = base64.urlsafe_b64encode(raw_json).decode("utf-8").rstrip("=")
+
+    signature = hmac.new(
+        secret_key.encode("utf-8"),
+        b64_payload.encode("utf-8"),
+        hashlib.sha256
+    ).hexdigest()
+
+    return f"{b64_payload}.{signature}"
+
+
+def verify_session_token(token: str, secret_key: str, max_age_seconds: int = 86400 * 7) -> Optional[Dict[str, Any]]:
+    """Verify session token signature, decode payload, and validate expiration."""
+    if not token or not isinstance(token, str):
+        return None
+    parts = token.split(".")
+    if len(parts) != 2:
+        return None
+
+    b64_payload, received_sig = parts
+    expected_sig = hmac.new(
+        secret_key.encode("utf-8"),
+        b64_payload.encode("utf-8"),
+        hashlib.sha256
+    ).hexdigest()
+
+    if not hmac.compare_digest(expected_sig, received_sig):
+        return None
+
+    # Add back base64 padding
+    padding = "=" * ((4 - len(b64_payload) % 4) % 4)
+    try:
+        raw_json = base64.urlsafe_b64decode(b64_payload + padding)
+        data = json.loads(raw_json.decode("utf-8"))
+    except Exception:
+        return None
+
+    created_at = data.get("_created_at", 0)
+    now = int(time.time())
+    age = now - created_at
+    if age > max_age_seconds or (max_age_seconds <= 0 and age >= 0):
+        return None
+
+    return data
+
+
+# --- Discord API Client Helpers ---
+
+async def exchange_discord_code(
+    client_id: str,
+    client_secret: str,
+    redirect_uri: str,
+    code: str,
+    session: aiohttp.ClientSession
+) -> Dict[str, Any]:
+    """Exchange authorization code for Discord access and refresh tokens."""
+    payload = {
+        "client_id": client_id,
+        "client_secret": client_secret,
+        "grant_type": "authorization_code",
+        "code": code,
+        "redirect_uri": redirect_uri,
+    }
+    headers = {"Content-Type": "application/x-www-form-urlencoded"}
+
+    async with session.post(DISCORD_TOKEN_URL, data=payload, headers=headers, timeout=aiohttp.ClientTimeout(total=15)) as resp:
+        if resp.status != 200:
+            error_body = await resp.text()
+            raise RuntimeError(f"Discord token exchange failed (HTTP {resp.status}): {error_body}")
+        return await resp.json()
+
+
+import logging
+
+logger = logging.getLogger("Kyoka.Dashboard.Auth")
+
+# In-memory TTL caches to eliminate rate limits and 502 errors
+_USER_GUILDS_CACHE: Dict[str, tuple[float, list[Dict[str, Any]]]] = {}
+USER_GUILDS_CACHE_TTL: float = 120.0  # 2 minutes active freshness
+USER_GUILDS_STALE_TTL: float = 900.0  # 15 minutes fallback for rate-limit resilience
+
+_BOT_GUILDS_CACHE: Optional[tuple[float, set[str]]] = None
+BOT_GUILDS_CACHE_TTL: float = 60.0    # 1 minute active freshness
+BOT_GUILDS_STALE_TTL: float = 600.0   # 10 minutes fallback
+
+
+async def fetch_discord_user(access_token: str, session: aiohttp.ClientSession) -> Dict[str, Any]:
+    """Fetch logged in user profile from Discord."""
+    headers = {"Authorization": f"Bearer {access_token}"}
+    async with session.get(DISCORD_USER_URL, headers=headers, timeout=aiohttp.ClientTimeout(total=10)) as resp:
+        if resp.status != 200:
+            raise RuntimeError(f"Failed to fetch Discord user (HTTP {resp.status})")
+        return await resp.json()
+
+
+async def fetch_user_guilds(
+    access_token: str,
+    session: aiohttp.ClientSession,
+    force_refresh: bool = False
+) -> list[Dict[str, Any]]:
+    """Fetch list of user's guilds from Discord with in-memory TTL caching and rate-limit resilience."""
+    now = time.time()
+    cache_key = hashlib.sha256(access_token.encode("utf-8")).hexdigest()
+
+    cached = _USER_GUILDS_CACHE.get(cache_key)
+    if not force_refresh and cached:
+        cached_time, cached_guilds = cached
+        if now - cached_time < USER_GUILDS_CACHE_TTL:
+            return cached_guilds
+
+    headers = {"Authorization": f"Bearer {access_token}"}
+    try:
+        async with session.get(DISCORD_GUILDS_URL, headers=headers, timeout=aiohttp.ClientTimeout(total=8)) as resp:
+            if resp.status == 200:
+                guilds = await resp.json()
+                _USER_GUILDS_CACHE[cache_key] = (now, guilds)
+                return guilds
+            elif resp.status == 429:
+                logger.warning("Discord API returned 429 Too Many Requests while fetching user guilds.")
+                if cached and (now - cached[0] < USER_GUILDS_STALE_TTL):
+                    logger.info("Serving user guilds from stale cache due to Discord 429 rate limit.")
+                    return cached[1]
+                raise RuntimeError("Discord API rate limit reached (HTTP 429). Please wait a moment.")
+            else:
+                error_text = await resp.text()
+                if cached and (now - cached[0] < USER_GUILDS_STALE_TTL):
+                    logger.warning(f"Discord returned HTTP {resp.status}; falling back to cached user guilds.")
+                    return cached[1]
+                raise RuntimeError(f"Failed to fetch user guilds from Discord (HTTP {resp.status}): {error_text}")
+    except Exception as e:
+        if cached and (now - cached[0] < USER_GUILDS_STALE_TTL):
+            logger.warning(f"Error fetching user guilds ({e}); serving from stale cache.")
+            return cached[1]
+        raise
+
+
+async def fetch_bot_guilds(
+    bot_token: str,
+    session: aiohttp.ClientSession,
+    force_refresh: bool = False
+) -> tuple[set[str], bool]:
+    """Verify bot's real guild memberships via live bot instance or server-side Discord REST API.
+    
+    Returns (guild_ids_set, verification_succeeded).
+    Guarantees O(1) membership checks and eliminates blocking sequential database queries.
+    """
+    global _BOT_GUILDS_CACHE
+    now = time.time()
+
+    # 1. Live Bot Memory Fast-Path: if KyokaBot is running in process, retrieve bot.guilds directly
+    try:
+        from src.main import get_current_bot
+        bot = get_current_bot()
+        if bot and hasattr(bot, "guilds") and bot.guilds:
+            live_guild_ids = {str(g.id) for g in bot.guilds}
+            _BOT_GUILDS_CACHE = (now, live_guild_ids)
+            return live_guild_ids, True
+    except Exception as e:
+        logger.debug(f"Live bot instance check bypassed: {e}")
+
+    # 2. Check in-memory cache
+    if not force_refresh and _BOT_GUILDS_CACHE:
+        cached_time, cached_ids = _BOT_GUILDS_CACHE
+        if now - cached_time < BOT_GUILDS_CACHE_TTL:
+            return cached_ids, True
+
+    if not bot_token:
+        logger.warning("No bot_token provided to fetch_bot_guilds; verification unavailable.")
+        if _BOT_GUILDS_CACHE:
+            return _BOT_GUILDS_CACHE[1], False
+        return set(), False
+
+    # 3. Server-side Discord REST API with bot token
+    guild_ids: set[str] = set()
+    headers = {"Authorization": f"Bot {bot_token}"}
+    after_id: Optional[str] = None
+
+    try:
+        for _ in range(5):  # Max 5 pages (1,000 guilds) with bounded execution
+            url = f"{DISCORD_GUILDS_URL}?limit=200"
+            if after_id:
+                url += f"&after={after_id}"
+
+            async with session.get(url, headers=headers, timeout=aiohttp.ClientTimeout(total=8)) as resp:
+                if resp.status == 200:
+                    data = await resp.json()
+                    if not data:
+                        break
+                    for g in data:
+                        guild_ids.add(str(g["id"]))
+                    if len(data) < 200:
+                        break
+                    after_id = str(data[-1]["id"])
+                elif resp.status == 429:
+                    logger.warning("Discord API rate limited bot guilds verification (HTTP 429).")
+                    if _BOT_GUILDS_CACHE and (now - _BOT_GUILDS_CACHE[0] < BOT_GUILDS_STALE_TTL):
+                        return _BOT_GUILDS_CACHE[1], True
+                    return (guild_ids, False) if guild_ids else (set(), False)
+                else:
+                    logger.error(f"Discord API error fetching bot guilds: HTTP {resp.status}")
+                    if _BOT_GUILDS_CACHE and (now - _BOT_GUILDS_CACHE[0] < BOT_GUILDS_STALE_TTL):
+                        return _BOT_GUILDS_CACHE[1], True
+                    return (guild_ids, False) if guild_ids else (set(), False)
+
+        _BOT_GUILDS_CACHE = (now, guild_ids)
+        return guild_ids, True
+
+    except Exception as e:
+        logger.error(f"Network error verifying bot guilds: {e}")
+        if _BOT_GUILDS_CACHE and (now - _BOT_GUILDS_CACHE[0] < BOT_GUILDS_STALE_TTL):
+            return _BOT_GUILDS_CACHE[1], True
+        return set(), False
+
+
+def clear_guild_caches() -> None:
+    """Clear in-memory guild caches (used during testing or forced refresh)."""
+    global _BOT_GUILDS_CACHE
+    _USER_GUILDS_CACHE.clear()
+    _BOT_GUILDS_CACHE = None
+

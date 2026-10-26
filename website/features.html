@@ -1,0 +1,193 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>KYOKA 3.0 — Platform Features & Architecture</title>
+  <meta name="description" content="Explore every module in KYOKA 3.0: Sovereign Anti-Nuke, Modular Giveaways, Neural AI, 24/7 Audio, TTS Voice Greetings, and Modular Logging." />
+  <link rel="icon" type="image/svg+xml" href="/assets/logo.svg" />
+  <link rel="stylesheet" href="/css/style.css" />
+</head>
+<body>
+  <!-- Navigation -->
+  <nav class="navbar">
+    <div class="nav-container">
+      <a href="/" class="nav-brand">
+        <img src="/assets/logo.svg" alt="KYOKA Logo" class="nav-logo" />
+        <span>KYOKA <span style="color: var(--purple-light);">3.0</span></span>
+      </a>
+
+      <button id="nav-toggle" class="nav-toggle" aria-label="Toggle navigation">
+        ☰
+      </button>
+
+      <ul id="nav-links" class="nav-links">
+        <li><a href="/" class="nav-link">Home</a></li>
+        <li><a href="/features.html" class="nav-link active">Features</a></li>
+        <li><a href="/commands.html" class="nav-link">Commands</a></li>
+        <li><a href="/premium.html" class="nav-link">Premium</a></li>
+        <li><a href="/changelog.html" class="nav-link">Changelog</a></li>
+        <li><a href="/support.html" class="nav-link">Support</a></li>
+        <li><a href="/dashboard.html" class="nav-link">Dashboard</a></li>
+      </ul>
+
+      <div class="nav-actions">
+        <div id="auth-nav-slot">
+          <a href="/dashboard.html" class="btn btn-discord btn-sm">
+            <span>Login with Discord</span>
+          </a>
+        </div>
+      </div>
+    </div>
+  </nav>
+
+  <!-- Header -->
+  <header class="section" style="padding-top: 3.5rem; padding-bottom: 1.5rem; text-align: center;">
+    <div class="hero-badge">
+      <span>MODULAR SYSTEM ARCHITECTURE</span>
+    </div>
+    <h1 class="section-title">
+      Comprehensive Server <span class="gradient-text">Domination</span>
+    </h1>
+    <p class="section-subtitle" style="max-width: 720px; margin: 0 auto;">
+      A detailed look at the core subsystems running inside KYOKA 3.0, backed by zero-latency event dispatchers and persistent cloud storage.
+    </p>
+  </header>
+
+  <!-- Deep Dive Sections -->
+  <main class="section" style="padding-top: 1rem;">
+    <div class="features-grid">
+      <!-- Section 1 -->
+      <div id="antinuke" class="feature-card" style="padding: 2.25rem;">
+        <div class="feature-icon-wrapper">🛡️</div>
+        <h3 class="feature-title">1. Sovereign Anti-Nuke Engine</h3>
+        <p class="feature-desc">
+          KYOKA's Anti-Nuke operates at the gateway level. If an unauthorized administrator or compromised bot account attempts to delete channels, prune members, modify guild vanity URLs, or grant dangerous permissions, KYOKA triggers instantaneous role revocation and automatic lockdown before damage occurs.
+        </p>
+        <ul style="list-style: none; display: flex; flex-direction: column; gap: 0.5rem; margin-bottom: 1.5rem; font-size: 0.9rem; color: var(--text-muted);">
+          <li>✓ <strong>Vanity URL Protection</strong> — Reverts vanity URL tampering automatically.</li>
+          <li>✓ <strong>Role & Channel Shields</strong> — Blocks unauthorized mass creation, deletion, or permission overwrites.</li>
+          <li>✓ <strong>Extra Owner Tier</strong> — Designate trusted co-owners who can bypass triggers without giving them full Discord guild ownership.</li>
+        </ul>
+        <a href="/dashboard.html" class="btn btn-primary btn-sm">Configure Anti-Nuke</a>
+      </div>
+
+      <!-- Section 2 -->
+      <div id="giveaways" class="feature-card" style="padding: 2.25rem;">
+        <div class="feature-icon-wrapper">🎁</div>
+        <h3 class="feature-title">2. Enterprise Giveaway System</h3>
+        <p class="feature-desc">
+          Say goodbye to basic giveaway bots. KYOKA introduces an advanced giveaway suite featuring bonus role entries, clan tag verification, daily message requirements, claim deadlines, auto-rerolling of unclaimed prizes, and CSV audit reports.
+        </p>
+        <ul style="list-style: none; display: flex; flex-direction: column; gap: 0.5rem; margin-bottom: 1.5rem; font-size: 0.9rem; color: var(--text-muted);">
+          <li>✓ <strong>Weighted Multipliers</strong> — Boost active boosters or VIP roles with 2x-10x entry weight.</li>
+          <li>✓ <strong>Clan Tag Gating</strong> — Enforce server clan tags in member usernames.</li>
+          <li>✓ <strong>Message Activity Quotas</strong> — Require 50+ messages in the last 7 days to enter.</li>
+        </ul>
+        <a href="/commands.html" class="btn btn-secondary btn-sm">View Giveaway Commands</a>
+      </div>
+
+      <!-- Section 3 -->
+      <div id="ai" class="feature-card" style="padding: 2.25rem;">
+        <div class="feature-icon-wrapper">🧠</div>
+        <h3 class="feature-title">3. Neural AI & Persona Matrix</h3>
+        <p class="feature-desc">
+          Equipped with Google Gemini neural models, KYOKA acts as an intelligent server companion capable of dry wit, strategic guidance, and conversational banter. Server owners can customize system instructions, set personality presets, and isolate AI conversations to specific channels.
+        </p>
+        <ul style="list-style: none; display: flex; flex-direction: column; gap: 0.5rem; margin-bottom: 1.5rem; font-size: 0.9rem; color: var(--text-muted);">
+          <li>✓ <strong>Aizen Persona</strong> — Composed, dry, and tactical dialogue inspired by Lord Aizen.</li>
+          <li>✓ <strong>Custom Knowledge Lore</strong> — Teach the bot your community's lore, rules, and staff hierarchy.</li>
+          <li>✓ <strong>Spam Protection</strong> — Channel and user cooldowns to prevent chat disruption.</li>
+        </ul>
+        <a href="/dashboard.html" class="btn btn-primary btn-sm">Tune AI Persona</a>
+      </div>
+
+      <!-- Section 4 -->
+      <div id="music" class="feature-card" style="padding: 2.25rem;">
+        <div class="feature-icon-wrapper">🎵</div>
+        <h3 class="feature-title">4. Studio Audio & 24/7 Presence</h3>
+        <p class="feature-desc">
+          Powered by dedicated Lavalink nodes, KYOKA streams high-bitrate audio with zero jitter. Enjoy smart recommendation autoplay that queues continuous genre-matched tracks when your queue ends, complete volume control, and 24/7 stay mode.
+        </p>
+        <ul style="list-style: none; display: flex; flex-direction: column; gap: 0.5rem; margin-bottom: 1.5rem; font-size: 0.9rem; color: var(--text-muted);">
+          <li>✓ <strong>Smart Autoplay</strong> — Algorithmic recommendation engine plays similar songs forever.</li>
+          <li>✓ <strong>24/7 Voice Stay</strong> — Permanent voice channel connection for community radios.</li>
+          <li>✓ <strong>Personal Playlists</strong> — Save favorites across servers to your persistent profile.</li>
+        </ul>
+        <a href="/commands.html" class="btn btn-secondary btn-sm">Music Commands</a>
+      </div>
+
+      <!-- Section 5 -->
+      <div id="voice-welcome" class="feature-card" style="padding: 2.25rem;">
+        <div class="feature-icon-wrapper">🎙️</div>
+        <h3 class="feature-title">5. Independent Spoken Voice Greetings</h3>
+        <p class="feature-desc">
+          When members enter your community voice lounges, KYOKA can speak a personalized welcome greeting via natural text-to-speech audio. Supports companion bot tokens for concurrent voice greetings during live music playback.
+        </p>
+        <ul style="list-style: none; display: flex; flex-direction: column; gap: 0.5rem; margin-bottom: 1.5rem; font-size: 0.9rem; color: var(--text-muted);">
+          <li>✓ <strong>Custom Greeting Text</strong> — Dynamic tokens for {user} and {server}.</li>
+          <li>✓ <strong>Multiple TTS Languages</strong> — English, Spanish, French, Japanese, and more.</li>
+          <li>✓ <strong>Queue Expiration</strong> — Cooldown timers prevent greeting spam during voice churn.</li>
+        </ul>
+        <a href="/dashboard.html" class="btn btn-primary btn-sm">Setup Voice Greetings</a>
+      </div>
+
+      <!-- Section 6 -->
+      <div id="verification" class="feature-card" style="padding: 2.25rem;">
+        <div class="feature-icon-wrapper">✅</div>
+        <h3 class="feature-title">6. Member Gate & Auto-Roles</h3>
+        <p class="feature-desc">
+          Defend your server gates with button-click or captcha verification. Quarantines unverified accounts until they authenticate, and automatically grants human and bot roles once verified.
+        </p>
+        <ul style="list-style: none; display: flex; flex-direction: column; gap: 0.5rem; margin-bottom: 1.5rem; font-size: 0.9rem; color: var(--text-muted);">
+          <li>✓ <strong>Anti-Alt Account Limits</strong> — Filter accounts created fewer than X days ago.</li>
+          <li>✓ <strong>Separate Human / Bot Roles</strong> — Keeps permissions structured and clean.</li>
+          <li>✓ <strong>Verification Audit Logs</strong> — Record of who verified and when.</li>
+        </ul>
+        <a href="/dashboard.html" class="btn btn-primary btn-sm">Configure Member Gate</a>
+      </div>
+    </div>
+  </main>
+
+  <!-- Footer -->
+  <footer class="footer">
+    <div class="footer-container">
+      <div class="footer-brand">
+        <h4>KYOKA 3.0</h4>
+        <p>The sovereign Discord management, security, and audio architecture. Crafted for elite communities.</p>
+      </div>
+      <div class="footer-col">
+        <h5>Navigation</h5>
+        <ul>
+          <li><a href="/">Home</a></li>
+          <li><a href="/features.html">Features</a></li>
+          <li><a href="/commands.html">Commands</a></li>
+          <li><a href="/dashboard.html">Web Dashboard</a></li>
+        </ul>
+      </div>
+      <div class="footer-col">
+        <h5>Resources</h5>
+        <ul>
+          <li><a href="/support.html">Community Support</a></li>
+          <li><a href="/support.html#faq">Setup FAQ</a></li>
+          <li><a href="https://discord.com" target="_blank">Discord API</a></li>
+        </ul>
+      </div>
+      <div class="footer-col">
+        <h5>Security</h5>
+        <ul>
+          <li><a href="/support.html#security">Data Isolation</a></li>
+          <li><a href="/support.html#privacy">Privacy Policy</a></li>
+          <li><a href="/dashboard.html">OAuth2 Portal</a></li>
+        </ul>
+      </div>
+    </div>
+    <div class="footer-bottom">
+      <span>&copy; 2026 KYOKA 3.0 Project. All rights reserved.</span>
+      <span style="color: var(--purple-light);">Powered by asyncpg & Cloudflare Pages</span>
+    </div>
+  </footer>
+
+  <script type="module" src="/js/app.js"></script>
+</body>
+</html>

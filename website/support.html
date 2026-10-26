@@ -1,0 +1,181 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>KYOKA 3.0 — Support, Documentation & FAQ</title>
+  <meta name="description" content="Get assistance, join the community support server, view setup troubleshooting guides, and learn how to invite KYOKA 3.0 to your Discord server." />
+  <link rel="icon" type="image/svg+xml" href="/assets/logo.svg" />
+  <link rel="stylesheet" href="/css/style.css" />
+</head>
+<body>
+  <!-- Navigation -->
+  <nav class="navbar">
+    <div class="nav-container">
+      <a href="/" class="nav-brand">
+        <img src="/assets/logo.svg" alt="KYOKA Logo" class="nav-logo" />
+        <span>KYOKA <span style="color: var(--purple-light);">3.0</span></span>
+      </a>
+
+      <button id="nav-toggle" class="nav-toggle" aria-label="Toggle navigation">
+        ☰
+      </button>
+
+      <ul id="nav-links" class="nav-links">
+        <li><a href="/" class="nav-link">Home</a></li>
+        <li><a href="/features.html" class="nav-link">Features</a></li>
+        <li><a href="/commands.html" class="nav-link">Commands</a></li>
+        <li><a href="/premium.html" class="nav-link">Premium</a></li>
+        <li><a href="/changelog.html" class="nav-link">Changelog</a></li>
+        <li><a href="/support.html" class="nav-link active">Support</a></li>
+        <li><a href="/dashboard.html" class="nav-link">Dashboard</a></li>
+      </ul>
+
+      <div class="nav-actions">
+        <div id="auth-nav-slot">
+          <a href="/dashboard.html" class="btn btn-discord btn-sm">
+            <span>Login with Discord</span>
+          </a>
+        </div>
+      </div>
+    </div>
+  </nav>
+
+  <!-- Support Header -->
+  <header class="section" style="padding-top: 3.5rem; padding-bottom: 2rem; text-align: center;">
+    <div class="hero-badge">
+      <span>COMMUNITY & ASSISTANCE</span>
+    </div>
+    <h1 class="section-title">
+      We Are Here to <span class="gradient-text">Empower You</span>
+    </h1>
+    <p class="section-subtitle" style="max-width: 680px; margin: 0 auto 2.5rem;">
+      Whether you need help with Anti-Nuke setup, configuring Discord permissions, or tuning AI parameters, our documentation and support community have you covered.
+    </p>
+
+    <div class="hero-cta" style="margin-bottom: 2rem;">
+      <a href="https://discord.gg/kyoka" target="_blank" class="btn btn-discord btn-lg">
+        <span>Join Official Support Server</span>
+      </a>
+      <a href="/dashboard.html" class="btn btn-primary btn-lg">
+        <span>Open Web Dashboard</span>
+      </a>
+    </div>
+  </header>
+
+  <!-- Setup Guides & FAQs -->
+  <main class="section" style="padding-top: 1rem;">
+    <!-- Critical Setup Checklist -->
+    <div class="feature-card" style="padding: 2.5rem; margin-bottom: 3rem;">
+      <h3 style="font-size: 1.4rem; color: var(--purple-white); margin-bottom: 1rem;">
+        🛡️ Anti-Nuke & Permission Setup Checklist
+      </h3>
+      <p style="color: var(--text-muted); margin-bottom: 1.5rem; line-height: 1.6;">
+        To enable KYOKA's Anti-Nuke to strip unauthorized roles or kick malicious administrators before damage occurs, Discord requires proper role hierarchy configuration:
+      </p>
+
+      <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 1.5rem;">
+        <div style="background: rgba(18, 9, 34, 0.6); padding: 1.25rem; border-radius: var(--radius-md); border: 1px solid var(--border-subtle);">
+          <div style="font-weight: 700; color: var(--purple-light); margin-bottom: 0.4rem;">1. Role Position Hierarchy</div>
+          <div style="font-size: 0.88rem; color: var(--text-muted);">
+            In your Discord Server Settings > Roles, drag the <strong>KYOKA</strong> integration role as high as possible (above all moderator and staff roles you wish to protect against).
+          </div>
+        </div>
+
+        <div style="background: rgba(18, 9, 34, 0.6); padding: 1.25rem; border-radius: var(--radius-md); border: 1px solid var(--border-subtle);">
+          <div style="font-weight: 700; color: var(--purple-light); margin-bottom: 0.4rem;">2. Administrator Permission</div>
+          <div style="font-size: 0.88rem; color: var(--text-muted);">
+            Grant KYOKA Administrator permissions upon invite so it can manage quarantine roles, voice states, and incident alert channels without permission blocks.
+          </div>
+        </div>
+
+        <div style="background: rgba(18, 9, 34, 0.6); padding: 1.25rem; border-radius: var(--radius-md); border: 1px solid var(--border-subtle);">
+          <div style="font-weight: 700; color: var(--purple-light); margin-bottom: 0.4rem;">3. Extra Owner Designations</div>
+          <div style="font-size: 0.88rem; color: var(--text-muted);">
+            Use <code>+extraowner add @User</code> for trusted co-founders so they can configure the bot and bypass anti-nuke triggers without Discord server transfer.
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- FAQ Accordion -->
+    <div id="faq" class="section-header" style="margin-bottom: 2rem;">
+      <h2 class="section-title">Frequently Asked Questions</h2>
+      <p class="section-subtitle">Common questions about hosting, permissions, and security.</p>
+    </div>
+
+    <div style="display: flex; flex-direction: column; gap: 1rem; max-width: 850px; margin: 0 auto;">
+      <div class="feature-card" style="padding: 1.5rem;">
+        <h4 style="font-size: 1.1rem; color: var(--purple-white); margin-bottom: 0.5rem;">Is KYOKA 3.0 really free to host and use?</h4>
+        <p style="color: var(--text-muted); font-size: 0.92rem; line-height: 1.6;">
+          Yes! The frontend website is designed for 100% free hosting on Cloudflare Pages (with unlimited bandwidth and free SSL). The backend API and bot run smoothly on free hosting platforms such as Render, Koyeb, or Supabase PostgreSQL free tiers.
+        </p>
+      </div>
+
+      <div class="feature-card" style="padding: 1.5rem;">
+        <h4 style="font-size: 1.1rem; color: var(--purple-white); margin-bottom: 0.5rem;">Why does the dashboard require Discord login?</h4>
+        <p style="color: var(--text-muted); font-size: 0.92rem; line-height: 1.6;">
+          We use Discord's official OAuth2 to verify your identity and confirm that you possess <strong>Manage Server</strong> or <strong>Administrator</strong> privileges. We only request your public username and server list—we never receive or ask for your password or tokens.
+        </p>
+      </div>
+
+      <div class="feature-card" style="padding: 1.5rem;">
+        <h4 id="security" style="font-size: 1.1rem; color: var(--purple-white); margin-bottom: 0.5rem;">How is data protected between different Discord servers?</h4>
+        <p style="color: var(--text-muted); font-size: 0.92rem; line-height: 1.6;">
+          Every single API request to view or edit server settings performs a server-side permission verification against Discord's live gateway permissions. Even if a user attempts to manually forge a request for another guild ID, the backend API rejects it with HTTP 403 Forbidden.
+        </p>
+      </div>
+
+      <div class="feature-card" style="padding: 1.5rem;">
+        <h4 id="privacy" style="font-size: 1.1rem; color: var(--purple-white); margin-bottom: 0.5rem;">What is the privacy and data retention policy?</h4>
+        <p style="color: var(--text-muted); font-size: 0.92rem; line-height: 1.6;">
+          KYOKA only stores server configuration parameters (such as prefixes, role IDs, and channel IDs) in your PostgreSQL database. Any member can opt out of message activity tracking at any time using the <code>/privacy</code> command.
+        </p>
+      </div>
+    </div>
+  </main>
+
+  <!-- Footer -->
+  <footer class="footer">
+    <div class="footer-container">
+      <div class="footer-brand">
+        <h4>KYOKA 3.0</h4>
+        <p>The sovereign Discord management, security, and audio architecture. Crafted for elite communities.</p>
+      </div>
+      <div class="footer-col">
+        <h5>Navigation</h5>
+        <ul>
+          <li><a href="/">Home</a></li>
+          <li><a href="/features.html">Features</a></li>
+          <li><a href="/commands.html">Commands</a></li>
+          <li><a href="/premium.html">Premium</a></li>
+          <li><a href="/changelog.html">Changelog</a></li>
+          <li><a href="/dashboard.html">Web Dashboard</a></li>
+        </ul>
+      </div>
+      <div class="footer-col">
+        <h5>Resources</h5>
+        <ul>
+          <li><a href="/support.html">Community Support</a></li>
+          <li><a href="/support.html#faq">Setup FAQ</a></li>
+          <li><a href="https://discord.com" target="_blank">Discord API</a></li>
+        </ul>
+      </div>
+      <div class="footer-col">
+        <h5>Legal & Security</h5>
+        <ul>
+          <li><a href="/privacy.html">Privacy Policy</a></li>
+          <li><a href="/terms.html">Terms of Service</a></li>
+          <li><a href="/dashboard.html">OAuth2 Portal</a></li>
+        </ul>
+      </div>
+    </div>
+    <div class="footer-bottom">
+      <span>&copy; 2026 KYOKA 3.0 Project. All rights reserved.</span>
+      <span style="color: var(--purple-light);">Community Support & FAQ</span>
+    </div>
+  </footer>
+
+  <script type="module" src="/js/app.js"></script>
+</body>
+</html>

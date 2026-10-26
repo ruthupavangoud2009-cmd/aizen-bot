@@ -1,0 +1,154 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>KYOKA 3.0 — Privacy Policy & Data Sovereignty</title>
+  <meta name="description" content="Transparent, uncompromising privacy policy for KYOKA 3.0 Discord Bot and Web Dashboard. Learn how your data is handled and protected." />
+  <link rel="icon" type="image/svg+xml" href="/assets/logo.svg" />
+  <link rel="stylesheet" href="/css/style.css" />
+</head>
+<body>
+  <!-- Navigation -->
+  <nav class="navbar">
+    <div class="nav-container">
+      <a href="/" class="nav-brand">
+        <img src="/assets/logo.svg" alt="KYOKA Logo" class="nav-logo" />
+        <span>KYOKA <span style="color: var(--purple-light);">3.0</span></span>
+      </a>
+
+      <button id="nav-toggle" class="nav-toggle" aria-label="Toggle navigation">
+        ☰
+      </button>
+
+      <ul id="nav-links" class="nav-links">
+        <li><a href="/" class="nav-link">Home</a></li>
+        <li><a href="/features.html" class="nav-link">Features</a></li>
+        <li><a href="/commands.html" class="nav-link">Commands</a></li>
+        <li><a href="/premium.html" class="nav-link">Premium</a></li>
+        <li><a href="/changelog.html" class="nav-link">Changelog</a></li>
+        <li><a href="/support.html" class="nav-link">Support</a></li>
+        <li><a href="/dashboard.html" class="nav-link">Dashboard</a></li>
+      </ul>
+
+      <div class="nav-actions">
+        <div id="auth-nav-slot">
+          <a href="/dashboard.html" class="btn btn-discord btn-sm">
+            <span>Login with Discord</span>
+          </a>
+        </div>
+      </div>
+    </div>
+  </nav>
+
+  <!-- Header -->
+  <header class="section" style="padding-top: 3.5rem; padding-bottom: 2rem; text-align: center;">
+    <div class="hero-badge">
+      <span>🔒 DATA SOVEREIGNTY & PRIVACY</span>
+    </div>
+    <h1 class="section-title">
+      Privacy Policy & <br /><span class="gradient-text">Transparency Standards</span>
+    </h1>
+    <p class="section-subtitle" style="max-width: 720px; margin: 0 auto;">
+      Last Updated: October 2026. How KYOKA 3.0 respects, isolates, and protects member and server telemetry.
+    </p>
+  </header>
+
+  <!-- Content Container -->
+  <main class="section" style="padding-top: 1rem; max-width: 860px; margin: 0 auto;">
+    <div style="background: var(--bg-card); border: 1px solid var(--border-subtle); border-radius: var(--radius-lg); padding: 3rem 2.5rem; line-height: 1.8; color: var(--text-muted); font-size: 0.95rem;">
+      
+      <h2 style="color: var(--purple-white); font-size: 1.5rem; font-weight: 800; margin-bottom: 1rem;">1. Principle of Data Minimization</h2>
+      <p style="margin-bottom: 1.5rem;">
+        KYOKA 3.0 operates under the strict principle of data minimization. We only collect the minimal identifiers necessary to execute security enforcement, audio streaming, member verification, modular ticket management, and guild configuration persistence.
+      </p>
+
+      <h2 style="color: var(--purple-white); font-size: 1.5rem; font-weight: 800; margin-bottom: 1rem;">2. Telemetry and Records Collected</h2>
+      <p style="margin-bottom: 0.75rem;">To provide operational services, the following data may be stored in our cloud PostgreSQL database:</p>
+      <ul style="margin-left: 1.5rem; margin-bottom: 1.5rem;">
+        <li><strong>Discord Identifiers:</strong> Guild IDs, User IDs, Channel IDs, and Role IDs for configuration bindings and permission checking.</li>
+        <li><strong>Server Configuration:</strong> Custom prefixes, language preferences, log channel destinations, moderation thresholds, and anti-nuke rules.</li>
+        <li><strong>Leveling & Activity Metrics:</strong> Aggregate message count and XP score per guild for leaderboard calculation.</li>
+        <li><strong>Security Audit Trails:</strong> Timestamped records of administrative actions (e.g. anti-nuke triggers, whitelist modifications, and role updates) for guild owner forensic review.</li>
+      </ul>
+
+      <h2 style="color: var(--purple-white); font-size: 1.5rem; font-weight: 800; margin-bottom: 1rem;">3. Data We NEVER Collect</h2>
+      <p style="margin-bottom: 1.5rem;">
+        We strictly do NOT log, store, sell, or monitor:
+      </p>
+      <ul style="margin-left: 1.5rem; margin-bottom: 1.5rem;">
+        <li>Passwords, personal emails, or credit card details.</li>
+        <li>Private Direct Messages (DMs) between Discord users.</li>
+        <li>Message content outside configured verification, sticky message, or AI interaction channels.</li>
+        <li>Discord user OAuth access tokens (tokens are securely discarded after session generation).</li>
+      </ul>
+
+      <h2 style="color: var(--purple-white); font-size: 1.5rem; font-weight: 800; margin-bottom: 1rem;">4. Artificial Intelligence Subsystem</h2>
+      <p style="margin-bottom: 1.5rem;">
+        When interacting with the KYOKA neural AI persona in designated channels, prompts are transmitted via encrypted HTTPS to Groq inference infrastructure for real-time generation. Prompts are processed ephemerally and are never retained, sold, or utilized for model training.
+      </p>
+
+      <h2 style="color: var(--purple-white); font-size: 1.5rem; font-weight: 800; margin-bottom: 1rem;">5. Right to Erasure (GDPR / CCPA)</h2>
+      <p style="margin-bottom: 1.5rem;">
+        Every Discord user and guild administrator maintains full sovereignty over their records:
+      </p>
+      <ul style="margin-left: 1.5rem; margin-bottom: 1.5rem;">
+        <li><strong>User Data Purge:</strong> Execute <code style="background: rgba(124, 58, 237, 0.2); color: var(--purple-light); padding: 0.2rem 0.4rem; border-radius: 4px;">/privacy forget</code> in any server to erase all personal XP, leveling records, and afk notes.</li>
+        <li><strong>Guild Data Deletion:</strong> Guild owners can reset all guild settings using <code style="background: rgba(124, 58, 237, 0.2); color: var(--purple-light); padding: 0.2rem 0.4rem; border-radius: 4px;">/config reset</code>, or remove KYOKA from the server to flag all records for automated expiration.</li>
+      </ul>
+
+      <h2 style="color: var(--purple-white); font-size: 1.5rem; font-weight: 800; margin-bottom: 1rem;">6. Infrastructure Security</h2>
+      <p>
+        Database communication is encrypted with TLS 1.3 across Supabase / AWS cloud infrastructure. Web session cookies are protected with HMAC-SHA256 signatures, <code style="color: var(--purple-light);">HttpOnly</code> flags, and cross-site scripting (CSP) headers.
+      </p>
+
+    </div>
+  </main>
+
+  <!-- Polished Footer -->
+  <footer class="footer">
+    <div class="footer-grid">
+      <div class="footer-col">
+        <div class="nav-brand" style="margin-bottom: 0.75rem;">
+          <img src="/assets/logo.svg" alt="KYOKA" class="nav-logo" />
+          <span>KYOKA <span style="color: var(--purple-light);">3.0</span></span>
+        </div>
+        <p>The sovereign Discord management, security, and audio architecture. Crafted for elite communities.</p>
+      </div>
+      <div class="footer-col">
+        <h5>Navigation</h5>
+        <ul>
+          <li><a href="/">Home</a></li>
+          <li><a href="/features.html">Features</a></li>
+          <li><a href="/commands.html">Commands</a></li>
+          <li><a href="/premium.html">Premium</a></li>
+          <li><a href="/changelog.html">Changelog</a></li>
+          <li><a href="/dashboard.html">Web Dashboard</a></li>
+        </ul>
+      </div>
+      <div class="footer-col">
+        <h5>Resources</h5>
+        <ul>
+          <li><a href="/support.html">Community Support</a></li>
+          <li><a href="/support.html#faq">Setup FAQ</a></li>
+          <li><a href="https://discord.com" target="_blank">Discord API</a></li>
+        </ul>
+      </div>
+      <div class="footer-col">
+        <h5>Legal & Security</h5>
+        <ul>
+          <li><a href="/privacy.html">Privacy Policy</a></li>
+          <li><a href="/terms.html">Terms of Service</a></li>
+          <li><a href="/dashboard.html">OAuth2 Portal</a></li>
+        </ul>
+      </div>
+    </div>
+    <div class="footer-bottom">
+      <span>&copy; 2026 KYOKA 3.0 Project. All rights reserved.</span>
+      <span style="color: var(--purple-light);">KYOKA 3.0 — Aizen Edition</span>
+    </div>
+  </footer>
+
+  <script type="module" src="/js/app.js"></script>
+</body>
+</html>

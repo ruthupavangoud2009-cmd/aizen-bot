@@ -93,7 +93,8 @@ class Profile(commands.Cog):
                     bot_vc = curr_player.voice_client.channel if curr_player.voice_client else None
                     target_member = target if isinstance(target, discord.Member) else (ctx.guild.get_member(target_id) if ctx.guild else None)
 
-                    in_same_vc = bool(target_member and target_member.voice and bot_vc and target_member.voice.channel.id == bot_vc.id)
+                    target_vc = getattr(target_member.voice, "channel", None) if (target_member and target_member.voice) else None
+                    in_same_vc = bool(target_vc and bot_vc and getattr(target_vc, "id", None) == getattr(bot_vc, "id", None))
                     req_id_match = getattr(curr_player.current, "requester_id", None) == target_id
                     req_name_match = bool(curr_player.current.requester and curr_player.current.requester in (target.name, target.display_name, getattr(target, "global_name", "")))
 
@@ -109,7 +110,8 @@ class Profile(commands.Cog):
                         if p and p.current and (p.is_playing or p.is_paused or p.voice_client):
                             p_vc = p.voice_client.channel if p.voice_client else None
                             g_member = p.guild.get_member(target_id)
-                            in_same_vc = bool(g_member and g_member.voice and p_vc and g_member.voice.channel.id == p_vc.id)
+                            g_vc = getattr(g_member.voice, "channel", None) if (g_member and g_member.voice) else None
+                            in_same_vc = bool(g_vc and p_vc and getattr(g_vc, "id", None) == getattr(p_vc, "id", None))
                             req_id_match = getattr(p.current, "requester_id", None) == target_id
                             req_name_match = bool(p.current.requester and p.current.requester in (target.name, target.display_name, getattr(target, "global_name", "")))
 

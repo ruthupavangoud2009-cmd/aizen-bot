@@ -1,0 +1,36 @@
+# Render Blueprint specification for standalone KYOKA 3.0 Web Dashboard & Owner Control Center
+# NOTE: Provided for review only. DO NOT deploy without explicit user approval.
+services:
+  - type: web
+    name: kyoka-dashboard-website
+    runtime: python
+    buildCommand: pip install -r requirements.txt
+    startCommand: python -m dashboard_api.run
+    plan: free
+    region: frankfurt
+    healthCheckPath: /api/health
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.11.9
+      - key: HOST
+        value: 0.0.0.0
+      - key: PORT
+        value: 10000
+      - key: ENVIRONMENT
+        value: production
+      - key: DATABASE_URL
+        sync: false
+      - key: DASHBOARD_SECRET_KEY
+        generateValue: true
+      - key: DISCORD_CLIENT_ID
+        sync: false
+      - key: DISCORD_CLIENT_SECRET
+        sync: false
+      - key: DISCORD_REDIRECT_URI
+        value: https://kyoka-dashboard-website.onrender.com/api/auth/callback
+      - key: FRONTEND_ORIGIN
+        value: https://kyoka-dashboard-website.onrender.com
+      - key: SESSION_COOKIE_NAME
+        value: kyoka_session
+      - key: RATE_LIMIT_PER_MINUTE
+        value: "120"

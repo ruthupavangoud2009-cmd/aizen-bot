@@ -6,6 +6,7 @@ import os
 import random
 import signal
 import sys
+import time
 from pathlib import Path
 
 # Ensure project root is in sys.path
@@ -121,19 +122,24 @@ async def run_bot_loop() -> None:
     # Backoff state — reset on successful connect+ready, increased on failure
     backoff_base = 15.0     # seconds base for transient-error backoff
     backoff_attempt = 0     # how many consecutive transient failures
-    use_proxy = bool(Config.DISCORD_PROXY)
+    proxy_consecutive_failures = 0
+    proxy_cooldown_until = 0.0
 
     while True:
         try:
+            now = time.monotonic()
+            use_proxy = bool(Config.DISCORD_PROXY) and (now >= proxy_cooldown_until)
             active_proxy = Config.DISCORD_PROXY if use_proxy else None
             bot = KyokaBot(proxy=active_proxy)
             active_bot = bot
-            route_desc = "via proxy" if active_proxy else "direct connection"
+            route_desc = "via proxy" if active_proxy else ("direct connection (proxy cooling down)" if Config.DISCORD_PROXY else "direct connection")
             logger.info(f"Connecting {Config.BOT_NAME} in [{Config.ENVIRONMENT.upper()}] mode to Discord Gateway ({route_desc})...")
             async with bot:
                 await bot.start(Config.TOKEN)
-            # Clean exit: reset backoff
+            # Clean exit: reset backoff and proxy failure counts
             backoff_attempt = 0
+            proxy_consecutive_failures = 0
+            proxy_cooldown_until = 0.0
             await asyncio.sleep(5)
 
         except discord.HTTPException as e:
@@ -191,9 +197,18 @@ async def run_bot_loop() -> None:
             exc_type = type(e).__name__
             wait = _jittered_backoff(backoff_base, backoff_attempt)
             backoff_attempt = min(backoff_attempt + 1, 6)
+
             if Config.DISCORD_PROXY:
-                use_proxy = not use_proxy
-                next_route = "proxy" if use_proxy else "direct connection"
+                if use_proxy:
+                    proxy_consecutive_failures += 1
+                    if proxy_consecutive_failures >= 2:
+                        proxy_cooldown_until = time.monotonic() + 900.0  # 15m cooldown
+                        next_route = "direct connection (proxy cooling down)"
+                    else:
+                        proxy_cooldown_until = time.monotonic() + 60.0
+                        next_route = "direct connection"
+                else:
+                    next_route = "direct connection"
                 logger.warning(
                     f"Transient network error ({exc_type}): {e}. "
                     f"Retrying in {wait:.1f}s (attempt {backoff_attempt}, switching next attempt to {next_route})..."
@@ -213,8 +228,16 @@ async def run_bot_loop() -> None:
                 wait = _jittered_backoff(backoff_base, backoff_attempt)
                 backoff_attempt = min(backoff_attempt + 1, 6)
                 if Config.DISCORD_PROXY:
-                    use_proxy = not use_proxy
-                    next_route = "proxy" if use_proxy else "direct connection"
+                    if use_proxy:
+                        proxy_consecutive_failures += 1
+                        if proxy_consecutive_failures >= 2:
+                            proxy_cooldown_until = time.monotonic() + 900.0
+                            next_route = "direct connection (proxy cooling down)"
+                        else:
+                            proxy_cooldown_until = time.monotonic() + 60.0
+                            next_route = "direct connection"
+                    else:
+                        next_route = "direct connection"
                     logger.warning(
                         f"Network connection timeout ({exc_type}): {exc_str[:200]}. "
                         f"Retrying in {wait:.1f}s (attempt {backoff_attempt}, switching next attempt to {next_route})..."

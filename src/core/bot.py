@@ -166,6 +166,8 @@ class KyokaBot(commands.Bot):
         self.custom_help_mgr: CustomHelpManager = CustomHelpManager(self.db)
         from src.managers.voice_welcome_manager import VoiceWelcomeManager
         self.voice_welcome_mgr: VoiceWelcomeManager = VoiceWelcomeManager(self, self.db)
+        from src.managers.automod_manager import AutoModManager
+        self.automod_mgr: AutoModManager = AutoModManager(self.db, bot=self)
         from src.core.task_manager import TaskManager
         self.task_mgr: TaskManager = TaskManager(self)
         from src.core.feature_registry import FeatureRegistry

@@ -1,0 +1,13 @@
+{
+  "name": "kyoka-website",
+  "version": "3.0.0",
+  "description": "KYOKA 3.0 Discord Bot public website and web dashboard",
+  "private": true,
+  "scripts": {
+    "build": "echo \"Static assets ready for Cloudflare Pages\"",
+    "start": "npx serve ."
+  },
+  "keywords": ["discord", "bot", "dashboard", "kyoka", "aizen"],
+  "author": "KYOKA Team",
+  "license": "MIT"
+}

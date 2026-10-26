@@ -349,6 +349,29 @@ class PostgresDatabase(BaseDatabase):
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             );
             """,
+            # Guild AutoMod & Chat Guard configuration table
+            """
+            CREATE TABLE IF NOT EXISTS guild_automod (
+                guild_id BIGINT PRIMARY KEY,
+                enabled BOOLEAN DEFAULT FALSE,
+                anti_spam BOOLEAN DEFAULT TRUE,
+                spam_threshold INT DEFAULT 5,
+                anti_mentions BOOLEAN DEFAULT TRUE,
+                mention_threshold INT DEFAULT 4,
+                anti_invites BOOLEAN DEFAULT TRUE,
+                anti_badwords BOOLEAN DEFAULT FALSE,
+                badwords_list TEXT DEFAULT '',
+                anti_repeated BOOLEAN DEFAULT TRUE,
+                anti_caps BOOLEAN DEFAULT FALSE,
+                caps_threshold INT DEFAULT 70,
+                action VARCHAR(32) DEFAULT 'delete',
+                timeout_duration INT DEFAULT 60,
+                exempt_roles TEXT DEFAULT '',
+                exempt_channels TEXT DEFAULT '',
+                log_channel_id BIGINT,
+                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            );
+            """,
             # Guild Auto-Role table
             """
             CREATE TABLE IF NOT EXISTS guild_autoroles (

@@ -1,0 +1,120 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>KYOKA 3.0 — Complete Command Inventory</title>
+  <meta name="description" content="Browse and search the official 50 top-level slash commands and administrative cogs for KYOKA 3.0 Discord Bot." />
+  <link rel="icon" type="image/svg+xml" href="/assets/logo.svg" />
+  <link rel="stylesheet" href="/css/style.css" />
+</head>
+<body>
+  <!-- Navigation -->
+  <nav class="navbar">
+    <div class="nav-container">
+      <a href="/" class="nav-brand">
+        <img src="/assets/logo.svg" alt="KYOKA Logo" class="nav-logo" />
+        <span>KYOKA <span style="color: var(--purple-light);">3.0</span></span>
+      </a>
+
+      <button id="nav-toggle" class="nav-toggle" aria-label="Toggle navigation">
+        ☰
+      </button>
+
+      <ul id="nav-links" class="nav-links">
+        <li><a href="/" class="nav-link">Home</a></li>
+        <li><a href="/features.html" class="nav-link">Features</a></li>
+        <li><a href="/commands.html" class="nav-link active">Commands</a></li>
+        <li><a href="/premium.html" class="nav-link">Premium</a></li>
+        <li><a href="/changelog.html" class="nav-link">Changelog</a></li>
+        <li><a href="/support.html" class="nav-link">Support</a></li>
+        <li><a href="/dashboard.html" class="nav-link">Dashboard</a></li>
+      </ul>
+
+      <div class="nav-actions">
+        <div id="auth-nav-slot">
+          <a href="/dashboard.html" class="btn btn-discord btn-sm">
+            <span>Login with Discord</span>
+          </a>
+        </div>
+      </div>
+    </div>
+  </nav>
+
+  <!-- Commands Header -->
+  <header class="section" style="padding-top: 3.5rem; padding-bottom: 2rem; text-align: center;">
+    <div class="hero-badge">
+      <span>OFFICIAL COMMAND DIRECTORY</span>
+    </div>
+    <h1 class="section-title">
+      Every Command At Your <span class="gradient-text">Fingertips</span>
+    </h1>
+    <p class="section-subtitle" style="max-width: 680px; margin: 0 auto 2rem;">
+      Search official slash commands and prefix cogs. Click any command to copy its syntax directly to your clipboard.
+    </p>
+
+    <!-- Search Input -->
+    <div style="max-width: 540px; margin: 0 auto;">
+      <input type="text" id="command-search" class="form-input" style="width: 100%; padding: 0.85rem 1.25rem; font-size: 1rem; border-radius: var(--radius-md);" placeholder="Search commands, groups or parameters..." />
+    </div>
+
+    <!-- Category Filter Pills -->
+    <div id="category-pills" style="display: flex; justify-content: center; flex-wrap: wrap; gap: 0.5rem; margin-top: 1.5rem;"></div>
+  </header>
+
+  <!-- Commands Grid Container -->
+  <main class="section" style="padding-top: 0.5rem;">
+    <div id="commands-list" class="features-grid">
+      <!-- Populated dynamically via /js/commands.js from real bot inventory -->
+      <div style="grid-column: 1 / -1; text-align: center; padding: 4rem;">
+        <div class="server-icon-placeholder" style="width: 48px; height: 48px; margin: 0 auto 1rem; animation: loading 1.5s infinite;">⚡</div>
+        <p style="color: var(--text-dim);">Loading official command specifications...</p>
+      </div>
+    </div>
+  </main>
+
+  <!-- Footer -->
+  <footer class="footer">
+    <div class="footer-container">
+      <div class="footer-brand">
+        <h4>KYOKA 3.0</h4>
+        <p>The sovereign Discord management, security, and audio architecture. Crafted for elite communities.</p>
+      </div>
+      <div class="footer-col">
+        <h5>Navigation</h5>
+        <ul>
+          <li><a href="/">Home</a></li>
+          <li><a href="/features.html">Features</a></li>
+          <li><a href="/commands.html">Commands</a></li>
+          <li><a href="/premium.html">Premium</a></li>
+          <li><a href="/changelog.html">Changelog</a></li>
+          <li><a href="/dashboard.html">Web Dashboard</a></li>
+        </ul>
+      </div>
+      <div class="footer-col">
+        <h5>Resources</h5>
+        <ul>
+          <li><a href="/support.html">Community Support</a></li>
+          <li><a href="/support.html#faq">Setup FAQ</a></li>
+          <li><a href="https://discord.com" target="_blank">Discord API</a></li>
+        </ul>
+      </div>
+      <div class="footer-col">
+        <h5>Legal & Security</h5>
+        <ul>
+          <li><a href="/privacy.html">Privacy Policy</a></li>
+          <li><a href="/terms.html">Terms of Service</a></li>
+          <li><a href="/dashboard.html">OAuth2 Portal</a></li>
+        </ul>
+      </div>
+    </div>
+    <div class="footer-bottom">
+      <span>&copy; 2026 KYOKA 3.0 Project. All rights reserved.</span>
+      <span style="color: var(--purple-light);">Official 50-Slash Inventory</span>
+    </div>
+  </footer>
+
+  <script type="module" src="/js/app.js"></script>
+  <script type="module" src="/js/commands.js"></script>
+</body>
+</html>

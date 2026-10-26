@@ -1,0 +1,81 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>KYOKA 3.0 — Sovereign Owner Control Center</title>
+  <meta name="description" content="Dedicated administrative command center for the authoritative owner of KYOKA 3.0. Cluster metrics, audit logs, and subsystem health." />
+  <link rel="icon" type="image/svg+xml" href="/assets/logo.svg" />
+  <link rel="stylesheet" href="/css/style.css" />
+  <link rel="stylesheet" href="/css/dashboard.css" />
+  <link rel="stylesheet" href="/css/owner.css" />
+</head>
+<body class="owner-body">
+  <!-- Sovereign Header Bar -->
+  <header class="owner-header">
+    <div class="owner-header-container">
+      <div class="owner-brand">
+        <a href="/" class="nav-brand" style="text-decoration: none;">
+          <img src="/assets/logo.svg" alt="KYOKA" class="nav-logo" />
+          <span style="font-weight: 800; letter-spacing: 0.05em;">KYOKA <span style="color: var(--purple-light);">3.0</span></span>
+        </a>
+        <div class="owner-security-badge">
+          <span class="owner-pulse-dot"></span>
+          <span>SOVEREIGN OWNER SUITE // RESTRICTED</span>
+        </div>
+      </div>
+
+      <div class="owner-header-actions">
+        <div id="owner-session-slot">
+          <!-- Populated by owner.js: Owner Avatar + Authoritative ID pill -->
+        </div>
+        <a href="/dashboard.html" class="btn btn-outline btn-sm">
+          ← Server Dashboard
+        </a>
+      </div>
+    </div>
+  </header>
+
+  <!-- Main Owner App Container -->
+  <main class="owner-main-wrapper">
+    <div id="owner-app">
+      <!-- Loading State -->
+      <div style="text-align: center; padding: 6rem 1.5rem;">
+        <div class="server-icon-placeholder" style="width: 64px; height: 64px; margin: 0 auto 1.5rem; animation: loading 1.5s infinite; border-color: var(--purple-vibrant);">👑</div>
+        <h3 style="color: var(--purple-white); font-weight: 800; font-size: 1.5rem; margin-bottom: 0.5rem;">Authenticating Sovereign Clearance...</h3>
+        <p style="color: var(--text-dim); font-size: 0.95rem;">Verifying authoritative Discord identity against server-side security registry...</p>
+      </div>
+    </div>
+  </main>
+
+  <!-- Dangerous Action Confirmation Modal -->
+  <div id="owner-modal-backdrop" class="owner-modal-backdrop" style="display: none;">
+    <div class="owner-modal-box">
+      <div class="owner-modal-header">
+        <h3 id="owner-modal-title">Confirm Administrative Operation</h3>
+        <button id="owner-modal-close" class="owner-modal-close-btn">&times;</button>
+      </div>
+      <div id="owner-modal-body" class="owner-modal-body">
+        <!-- Injected dynamically -->
+      </div>
+      <div class="owner-modal-actions">
+        <button id="owner-modal-cancel" class="btn btn-outline btn-sm">Cancel</button>
+        <button id="owner-modal-confirm" class="btn btn-primary btn-sm" style="background: var(--purple-vibrant);">Confirm Action</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Toast Container -->
+  <div id="toast-container" class="toast-container"></div>
+
+  <!-- Polished Footer -->
+  <footer class="footer" style="margin-top: auto; border-top: 1px solid rgba(168, 85, 247, 0.15);">
+    <div class="footer-bottom" style="border-top: none; padding-top: 0;">
+      <span>KYOKA 3.0 Sovereign Owner Suite • Restrictive Access Policy</span>
+      <span style="color: var(--purple-light);">Fail-Closed Architecture: OWNER_ID 1505515188991033409</span>
+    </div>
+  </footer>
+
+  <script type="module" src="/js/owner.js"></script>
+</body>
+</html>

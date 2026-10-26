@@ -460,7 +460,7 @@ class Music(commands.Cog):
         bot_member = ctx.guild.me or (ctx.guild.get_member(self.bot.user.id) if (self.bot and self.bot.user) else None)
         bot_voice_state = getattr(bot_member, "voice", None) if bot_member else None
         bot_vc = getattr(bot_voice_state, "channel", None) if bot_voice_state else None
-        if bot_vc and getattr(bot_vc, "id", None):
+        if bot_vc and getattr(bot_vc, "id", None) and target_channel and getattr(target_channel, "id", None):
             if bot_vc.id == target_channel.id:
                 container = KyroContainer(accent_color=None)
                 container.add_text(f"**Already connected to** {target_channel.mention}.")

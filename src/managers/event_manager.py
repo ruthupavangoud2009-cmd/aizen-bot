@@ -14,14 +14,27 @@ class EventManager:
 
     def __init__(self, db: PostgresDatabase) -> None:
         self.db = db
-        # Cache keyed by (guild_id, event_type) -> config dict
-        self._cache: dict[tuple[int, str], dict[str, Any]] = {}
+        # Cache keyed by (guild_id, event_type) -> (monotonic_timestamp, config dict)
+        self._cache: dict[tuple[int, str], tuple[float, dict[str, Any]]] = {}
+
+    def invalidate_cache(self, guild_id: int, event_type: str | None = None) -> None:
+        """Invalidate cached event configuration for immediate reloading."""
+        if event_type:
+            self._cache.pop((guild_id, event_type.lower()), None)
+        else:
+            to_remove = [k for k in self._cache if k[0] == guild_id]
+            for k in to_remove:
+                self._cache.pop(k, None)
 
     async def get_event_config(self, guild_id: int, event_type: str) -> dict[str, Any] | None:
-        """Fetch event configuration from memory cache or database."""
+        """Fetch event configuration from memory cache (with 15s TTL) or database."""
         cache_key = (guild_id, event_type.lower())
+        import time
+        now = time.monotonic()
         if cache_key in self._cache:
-            return self._cache[cache_key]
+            cached_time, cached_data = self._cache[cache_key]
+            if now - cached_time < 15.0:
+                return cached_data
 
         query = """
             SELECT guild_id, event_type, channel_id, embed_name, message_content,
@@ -32,7 +45,7 @@ class EventManager:
         row = await self.db.fetch_one(query, guild_id, event_type.lower())
         if row:
             data = dict(row)
-            self._cache[cache_key] = data
+            self._cache[cache_key] = (now, data)
             return data
         return None
 
@@ -75,7 +88,8 @@ class EventManager:
                 dm_enabled,
                 dm_embed_name,
             )
-            self._cache[(guild_id, event_type)] = {
+            import time
+            self._cache[(guild_id, event_type)] = (time.monotonic(), {
                 "guild_id": guild_id,
                 "event_type": event_type,
                 "channel_id": channel_id,
@@ -84,7 +98,7 @@ class EventManager:
                 "is_enabled": is_enabled,
                 "dm_enabled": dm_enabled,
                 "dm_embed_name": dm_embed_name,
-            }
+            })
             logger.info(f"Saved {event_type} event config for guild {guild_id} (embed: '{embed_name}', channel: {channel_id})")
             return True
         except Exception as e:
@@ -106,8 +120,9 @@ class EventManager:
         """
         try:
             await self.db.execute(query, new_state, guild_id, event_type)
+            import time
             config["is_enabled"] = new_state
-            self._cache[(guild_id, event_type)] = config
+            self._cache[(guild_id, event_type)] = (time.monotonic(), config)
             return new_state
         except Exception as e:
             logger.error(f"Failed to toggle {event_type} for guild {guild_id}: {e}", exc_info=e)
@@ -119,7 +134,7 @@ class EventManager:
         query = "DELETE FROM server_events WHERE guild_id = $1 AND event_type = $2;"
         try:
             await self.db.execute(query, guild_id, event_type)
-            self._cache.pop((guild_id, event_type), None)
+            self.invalidate_cache(guild_id, event_type)
             logger.info(f"Deleted {event_type} config for guild {guild_id}")
             return True
         except Exception as e:
