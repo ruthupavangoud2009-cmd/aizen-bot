@@ -209,9 +209,10 @@ export async function logoutUser() {
  * Fetch all Discord servers manageable by the authenticated user
  */
 export async function fetchGuilds(forceRefresh = false) {
-  const query = forceRefresh ? '?refresh=1' : '';
+  const query = forceRefresh ? '?refresh=1&installed_only=1' : '?installed_only=1';
   const res = await apiFetch(`/guilds${query}`);
-  return res.guilds || [];
+  const guilds = Array.isArray(res?.guilds) ? res.guilds : [];
+  return guilds.filter(g => (g.can_manage && g.bot_installed) || g.status === 'unavailable');
 }
 
 /**

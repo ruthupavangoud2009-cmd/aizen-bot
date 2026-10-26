@@ -220,15 +220,20 @@ function renderServerSelector(container) {
       <div class="server-selector-header">
         <div class="server-selector-title">
           <h2>Select a Server</h2>
-          <p>You can manage servers where you hold Administrator or Manage Server permissions.</p>
+          <p>Servers where you possess Administrator or Manage Server permissions and KYOKA is installed.</p>
         </div>
         <button id="retry-servers-empty-btn" class="btn btn-outline btn-sm">🔄 Refresh Server Scanner</button>
       </div>
       <div class="login-hero-card" style="padding: 3rem 2rem;">
-        <h3 style="color: var(--purple-white); margin-bottom: 0.75rem;">No Manageable Servers Detected</h3>
-        <p style="color: var(--text-muted); margin-bottom: 1.5rem;">We checked your Discord account and didn't find any servers where you possess Manage Server or Administrator privileges.</p>
+        <h3 style="color: var(--purple-white); margin-bottom: 0.75rem;">No Active KYOKA Servers Detected</h3>
+        <p style="color: var(--text-muted); margin-bottom: 1.5rem; max-width: 520px; margin-left: auto; margin-right: auto; line-height: 1.6;">
+          To configure a server in this dashboard, you must hold <strong>Administrator</strong> or <strong>Manage Server</strong> permissions and <strong>KYOKA</strong> must be invited to that server.
+        </p>
         <div style="display: flex; gap: 0.75rem; justify-content: center; flex-wrap: wrap;">
-          <button id="retry-scan-hero-btn" class="btn btn-primary">⚡ Re-Scan Discord Account</button>
+          <button id="retry-scan-hero-btn" class="btn btn-primary">⚡ Refresh Server Scanner</button>
+          <a href="https://discord.com/oauth2/authorize?client_id=1562505487214321714&permissions=8&scope=bot%20applications.commands" target="_blank" class="btn btn-outline" style="border-color: var(--purple-primary); color: var(--purple-pastel);">
+            ➕ Invite KYOKA to Server
+          </a>
           <a href="https://discord.com/channels/@me" target="_blank" class="btn btn-outline">
             Open Discord
           </a>

@@ -249,4 +249,13 @@ class TestAuditFixesRecovery(AioHTTPTestCase):
         manageable_ids = [g["id"] for g in guilds if g["can_manage"]]
         assert "1001" in manageable_ids
         assert "1002" in manageable_ids
-        assert "1003" not in manageable_ids
+
+        # Test installed_only=1 strict intersection
+        self.db.known_bot_guilds = {1001}
+        resp_installed = await self.client.get("/api/guilds?installed_only=1", cookies=cookies)
+        assert resp_installed.status == 200
+        installed_data = await resp_installed.json()
+        installed_ids = [g["id"] for g in installed_data["guilds"]]
+        assert "1001" in installed_ids
+        assert "1002" not in installed_ids
+        assert "1003" not in installed_ids

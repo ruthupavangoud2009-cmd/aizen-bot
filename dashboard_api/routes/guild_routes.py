@@ -154,6 +154,13 @@ async def handle_list_guilds(request: web.Request) -> web.Response:
             "invite_url": invite_url,
         })
 
+    installed_only = request.query.get("installed_only", "").lower() in ("1", "true", "yes")
+    if installed_only:
+        manageable = [
+            g for g in manageable
+            if (g["can_manage"] and g["bot_installed"]) or g["status"] == "unavailable"
+        ]
+
     return web.json_response({
         "guilds": manageable,
         "verification_status": "verified" if bot_check_ok else "unavailable"
