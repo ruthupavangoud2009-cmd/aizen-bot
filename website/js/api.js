@@ -462,6 +462,62 @@ export async function redeemGuildPremiumKey(guildId, key) {
 }
 
 /**
+ * --- Support Ticket System Client Interfaces ---
+ */
+export async function createTicket(category, subject, description, guildId = null) {
+  return await apiFetch('/tickets', {
+    method: 'POST',
+    body: { category, subject, description, guild_id: guildId },
+  });
+}
+
+export async function fetchTickets(status = null, userId = null) {
+  const params = new URLSearchParams();
+  if (status) params.set('status', status);
+  if (userId) params.set('user_id', userId);
+  const q = params.toString() ? '?' + params.toString() : '';
+  return await apiFetch(`/tickets${q}`);
+}
+
+export async function fetchTicketDetails(ticketId) {
+  return await apiFetch(`/tickets/${ticketId}`);
+}
+
+export async function replyTicket(ticketId, content) {
+  return await apiFetch(`/tickets/${ticketId}/reply`, {
+    method: 'POST',
+    body: { content },
+  });
+}
+
+export async function updateTicketStatus(ticketId, status) {
+  return await apiFetch(`/tickets/${ticketId}/status`, {
+    method: 'POST',
+    body: { status },
+  });
+}
+
+export async function claimTicket(ticketId) {
+  return await apiFetch(`/tickets/${ticketId}/claim`, {
+    method: 'POST',
+  });
+}
+
+/**
+ * --- Website Staff Management Client Interfaces ---
+ */
+export async function fetchStaffList() {
+  return await apiFetch('/staff/list');
+}
+
+export async function manageStaff(action, userId, username = '', roleLevel = 'support') {
+  return await apiFetch('/staff/manage', {
+    method: 'POST',
+    body: { action, user_id: userId, username, role_level: roleLevel },
+  });
+}
+
+/**
  * --- Web Audio Micro-Sound Effects Engine (Synthesized, OFF by default) ---
  */
 class SoundEngine {

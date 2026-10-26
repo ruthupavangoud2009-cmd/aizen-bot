@@ -1,0 +1,285 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>KYOKA 3.0 — Support Tickets & Discord Synchronized Helpdesk</title>
+  <meta name="description" content="Open and track official KYOKA 3.0 support tickets directly on the web, synchronized in real time with our Discord staff threads." />
+  <link rel="icon" type="image/svg+xml" href="/assets/logo.svg" />
+  <link rel="stylesheet" href="/css/style.css" />
+  <link rel="stylesheet" href="/css/dashboard.css" />
+  <style>
+    .ticket-container {
+      max-width: 1100px;
+      margin: 2rem auto;
+      padding: 0 1.5rem;
+      width: 100%;
+    }
+    .ticket-stats-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+      gap: 1.25rem;
+      margin-bottom: 2rem;
+    }
+    .ticket-stat-card {
+      background: var(--bg-card);
+      border: 1px solid var(--border-subtle);
+      border-radius: var(--radius-md);
+      padding: 1.25rem 1.5rem;
+      backdrop-filter: blur(12px);
+    }
+    .ticket-stat-val {
+      font-size: 1.85rem;
+      font-weight: 800;
+      color: var(--purple-light);
+      margin-top: 0.35rem;
+    }
+    .ticket-header-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      flex-wrap: wrap;
+      gap: 1rem;
+      margin-bottom: 1.5rem;
+    }
+    .ticket-card {
+      background: var(--bg-card);
+      border: 1px solid var(--border-subtle);
+      border-radius: var(--radius-md);
+      padding: 1.25rem 1.5rem;
+      margin-bottom: 1rem;
+      transition: var(--transition);
+      cursor: pointer;
+    }
+    .ticket-card:hover {
+      border-color: var(--border-active);
+      transform: translateY(-2px);
+      box-shadow: 0 8px 24px rgba(124, 58, 237, 0.2);
+    }
+    .badge {
+      display: inline-block;
+      padding: 0.2rem 0.65rem;
+      border-radius: var(--radius-full);
+      font-size: 0.75rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+    }
+    .badge-open {
+      background: rgba(16, 185, 129, 0.2);
+      color: #34D399;
+      border: 1px solid rgba(16, 185, 129, 0.4);
+    }
+    .badge-closed {
+      background: rgba(239, 68, 68, 0.2);
+      color: #F87171;
+      border: 1px solid rgba(239, 68, 68, 0.4);
+    }
+    .badge-cat {
+      background: rgba(124, 58, 237, 0.25);
+      color: var(--purple-pastel);
+      border: 1px solid rgba(168, 85, 247, 0.3);
+    }
+    .chat-bubble {
+      padding: 1rem 1.25rem;
+      border-radius: var(--radius-md);
+      margin-bottom: 1rem;
+      max-width: 85%;
+      line-height: 1.5;
+    }
+    .bubble-user {
+      background: rgba(28, 15, 53, 0.8);
+      border: 1px solid var(--border-subtle);
+      margin-right: auto;
+    }
+    .bubble-staff {
+      background: rgba(88, 28, 135, 0.5);
+      border: 1px solid var(--border-active);
+      margin-left: auto;
+      box-shadow: 0 4px 16px rgba(147, 51, 234, 0.2);
+    }
+    .bubble-system {
+      background: rgba(10, 4, 20, 0.6);
+      border: 1px dashed var(--border-subtle);
+      margin: 1rem auto;
+      text-align: center;
+      max-width: 90%;
+      font-size: 0.85rem;
+      color: var(--text-muted);
+    }
+    .ticket-modal-backdrop {
+      display: none;
+      position: fixed;
+      top: 0; left: 0; right: 0; bottom: 0;
+      background: rgba(5, 2, 10, 0.8);
+      backdrop-filter: blur(8px);
+      z-index: 2000;
+      align-items: center;
+      justify-content: center;
+      padding: 1rem;
+    }
+    .ticket-modal-backdrop.active {
+      display: flex;
+    }
+    .ticket-modal {
+      background: #0f071f;
+      border: 1px solid var(--border-active);
+      border-radius: var(--radius-lg);
+      max-width: 650px;
+      width: 100%;
+      padding: 2rem;
+      box-shadow: 0 20px 50px rgba(0, 0, 0, 0.9), 0 0 30px rgba(124, 58, 237, 0.3);
+    }
+    @media (max-width: 600px) {
+      .ticket-container {
+        padding: 0 0.75rem;
+      }
+      .ticket-modal {
+        padding: 1.25rem;
+      }
+      .chat-bubble {
+        max-width: 95%;
+      }
+    }
+  </style>
+</head>
+<body>
+  <!-- Ambient Aizen Spiritual Particles Canvas -->
+  <canvas id="aizen-particles-canvas"></canvas>
+
+  <!-- Navigation -->
+  <nav class="navbar">
+    <div class="nav-container">
+      <a href="/" class="nav-brand">
+        <img src="/assets/logo.svg" alt="KYOKA Logo" class="nav-logo" />
+        <span>KYOKA <span style="color: var(--purple-light);">3.0</span></span>
+      </a>
+
+      <button id="nav-toggle" class="nav-toggle" aria-label="Toggle navigation">
+        ☰
+      </button>
+
+      <ul id="nav-links" class="nav-links">
+        <li><a href="/" class="nav-link">Home</a></li>
+        <li><a href="/features.html" class="nav-link">Features</a></li>
+        <li><a href="/commands.html" class="nav-link">Commands</a></li>
+        <li><a href="/premium.html" class="nav-link">Premium</a></li>
+        <li><a href="/dashboard.html" class="nav-link">Dashboard</a></li>
+        <li><a href="/tickets.html" class="nav-link active">Tickets</a></li>
+        <li><a href="/staff.html" class="nav-link" id="nav-staff-link" style="display: none;">Staff</a></li>
+        <li><a href="/support.html" class="nav-link">Support</a></li>
+      </ul>
+
+      <div class="nav-actions">
+        <div id="auth-nav-slot">
+          <!-- Populated dynamically -->
+        </div>
+      </div>
+    </div>
+  </nav>
+
+  <!-- Main Ticket Helpdesk -->
+  <main class="ticket-container">
+    <!-- Header -->
+    <div class="ticket-header-row">
+      <div>
+        <h1 style="font-size: 2rem; font-weight: 800; color: var(--purple-white);">Support Tickets</h1>
+        <p style="color: var(--text-muted); font-size: 0.95rem;">
+          Open and manage official KYOKA 3.0 tickets synchronized with Discord staff threads.
+        </p>
+      </div>
+      <div>
+        <button id="btn-open-ticket-modal" class="btn btn-primary" style="min-height: 44px; display: inline-flex; align-items: center; gap: 0.5rem;">
+          <span>+</span> Open New Ticket
+        </button>
+      </div>
+    </div>
+
+    <!-- Quick Stats -->
+    <div class="ticket-stats-grid">
+      <div class="ticket-stat-card">
+        <div style="font-size: 0.85rem; color: var(--text-dim); text-transform: uppercase; font-weight: 700;">Open Tickets</div>
+        <div class="ticket-stat-val" id="stat-open-tickets">0</div>
+      </div>
+      <div class="ticket-stat-card">
+        <div style="font-size: 0.85rem; color: var(--text-dim); text-transform: uppercase; font-weight: 700;">Average Response</div>
+        <div class="ticket-stat-val">&lt; 15m</div>
+      </div>
+      <div class="ticket-stat-card">
+        <div style="font-size: 0.85rem; color: var(--text-dim); text-transform: uppercase; font-weight: 700;">Sync Engine</div>
+        <div class="ticket-stat-val" style="color: #34D399; font-size: 1.35rem;">🟢 Live Discord Sync</div>
+      </div>
+    </div>
+
+    <!-- Main Content Area: Tickets List or Active Ticket View -->
+    <div id="ticket-view-container">
+      <div style="text-align: center; padding: 4rem 1.5rem; color: var(--text-muted);">
+        <div class="server-icon-placeholder" style="width: 48px; height: 48px; margin: 0 auto 1rem; animation: loading 1.5s infinite;">🎫</div>
+        <p>Loading support tickets...</p>
+      </div>
+    </div>
+  </main>
+
+  <!-- Create Ticket Modal -->
+  <div id="ticket-modal-backdrop" class="ticket-modal-backdrop">
+    <div class="ticket-modal">
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem;">
+        <h3 style="font-size: 1.35rem; font-weight: 800; color: var(--purple-white);">Create Support Ticket</h3>
+        <button id="btn-close-modal" style="background: none; border: none; color: var(--text-muted); font-size: 1.5rem; cursor: pointer;">&times;</button>
+      </div>
+
+      <form id="create-ticket-form">
+        <div style="margin-bottom: 1.25rem;">
+          <label style="display: block; font-size: 0.85rem; font-weight: 700; color: var(--text-muted); margin-bottom: 0.4rem;">
+            Category
+          </label>
+          <select id="ticket-category" class="form-input" style="width: 100%; min-height: 44px; background: var(--bg-secondary); color: var(--text-main); border: 1px solid var(--border-subtle); border-radius: var(--radius-sm); padding: 0.5rem 0.75rem;">
+            <option value="Support">Support</option>
+            <option value="Bug Report">Bug Report</option>
+            <option value="Premium">Premium</option>
+            <option value="Purchase/Orders">Purchase/Orders</option>
+            <option value="Bot Issues">Bot Issues</option>
+            <option value="Website Issues">Website Issues</option>
+            <option value="Other">Other</option>
+          </select>
+        </div>
+
+        <div style="margin-bottom: 1.25rem;">
+          <label style="display: block; font-size: 0.85rem; font-weight: 700; color: var(--text-muted); margin-bottom: 0.4rem;">
+            Subject (3–200 characters)
+          </label>
+          <input type="text" id="ticket-subject" class="form-input" required minlength="3" maxlength="200" placeholder="e.g. Need assistance setting up Anti-Nuke" style="width: 100%; min-height: 44px; background: var(--bg-secondary); color: var(--text-main); border: 1px solid var(--border-subtle); border-radius: var(--radius-sm); padding: 0.5rem 0.75rem;" />
+        </div>
+
+        <div style="margin-bottom: 1.5rem;">
+          <label style="display: block; font-size: 0.85rem; font-weight: 700; color: var(--text-muted); margin-bottom: 0.4rem;">
+            Detailed Description (10–4000 characters)
+          </label>
+          <textarea id="ticket-description" required minlength="10" maxlength="4000" rows="5" placeholder="Explain your inquiry, issue, or request with relevant server IDs and details..." style="width: 100%; background: var(--bg-secondary); color: var(--text-main); border: 1px solid var(--border-subtle); border-radius: var(--radius-sm); padding: 0.75rem; font-family: inherit; resize: vertical;"></textarea>
+        </div>
+
+        <div style="display: flex; justify-content: flex-end; gap: 0.75rem;">
+          <button type="button" id="btn-cancel-modal" class="btn btn-outline" style="min-height: 44px;">Cancel</button>
+          <button type="submit" id="btn-submit-ticket" class="btn btn-primary" style="min-height: 44px;">Submit Ticket</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Toast Container -->
+  <div id="toast-container" class="toast-container"></div>
+
+  <!-- Footer -->
+  <footer class="footer">
+    <div class="footer-bottom" style="border-top: none; padding-top: 0;">
+      <span>&copy; 2026 KYOKA 3.0 Project. Official Support Ticket Portal.</span>
+      <span style="color: var(--purple-light);"><a href="https://discord.gg/7q4tn6dA6V" target="_blank" rel="noopener">Official Support Server</a></span>
+    </div>
+  </footer>
+
+  <script type="module" src="/js/particles.js"></script>
+  <script type="module" src="/js/audio.js"></script>
+  <script type="module" src="/js/app.js"></script>
+  <script type="module" src="/js/tickets.js"></script>
+</body>
+</html>

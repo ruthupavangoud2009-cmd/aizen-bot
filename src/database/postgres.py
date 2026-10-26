@@ -343,6 +343,50 @@ class PostgresDatabase(BaseDatabase):
                 total_tickets INT DEFAULT 0
             );
             """,
+            # Website Staff Management table
+            """
+            CREATE TABLE IF NOT EXISTS website_staff (
+                user_id BIGINT PRIMARY KEY,
+                username VARCHAR(64) NOT NULL,
+                role_level VARCHAR(32) NOT NULL DEFAULT 'support',
+                added_by BIGINT NOT NULL,
+                added_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            );
+            """,
+            # Website Support Tickets table
+            """
+            CREATE TABLE IF NOT EXISTS website_tickets (
+                ticket_id VARCHAR(32) PRIMARY KEY,
+                user_id BIGINT NOT NULL,
+                username VARCHAR(64) NOT NULL,
+                guild_id BIGINT,
+                category VARCHAR(64) NOT NULL,
+                subject VARCHAR(200) NOT NULL,
+                description TEXT NOT NULL,
+                status VARCHAR(20) DEFAULT 'open',
+                assigned_staff_id BIGINT,
+                assigned_staff_name VARCHAR(64),
+                discord_thread_id BIGINT,
+                discord_channel_id BIGINT,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                closed_at TIMESTAMP,
+                closed_by BIGINT
+            );
+            """,
+            # Website Support Ticket Messages table
+            """
+            CREATE TABLE IF NOT EXISTS website_ticket_messages (
+                id SERIAL PRIMARY KEY,
+                ticket_id VARCHAR(32) REFERENCES website_tickets(ticket_id) ON DELETE CASCADE,
+                sender_id BIGINT NOT NULL,
+                sender_name VARCHAR(64) NOT NULL,
+                sender_role VARCHAR(20) NOT NULL,
+                content TEXT NOT NULL,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            );
+            """,
             # User Music Taste & Listening History table
             """
             CREATE TABLE IF NOT EXISTS user_music_history (

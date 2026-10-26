@@ -245,14 +245,32 @@ async def handle_me(request: web.Request) -> web.Response:
 
     from src.security.owner import is_primary_owner
 
+    user_id = session_data.get("user_id")
+    is_owner = is_primary_owner(user_id)
+    is_staff = is_owner
+    staff_role = "admin" if is_owner else None
+
+    if not is_owner:
+        db = request.app.get("db")
+        if db and hasattr(db, "get_website_staff"):
+            try:
+                staff_info = await db.get_website_staff(int(user_id))
+                if staff_info:
+                    is_staff = True
+                    staff_role = staff_info.get("role_level", "support")
+            except Exception as e:
+                logger.debug(f"Staff permission check notice: {e}")
+
     # Return safe user profile (never expose access_token to client JS)
     safe_user = {
-        "id": session_data.get("user_id"),
+        "id": user_id,
         "username": session_data.get("username"),
         "discriminator": session_data.get("discriminator"),
         "avatar": session_data.get("avatar"),
         "avatar_url": session_data.get("avatar_url"),
-        "is_owner": is_primary_owner(session_data.get("user_id")),
+        "is_owner": is_owner,
+        "is_staff": is_staff,
+        "staff_role": staff_role,
     }
     return web.json_response({"authenticated": True, "user": safe_user})
 

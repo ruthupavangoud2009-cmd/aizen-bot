@@ -66,8 +66,12 @@ def test_botinfo_handles_missing_optional_state_and_omits_invalid_invite():
     assert "0 Members" in text
 
     view = BotInfoView("not-a-url")
-    assert [button.label for button in view.children] == ["Join Support Server"]
+    assert [button.label for button in view.children] == [
+        "Join Support Server",
+        "Official Website",
+    ]
     assert view.children[0].url == "https://discord.gg/7q4tn6dA6V"
+    assert view.children[1].url == "https://aizen-bot.pages.dev/"
 
 
 def test_botinfo_view_adds_only_a_valid_optional_invite():
@@ -76,5 +80,6 @@ def test_botinfo_view_adds_only_a_valid_optional_invite():
     assert [button.label for button in view.children] == [
         "Invite KYOKA",
         "Join Support Server",
+        "Official Website",
     ]
     assert Config.BOT_NAME in ("KYOKA 2.0", "KYOKA 3.0")

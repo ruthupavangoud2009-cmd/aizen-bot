@@ -17,6 +17,7 @@ from discord.ext import commands
 
 from src.core.bot import KyokaBot
 from src.core.context import CustomContext
+from src.security.owner import OWNER_ID, is_primary_owner
 from src.utils.containers import KyokaContainer, send_container_response, edit_container_response, build_container_payload
 from src.utils.transcript import generate_html_transcript
 from src.cogs.utility.embed_builder import ContainerDraft
@@ -1608,6 +1609,52 @@ class TicketSystem(commands.Cog):
             await ctx.send_success(f"Ticket category **{clean_name}** deleted.")
         else:
             await ctx.send_error(f"Category **{clean_name}** not found.")
+
+    @commands.Cog.listener()
+    async def on_message(self, message: discord.Message) -> None:
+        """Synchronize staff messages from Discord ticket threads into website tickets."""
+        if not message.guild or message.author.bot:
+            return
+
+        ch_name = getattr(message.channel, "name", "") or ""
+        # Check if thread name or channel matches ticket pattern
+        match = re.search(r"ticket-(TICK-[A-F0-9]+)", ch_name, re.IGNORECASE)
+        ticket_id = match.group(1).upper() if match else None
+
+        if not ticket_id and hasattr(self.bot, "db") and self.bot.db:
+            try:
+                row = await self.bot.db.fetch_one(
+                    "SELECT ticket_id FROM website_tickets WHERE discord_thread_id = $1;",
+                    message.channel.id,
+                )
+                if row:
+                    ticket_id = row["ticket_id"]
+            except Exception:
+                pass
+
+        if ticket_id and hasattr(self.bot, "db") and self.bot.db:
+            try:
+                is_admin = is_primary_owner(message.author.id) or message.author.guild_permissions.administrator
+                role_label = "admin" if is_admin else "staff"
+
+                await self.bot.db.execute(
+                    """
+                    INSERT INTO website_ticket_messages (ticket_id, sender_id, sender_name, sender_role, content, created_at)
+                    VALUES ($1, $2, $3, $4, $5, CURRENT_TIMESTAMP);
+                    """,
+                    ticket_id,
+                    message.author.id,
+                    str(message.author.display_name)[:64],
+                    role_label,
+                    message.clean_content[:4000],
+                )
+                await self.bot.db.execute(
+                    "UPDATE website_tickets SET updated_at = CURRENT_TIMESTAMP WHERE ticket_id = $1;",
+                    ticket_id,
+                )
+                logger.debug(f"Synced staff message from Discord thread {message.channel.id} to website ticket {ticket_id}.")
+            except Exception as e:
+                logger.debug(f"Notice syncing Discord message to website ticket: {e}")
 
 
 async def setup(bot: KyokaBot) -> None:

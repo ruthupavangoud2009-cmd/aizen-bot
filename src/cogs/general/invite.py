@@ -32,6 +32,13 @@ class InviteView(discord.ui.View):
                     url=support_url,
                 )
             )
+        self.add_item(
+            discord.ui.Button(
+                label="Official Website",
+                style=discord.ButtonStyle.link,
+                url="https://aizen-bot.pages.dev/",
+            )
+        )
 
 
 class Invite(commands.Cog):

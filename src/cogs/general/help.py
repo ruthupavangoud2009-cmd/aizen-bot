@@ -287,6 +287,14 @@ class HelpView(discord.ui.View):
                     row=2,
                 )
             )
+        self.add_item(
+            discord.ui.Button(
+                label="Official Website",
+                url="https://aizen-bot.pages.dev/",
+                style=discord.ButtonStyle.link,
+                row=2,
+            )
+        )
 
     async def interaction_check(self, interaction: discord.Interaction) -> bool:
         """Ensure only the command requester can control this session."""

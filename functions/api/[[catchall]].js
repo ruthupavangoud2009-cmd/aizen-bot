@@ -71,6 +71,17 @@ export async function onRequest(context) {
     }
   }
 
+  // Dedicated check: if login route reached catchall, redirect directly to Discord OAuth2
+  if (url.pathname === '/api/auth/login') {
+    const clientId = (env.DISCORD_CLIENT_ID || env.CLIENT_ID || '1562505487214321714').trim();
+    const redirectUri = (env.DISCORD_REDIRECT_URI || `${url.origin}/api/auth/callback`).trim();
+    const array = new Uint8Array(16);
+    crypto.getRandomValues(array);
+    const state = Array.from(array, b => b.toString(16).padStart(2, '0')).join('');
+    const discordAuthUrl = `https://discord.com/api/oauth2/authorize?client_id=${clientId}&redirect_uri=${encodeURIComponent(redirectUri)}&response_type=code&scope=identify%20guilds&state=${state}&prompt=consent`;
+    return Response.redirect(discordAuthUrl, 302);
+  }
+
   // Graceful standalone fallback when backend is not configured or in transition
   return new Response(
     JSON.stringify({

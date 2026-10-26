@@ -98,6 +98,38 @@ class BaseDatabaseAdapter:
     async def redeem_premium_key(self, guild_id: int, key: str, user_id: int) -> Dict[str, Any]:
         raise NotImplementedError
 
+    # Website Staff Management
+    async def get_website_staff(self, user_id: int) -> Optional[Dict[str, Any]]:
+        raise NotImplementedError
+
+    async def list_website_staff(self) -> List[Dict[str, Any]]:
+        raise NotImplementedError
+
+    async def add_website_staff(self, user_id: int, username: str, role_level: str, added_by: int) -> Dict[str, Any]:
+        raise NotImplementedError
+
+    async def remove_website_staff(self, user_id: int) -> bool:
+        raise NotImplementedError
+
+    # Website Tickets
+    async def create_website_ticket(self, user_id: int, username: str, category: str, subject: str, description: str, guild_id: Optional[int] = None) -> Dict[str, Any]:
+        raise NotImplementedError
+
+    async def get_website_ticket(self, ticket_id: str) -> Optional[Dict[str, Any]]:
+        raise NotImplementedError
+
+    async def list_website_tickets(self, user_id: Optional[int] = None, status: Optional[str] = None) -> List[Dict[str, Any]]:
+        raise NotImplementedError
+
+    async def update_website_ticket(self, ticket_id: str, updates: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+        raise NotImplementedError
+
+    async def add_website_ticket_message(self, ticket_id: str, sender_id: int, sender_name: str, sender_role: str, content: str) -> Dict[str, Any]:
+        raise NotImplementedError
+
+    async def get_website_ticket_messages(self, ticket_id: str) -> List[Dict[str, Any]]:
+        raise NotImplementedError
+
 
 def normalize_wizard_draft(draft: Dict[str, Any]) -> Dict[str, Any]:
     """Map setup wizard step draft structure into canonical guild_settings module dictionary."""
@@ -1610,6 +1642,314 @@ class PostgresDatabaseAdapter(BaseDatabaseAdapter):
             "database_vendor": "PostgreSQL / Supabase AWS",
         }
 
+    # Website Staff Management
+    async def get_website_staff(self, user_id: int) -> Optional[Dict[str, Any]]:
+        """Fetch staff permissions for user_id."""
+        if not self.pool:
+            return None
+        try:
+            async with self.pool.acquire() as conn:
+                row = await conn.fetchrow(
+                    "SELECT user_id, username, role_level, added_by, added_at, updated_at FROM website_staff WHERE user_id = $1;",
+                    user_id
+                )
+                if row:
+                    return {
+                        "user_id": str(row["user_id"]),
+                        "username": row["username"],
+                        "role_level": row["role_level"],
+                        "added_by": str(row["added_by"]),
+                        "added_at": row["added_at"].isoformat() if row["added_at"] else None,
+                        "updated_at": row["updated_at"].isoformat() if row["updated_at"] else None,
+                    }
+        except Exception as e:
+            logger.warning(f"Error querying website_staff: {e}")
+        return None
+
+    async def list_website_staff(self) -> List[Dict[str, Any]]:
+        """List all configured website staff members."""
+        if not self.pool:
+            return []
+        try:
+            async with self.pool.acquire() as conn:
+                rows = await conn.fetch(
+                    "SELECT user_id, username, role_level, added_by, added_at, updated_at FROM website_staff ORDER BY added_at ASC;"
+                )
+                return [
+                    {
+                        "user_id": str(r["user_id"]),
+                        "username": r["username"],
+                        "role_level": r["role_level"],
+                        "added_by": str(r["added_by"]),
+                        "added_at": r["added_at"].isoformat() if r["added_at"] else None,
+                        "updated_at": r["updated_at"].isoformat() if r["updated_at"] else None,
+                    }
+                    for r in rows
+                ]
+        except Exception as e:
+            logger.warning(f"Error listing website_staff: {e}")
+            return []
+
+    async def add_website_staff(self, user_id: int, username: str, role_level: str, added_by: int) -> Dict[str, Any]:
+        """Add or update website staff member."""
+        clean_role = role_level.lower().strip()
+        if clean_role not in ("support", "senior", "admin"):
+            clean_role = "support"
+        if not self.pool:
+            return {"user_id": str(user_id), "username": username, "role_level": clean_role, "added_by": str(added_by)}
+        async with self.pool.acquire() as conn:
+            await conn.execute(
+                """
+                INSERT INTO website_staff (user_id, username, role_level, added_by, added_at, updated_at)
+                VALUES ($1, $2, $3, $4, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+                ON CONFLICT (user_id) DO UPDATE SET
+                    username = EXCLUDED.username,
+                    role_level = EXCLUDED.role_level,
+                    added_by = EXCLUDED.added_by,
+                    updated_at = CURRENT_TIMESTAMP;
+                """,
+                user_id, username[:64], clean_role, added_by
+            )
+        await self.log_owner_audit(
+            actor_id=added_by,
+            action="webstaff_add",
+            target_id=user_id,
+            outcome="success",
+            details=f"Granted role '{clean_role}' to {username} ({user_id})"
+        )
+        return {"user_id": str(user_id), "username": username, "role_level": clean_role, "added_by": str(added_by)}
+
+    async def remove_website_staff(self, user_id: int) -> bool:
+        """Remove website staff member."""
+        if not self.pool:
+            return True
+        async with self.pool.acquire() as conn:
+            res = await conn.execute("DELETE FROM website_staff WHERE user_id = $1;", user_id)
+            deleted = "DELETE 0" not in res
+        return deleted
+
+    # Website Tickets
+    async def create_website_ticket(
+        self,
+        user_id: int,
+        username: str,
+        category: str,
+        subject: str,
+        description: str,
+        guild_id: Optional[int] = None
+    ) -> Dict[str, Any]:
+        """Create a persistent website support ticket."""
+        import secrets
+        ticket_id = f"TICK-{secrets.token_hex(4).upper()}"
+        clean_cat = category.strip()[:64] or "Support"
+        clean_sub = subject.strip()[:200]
+        clean_desc = description.strip()
+
+        if self.pool:
+            async with self.pool.acquire() as conn:
+                await conn.execute(
+                    """
+                    INSERT INTO website_tickets (
+                        ticket_id, user_id, username, guild_id, category,
+                        subject, description, status, created_at, updated_at
+                    ) VALUES ($1, $2, $3, $4, $5, $6, $7, 'open', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP);
+                    """,
+                    ticket_id, user_id, username[:64], guild_id, clean_cat, clean_sub, clean_desc
+                )
+                await conn.execute(
+                    """
+                    INSERT INTO website_ticket_messages (
+                        ticket_id, sender_id, sender_name, sender_role, content, created_at
+                    ) VALUES ($1, $2, $3, 'user', $4, CURRENT_TIMESTAMP);
+                    """,
+                    ticket_id, user_id, username[:64], clean_desc
+                )
+
+        return {
+            "ticket_id": ticket_id,
+            "user_id": str(user_id),
+            "username": username,
+            "guild_id": str(guild_id) if guild_id else None,
+            "category": clean_cat,
+            "subject": clean_sub,
+            "description": clean_desc,
+            "status": "open",
+            "assigned_staff_id": None,
+            "assigned_staff_name": None,
+            "discord_thread_id": None,
+            "created_at": dt.datetime.now(dt.timezone.utc).isoformat(),
+            "updated_at": dt.datetime.now(dt.timezone.utc).isoformat(),
+        }
+
+    async def get_website_ticket(self, ticket_id: str) -> Optional[Dict[str, Any]]:
+        """Fetch single website ticket by ID."""
+        if not self.pool:
+            return None
+        try:
+            async with self.pool.acquire() as conn:
+                row = await conn.fetchrow(
+                    "SELECT * FROM website_tickets WHERE ticket_id = $1;",
+                    ticket_id
+                )
+                if not row:
+                    return None
+                return {
+                    "ticket_id": row["ticket_id"],
+                    "user_id": str(row["user_id"]),
+                    "username": row["username"],
+                    "guild_id": str(row["guild_id"]) if row.get("guild_id") else None,
+                    "category": row["category"],
+                    "subject": row["subject"],
+                    "description": row["description"],
+                    "status": row["status"],
+                    "assigned_staff_id": str(row["assigned_staff_id"]) if row.get("assigned_staff_id") else None,
+                    "assigned_staff_name": row.get("assigned_staff_name"),
+                    "discord_thread_id": str(row["discord_thread_id"]) if row.get("discord_thread_id") else None,
+                    "created_at": row["created_at"].isoformat() if row.get("created_at") else None,
+                    "updated_at": row["updated_at"].isoformat() if row.get("updated_at") else None,
+                    "closed_at": row["closed_at"].isoformat() if row.get("closed_at") else None,
+                    "closed_by": str(row["closed_by"]) if row.get("closed_by") else None,
+                }
+        except Exception as e:
+            logger.warning(f"Error fetching website ticket {ticket_id}: {e}")
+            return None
+
+    async def list_website_tickets(self, user_id: Optional[int] = None, status: Optional[str] = None) -> List[Dict[str, Any]]:
+        """List website tickets filtered by user and/or status."""
+        if not self.pool:
+            return []
+        try:
+            async with self.pool.acquire() as conn:
+                conditions = []
+                params = []
+                if user_id is not None:
+                    params.append(user_id)
+                    conditions.append(f"user_id = ${len(params)}")
+                if status:
+                    params.append(status.lower().strip())
+                    conditions.append(f"status = ${len(params)}")
+
+                where_clause = f"WHERE {' AND '.join(conditions)}" if conditions else ""
+                sql = f"SELECT * FROM website_tickets {where_clause} ORDER BY updated_at DESC LIMIT 100;"
+                rows = await conn.fetch(sql, *params)
+                return [
+                    {
+                        "ticket_id": r["ticket_id"],
+                        "user_id": str(r["user_id"]),
+                        "username": r["username"],
+                        "guild_id": str(r["guild_id"]) if r.get("guild_id") else None,
+                        "category": r["category"],
+                        "subject": r["subject"],
+                        "description": r["description"],
+                        "status": r["status"],
+                        "assigned_staff_id": str(r["assigned_staff_id"]) if r.get("assigned_staff_id") else None,
+                        "assigned_staff_name": r.get("assigned_staff_name"),
+                        "discord_thread_id": str(r["discord_thread_id"]) if r.get("discord_thread_id") else None,
+                        "created_at": r["created_at"].isoformat() if r.get("created_at") else None,
+                        "updated_at": r["updated_at"].isoformat() if r.get("updated_at") else None,
+                        "closed_at": r["closed_at"].isoformat() if r.get("closed_at") else None,
+                        "closed_by": str(r["closed_by"]) if r.get("closed_by") else None,
+                    }
+                    for r in rows
+                ]
+        except Exception as e:
+            logger.warning(f"Error listing website tickets: {e}")
+            return []
+
+    async def update_website_ticket(self, ticket_id: str, updates: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+        """Update website ticket status, assignment, or thread ID."""
+        if not self.pool:
+            return None
+        allowed_fields = {"status", "assigned_staff_id", "assigned_staff_name", "discord_thread_id", "closed_at", "closed_by"}
+        set_clauses = ["updated_at = CURRENT_TIMESTAMP"]
+        params = [ticket_id]
+        for k, v in updates.items():
+            if k in allowed_fields:
+                params.append(v)
+                set_clauses.append(f"{k} = ${len(params)}")
+
+        async with self.pool.acquire() as conn:
+            sql = f"UPDATE website_tickets SET {', '.join(set_clauses)} WHERE ticket_id = $1 RETURNING *;"
+            row = await conn.fetchrow(sql, *params)
+            if not row:
+                return None
+            return {
+                "ticket_id": row["ticket_id"],
+                "user_id": str(row["user_id"]),
+                "username": row["username"],
+                "category": row["category"],
+                "subject": row["subject"],
+                "status": row["status"],
+                "assigned_staff_id": str(row["assigned_staff_id"]) if row.get("assigned_staff_id") else None,
+                "assigned_staff_name": row.get("assigned_staff_name"),
+                "discord_thread_id": str(row["discord_thread_id"]) if row.get("discord_thread_id") else None,
+                "updated_at": row["updated_at"].isoformat() if row.get("updated_at") else None,
+            }
+
+    async def add_website_ticket_message(
+        self,
+        ticket_id: str,
+        sender_id: int,
+        sender_name: str,
+        sender_role: str,
+        content: str
+    ) -> Dict[str, Any]:
+        """Add reply message to a ticket and bump updated_at."""
+        clean_content = content.strip()[:4000]
+        clean_role = sender_role.lower().strip()
+        if clean_role not in ("user", "staff", "admin", "system"):
+            clean_role = "user"
+
+        if self.pool:
+            async with self.pool.acquire() as conn:
+                await conn.execute(
+                    """
+                    INSERT INTO website_ticket_messages (
+                        ticket_id, sender_id, sender_name, sender_role, content, created_at
+                    ) VALUES ($1, $2, $3, $4, $5, CURRENT_TIMESTAMP);
+                    """,
+                    ticket_id, sender_id, sender_name[:64], clean_role, clean_content
+                )
+                await conn.execute(
+                    "UPDATE website_tickets SET updated_at = CURRENT_TIMESTAMP WHERE ticket_id = $1;",
+                    ticket_id
+                )
+
+        return {
+            "ticket_id": ticket_id,
+            "sender_id": str(sender_id),
+            "sender_name": sender_name,
+            "sender_role": clean_role,
+            "content": clean_content,
+            "created_at": dt.datetime.now(dt.timezone.utc).isoformat(),
+        }
+
+    async def get_website_ticket_messages(self, ticket_id: str) -> List[Dict[str, Any]]:
+        """Fetch all messages for a website ticket in chronological order."""
+        if not self.pool:
+            return []
+        try:
+            async with self.pool.acquire() as conn:
+                rows = await conn.fetch(
+                    "SELECT * FROM website_ticket_messages WHERE ticket_id = $1 ORDER BY id ASC;",
+                    ticket_id
+                )
+                return [
+                    {
+                        "id": r["id"],
+                        "ticket_id": r["ticket_id"],
+                        "sender_id": str(r["sender_id"]),
+                        "sender_name": r["sender_name"],
+                        "sender_role": r["sender_role"],
+                        "content": r["content"],
+                        "created_at": r["created_at"].isoformat() if r.get("created_at") else None,
+                    }
+                    for r in rows
+                ]
+        except Exception as e:
+            logger.warning(f"Error fetching ticket messages for {ticket_id}: {e}")
+            return []
+
 
 class MockDatabaseAdapter(BaseDatabaseAdapter):
     """In-memory mock database for unit tests and local frontend testing."""
@@ -1619,6 +1959,9 @@ class MockDatabaseAdapter(BaseDatabaseAdapter):
         self.known_bot_guilds: set[int] = {1001, 1002}
         self.audit_logs: List[Dict[str, Any]] = []
         self._mock_premiums: Dict[int, Dict[str, Any]] = {}
+        self._mock_staff: Dict[int, Dict[str, Any]] = {}
+        self._mock_tickets: Dict[str, Dict[str, Any]] = {}
+        self._mock_ticket_messages: Dict[str, List[Dict[str, Any]]] = {}
         self._start_time = dt.datetime.now(dt.timezone.utc)
         self.web_config: Dict[str, Any] = {
             "announcement_enabled": False,
@@ -2087,4 +2430,138 @@ class MockDatabaseAdapter(BaseDatabaseAdapter):
             "ssl_enabled": True,
             "database_vendor": "Mock In-Memory Adapter",
         }
+
+    # Website Staff Management
+    async def get_website_staff(self, user_id: int) -> Optional[Dict[str, Any]]:
+        return copy.deepcopy(self._mock_staff.get(user_id))
+
+    async def list_website_staff(self) -> List[Dict[str, Any]]:
+        return [copy.deepcopy(s) for s in self._mock_staff.values()]
+
+    async def add_website_staff(self, user_id: int, username: str, role_level: str, added_by: int) -> Dict[str, Any]:
+        clean_role = role_level.lower().strip()
+        if clean_role not in ("support", "senior", "admin"):
+            clean_role = "support"
+        entry = {
+            "user_id": str(user_id),
+            "username": username,
+            "role_level": clean_role,
+            "added_by": str(added_by),
+            "added_at": dt.datetime.now(dt.timezone.utc).isoformat(),
+            "updated_at": dt.datetime.now(dt.timezone.utc).isoformat(),
+        }
+        self._mock_staff[user_id] = entry
+        await self.log_owner_audit(
+            actor_id=added_by,
+            action="webstaff_add",
+            target_id=user_id,
+            outcome="success",
+            details=f"Granted role '{clean_role}' to {username} ({user_id})"
+        )
+        return copy.deepcopy(entry)
+
+    async def remove_website_staff(self, user_id: int) -> bool:
+        return self._mock_staff.pop(user_id, None) is not None
+
+    # Website Tickets
+    async def create_website_ticket(
+        self,
+        user_id: int,
+        username: str,
+        category: str,
+        subject: str,
+        description: str,
+        guild_id: Optional[int] = None
+    ) -> Dict[str, Any]:
+        import secrets
+        ticket_id = f"TICK-{secrets.token_hex(4).upper()}"
+        clean_cat = category.strip()[:64] or "Support"
+        clean_sub = subject.strip()[:200]
+        clean_desc = description.strip()
+        now_str = dt.datetime.now(dt.timezone.utc).isoformat()
+
+        ticket = {
+            "ticket_id": ticket_id,
+            "user_id": str(user_id),
+            "username": username,
+            "guild_id": str(guild_id) if guild_id else None,
+            "category": clean_cat,
+            "subject": clean_sub,
+            "description": clean_desc,
+            "status": "open",
+            "assigned_staff_id": None,
+            "assigned_staff_name": None,
+            "discord_thread_id": None,
+            "created_at": now_str,
+            "updated_at": now_str,
+            "closed_at": None,
+            "closed_by": None,
+        }
+        self._mock_tickets[ticket_id] = ticket
+        msg = {
+            "id": 1,
+            "ticket_id": ticket_id,
+            "sender_id": str(user_id),
+            "sender_name": username,
+            "sender_role": "user",
+            "content": clean_desc,
+            "created_at": now_str,
+        }
+        self._mock_ticket_messages[ticket_id] = [msg]
+        return copy.deepcopy(ticket)
+
+    async def get_website_ticket(self, ticket_id: str) -> Optional[Dict[str, Any]]:
+        t = self._mock_tickets.get(ticket_id)
+        return copy.deepcopy(t) if t else None
+
+    async def list_website_tickets(self, user_id: Optional[int] = None, status: Optional[str] = None) -> List[Dict[str, Any]]:
+        tickets = list(self._mock_tickets.values())
+        if user_id is not None:
+            tickets = [t for t in tickets if t["user_id"] == str(user_id)]
+        if status:
+            tickets = [t for t in tickets if t["status"] == status.lower().strip()]
+        tickets.sort(key=lambda x: x.get("updated_at", ""), reverse=True)
+        return copy.deepcopy(tickets)
+
+    async def update_website_ticket(self, ticket_id: str, updates: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+        t = self._mock_tickets.get(ticket_id)
+        if not t:
+            return None
+        allowed_fields = {"status", "assigned_staff_id", "assigned_staff_name", "discord_thread_id", "closed_at", "closed_by"}
+        for k, v in updates.items():
+            if k in allowed_fields:
+                t[k] = v
+        t["updated_at"] = dt.datetime.now(dt.timezone.utc).isoformat()
+        return copy.deepcopy(t)
+
+    async def add_website_ticket_message(
+        self,
+        ticket_id: str,
+        sender_id: int,
+        sender_name: str,
+        sender_role: str,
+        content: str
+    ) -> Dict[str, Any]:
+        clean_content = content.strip()[:4000]
+        clean_role = sender_role.lower().strip()
+        if clean_role not in ("user", "staff", "admin", "system"):
+            clean_role = "user"
+        now_str = dt.datetime.now(dt.timezone.utc).isoformat()
+        msg_list = self._mock_ticket_messages.setdefault(ticket_id, [])
+        msg = {
+            "id": len(msg_list) + 1,
+            "ticket_id": ticket_id,
+            "sender_id": str(sender_id),
+            "sender_name": sender_name,
+            "sender_role": clean_role,
+            "content": clean_content,
+            "created_at": now_str,
+        }
+        msg_list.append(msg)
+        if ticket_id in self._mock_tickets:
+            self._mock_tickets[ticket_id]["updated_at"] = now_str
+        return copy.deepcopy(msg)
+
+    async def get_website_ticket_messages(self, ticket_id: str) -> List[Dict[str, Any]]:
+        return copy.deepcopy(self._mock_ticket_messages.get(ticket_id, []))
 

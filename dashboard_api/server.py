@@ -15,6 +15,7 @@ from dashboard_api.routes.guild_routes import register_guild_routes
 from dashboard_api.routes.owner_routes import register_owner_routes
 from dashboard_api.routes.music_routes import register_music_routes
 from dashboard_api.routes.system_routes import register_system_routes
+from dashboard_api.routes.ticket_routes import register_ticket_routes
 
 logger = logging.getLogger("Kyoka.Dashboard.Server")
 
@@ -189,6 +190,7 @@ def create_app(
     register_music_routes(app)
     register_owner_routes(app)
     register_system_routes(app)
+    register_ticket_routes(app)
 
     # Mount frontend static files and pages for unified hosting and standalone deployment
     if serve_website:
@@ -217,6 +219,8 @@ def create_app(
                 ("terms", "terms.html"),
                 ("dashboard", "dashboard.html"),
                 ("owner", "owner.html"),
+                ("tickets", "tickets.html"),
+                ("staff", "staff.html"),
             ]
             for clean_route, filename in named_pages:
                 page_path = os.path.join(website_dir, filename)

@@ -46,6 +46,13 @@ class BotInfoView(discord.ui.View):
                 url=SUPPORT_URL,
             )
         )
+        self.add_item(
+            discord.ui.Button(
+                label="Official Website",
+                style=discord.ButtonStyle.link,
+                url="https://aizen-bot.pages.dev/",
+            )
+        )
 
 
 def build_botinfo_container(bot: KyokaBot, guild_id: int | None = None) -> KyokaContainer:
@@ -101,8 +108,9 @@ def build_botinfo_container(bot: KyokaBot, guild_id: int | None = None) -> Kyoka
         f"> **Python:** `{platform.python_version()}`\n\n"
         f"**Commands & Premium**\n"
         f"> **Prefix:** `{prefix}` • **Help:** `{prefix}help` or `/help`\n"
+        f"> **Web Dashboard:** [aizen-bot.pages.dev](https://aizen-bot.pages.dev/)\n"
         f"> **Premium:** {premium_status}\n\n"
-        f"-# Made by Aizen • [Join Support Server]({SUPPORT_URL})"
+        f"-# Made by Aizen • [Official Website](https://aizen-bot.pages.dev/) • [Support Server]({SUPPORT_URL})"
     )
     return container
 

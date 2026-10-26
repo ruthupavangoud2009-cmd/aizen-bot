@@ -19,6 +19,13 @@ export async function onRequest(context) {
     return Response.redirect(`${url.origin}/dashboard.html?error=missing_code`, 302);
   }
 
+  // Validate CSRF state against HttpOnly state cookie if present
+  const cookieHeader = request.headers.get('Cookie') || '';
+  const stateMatch = cookieHeader.match(/kyoka_oauth_state=([^;]+)/);
+  if (stateMatch && state && decodeURIComponent(stateMatch[1]) !== state) {
+    return Response.redirect(`${url.origin}/dashboard.html?error=invalid_state&error_description=CSRF+state+verification+failed`, 302);
+  }
+
   // 1. If backend URL is configured, forward callback to backend
   const backendBase = (
     env.BACKEND_URL ||
