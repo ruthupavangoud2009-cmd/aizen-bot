@@ -49,30 +49,36 @@ async def cors_middleware(request: web.Request, handler) -> web.Response:
     config: DashboardConfig = request.app["config"]
     origin = request.headers.get("Origin", "")
 
+    is_allowed = False
+    echo_origin = ""
+
+    if origin:
+        if config.is_origin_allowed(origin):
+            is_allowed = True
+            echo_origin = origin
+    elif not config.is_production:
+        is_allowed = True
+        echo_origin = "*"
+
     # Handle Preflight OPTIONS
     if request.method == "OPTIONS":
         res = web.Response(status=204)
-        if config.frontend_origin == "*" or (origin and origin == config.frontend_origin):
-            res.headers["Access-Control-Allow-Origin"] = origin if origin else "*"
-            res.headers["Access-Control-Allow-Credentials"] = "true"
-        elif config.frontend_origin:
-            res.headers["Access-Control-Allow-Origin"] = config.frontend_origin
-            res.headers["Access-Control-Allow-Credentials"] = "true"
-
-        res.headers["Access-Control-Allow-Methods"] = "GET, POST, PATCH, OPTIONS"
-        res.headers["Access-Control-Allow-Headers"] = "Content-Type, Authorization"
+        if is_allowed and echo_origin:
+            res.headers["Access-Control-Allow-Origin"] = echo_origin
+            if echo_origin != "*":
+                res.headers["Access-Control-Allow-Credentials"] = "true"
+        res.headers["Access-Control-Allow-Methods"] = "GET, POST, PATCH, PUT, DELETE, OPTIONS"
+        res.headers["Access-Control-Allow-Headers"] = "Content-Type, Authorization, X-Requested-With, Accept"
         res.headers["Access-Control-Max-Age"] = "86400"
         return res
 
     response = await handler(request)
 
     # Attach CORS to normal responses
-    if config.frontend_origin == "*" or (origin and origin == config.frontend_origin):
-        response.headers["Access-Control-Allow-Origin"] = origin if origin else "*"
-        response.headers["Access-Control-Allow-Credentials"] = "true"
-    elif config.frontend_origin:
-        response.headers["Access-Control-Allow-Origin"] = config.frontend_origin
-        response.headers["Access-Control-Allow-Credentials"] = "true"
+    if is_allowed and echo_origin:
+        response.headers["Access-Control-Allow-Origin"] = echo_origin
+        if echo_origin != "*":
+            response.headers["Access-Control-Allow-Credentials"] = "true"
 
     return response
 

@@ -51,6 +51,47 @@ class DashboardConfig:
     # Rate Limiting
     rate_limit_per_minute: int = 60
 
+    @property
+    def allowed_origins(self) -> List[str]:
+        """Return list of allowed frontend origins for CORS and OAuth redirects."""
+        origins = [
+            "https://aizen-bot.pages.dev",
+            "https://kyoka-dashboard-website.onrender.com",
+            "http://localhost:8080",
+            "http://127.0.0.1:8080",
+            "http://localhost:3000",
+            "http://localhost:5173",
+        ]
+        if self.frontend_origin and self.frontend_origin != "*":
+            for part in self.frontend_origin.split(","):
+                p = part.strip().rstrip("/")
+                if p and p not in origins:
+                    origins.append(p)
+        return origins
+
+    def is_origin_allowed(self, origin: str) -> bool:
+        """Check if an incoming origin header is authorized for CORS credentials."""
+        if not origin:
+            return False
+        if not self.is_production or self.frontend_origin == "*":
+            return True
+        norm = origin.strip().rstrip("/")
+        if norm in self.allowed_origins:
+            return True
+        # Allow Cloudflare Pages deployments like https://*.aizen-bot.pages.dev or *.pages.dev
+        if norm.endswith(".pages.dev") or norm.endswith(".onrender.com"):
+            return True
+        return False
+
+    @property
+    def primary_frontend_url(self) -> str:
+        """Return primary frontend root URL to redirect users after OAuth authorization."""
+        if self.frontend_origin and self.frontend_origin != "*":
+            first = self.frontend_origin.split(",")[0].strip().rstrip("/")
+            if first:
+                return first
+        return "https://aizen-bot.pages.dev" if self.is_production else "http://localhost:8080"
+
     def get_missing_oauth_vars(self) -> List[str]:
         """Return list of missing required environment variable names for Discord OAuth2."""
         missing = []
@@ -96,7 +137,7 @@ class DashboardConfig:
         )
         support_url = os.environ.get("SUPPORT_URL", "https://discord.gg/kyoka")
 
-        frontend_origin = os.environ.get("FRONTEND_ORIGIN", "*" if not is_prod else "https://kyoka-dashboard-website.onrender.com")
+        frontend_origin = os.environ.get("FRONTEND_ORIGIN", "https://aizen-bot.pages.dev,https://kyoka-dashboard-website.onrender.com" if is_prod else "*")
         database_url = os.environ.get("DATABASE_URL", "").strip()
 
         host = os.environ.get("HOST", "0.0.0.0")

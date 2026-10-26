@@ -694,3 +694,295 @@ a {
     width: 100%;
   }
 }
+
+/* ==========================================================================
+   KYOKA 3.0 — AIZEN SPIRITUAL PRESSURE PARTICLES CANVAS
+   ========================================================================== */
+
+#aizen-particles-canvas {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100vw;
+  height: 100vh;
+  pointer-events: none;
+  z-index: 0;
+}
+
+nav, header, main, footer, .dashboard-wrapper, .section {
+  position: relative;
+  z-index: 1;
+}
+
+/* ==========================================================================
+   KYOKA 3.0 — ATMOSPHERIC MUSIC PLAYER DOCK (Part 5)
+   ========================================================================== */
+
+.aizen-audio-dock {
+  position: fixed;
+  bottom: 1.5rem;
+  left: 1.5rem;
+  z-index: 9998;
+  display: flex;
+  align-items: center;
+  transition: var(--transition);
+}
+
+.audio-pill {
+  display: flex;
+  align-items: center;
+  gap: 0.85rem;
+  background: rgba(18, 9, 34, 0.88);
+  border: 1px solid var(--border-active);
+  border-radius: var(--radius-full);
+  padding: 0.5rem 1rem 0.5rem 0.6rem;
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  box-shadow: 0 8px 30px rgba(0, 0, 0, 0.6), 0 0 20px rgba(168, 85, 247, 0.25);
+  transition: var(--transition);
+}
+
+.audio-pill:hover {
+  border-color: var(--purple-glow);
+  box-shadow: 0 8px 35px rgba(0, 0, 0, 0.7), 0 0 25px rgba(168, 85, 247, 0.4);
+}
+
+.audio-ctrl-btn {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  border: 1px solid var(--border-subtle);
+  background: linear-gradient(135deg, var(--purple-primary) 0%, var(--purple-dark) 100%);
+  color: #FFFFFF;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  font-size: 0.85rem;
+  transition: var(--transition);
+  outline: none;
+}
+
+.audio-ctrl-btn:hover {
+  transform: scale(1.08);
+  border-color: var(--purple-light);
+  box-shadow: 0 0 15px rgba(168, 85, 247, 0.6);
+}
+
+.audio-ctrl-btn:focus-visible {
+  outline: 2px solid var(--purple-light);
+  outline-offset: 2px;
+}
+
+.audio-meta {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+  min-width: 140px;
+}
+
+.audio-title {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.audio-title-text {
+  font-size: 0.82rem;
+  font-weight: 700;
+  color: var(--purple-white);
+  letter-spacing: 0.02em;
+}
+
+.audio-status {
+  font-size: 0.72rem;
+  color: var(--text-dim);
+  transition: var(--transition);
+}
+
+.audio-eq {
+  display: flex;
+  align-items: flex-end;
+  gap: 2px;
+  height: 12px;
+}
+
+.eq-bar {
+  width: 2px;
+  height: 3px;
+  background: var(--purple-glow);
+  border-radius: 1px;
+  transition: height 0.15s ease;
+}
+
+.audio-eq.playing .eq-bar:nth-child(1) {
+  animation: eqBounce1 0.7s infinite alternate ease-in-out;
+}
+.audio-eq.playing .eq-bar:nth-child(2) {
+  animation: eqBounce2 0.55s infinite alternate ease-in-out 0.15s;
+}
+.audio-eq.playing .eq-bar:nth-child(3) {
+  animation: eqBounce3 0.65s infinite alternate ease-in-out 0.3s;
+}
+
+@keyframes eqBounce1 { from { height: 3px; } to { height: 12px; } }
+@keyframes eqBounce2 { from { height: 4px; } to { height: 10px; } }
+@keyframes eqBounce3 { from { height: 2px; } to { height: 11px; } }
+
+.audio-volume-group {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.audio-slider {
+  width: 65px;
+  height: 4px;
+  -webkit-appearance: none;
+  background: rgba(168, 85, 247, 0.25);
+  border-radius: 2px;
+  outline: none;
+  cursor: pointer;
+  accent-color: var(--purple-glow);
+}
+
+@media (max-width: 640px) {
+  .aizen-audio-dock {
+    bottom: 0.75rem;
+    left: 0.75rem;
+    right: 0.75rem;
+  }
+  .audio-pill {
+    width: 100%;
+    justify-content: space-between;
+  }
+  .audio-slider {
+    width: 50px;
+  }
+}
+
+/* ==========================================================================
+   AIZEN HERO VISUAL SHOWCASE & BRANDING (Part 3 & Part 4)
+   ========================================================================== */
+
+.hero-visual-container {
+  margin: 2.5rem auto 3.5rem;
+  max-width: 960px;
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.aizen-frame {
+  position: relative;
+  border-radius: var(--radius-lg);
+  padding: 8px;
+  background: linear-gradient(135deg, rgba(168, 85, 247, 0.4) 0%, rgba(20, 10, 42, 0.9) 50%, rgba(124, 58, 237, 0.35) 100%);
+  box-shadow: 0 0 50px rgba(124, 58, 237, 0.35), 0 20px 60px rgba(0, 0, 0, 0.85);
+  overflow: hidden;
+  width: 100%;
+  border: 1px solid var(--border-active);
+}
+
+.aizen-hero-img {
+  width: 100%;
+  max-height: 440px;
+  object-fit: cover;
+  object-position: center 25%;
+  border-radius: calc(var(--radius-lg) - 4px);
+  display: block;
+  filter: brightness(0.92) contrast(1.08);
+}
+
+.aizen-overlay-content {
+  position: absolute;
+  bottom: 1.5rem;
+  left: 1.5rem;
+  right: 1.5rem;
+  background: rgba(10, 4, 20, 0.85);
+  border: 1px solid var(--border-active);
+  border-radius: var(--radius-md);
+  padding: 1rem 1.5rem;
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+}
+
+.aizen-quote {
+  font-style: italic;
+  font-size: 0.95rem;
+  color: var(--purple-pastel);
+  max-width: 600px;
+  line-height: 1.4;
+  text-align: left;
+}
+
+.aizen-quote span {
+  display: block;
+  font-style: normal;
+  font-size: 0.75rem;
+  color: var(--text-dim);
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  margin-top: 0.35rem;
+}
+
+.kanji-watermark {
+  position: absolute;
+  top: 1rem;
+  right: 2rem;
+  font-size: 5rem;
+  font-weight: 900;
+  color: rgba(168, 85, 247, 0.12);
+  user-select: none;
+  pointer-events: none;
+  letter-spacing: 0.25em;
+  font-family: serif;
+  text-shadow: 0 0 20px rgba(168, 85, 247, 0.3);
+}
+
+/* Feature Banners */
+.feature-card-banner {
+  width: 100%;
+  height: 140px;
+  object-fit: cover;
+  border-radius: calc(var(--radius-md) - 4px);
+  margin-bottom: 1.25rem;
+  border: 1px solid rgba(168, 85, 247, 0.2);
+  display: block;
+  transition: var(--transition);
+}
+
+.feature-card:hover .feature-card-banner {
+  border-color: var(--purple-glow);
+  box-shadow: 0 0 15px rgba(168, 85, 247, 0.3);
+  transform: scale(1.02);
+}
+
+/* Reduced Motion Support (Part 6) */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+  #aizen-particles-canvas {
+    display: none !important;
+  }
+  .eq-bar {
+    animation: none !important;
+  }
+}
+
+.reduce-motion #aizen-particles-canvas {
+  display: none !important;
+}
+.reduce-motion .eq-bar {
+  animation: none !important;
+}

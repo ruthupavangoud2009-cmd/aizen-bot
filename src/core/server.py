@@ -28,7 +28,50 @@ class HealthServer:
         self._bot_getter = bot_getter
         self.app = web.Application()
         self.runner: web.AppRunner | None = None
+        self._setup_dashboard_integration()
         self._setup_routes()
+
+    def _setup_dashboard_integration(self) -> None:
+        """Mount Dashboard OAuth2, guilds, music, owner, and system routes onto HealthServer."""
+        try:
+            import aiohttp
+            from dashboard_api.config import DashboardConfig
+            from dashboard_api.database import PostgresDatabaseAdapter, MockDatabaseAdapter
+            from dashboard_api.rate_limiter import SlidingWindowRateLimiter
+            from dashboard_api.routes.auth_routes import register_auth_routes
+            from dashboard_api.routes.guild_routes import register_guild_routes
+            from dashboard_api.routes.music_routes import register_music_routes
+            from dashboard_api.routes.owner_routes import register_owner_routes
+            from dashboard_api.routes.system_routes import register_system_routes
+
+            cfg = DashboardConfig.from_env()
+            self.app["config"] = cfg
+            if "db" not in self.app:
+                if cfg.database_url:
+                    self.app["db"] = PostgresDatabaseAdapter(cfg.database_url)
+                else:
+                    self.app["db"] = MockDatabaseAdapter()
+            self.app["rate_limiter"] = SlidingWindowRateLimiter(default_limit=cfg.rate_limit_per_minute)
+            register_auth_routes(self.app)
+            register_guild_routes(self.app)
+            register_music_routes(self.app)
+            register_owner_routes(self.app)
+            register_system_routes(self.app)
+
+            async def _init_dashboard(app):
+                if "http_session" not in app or app["http_session"].closed:
+                    app["http_session"] = aiohttp.ClientSession()
+                db_inst = app.get("db")
+                if db_inst and hasattr(db_inst, "connect"):
+                    try:
+                        await db_inst.connect()
+                    except Exception as e:
+                        logger.warning(f"Dashboard database connect notice: {e}")
+            self.app.on_startup.append(_init_dashboard)
+
+            logger.info("Mounted complete Dashboard API suite onto HealthServer.")
+        except Exception as e:
+            logger.error(f"Dashboard routes mount error: {e}", exc_info=e)
 
     @property
     def bot(self) -> KyokaBot | None:
@@ -41,33 +84,78 @@ class HealthServer:
         self._bot = value
 
     def _setup_routes(self) -> None:
-        self.app.router.add_get("/", self._handle_home)
+        # Render health check path
         self.app.router.add_get("/health", self._handle_health)
-        self.app.router.add_get("/api/health", self._handle_health)
-        self.app.router.add_get("/api/stats", self._handle_api_stats)
-        self.app.router.add_get("/api/guilds", self._handle_api_guilds)
+
+        # Legacy / bot-specific routes
         self.app.router.add_get("/api/guilds/{id}", self._handle_api_guild)
         self.app.router.add_get("/api/guilds/{id}/antinuke", self._handle_api_antinuke_get)
         self.app.router.add_patch("/api/guilds/{id}/antinuke", self._handle_api_antinuke_patch)
         self.app.router.add_post("/api/guilds/{id}/test-event", self._handle_api_test_event)
-        self.app.router.add_get("/api/commands", self._handle_api_commands)
         self.app.router.add_get("/api/music/{id}", self._handle_api_music)
         self.app.router.add_post("/api/music/{id}/control", self._handle_api_music_control)
         self.app.router.add_post("/api/music/{id}/play", self._handle_api_music_play)
+
+        # Static website serving if website directory exists
+        website_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "website"))
+        if os.path.isdir(website_dir):
+            def make_page_handler(filepath: str):
+                async def page_handler(request: web.Request) -> web.Response:
+                    if os.path.isfile(filepath):
+                        return web.FileResponse(filepath)
+                    raise web.HTTPNotFound()
+                return page_handler
+
+            index_path = os.path.join(website_dir, "index.html")
+            self.app.router.add_get("/", make_page_handler(index_path))
+            self.app.router.add_get("/index.html", make_page_handler(index_path))
+
+            named_pages = [
+                ("features", "features.html"),
+                ("commands", "commands.html"),
+                ("premium", "premium.html"),
+                ("changelog", "changelog.html"),
+                ("support", "support.html"),
+                ("privacy", "privacy.html"),
+                ("terms", "terms.html"),
+                ("dashboard", "dashboard.html"),
+                ("owner", "owner.html"),
+            ]
+            for clean_route, filename in named_pages:
+                page_path = os.path.join(website_dir, filename)
+                handler = make_page_handler(page_path)
+                self.app.router.add_get(f"/{clean_route}", handler)
+                self.app.router.add_get(f"/{filename}", handler)
+
+            self.app.router.add_static("/assets", os.path.join(website_dir, "assets"), show_index=False)
+            self.app.router.add_static("/css", os.path.join(website_dir, "css"), show_index=False)
+            self.app.router.add_static("/js", os.path.join(website_dir, "js"), show_index=False)
+        else:
+            self.app.router.add_get("/", self._handle_home)
+
         # CORS preflight for website (localhost + prod)
-        self.app.router.add_options("/api/{tail:.*}", self._handle_options)
-        self.app.router.add_options("/health", self._handle_options)
+        self.app.router.add_options("/{tail:.*}", self._handle_options)
 
     async def _handle_options(self, request: web.Request) -> web.Response:
-        return web.Response(status=204, headers=self._cors_headers())
+        return web.Response(status=204, headers=self._cors_headers(request))
 
-    @staticmethod
-    def _cors_headers() -> dict:
-        return {
-            "Access-Control-Allow-Origin": "*",
-            "Access-Control-Allow-Methods": "GET, POST, PATCH, OPTIONS",
-            "Access-Control-Allow-Headers": "Content-Type, Authorization",
+    def _cors_headers(self, request: web.Request | None = None) -> dict:
+        origin = request.headers.get("Origin", "") if request else ""
+        allowed_origin = "*"
+        allow_cred = False
+        if origin:
+            norm = origin.strip().rstrip("/")
+            if norm.endswith(".pages.dev") or norm.endswith(".onrender.com") or "localhost" in norm or "127.0.0.1" in norm:
+                allowed_origin = origin
+                allow_cred = True
+        headers = {
+            "Access-Control-Allow-Origin": allowed_origin,
+            "Access-Control-Allow-Methods": "GET, POST, PATCH, PUT, DELETE, OPTIONS",
+            "Access-Control-Allow-Headers": "Content-Type, Authorization, X-Requested-With, Accept",
         }
+        if allow_cred:
+            headers["Access-Control-Allow-Credentials"] = "true"
+        return headers
 
     def _check_dashboard_auth(self, request: web.Request) -> bool:
         """Bearer-token guard for write endpoints (empty token = local dev, allow)."""
@@ -612,9 +700,16 @@ class HealthServer:
         logger.error("Could not bind HealthServer to any open port.")
 
     async def stop(self) -> None:
-        """Gracefully stop the web server."""
+        """Gracefully stop the web server and associated resources."""
         if hasattr(self, "_keepalive_task") and self._keepalive_task:
             self._keepalive_task.cancel()
+        if "http_session" in self.app and not self.app["http_session"].closed:
+            await self.app["http_session"].close()
+        if "db" in self.app and hasattr(self.app["db"], "close"):
+            try:
+                await self.app["db"].close()
+            except Exception:
+                pass
         if self.runner:
             await self.runner.cleanup()
             logger.info("Keep-Alive Health Server stopped.")

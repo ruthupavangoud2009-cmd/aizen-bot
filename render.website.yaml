@@ -29,7 +29,7 @@ services:
       - key: DISCORD_REDIRECT_URI
         value: https://kyoka-dashboard-website.onrender.com/api/auth/callback
       - key: FRONTEND_ORIGIN
-        value: https://kyoka-dashboard-website.onrender.com
+        value: https://aizen-bot.pages.dev,https://kyoka-dashboard-website.onrender.com
       - key: SESSION_COOKIE_NAME
         value: kyoka_session
       - key: RATE_LIMIT_PER_MINUTE

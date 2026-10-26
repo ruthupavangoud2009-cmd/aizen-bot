@@ -24,10 +24,24 @@ DISCORD_GUILDS_URL: str = f"{DISCORD_API_BASE}/users/@me/guilds"
 
 # --- OAuth2 State Nonce (CSRF Protection) ---
 
-def create_oauth_state(secret_key: str) -> str:
-    """Generate a tamper-proof timestamped OAuth state parameter with HMAC signature."""
+def create_oauth_state(secret_key: str, extra: str = "") -> str:
+    """Generate a tamper-proof timestamped OAuth state parameter with HMAC signature.
+    
+    If `extra` is provided (e.g. client origin or return URL), it is securely embedded
+    and signed. If `extra` is empty, returns canonical 3-part nonce.timestamp.sig.
+    """
     nonce = secrets.token_urlsafe(16)
     timestamp = str(int(time.time()))
+    if extra:
+        safe_extra = base64.urlsafe_b64encode(extra.encode("utf-8")).decode("utf-8").rstrip("=")
+        payload = f"{nonce}:{timestamp}:{safe_extra}"
+        signature = hmac.new(
+            secret_key.encode("utf-8"),
+            payload.encode("utf-8"),
+            hashlib.sha256
+        ).hexdigest()
+        return f"{nonce}.{timestamp}.{safe_extra}.{signature}"
+
     payload = f"{nonce}:{timestamp}"
     signature = hmac.new(
         secret_key.encode("utf-8"),
@@ -42,10 +56,16 @@ def verify_oauth_state(state: str, secret_key: str, max_age_seconds: int = 600) 
     if not state or not isinstance(state, str):
         return False
     parts = state.split(".")
-    if len(parts) != 3:
+    if len(parts) == 3:
+        nonce, timestamp_str, received_sig = parts
+        safe_extra = None
+        payload = f"{nonce}:{timestamp_str}"
+    elif len(parts) == 4:
+        nonce, timestamp_str, safe_extra, received_sig = parts
+        payload = f"{nonce}:{timestamp_str}:{safe_extra}"
+    else:
         return False
 
-    nonce, timestamp_str, received_sig = parts
     try:
         ts = int(timestamp_str)
     except ValueError:
@@ -58,7 +78,6 @@ def verify_oauth_state(state: str, secret_key: str, max_age_seconds: int = 600) 
         return False
 
     # Check HMAC
-    payload = f"{nonce}:{timestamp_str}"
     expected_sig = hmac.new(
         secret_key.encode("utf-8"),
         payload.encode("utf-8"),
@@ -66,6 +85,27 @@ def verify_oauth_state(state: str, secret_key: str, max_age_seconds: int = 600) 
     ).hexdigest()
 
     return hmac.compare_digest(expected_sig, received_sig)
+
+
+def extract_oauth_state_extra(state: str, secret_key: str, max_age_seconds: int = 600) -> Optional[str]:
+    """Verify state and extract the embedded extra string if present."""
+    if not verify_oauth_state(state, secret_key, max_age_seconds=max_age_seconds):
+        return None
+    parts = state.split(".")
+    if len(parts) != 4:
+        return None
+    safe_extra = parts[2]
+    if not safe_extra:
+        return None
+    try:
+        # Restore base64 padding
+        padding = 4 - (len(safe_extra) % 4)
+        if padding != 4:
+            safe_extra += "=" * padding
+        raw = base64.urlsafe_b64decode(safe_extra.encode("utf-8")).decode("utf-8")
+        return raw
+    except Exception:
+        return None
 
 
 # --- Tamper-Proof Signed Session Tokens ---

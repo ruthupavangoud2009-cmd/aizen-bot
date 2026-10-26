@@ -39,3 +39,13 @@ services:
         value: "2"
       - key: AI_MAX_CONCURRENT_REQUESTS
         value: "5"
+      - key: DISCORD_CLIENT_ID
+        sync: false
+      - key: DISCORD_CLIENT_SECRET
+        sync: false
+      - key: DISCORD_REDIRECT_URI
+        value: "https://kyoka-discord-bot.onrender.com/api/auth/callback"
+      - key: FRONTEND_ORIGIN
+        value: "https://aizen-bot.pages.dev,https://kyoka-discord-bot.onrender.com"
+      - key: DASHBOARD_SECRET_KEY
+        generateValue: true

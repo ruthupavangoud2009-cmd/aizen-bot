@@ -8,6 +8,7 @@ from aiohttp import web
 from dashboard_api.auth import (
     create_oauth_state,
     verify_oauth_state,
+    extract_oauth_state_extra,
     create_session_token,
     verify_session_token,
     exchange_discord_code,
@@ -81,7 +82,17 @@ async def handle_login(request: web.Request) -> web.Response:
 </html>"""
         return web.Response(text=html_content, content_type="text/html", status=500)
 
-    state = create_oauth_state(config.secret_key)
+    req_origin = request.query.get("origin", "").strip() or request.headers.get("Origin", "").strip()
+    if not req_origin:
+        referer = request.headers.get("Referer", "")
+        if referer:
+            from urllib.parse import urlparse
+            p = urlparse(referer)
+            if p.scheme and p.netloc:
+                req_origin = f"{p.scheme}://{p.netloc}"
+
+    extra = req_origin if (req_origin and config.is_origin_allowed(req_origin)) else ""
+    state = create_oauth_state(config.secret_key, extra=extra)
 
     params = {
         "client_id": config.client_id,
@@ -108,22 +119,34 @@ async def handle_callback(request: web.Request) -> web.Response:
         raise web.HTTPInternalServerError(reason=f"Discord OAuth2 credentials incomplete: missing {', '.join(missing)}.")
 
     query = request.query
+    state = query.get("state")
+
+    # Determine frontend redirect target from state if available
+    target_origin = config.primary_frontend_url.rstrip("/")
+    if state:
+        try:
+            extra_origin = extract_oauth_state_extra(state, config.secret_key, max_age_seconds=config.state_max_age_seconds)
+            if extra_origin and config.is_origin_allowed(extra_origin):
+                target_origin = extra_origin.rstrip("/")
+        except Exception:
+            pass
 
     error = query.get("error")
     if error:
         logger.warning(f"OAuth error returned by Discord: {error}")
-        target = f"/dashboard.html?error={error}"
+        target = f"{target_origin}/dashboard.html?error={error}"
         raise web.HTTPFound(location=target)
 
     code = query.get("code")
-    state = query.get("state")
 
     if not code or not state:
-        raise web.HTTPBadRequest(reason="Missing required code or state parameter.")
+        target = f"{target_origin}/dashboard.html?error=missing_code"
+        raise web.HTTPFound(location=target)
 
     # 1. Validate CSRF state signature and expiration
     if not verify_oauth_state(state, config.secret_key, max_age_seconds=config.state_max_age_seconds):
-        raise web.HTTPBadRequest(reason="Invalid or expired OAuth state parameter. Please restart the login process.")
+        target = f"{target_origin}/dashboard.html?error=invalid_state"
+        raise web.HTTPFound(location=target)
 
     http_session = request.app["http_session"]
 
@@ -174,11 +197,15 @@ async def handle_callback(request: web.Request) -> web.Response:
 
     session_token = create_session_token(session_payload, config.secret_key)
 
-    # 5. Redirect to frontend dashboard with secure HttpOnly cookie
-    # Use absolute URL so this works for both Render-only and Cloudflare+Render deployments.
-    # If FRONTEND_ORIGIN is the wildcard default ('*'), fall back to same-origin relative path.
-    _frontend_origin = config.frontend_origin.rstrip("/") if config.frontend_origin not in ("*", "") else ""
-    _redirect_target = f"{_frontend_origin}/dashboard.html" if _frontend_origin else "/dashboard.html"
+    # 5. Extract origin from state if client encoded it, or fall back to primary frontend url
+    extra_origin = extract_oauth_state_extra(state, config.secret_key, max_age_seconds=config.state_max_age_seconds)
+    if extra_origin and config.is_origin_allowed(extra_origin):
+        target_origin = extra_origin.rstrip("/")
+    else:
+        target_origin = config.primary_frontend_url.rstrip("/")
+
+    # Redirect to frontend dashboard with both secure cookie and #token in URL fragment for decoupling
+    _redirect_target = f"{target_origin}/dashboard.html#token={session_token}"
     response = web.HTTPFound(location=_redirect_target)
     response.set_cookie(
         name=config.session_cookie_name,
@@ -188,7 +215,6 @@ async def handle_callback(request: web.Request) -> web.Response:
         secure=config.is_production,
         # SameSite=None required for cross-origin deployments (Cloudflare Pages + Render).
         # SameSite=Lax is sufficient for same-origin (Render serves everything).
-        # SameSite=None requires Secure=True, which is always true in production.
         samesite="None" if config.is_production else "Lax",
         path="/"
     )
@@ -240,7 +266,14 @@ async def handle_logout(request: web.Request) -> web.Response:
 
 
 def register_auth_routes(app: web.Application) -> None:
+    # Canonical /api/auth routes
     app.router.add_get("/api/auth/login", handle_login)
     app.router.add_get("/api/auth/callback", handle_callback)
     app.router.add_get("/api/auth/me", handle_me)
     app.router.add_post("/api/auth/logout", handle_logout)
+
+    # Route aliases without /api prefix
+    app.router.add_get("/auth/login", handle_login)
+    app.router.add_get("/auth/callback", handle_callback)
+    app.router.add_get("/auth/me", handle_me)
+    app.router.add_post("/auth/logout", handle_logout)

@@ -112,6 +112,15 @@ async def handle_stats(request: web.Request) -> web.Response:
     """Public statistics for homepage showcase."""
     db = request.app["db"]
     stats = await db.get_public_stats()
+    try:
+        from src.main import get_current_bot
+        bot = get_current_bot()
+        if bot and hasattr(bot, "guilds") and bot.guilds:
+            stats["guilds"] = len(bot.guilds)
+            stats["users"] = sum(getattr(g, "member_count", 0) for g in bot.guilds)
+            stats["status"] = "online"
+    except Exception:
+        pass
     return web.json_response(stats)
 
 

@@ -73,13 +73,40 @@ async function initDashboard(forceRefresh = false) {
   const container = document.getElementById('dashboard-app');
   if (!container) return;
 
+  // Check URL query parameters for OAuth errors or messages
+  const urlParams = new URLSearchParams(window.location.search);
+  const oauthError = urlParams.get('error');
+  const oauthDesc = urlParams.get('error_description');
+  let authNotice = null;
+
+  if (oauthError) {
+    if (oauthError === 'access_denied') {
+      authNotice = 'Discord authorization was cancelled or declined.';
+    } else if (oauthError === 'invalid_state') {
+      authNotice = 'Authentication session timed out or state verification failed. Please try logging in again.';
+    } else if (oauthError === 'token_exchange_failed') {
+      authNotice = 'Failed to securely exchange authorization code with Discord. Please retry.';
+    } else if (oauthError === 'missing_code') {
+      authNotice = 'No authorization code returned from Discord.';
+    } else {
+      authNotice = oauthDesc || `Discord authentication error: ${oauthError}`;
+    }
+    showToast(authNotice, 'error');
+
+    // Clean up error params from browser URL without triggering reload
+    const cleanUrl = new URL(window.location.href);
+    cleanUrl.searchParams.delete('error');
+    cleanUrl.searchParams.delete('error_description');
+    window.history.replaceState({}, document.title, cleanUrl.pathname + (cleanUrl.searchParams.toString() ? '?' + cleanUrl.searchParams.toString() : ''));
+  }
+
   // 1. Verify Authentication
   if (!state.currentUser || forceRefresh) {
     renderLoading(container, 'Connecting to Discord OAuth2...');
     const auth = await getAuthStatus();
 
     if (!auth.authenticated || !auth.user) {
-      renderLoggedOutView(container);
+      renderLoggedOutView(container, authNotice);
       return;
     }
 
@@ -97,7 +124,6 @@ async function initDashboard(forceRefresh = false) {
   }
 
   // Check URL query for direct guild deep-link: /dashboard.html?guild_id=123
-  const urlParams = new URLSearchParams(window.location.search);
   const targetGid = urlParams.get('guild_id');
 
   if (targetGid && state.guilds.some(g => g.id === targetGid)) {
@@ -142,11 +168,22 @@ function renderLoading(container, message) {
   `;
 }
 
-function renderLoggedOutView(container) {
+function renderLoggedOutView(container, errorMessage = null) {
+  const errorBanner = errorMessage ? `
+    <div style="background: rgba(239, 68, 68, 0.15); border: 1px solid rgba(239, 68, 68, 0.4); border-radius: var(--radius-md); padding: 1rem 1.25rem; margin-bottom: 1.5rem; text-align: left; display: flex; align-items: flex-start; gap: 0.75rem;">
+      <span style="font-size: 1.25rem;">⚠️</span>
+      <div>
+        <strong style="color: #fca5a5; font-size: 0.95rem; display: block; margin-bottom: 0.25rem;">Authentication Notice</strong>
+        <span style="color: var(--text-main); font-size: 0.88rem; line-height: 1.4;">${errorMessage}</span>
+      </div>
+    </div>
+  ` : '';
+
   container.innerHTML = `
     <div class="login-hero-card">
       <img src="/assets/logo.svg" alt="KYOKA Logo" class="login-hero-icon" />
       <h2>Manage Your Discord Servers</h2>
+      ${errorBanner}
       <p>Log in with your Discord account to configure 14 modular server systems including anti-nuke defense, welcome events, tickets, neural AI personas, and high-fidelity audio.</p>
       <button id="login-discord-btn" class="btn btn-discord btn-lg">
         <svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor">
