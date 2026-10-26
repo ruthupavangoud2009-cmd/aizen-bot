@@ -123,7 +123,13 @@ class DashboardConfig:
         client_id = (os.environ.get("DISCORD_CLIENT_ID") or os.environ.get("CLIENT_ID") or "1562505487214321714").strip()
         # Canonical DISCORD_CLIENT_SECRET, fallback CLIENT_SECRET
         client_secret = (os.environ.get("DISCORD_CLIENT_SECRET") or os.environ.get("CLIENT_SECRET") or "").strip()
-        bot_token = os.environ.get("DISCORD_TOKEN", "").strip()
+        raw_bot_token = (
+            os.environ.get("DISCORD_TOKEN")
+            or os.environ.get("BOT_TOKEN")
+            or os.environ.get("TOKEN")
+            or ""
+        ).strip()
+        bot_token = raw_bot_token[4:].strip() if raw_bot_token.lower().startswith("bot ") else raw_bot_token
 
         # Canonical DISCORD_REDIRECT_URI, fallback REDIRECT_URI
         default_redirect = "https://aizen-bot.pages.dev/api/auth/callback" if is_prod else "http://localhost:8080/api/auth/callback"

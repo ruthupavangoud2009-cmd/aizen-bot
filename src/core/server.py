@@ -47,6 +47,9 @@ class HealthServer:
 
             cfg = DashboardConfig.from_env()
             self.app["config"] = cfg
+            self.app["bot_getter"] = self._bot_getter or (lambda: self.bot)
+            if self._bot:
+                self.app["bot"] = self._bot
             if "db" not in self.app:
                 if cfg.database_url:
                     self.app["db"] = PostgresDatabaseAdapter(cfg.database_url)

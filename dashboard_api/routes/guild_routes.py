@@ -84,6 +84,9 @@ async def handle_list_guilds(request: web.Request) -> web.Response:
     access_token = session_data.get("access_token")
 
     force_refresh = request.query.get("refresh", "").lower() in ("1", "true", "yes")
+    if force_refresh:
+        from dashboard_api.auth import clear_guild_caches
+        clear_guild_caches()
 
     if access_token == "mock_test_token" and "mock_guilds" in session_data:
         raw_guilds = session_data["mock_guilds"]
@@ -98,14 +101,37 @@ async def handle_list_guilds(request: web.Request) -> web.Response:
             logger.error(f"Failed to fetch user guilds: {e}")
             raise web.HTTPBadGateway(reason="Failed to fetch servers from Discord API.")
 
-        # Single verified bot guilds query (cached for 60s, O(1) comparison):
-        bot_guild_ids, bot_check_ok = await fetch_bot_guilds(config.bot_token, http_session, force_refresh=force_refresh)
+        # Authoritative live bot instance extraction
+        bot_inst = None
+        bot_getter = request.app.get("bot_getter")
+        if callable(bot_getter):
+            try:
+                bot_inst = bot_getter()
+            except Exception:
+                pass
+        if not bot_inst and "bot" in request.app:
+            bot_inst = request.app["bot"]
+        if not bot_inst:
+            try:
+                from src.main import get_current_bot
+                bot_inst = get_current_bot()
+            except Exception:
+                pass
+
+        # Verified bot guilds query (checks live bot instance first, then REST API with clean token)
+        bot_guild_ids, bot_check_ok = await fetch_bot_guilds(
+            config.bot_token,
+            http_session,
+            force_refresh=force_refresh,
+            bot_instance=bot_inst
+        )
 
         # Merge with database-known configured guilds if available
         try:
             if hasattr(db, "get_all_guild_ids"):
                 db_ids = await db.get_all_guild_ids()
-                bot_guild_ids = bot_guild_ids.union(db_ids)
+                if db_ids:
+                    bot_guild_ids = bot_guild_ids.union(db_ids)
         except Exception as e:
             logger.debug(f"Could not load auxiliary db guild ids: {e}")
 

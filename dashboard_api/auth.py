@@ -271,26 +271,36 @@ async def fetch_user_guilds(
 async def fetch_bot_guilds(
     bot_token: str,
     session: aiohttp.ClientSession,
-    force_refresh: bool = False
+    force_refresh: bool = False,
+    bot_instance: Any = None
 ) -> tuple[set[str], bool]:
     """Verify bot's real guild memberships via live bot instance or server-side Discord REST API.
     
     Returns (guild_ids_set, verification_succeeded).
-    Guarantees O(1) membership checks and eliminates blocking sequential database queries.
+    Guarantees exact Discord snowflake ID comparison and eliminates false "Add Bot" detection.
     """
     global _BOT_GUILDS_CACHE
     now = time.time()
 
-    # 1. Live Bot Memory Fast-Path: if KyokaBot is running in process, retrieve bot.guilds directly
-    try:
-        from src.main import get_current_bot
-        bot = get_current_bot()
-        if bot and hasattr(bot, "guilds") and bot.guilds:
-            live_guild_ids = {str(g.id) for g in bot.guilds}
-            _BOT_GUILDS_CACHE = (now, live_guild_ids)
-            return live_guild_ids, True
-    except Exception as e:
-        logger.debug(f"Live bot instance check bypassed: {e}")
+    # 1. Live Bot Memory Fast-Path: authoritative check from running KyokaBot
+    live_bot = bot_instance
+    if not live_bot:
+        try:
+            from src.main import get_current_bot
+            live_bot = get_current_bot()
+        except Exception as e:
+            logger.debug(f"get_current_bot check bypassed: {e}")
+
+    if live_bot and hasattr(live_bot, "guilds"):
+        try:
+            guilds = live_bot.guilds
+            is_ready = getattr(live_bot, "is_ready", lambda: True)()
+            if guilds or is_ready:
+                live_guild_ids = {str(getattr(g, "id", g)) for g in guilds}
+                _BOT_GUILDS_CACHE = (now, live_guild_ids)
+                return live_guild_ids, True
+        except Exception as e:
+            logger.warning(f"Error reading live bot guilds: {e}")
 
     # 2. Check in-memory cache
     if not force_refresh and _BOT_GUILDS_CACHE:
@@ -298,19 +308,35 @@ async def fetch_bot_guilds(
         if now - cached_time < BOT_GUILDS_CACHE_TTL:
             return cached_ids, True
 
-    if not bot_token:
-        logger.warning("No bot_token provided to fetch_bot_guilds; verification unavailable.")
+    # Sanitize bot token
+    clean_token = (bot_token or "").strip()
+    if clean_token.lower().startswith("bot "):
+        clean_token = clean_token[4:].strip()
+
+    if not clean_token:
+        # Fallback to process environment variables
+        import os
+        raw_env_token = (
+            os.environ.get("DISCORD_TOKEN")
+            or os.environ.get("BOT_TOKEN")
+            or os.environ.get("TOKEN")
+            or ""
+        ).strip()
+        clean_token = raw_env_token[4:].strip() if raw_env_token.lower().startswith("bot ") else raw_env_token
+
+    if not clean_token:
+        logger.warning("No valid bot token found for fetch_bot_guilds; verification unavailable.")
         if _BOT_GUILDS_CACHE:
             return _BOT_GUILDS_CACHE[1], False
         return set(), False
 
     # 3. Server-side Discord REST API with bot token
     guild_ids: set[str] = set()
-    headers = {"Authorization": f"Bot {bot_token}"}
+    headers = {"Authorization": f"Bot {clean_token}"}
     after_id: Optional[str] = None
 
     try:
-        for _ in range(5):  # Max 5 pages (1,000 guilds) with bounded execution
+        for _ in range(10):  # Up to 10 pages (2,000 guilds) with bounded execution
             url = f"{DISCORD_GUILDS_URL}?limit=200"
             if after_id:
                 url += f"&after={after_id}"
@@ -331,7 +357,8 @@ async def fetch_bot_guilds(
                         return _BOT_GUILDS_CACHE[1], True
                     return (guild_ids, False) if guild_ids else (set(), False)
                 else:
-                    logger.error(f"Discord API error fetching bot guilds: HTTP {resp.status}")
+                    error_body = await resp.text()
+                    logger.error(f"Discord API error fetching bot guilds (HTTP {resp.status}): {error_body}")
                     if _BOT_GUILDS_CACHE and (now - _BOT_GUILDS_CACHE[0] < BOT_GUILDS_STALE_TTL):
                         return _BOT_GUILDS_CACHE[1], True
                     return (guild_ids, False) if guild_ids else (set(), False)

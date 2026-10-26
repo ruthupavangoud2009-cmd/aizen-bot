@@ -96,26 +96,70 @@ export async function onRequest(context) {
     const rawGuilds = await discordRes.json();
     const clientId = (env.DISCORD_CLIENT_ID || env.CLIENT_ID || '1562505487214321714').trim();
 
+    // Edge bot guild verification if bot token is configured in Cloudflare environment
+    const rawBotToken = (env.DISCORD_TOKEN || env.BOT_TOKEN || env.TOKEN || '').trim();
+    const cleanBotToken = rawBotToken.toLowerCase().startsWith('bot ') ? rawBotToken.substring(4).trim() : rawBotToken;
+
+    let botGuildIds = new Set();
+    let botCheckOk = false;
+
+    if (cleanBotToken) {
+      try {
+        const botRes = await fetch('https://discord.com/api/users/@me/guilds?limit=200', {
+          headers: { Authorization: `Bot ${cleanBotToken}` },
+        });
+        if (botRes.ok) {
+          const botGuilds = await botRes.json();
+          if (Array.isArray(botGuilds)) {
+            botGuildIds = new Set(botGuilds.map(b => String(b.id)));
+            botCheckOk = true;
+          }
+        }
+      } catch (e) {
+        console.warn('Edge bot guilds query notice:', e);
+      }
+    }
+
+    const installedOnly = url.searchParams.get('installed_only') === '1' || url.searchParams.get('installed_only') === 'true';
+
     const manageable = rawGuilds.filter(g => {
       const perms = BigInt(g.permissions || 0);
       return Boolean(g.owner) || (perms & BigInt(0x8)) !== BigInt(0) || (perms & BigInt(0x20)) !== BigInt(0);
     }).map(g => {
-      const iconUrl = g.icon ? `https://cdn.discordapp.com/icons/${g.id}/${g.icon}.png?size=128` : null;
+      const gid = String(g.id);
+      const iconUrl = g.icon ? `https://cdn.discordapp.com/icons/${gid}/${g.icon}.png?size=128` : null;
+      let status = 'unavailable';
+      let isInstalled = false;
+
+      if (botCheckOk) {
+        if (botGuildIds.has(gid)) {
+          status = 'installed';
+          isInstalled = true;
+        } else {
+          status = 'not_installed';
+          isInstalled = false;
+        }
+      }
+
       return {
-        id: String(g.id),
+        id: gid,
         name: g.name || 'Unknown Server',
         icon: g.icon,
         icon_url: iconUrl,
         is_owner: Boolean(g.owner),
         can_manage: true,
-        bot_installed: true,
-        status: 'installed',
+        bot_installed: isInstalled,
+        status: status,
         permissions: String(g.permissions || '0'),
-        invite_url: `https://discord.com/oauth2/authorize?client_id=${clientId}&guild_id=${g.id}&permissions=8&scope=bot%20applications.commands`,
+        invite_url: `https://discord.com/oauth2/authorize?client_id=${clientId}&guild_id=${gid}&permissions=8&scope=bot%20applications.commands`,
       };
     });
 
-    return new Response(JSON.stringify({ guilds: manageable, total: manageable.length }), {
+    const finalGuilds = installedOnly
+      ? manageable.filter(g => (g.can_manage && g.bot_installed) || g.status === 'unavailable')
+      : manageable;
+
+    return new Response(JSON.stringify({ guilds: finalGuilds, total: finalGuilds.length, verification_status: botCheckOk ? 'verified' : 'unavailable' }), {
       status: 200,
       headers: {
         'Content-Type': 'application/json',

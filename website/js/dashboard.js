@@ -215,6 +215,13 @@ function renderServerSelector(container) {
   state.hasUnsavedChanges = false;
   history.replaceState(null, '', '/dashboard.html');
 
+  // Authoritative filter: strictly display servers where user has manage permissions AND KYOKA is installed,
+  // or where verification check failed (status === 'unavailable') so user can retry.
+  state.guilds = (state.guilds || []).filter(g => {
+    if (g.status === 'unavailable') return true;
+    return Boolean(g.can_manage && (g.status === 'installed' || g.bot_installed));
+  });
+
   if (state.guilds.length === 0) {
     container.innerHTML = `
       <div class="server-selector-header">
@@ -254,7 +261,7 @@ function renderServerSelector(container) {
       <div style="display: flex; gap: 0.75rem; align-items: center; flex-wrap: wrap;">
         <input type="text" id="server-filter" class="server-search-input" placeholder="Search servers..." />
         <button id="refresh-servers-btn" class="btn btn-outline btn-sm" title="Re-scan Discord servers and verify bot membership">
-          🔄 Refresh
+          🔄 Refresh Server Scanner
         </button>
       </div>
     </div>
@@ -277,18 +284,24 @@ function renderServerSelector(container) {
 }
 
 function renderGuildCards(guilds, grid, mainContainer) {
-  if (guilds.length === 0) {
-    grid.innerHTML = `<p style="grid-column: 1 / -1; text-align: center; color: var(--text-dim); padding: 2rem;">No matching servers found.</p>`;
+  // Authoritative filter: ONLY show servers with bot installed + manage permission, or verification failed
+  const displayGuilds = guilds.filter(g => {
+    if (g.status === 'unavailable') return true;
+    return Boolean(g.can_manage && (g.status === 'installed' || g.bot_installed));
+  });
+
+  if (displayGuilds.length === 0) {
+    grid.innerHTML = `<p style="grid-column: 1 / -1; text-align: center; color: var(--text-dim); padding: 2rem;">No installed servers found with your management permissions.</p>`;
     return;
   }
 
-  grid.innerHTML = guilds.map(g => {
+  grid.innerHTML = displayGuilds.map(g => {
     const initial = (g && g.name ? g.name.charAt(0) : 'S').toUpperCase();
     const iconHtml = g.icon_url
       ? `<img src="${g.icon_url}" alt="${g.name}" class="server-icon" />`
       : `<div class="server-icon-placeholder">${initial}</div>`;
 
-    const status = g.status || (g.bot_installed ? 'installed' : 'not_installed');
+    const status = g.status || (g.bot_installed ? 'installed' : 'unavailable');
 
     let statusBadge = '';
     let actionBtn = '';
@@ -297,32 +310,17 @@ function renderGuildCards(guilds, grid, mainContainer) {
       statusBadge = `<span class="server-badge badge-installed">Bot Added</span>`;
       actionBtn = `
         <div style="display: flex; gap: 0.5rem; width: 100%; margin-top: auto;">
-          <button class="btn btn-primary manage-btn" data-gid="${g.id}" style="flex: 1;">Configure Dashboard</button>
+          <button class="btn btn-primary manage-btn" data-gid="${g.id}" style="flex: 1;">Open Dashboard</button>
           <button class="btn btn-outline wizard-btn" data-gid="${g.id}" title="Launch Guided Setup Wizard" style="padding: 0.5rem 0.75rem; border-color: var(--purple-primary); color: var(--purple-pastel);">✨ Wizard</button>
         </div>
       `;
     } else if (status === 'unavailable') {
-      statusBadge = `<span class="server-badge" style="background: rgba(239, 68, 68, 0.2); color: #fca5a5; border: 1px solid rgba(239, 68, 68, 0.4);">Temporarily Unavailable</span>`;
+      // Clear verification error and Retry; do not falsely show an invite button or silently treat as absent
+      statusBadge = `<span class="server-badge" style="background: rgba(239, 68, 68, 0.2); color: #fca5a5; border: 1px solid rgba(239, 68, 68, 0.4);">Verification Failed</span>`;
       actionBtn = `
         <div style="display: flex; gap: 0.5rem; width: 100%; margin-top: auto;">
-          <button class="btn btn-outline retry-verify-btn" data-gid="${g.id}" style="flex: 1; border-color: rgba(239, 68, 68, 0.4); color: #fca5a5;">🔄 Retry Check</button>
-          <a href="${g.invite_url}" target="_blank" class="btn btn-secondary" style="padding: 0.5rem 0.75rem;">Invite</a>
+          <button class="btn btn-outline retry-verify-btn" data-gid="${g.id}" style="flex: 1; border-color: rgba(239, 68, 68, 0.4); color: #fca5a5;">🔄 Retry Verification</button>
         </div>
-      `;
-    } else if (status === 'permission_required' || g.can_manage === false) {
-      statusBadge = `<span class="server-badge" style="background: rgba(245, 158, 11, 0.2); color: var(--amber-accent); border: 1px solid rgba(245, 158, 11, 0.4);">Permission Required</span>`;
-      actionBtn = `
-        <button class="btn btn-outline" disabled style="width: 100%; margin-top: auto; opacity: 0.5; cursor: not-allowed;">
-          🛡️ Admin Rights Needed
-        </button>
-      `;
-    } else {
-      // verified absent, user can manage
-      statusBadge = `<span class="server-badge badge-invite">Add KYOKA</span>`;
-      actionBtn = `
-        <a href="${g.invite_url}" target="_blank" class="btn btn-secondary" style="width: 100%; margin-top: auto;">
-          Invite KYOKA
-        </a>
       `;
     }
 
@@ -399,21 +397,6 @@ function renderWorkspace(container, guild) {
     ? `<img src="${guild.icon_url}" alt="${guild.name}" class="guild-header-icon" />`
     : `<div class="server-icon-placeholder" style="width: 60px; height: 60px; font-size: 1.5rem;">${guild.name.charAt(0)}</div>`;
 
-  const missingBotBanner = !guild.bot_installed
-    ? `
-      <div class="alert-missing-perms">
-        <span style="font-size: 1.25rem;">⚠️</span>
-        <div>
-          <strong>KYOKA is not currently in this server.</strong>
-          <span style="display: block; font-size: 0.82rem; margin-top: 0.2rem;">Settings saved here will be stored in PostgreSQL and activated immediately once KYOKA joins.</span>
-        </div>
-        <a href="${guild.invite_url || '#'}" target="_blank" class="btn btn-outline btn-sm" style="margin-left: auto; color: var(--amber-accent); border-color: var(--amber-accent);">
-          Invite KYOKA
-        </a>
-      </div>
-    `
-    : '';
-
   container.innerHTML = `
     <div class="guild-workspace">
       <!-- Breadcrumbs -->
@@ -440,8 +423,6 @@ function renderWorkspace(container, guild) {
           <button id="save-btn" class="btn btn-primary btn-sm">Save Changes</button>
         </div>
       </div>
-
-      ${missingBotBanner}
 
       <!-- Header -->
       <div class="guild-header" style="margin-bottom: 1.5rem;">

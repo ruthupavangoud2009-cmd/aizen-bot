@@ -150,7 +150,9 @@ async def on_cleanup(app: web.Application) -> None:
 def create_app(
     config: Optional[DashboardConfig] = None,
     db: Optional[BaseDatabaseAdapter] = None,
-    serve_website: bool = True
+    serve_website: bool = True,
+    bot: Any = None,
+    bot_getter: Any = None,
 ) -> web.Application:
     """Application factory for KYOKA Dashboard API."""
     cfg = config or DashboardConfig.from_env()
@@ -180,6 +182,10 @@ def create_app(
     app["config"] = cfg
     app["db"] = db_adapter
     app["rate_limiter"] = SlidingWindowRateLimiter(default_limit=cfg.rate_limit_per_minute)
+    if bot is not None:
+        app["bot"] = bot
+    if bot_getter is not None:
+        app["bot_getter"] = bot_getter
 
     app.on_startup.append(on_startup)
     app.on_cleanup.append(on_cleanup)

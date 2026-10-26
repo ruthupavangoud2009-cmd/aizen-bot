@@ -329,6 +329,41 @@ class PostgresDatabaseAdapter(BaseDatabaseAdapter):
             await self.pool.close()
             self.pool = None
 
+    async def is_bot_in_guild(self, guild_id: int) -> bool:
+        if not self.pool:
+            return False
+        try:
+            async with self.pool.acquire() as conn:
+                row = await conn.fetchrow(
+                    "SELECT 1 FROM guild_settings WHERE guild_id = $1 LIMIT 1;",
+                    guild_id
+                )
+                return bool(row)
+        except Exception as e:
+            logger.debug(f"is_bot_in_guild query notice for {guild_id}: {e}")
+            return False
+
+    async def get_all_guild_ids(self) -> set[str]:
+        if not self.pool:
+            return set()
+        try:
+            async with self.pool.acquire() as conn:
+                rows = await conn.fetch(
+                    """
+                    SELECT DISTINCT guild_id FROM (
+                        SELECT guild_id FROM guild_settings
+                        UNION
+                        SELECT guild_id FROM antinuke_settings
+                        UNION
+                        SELECT guild_id FROM server_events
+                    ) sub WHERE guild_id IS NOT NULL;
+                    """
+                )
+                return {str(r["guild_id"]) for r in rows if r["guild_id"]}
+        except Exception as e:
+            logger.debug(f"get_all_guild_ids query notice: {e}")
+            return set()
+
     async def get_guild_settings(self, guild_id: int) -> Dict[str, Any]:
         if not self.pool:
             return MockDatabaseAdapter.get_default_settings(guild_id)
