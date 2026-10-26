@@ -24,7 +24,7 @@ export async function onRequest(context) {
     const backendBase = (
       env.BACKEND_URL ||
       env.KYOKA_BACKEND_URL ||
-      ''
+      'https://kyokasugisetsu.onrender.com'
     ).replace(/\/+$/, '');
 
     if (backendBase) {
@@ -54,7 +54,9 @@ export async function onRequest(context) {
   }
 
   try {
-    const session = JSON.parse(atob(sessionStr));
+    const raw = sessionStr.includes('.') ? sessionStr.split('.')[0] : sessionStr;
+    const padding = '='.repeat((4 - (raw.length % 4)) % 4);
+    const session = JSON.parse(atob(raw + padding));
     if (session.expires_at && Date.now() > session.expires_at) {
       return new Response(JSON.stringify({ authenticated: false, user: null, expired: true }), {
         status: 200,

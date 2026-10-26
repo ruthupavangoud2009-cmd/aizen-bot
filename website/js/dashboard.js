@@ -278,7 +278,7 @@ function renderGuildCards(guilds, grid, mainContainer) {
   }
 
   grid.innerHTML = guilds.map(g => {
-    const initial = g.name.charAt(0).toUpperCase();
+    const initial = (g && g.name ? g.name.charAt(0) : 'S').toUpperCase();
     const iconHtml = g.icon_url
       ? `<img src="${g.icon_url}" alt="${g.name}" class="server-icon" />`
       : `<div class="server-icon-placeholder">${initial}</div>`;
@@ -870,13 +870,13 @@ function renderOverviewTab(panel, s) {
       <div class="owner-metric-card">
         <div class="owner-metric-label">Command Prefix</div>
         <div class="owner-metric-value" style="font-size: 1.4rem;">${g.prefix || '+'}</div>
-        <div class="owner-metric-sub">Language: ${(g.language || 'en').toUpperCase()}</div>
+        <div class="owner-metric-sub">Language: ${String(g?.language || 'en').toUpperCase()}</div>
       </div>
 
       <div class="owner-metric-card">
         <div class="owner-metric-label">Premium Entitlement</div>
         <div class="owner-metric-value" style="color: ${prem.is_premium ? 'var(--purple-pastel)' : 'var(--text-muted)'}; font-size: 1.4rem;">
-          ${(prem.tier || 'free').toUpperCase()}
+          ${String(prem?.tier || 'free').toUpperCase()}
         </div>
         <div class="owner-metric-sub">${prem.is_premium ? 'Sovereign Features Active' : 'Standard Edition'}</div>
       </div>
@@ -1881,7 +1881,7 @@ function renderPrefixCommandsTab(panel, s) {
 function renderPremiumTab(panel, s) {
   const p = s.premium || {};
   const isPrem = Boolean(p.is_premium);
-  const tier = (p.tier || 'free').toUpperCase();
+  const tier = String(p?.tier || 'free').toUpperCase();
   const expires = p.expires_at ? new Date(p.expires_at).toLocaleDateString() : 'Lifetime / Active';
 
   panel.innerHTML = `
@@ -2095,7 +2095,7 @@ async function renderMusicStudioTab(panel, s) {
                   <div class="track-requester-hero">${trackRequester}</div>
                 </div>
                 <span class="badge ${isPlaying ? 'badge-installed' : 'badge-invite'}" style="font-size: 0.75rem;">
-                  ${playback.status.toUpperCase()}
+                  ${String(playback?.status || 'idle').toUpperCase()}
                 </span>
               </div>
 

@@ -262,7 +262,7 @@ async function loadStaffRoster() {
         <tr>
           <td><strong>${escapeHtml(s.username)}</strong></td>
           <td style="font-family: var(--font-mono); color: var(--text-muted);">${s.user_id}</td>
-          <td><span class="badge" style="background: rgba(124, 58, 237, 0.2); border: 1px solid ${badgeCls}; color: #fff;">${s.role_level.toUpperCase()}</span></td>
+          <td><span class="badge" style="background: rgba(124, 58, 237, 0.2); border: 1px solid ${badgeCls}; color: #fff;">${String(s.role_level || 'support').toUpperCase()}</span></td>
           <td>${s.added_by}</td>
           <td>${dateStr}</td>
           ${isOwnerOrAdmin ? `

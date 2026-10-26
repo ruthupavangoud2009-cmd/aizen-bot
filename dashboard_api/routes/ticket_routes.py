@@ -279,7 +279,7 @@ async def handle_get_ticket(request: web.Request) -> web.Response:
 
     is_staff, staff_role = await check_staff_status(request, user_id)
     # Authorization: author or staff only
-    if ticket["user_id"] != str(user_id) and not is_staff:
+    if str(ticket["user_id"]) != str(user_id) and not is_staff:
         raise web.HTTPForbidden(reason="You are not authorized to view this ticket.")
 
     messages = await db.get_website_ticket_messages(ticket_id)
@@ -305,7 +305,7 @@ async def handle_reply_ticket(request: web.Request) -> web.Response:
         raise web.HTTPNotFound(reason=f"Ticket '{ticket_id}' not found.")
 
     is_staff, staff_role = await check_staff_status(request, user_id)
-    if ticket["user_id"] != str(user_id) and not is_staff:
+    if str(ticket["user_id"]) != str(user_id) and not is_staff:
         raise web.HTTPForbidden(reason="You are not authorized to reply to this ticket.")
 
     try:
@@ -362,7 +362,7 @@ async def handle_update_status(request: web.Request) -> web.Response:
 
     # Regular user can only close their own ticket, cannot reopen once closed by staff
     if not is_staff:
-        if ticket["user_id"] != str(user_id):
+        if str(ticket["user_id"]) != str(user_id):
             raise web.HTTPForbidden(reason="You cannot change another user's ticket status.")
         if target_status == "open":
             raise web.HTTPForbidden(reason="Only staff can reopen closed tickets.")

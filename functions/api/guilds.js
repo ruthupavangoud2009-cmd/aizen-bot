@@ -1,6 +1,6 @@
 /**
  * Cloudflare Pages Function: /api/guilds
- * Returns user's manageable Discord servers (Admin or Manage Guild).
+ * Returns user's manageable Discord servers (Administrator, Manage Guild, or Server Owner).
  */
 
 export async function onRequest(context) {
@@ -14,11 +14,11 @@ export async function onRequest(context) {
   const authHeader = request.headers.get('Authorization') || '';
   if (!sessionStr && authHeader.startsWith('Bearer ')) sessionStr = authHeader.substring(7).trim();
 
-  // If backend configured, forward to backend
+  // 1. If backend configured, attempt backend query first
   const backendBase = (
     env.BACKEND_URL ||
     env.KYOKA_BACKEND_URL ||
-    ''
+    'https://kyokasugisetsu.onrender.com'
   ).replace(/\/+$/, '');
 
   if (backendBase) {
@@ -27,16 +27,25 @@ export async function onRequest(context) {
         method: 'GET',
         headers: request.headers,
       });
-      const headers = new Headers(backendRes.headers);
-      headers.set('Access-Control-Allow-Origin', url.origin);
-      headers.set('Access-Control-Allow-Credentials', 'true');
-      return new Response(backendRes.body, {
-        status: backendRes.status,
-        headers: headers,
-      });
-    } catch {}
+      if (backendRes.ok) {
+        const data = await backendRes.json();
+        if (data && Array.isArray(data.guilds)) {
+          return new Response(JSON.stringify(data), {
+            status: 200,
+            headers: {
+              'Content-Type': 'application/json',
+              'Access-Control-Allow-Origin': url.origin,
+              'Access-Control-Allow-Credentials': 'true',
+            },
+          });
+        }
+      }
+    } catch (e) {
+      console.warn('Backend guilds fetch notice, falling back to edge Discord query:', e);
+    }
   }
 
+  // 2. Fallback to direct Discord API using access_token in session
   if (!sessionStr) {
     return new Response(JSON.stringify({ error: 'Unauthorized', guilds: [] }), {
       status: 401,
@@ -49,10 +58,16 @@ export async function onRequest(context) {
   }
 
   try {
-    const session = JSON.parse(atob(sessionStr));
-    const token = session.access_token;
+    let session = null;
+    try {
+      const raw = sessionStr.includes('.') ? sessionStr.split('.')[0] : sessionStr;
+      const padding = '='.repeat((4 - (raw.length % 4)) % 4);
+      session = JSON.parse(atob(raw + padding));
+    } catch {}
+
+    const token = session?.access_token;
     if (!token) {
-      return new Response(JSON.stringify({ error: 'Session token missing', guilds: [] }), {
+      return new Response(JSON.stringify({ error: 'Session token missing or expired', guilds: [] }), {
         status: 401,
         headers: {
           'Content-Type': 'application/json',
@@ -78,20 +93,29 @@ export async function onRequest(context) {
       });
     }
 
-    const guilds = await discordRes.json();
-    const manageable = guilds.filter(g => {
-      const perms = BigInt(g.permissions || 0);
-      return (perms & BigInt(0x8)) !== BigInt(0) || (perms & BigInt(0x20)) !== BigInt(0);
-    }).map(g => ({
-      id: g.id,
-      name: g.name,
-      icon: g.icon ? `https://cdn.discordapp.com/icons/${g.id}/${g.icon}.png` : null,
-      owner: Boolean(g.owner),
-      permissions: g.permissions,
-      bot_in_guild: true,
-    }));
+    const rawGuilds = await discordRes.json();
+    const clientId = (env.DISCORD_CLIENT_ID || env.CLIENT_ID || '1562505487214321714').trim();
 
-    return new Response(JSON.stringify({ guilds: manageable }), {
+    const manageable = rawGuilds.filter(g => {
+      const perms = BigInt(g.permissions || 0);
+      return Boolean(g.owner) || (perms & BigInt(0x8)) !== BigInt(0) || (perms & BigInt(0x20)) !== BigInt(0);
+    }).map(g => {
+      const iconUrl = g.icon ? `https://cdn.discordapp.com/icons/${g.id}/${g.icon}.png?size=128` : null;
+      return {
+        id: String(g.id),
+        name: g.name || 'Unknown Server',
+        icon: g.icon,
+        icon_url: iconUrl,
+        is_owner: Boolean(g.owner),
+        can_manage: true,
+        bot_installed: true,
+        status: 'installed',
+        permissions: String(g.permissions || '0'),
+        invite_url: `https://discord.com/oauth2/authorize?client_id=${clientId}&guild_id=${g.id}&permissions=8&scope=bot%20applications.commands`,
+      };
+    });
+
+    return new Response(JSON.stringify({ guilds: manageable, total: manageable.length }), {
       status: 200,
       headers: {
         'Content-Type': 'application/json',

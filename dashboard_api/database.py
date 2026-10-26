@@ -1823,7 +1823,7 @@ class PostgresDatabaseAdapter(BaseDatabaseAdapter):
                 conditions = []
                 params = []
                 if user_id is not None:
-                    params.append(user_id)
+                    params.append(int(user_id))
                     conditions.append(f"user_id = ${len(params)}")
                 if status:
                     params.append(status.lower().strip())
@@ -1832,7 +1832,7 @@ class PostgresDatabaseAdapter(BaseDatabaseAdapter):
                 where_clause = f"WHERE {' AND '.join(conditions)}" if conditions else ""
                 sql = f"SELECT * FROM website_tickets {where_clause} ORDER BY updated_at DESC LIMIT 100;"
                 rows = await conn.fetch(sql, *params)
-                return [
+                results = [
                     {
                         "ticket_id": r["ticket_id"],
                         "user_id": str(r["user_id"]),
@@ -1852,6 +1852,36 @@ class PostgresDatabaseAdapter(BaseDatabaseAdapter):
                     }
                     for r in rows
                 ]
+
+                # Also bridge active_tickets for the user so Discord bot tickets appear seamlessly
+                if user_id is not None:
+                    try:
+                        act_rows = await conn.fetch("SELECT * FROM active_tickets WHERE user_id = $1 ORDER BY created_at DESC LIMIT 50;", int(user_id))
+                        existing_ids = {item["ticket_id"] for item in results}
+                        for ar in act_rows:
+                            disc_tid = f"DISC-{ar['ticket_number']}"
+                            if disc_tid not in existing_ids:
+                                results.append({
+                                    "ticket_id": disc_tid,
+                                    "user_id": str(ar["user_id"]),
+                                    "username": "Discord Member",
+                                    "guild_id": str(ar["guild_id"]),
+                                    "category": "Discord Ticket",
+                                    "subject": f"Discord Server Ticket #{ar['ticket_number']}",
+                                    "description": f"Ticket session in Discord server channel {ar['channel_id']}.",
+                                    "status": ar.get("status", "open"),
+                                    "assigned_staff_id": str(ar["claimed_by"]) if ar.get("claimed_by") else None,
+                                    "assigned_staff_name": None,
+                                    "discord_thread_id": str(ar["channel_id"]),
+                                    "created_at": ar["created_at"].isoformat() if ar.get("created_at") else None,
+                                    "updated_at": (ar.get("closed_at") or ar["created_at"]).isoformat() if ar.get("created_at") else None,
+                                    "closed_at": ar["closed_at"].isoformat() if ar.get("closed_at") else None,
+                                    "closed_by": str(ar["closed_by"]) if ar.get("closed_by") else None,
+                                })
+                    except Exception as act_err:
+                        logger.debug(f"Auxiliary active_tickets bridge notice: {act_err}")
+
+                return results
         except Exception as e:
             logger.warning(f"Error listing website tickets: {e}")
             return []

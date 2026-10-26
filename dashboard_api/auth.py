@@ -132,8 +132,23 @@ def verify_session_token(token: str, secret_key: str, max_age_seconds: int = 864
     """Verify session token signature, decode payload, and validate expiration."""
     if not token or not isinstance(token, str):
         return None
+    token = token.strip()
     parts = token.split(".")
     if len(parts) != 2:
+        # Check if it's an Edge-issued base64 JSON session token
+        try:
+            padding = "=" * ((4 - len(token) % 4) % 4)
+            raw = base64.urlsafe_b64decode((token + padding).encode("utf-8"))
+            data = json.loads(raw.decode("utf-8"))
+            if isinstance(data, dict) and data.get("user_id"):
+                expires_at = data.get("expires_at", 0)
+                if expires_at and expires_at > 1000000000000:  # millisecond timestamp
+                    expires_at = expires_at / 1000.0
+                if expires_at and time.time() > expires_at:
+                    return None
+                return data
+        except Exception:
+            return None
         return None
 
     b64_payload, received_sig = parts

@@ -44,7 +44,7 @@ if (typeof window !== 'undefined') {
   }
 }
 
-const DIRECT_BACKEND_FALLBACK = 'https://kyoka-discord-bot.onrender.com/api';
+const DIRECT_BACKEND_FALLBACK = 'https://kyokasugisetsu.onrender.com/api';
 
 /**
  * Standard authenticated fetch helper with credentials and error handling

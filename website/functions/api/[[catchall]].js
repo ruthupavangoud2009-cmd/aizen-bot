@@ -22,11 +22,11 @@ export async function onRequest(context) {
     });
   }
 
-  // Read backend base URL from Cloudflare environment variable
+  // Read backend base URL from Cloudflare environment variable with production fallback
   const backendBase = (
     env.BACKEND_URL ||
     env.KYOKA_BACKEND_URL ||
-    ''
+    'https://kyokasugisetsu.onrender.com'
   ).replace(/\/+$/, '');
 
   if (backendBase) {

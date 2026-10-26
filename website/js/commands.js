@@ -37,7 +37,7 @@ function renderCategories(container) {
 
   container.innerHTML = categories.map(cat => `
     <button class="btn btn-sm ${cat === activeCategory ? 'btn-primary' : 'btn-secondary'} category-pill" data-category="${cat}">
-      ${cat.charAt(0).toUpperCase() + cat.slice(1)}
+      ${cat ? (cat.charAt(0).toUpperCase() + cat.slice(1)) : 'General'}
     </button>
   `).join('');
 
