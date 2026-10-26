@@ -15,7 +15,7 @@ from src.utils.containers import KyokaContainer, send_container_response
 if TYPE_CHECKING:
     from src.core.bot import KyokaBot
 
-SUPPORT_URL = Config.SUPPORT_URL or "https://discord.gg/msH67hUx6G"
+SUPPORT_URL = Config.SUPPORT_URL or "https://discord.gg/7q4tn6dA6V"
 OWNER_ID = 1505515188991033409
 
 

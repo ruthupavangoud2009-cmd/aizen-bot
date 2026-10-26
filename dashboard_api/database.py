@@ -1583,7 +1583,7 @@ class PostgresDatabaseAdapter(BaseDatabaseAdapter):
             "announcement_enabled": False,
             "announcement_text": "KYOKA 3.0 Aizen Edition is currently live and operational across all shards.",
             "announcement_level": "info",
-            "support_discord_url": "https://discord.gg/kyoka",
+            "support_discord_url": "https://discord.gg/7q4tn6dA6V",
             "docs_url": "https://docs.kyokabot.com",
             "invite_permissions": "8",
         }
@@ -1624,7 +1624,7 @@ class MockDatabaseAdapter(BaseDatabaseAdapter):
             "announcement_enabled": False,
             "announcement_text": "KYOKA 3.0 Architecture online.",
             "announcement_level": "info",
-            "support_discord_url": "https://discord.gg/kyoka",
+            "support_discord_url": "https://discord.gg/7q4tn6dA6V",
             "docs_url": "https://docs.kyokabot.com",
             "invite_permissions": "8",
         }

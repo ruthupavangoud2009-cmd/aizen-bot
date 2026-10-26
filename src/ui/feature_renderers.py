@@ -382,12 +382,13 @@ class FeatureRenderer:
         color = KyokaTheme.CRIMSON if is_danger else KyokaTheme.PRIMARY
 
         case_tag = f"Case #{case_id:04d} • " if case_id else ""
+        dur_str = f"• **Duration:** `{duration}`\n" if duration else ""
         embed = KyokaHelpEmbed(
             title=f"🛡️ {case_tag}{action_upper}",
             description=(
                 f"• **Target:** `{target_name}` (<@{target_id}>)\n"
                 f"• **Moderator:** `{moderator_name}`\n"
-                f"{f'• **Duration:** `{duration}`\\n' if duration else ''}"
+                f"{dur_str}"
                 f"• **Reason:** {discord.utils.escape_markdown(reason)}"
             ),
             color=color,
@@ -496,13 +497,14 @@ class FeatureRenderer:
         color = KyokaTheme.PRIMARY if is_premium else KyokaTheme.SECONDARY
 
         feat_lines = "\n".join(f"• {f}" for f in (features or ["High-fidelity Audio", "Enterprise Tickets", "Blox Fruits AI"]))
+        expires_line = f"> **Expires:** `{expiration}`\n" if expiration else ""
 
         embed = KyokaHelpEmbed(
             title=f"💎 Kyoka Prime • {guild_name}",
             description=(
                 f"> **Status:** **`{status_tag}`**\n"
                 f"> **Current Tier:** `{tier}`\n"
-                f"{f'> **Expires:** `{expiration}`\\n' if expiration else ''}\n"
+                f"{expires_line}\n"
                 f"✨ **Active Privileges:**\n{feat_lines}"
             ),
             color=color,

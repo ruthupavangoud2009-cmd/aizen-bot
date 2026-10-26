@@ -16,7 +16,7 @@ class TestDashboardSecurity(AioHTTPTestCase):
             bot_token="test_bot_token",
             redirect_uri="http://localhost:8080/api/auth/callback",
             bot_invite_url="https://discord.com/oauth2/authorize?client_id=123",
-            support_server_url="https://discord.gg/kyoka",
+            support_server_url="https://discord.gg/7q4tn6dA6V",
             secret_key="test_security_secret_key_32_chars_long",
             is_production=True,
             database_url="",

@@ -56,7 +56,7 @@ class Invite(commands.Cog):
             )
             return
 
-        support_url = Config.SUPPORT_URL or "https://discord.gg/msH67hUx6G"
+        support_url = Config.SUPPORT_URL or "https://discord.gg/7q4tn6dA6V"
 
         bot_avatar = self.bot.user.display_avatar.url if self.bot.user else None
         guilds_count = len(self.bot.guilds)

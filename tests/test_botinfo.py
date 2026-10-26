@@ -49,7 +49,7 @@ def test_botinfo_contains_public_identity_runtime_and_support_details():
     assert "Python" in text
     assert "`&`" in text and "`&help`" in text
     assert "Premium" in text
-    assert "https://discord.gg/msH67hUx6G" in text
+    assert "https://discord.gg/7q4tn6dA6V" in text
 
 
 def test_botinfo_handles_missing_optional_state_and_omits_invalid_invite():
@@ -67,7 +67,7 @@ def test_botinfo_handles_missing_optional_state_and_omits_invalid_invite():
 
     view = BotInfoView("not-a-url")
     assert [button.label for button in view.children] == ["Join Support Server"]
-    assert view.children[0].url == "https://discord.gg/msH67hUx6G"
+    assert view.children[0].url == "https://discord.gg/7q4tn6dA6V"
 
 
 def test_botinfo_view_adds_only_a_valid_optional_invite():

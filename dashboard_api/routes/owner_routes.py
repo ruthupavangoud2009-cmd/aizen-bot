@@ -247,7 +247,7 @@ async def handle_owner_update_web_config(request: web.Request) -> web.Response:
         "announcement_enabled": bool(body.get("announcement_enabled", False)),
         "announcement_text": str(body.get("announcement_text", ""))[:250],
         "announcement_level": str(body.get("announcement_level", "info"))[:16],
-        "support_discord_url": str(body.get("support_discord_url", "https://discord.gg/kyoka"))[:120],
+        "support_discord_url": str(body.get("support_discord_url", "https://discord.gg/7q4tn6dA6V"))[:120],
         "docs_url": str(body.get("docs_url", "https://docs.kyokabot.com"))[:120],
     }
 

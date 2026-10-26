@@ -1,0 +1,68 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Redirecting to Discord Authorization...</title>
+  <link rel="icon" type="image/svg+xml" href="/assets/logo.svg" />
+  <link rel="stylesheet" href="/css/style.css" />
+  <style>
+    body {
+      background: #07030D;
+      color: #FFFFFF;
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 1.5rem;
+      margin: 0;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    }
+    .redirect-card {
+      max-width: 480px;
+      width: 100%;
+      background: rgba(18, 9, 34, 0.95);
+      border: 1px solid rgba(168, 85, 247, 0.35);
+      border-radius: var(--radius-lg, 16px);
+      padding: 2.5rem;
+      text-align: center;
+      box-shadow: 0 10px 40px rgba(0, 0, 0, 0.8);
+    }
+    .spinner {
+      width: 44px;
+      height: 44px;
+      border: 3px solid rgba(168, 85, 247, 0.25);
+      border-top-color: var(--purple-light, #C084FC);
+      border-radius: 50%;
+      animation: spin 1s linear infinite;
+      margin: 0 auto 1.5rem;
+    }
+    @keyframes spin {
+      to { transform: rotate(360deg); }
+    }
+  </style>
+</head>
+<body>
+  <div class="redirect-card">
+    <div class="spinner"></div>
+    <h3 style="color: #FFFFFF; margin-bottom: 0.5rem;">Connecting to Discord...</h3>
+    <p style="color: #94A3B8; font-size: 0.9rem; line-height: 1.5; margin-bottom: 1.5rem;">
+      Redirecting to the official Discord authorization portal...
+    </p>
+    <a id="manual-login-link" href="#" class="btn btn-discord btn-sm">Click here if not redirected automatically</a>
+  </div>
+
+  <script type="module">
+    import { loginWithDiscord } from '/js/api.js';
+    
+    // Set manual link in case JS is slow
+    const CLIENT_ID = '1562505487214321714';
+    const callbackUrl = `${window.location.origin}/api/auth/callback`;
+    const authUrl = `https://discord.com/oauth2/authorize?client_id=${CLIENT_ID}&response_type=code&redirect_uri=${encodeURIComponent(callbackUrl)}&scope=identify%20guilds&prompt=consent`;
+    document.getElementById('manual-login-link').href = authUrl;
+
+    // Immediately trigger official Discord OAuth2 authorization
+    loginWithDiscord();
+  </script>
+</body>
+</html>

@@ -143,7 +143,7 @@ class Config:
     VERSION: str = "3.0.0"
     FOOTER_TEXT: str = "Made by Aizen"
     INVITE_URL: str = os.getenv("INVITE_URL", "").strip()
-    SUPPORT_URL: str = os.getenv("SUPPORT_URL", "https://discord.gg/msH67hUx6G").strip()
+    SUPPORT_URL: str = os.getenv("SUPPORT_URL", "https://discord.gg/7q4tn6dA6V").strip()
 
     @classmethod
     def validate(cls) -> None:

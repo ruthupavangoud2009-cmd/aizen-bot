@@ -1764,14 +1764,14 @@ class TopAIManager(commands.Cog, name="TopAIManager"):
                 f"**⚙️ Currency & In-Game Values:**\n"
                 f"• All prices are quoted in **Millions (M)** or **Billions (B)** of in-game Beli or Fruits.\n"
                 f"• Never converts to or uses real-world USD currency.\n\n"
-                f"• **Official Support:** [Join Support Server]({Config.SUPPORT_URL or 'https://discord.gg/msH67hUx6G'})"
+                f"• **Official Support:** [Join Support Server]({Config.SUPPORT_URL or 'https://discord.gg/7q4tn6dA6V'})"
             ),
             color=KyokaTheme.PRIMARY,
         )
         embed.set_thumbnail(url=AIZEN_THUMBNAIL_URL)
         embed.set_footer(text=f"Kyoka 3.0 • AI Top Assistant • Requested by {ctx.author.display_name}")
         view = discord.ui.View(timeout=None)
-        support_url = Config.SUPPORT_URL or "https://discord.gg/msH67hUx6G"
+        support_url = Config.SUPPORT_URL or "https://discord.gg/7q4tn6dA6V"
         view.add_item(discord.ui.Button(label="Join Support Server", style=discord.ButtonStyle.link, url=support_url, emoji="💜"))
         if Config.INVITE_URL:
             view.add_item(discord.ui.Button(label="Invite KYOKA", style=discord.ButtonStyle.link, url=Config.INVITE_URL, emoji="✦"))
@@ -2202,7 +2202,7 @@ class TopAIManager(commands.Cog, name="TopAIManager"):
             await help_cog.help_command(ctx, command_or_module=command_or_module)
         else:
             view = discord.ui.View(timeout=None)
-            support_url = Config.SUPPORT_URL or "https://discord.gg/msH67hUx6G"
+            support_url = Config.SUPPORT_URL or "https://discord.gg/7q4tn6dA6V"
             view.add_item(discord.ui.Button(label="Join Support Server", style=discord.ButtonStyle.link, url=support_url, emoji="💜"))
             await ctx.reply("ℹ️ Command directory is loading. Need assistance? Join our official support server below!", view=view, mention_author=False)
 

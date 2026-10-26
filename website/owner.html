@@ -14,33 +14,8 @@
   <!-- Ambient Aizen Spiritual Particles Canvas -->
   <canvas id="aizen-particles-canvas"></canvas>
 
-  <!-- Aizen Ambient Audio Dock -->
-  <div class="aizen-audio-dock" id="aizen-audio-dock">
-    <button class="audio-play-btn" id="audio-play-btn" aria-label="Toggle Aizen Ambient Audio" title="Toggle Las Noches Spiritual Atmosphere">
-      <svg id="audio-play-icon" viewBox="0 0 24 24" fill="currentColor">
-        <polygon points="5 3 19 12 5 21 5 3"></polygon>
-      </svg>
-    </button>
-    <div class="audio-equalizer" id="audio-equalizer">
-      <span class="eq-bar"></span>
-      <span class="eq-bar"></span>
-      <span class="eq-bar"></span>
-      <span class="eq-bar"></span>
-    </div>
-    <div class="audio-info">
-      <span class="audio-title">Las Noches Ambient</span>
-      <span class="audio-status" id="audio-status-text">Click to Play</span>
-    </div>
-    <div class="audio-controls-right">
-      <button class="audio-mute-btn" id="audio-mute-btn" aria-label="Mute Audio" title="Mute/Unmute">
-        <svg id="audio-mute-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-          <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon>
-          <path d="M19.07 4.93a10 10 0 0 1 0 14.14M15.54 8.46a5 5 0 0 1 0 7.07"></path>
-        </svg>
-      </button>
-      <input type="range" class="audio-volume-slider" id="audio-volume-slider" min="0" max="1" step="0.05" value="0.35" aria-label="Audio Volume" />
-    </div>
-  </div>
+  <!-- Aizen Ambient Audio Dock (Mounted by audio.js) -->
+  <div class="aizen-audio-dock" id="aizen-audio-dock"></div>
 
   <!-- Sovereign Header Bar -->
   <header class="owner-header">

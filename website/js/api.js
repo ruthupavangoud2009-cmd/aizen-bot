@@ -156,43 +156,38 @@ export async function getAuthStatus() {
   }
 }
 
-/**
- * Trigger Discord OAuth2 authorization flow
- */
-export async function loginWithDiscord() {
-  const base = getApiBase();
-  const currentOrigin = typeof window !== 'undefined' ? window.location.origin : '';
-  const loginUrl = `${base}/auth/login?origin=${encodeURIComponent(currentOrigin)}`;
+export function loginWithDiscord() {
+  const CLIENT_ID = '1562505487214321714';
+  const origin = typeof window !== 'undefined' ? window.location.origin : 'https://aizen-bot.pages.dev';
+  const callbackUrl = `${origin}/api/auth/callback`;
 
+  // Generate cryptographically random CSRF state
+  let state = '';
   try {
-    // Attempt to fetch direct Discord authorization URL with CSRF state
-    const res = await fetch(`${base}/auth/login?format=json&origin=${encodeURIComponent(currentOrigin)}`, {
-      headers: { 'Accept': 'application/json' },
-    });
-    if (res.ok) {
-      const data = await res.json();
-      if (data && data.auth_url) {
-        window.location.href = data.auth_url;
-        return;
-      }
+    const array = new Uint8Array(16);
+    if (typeof crypto !== 'undefined' && crypto.getRandomValues) {
+      crypto.getRandomValues(array);
+      state = Array.from(array, b => b.toString(16).padStart(2, '0')).join('');
+    } else {
+      state = Math.random().toString(36).substring(2) + Date.now().toString(36);
     }
-  } catch {}
-
-  // Fallback to direct Render backend endpoint if local proxy failed
-  try {
-    const directRes = await fetch(`${DIRECT_BACKEND_FALLBACK}/auth/login?format=json&origin=${encodeURIComponent(currentOrigin)}`, {
-      headers: { 'Accept': 'application/json' },
-    });
-    if (directRes.ok) {
-      const data = await directRes.json();
-      if (data && data.auth_url) {
-        window.location.href = data.auth_url;
-        return;
-      }
+    if (typeof sessionStorage !== 'undefined') {
+      sessionStorage.setItem('kyoka_oauth_state', state);
     }
-  } catch {}
+  } catch {
+    state = 'kyoka_state_' + Date.now();
+  }
 
-  window.location.href = loginUrl;
+  const params = new URLSearchParams({
+    client_id: CLIENT_ID,
+    response_type: 'code',
+    redirect_uri: callbackUrl,
+    scope: 'identify guilds',
+    state: state,
+    prompt: 'consent',
+  });
+
+  window.location.href = `https://discord.com/oauth2/authorize?${params.toString()}`;
 }
 
 /**

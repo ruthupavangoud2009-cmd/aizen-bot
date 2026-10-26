@@ -34,7 +34,7 @@ class DashboardConfig:
     secret_key: str
 
     bot_invite_url: str = ""
-    support_server_url: str = "https://discord.gg/kyoka"
+    support_server_url: str = "https://discord.gg/7q4tn6dA6V"
     session_cookie_name: str = "kyoka_session"
     session_max_age_seconds: int = 86400 * 7  # 7 days
     state_max_age_seconds: int = 600  # 10 minutes
@@ -118,7 +118,7 @@ class DashboardConfig:
             secret_key = os.environ.get("DISCORD_TOKEN", "kyoka_default_dev_secret_key_32_bytes_long_minimum")
 
         # Canonical DISCORD_CLIENT_ID, fallback CLIENT_ID
-        client_id = (os.environ.get("DISCORD_CLIENT_ID") or os.environ.get("CLIENT_ID") or "").strip()
+        client_id = (os.environ.get("DISCORD_CLIENT_ID") or os.environ.get("CLIENT_ID") or "1562505487214321714").strip()
         # Canonical DISCORD_CLIENT_SECRET, fallback CLIENT_SECRET
         client_secret = (os.environ.get("DISCORD_CLIENT_SECRET") or os.environ.get("CLIENT_SECRET") or "").strip()
         bot_token = os.environ.get("DISCORD_TOKEN", "").strip()
@@ -135,7 +135,7 @@ class DashboardConfig:
             "INVITE_URL",
             f"https://discord.com/oauth2/authorize?client_id={client_id}&permissions=8&scope=bot%20applications.commands" if client_id else ""
         )
-        support_url = os.environ.get("SUPPORT_URL", "https://discord.gg/kyoka")
+        support_url = os.environ.get("SUPPORT_URL", "https://discord.gg/7q4tn6dA6V")
 
         frontend_origin = os.environ.get("FRONTEND_ORIGIN", "https://aizen-bot.pages.dev,https://kyoka-dashboard-website.onrender.com" if is_prod else "*")
         database_url = os.environ.get("DATABASE_URL", "").strip()

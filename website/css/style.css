@@ -964,6 +964,32 @@ nav, header, main, footer, .dashboard-wrapper, .section {
   transform: scale(1.02);
 }
 
+@media (max-width: 768px) {
+  .hero-visual-container {
+    margin: 1.5rem auto 2.5rem;
+  }
+  .aizen-hero-img {
+    max-height: 260px;
+  }
+  .aizen-overlay-content {
+    position: static;
+    margin-top: -0.5rem;
+    padding: 0.85rem 1rem;
+    flex-direction: column;
+    align-items: stretch;
+    text-align: center;
+  }
+  .aizen-quote {
+    text-align: center;
+    font-size: 0.82rem;
+  }
+  .kanji-watermark {
+    font-size: 3rem;
+    right: 1rem;
+    top: 0.5rem;
+  }
+}
+
 /* Reduced Motion Support (Part 6) */
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after {

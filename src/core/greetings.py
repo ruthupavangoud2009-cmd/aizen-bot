@@ -11,7 +11,7 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger("Kyoka.Greetings")
 AIZEN_ART = os.getenv("AIZEN_IMAGE_URL", "").strip()
-SUPPORT_URL = Config.SUPPORT_URL or "https://discord.gg/msH67hUx6G"
+SUPPORT_URL = Config.SUPPORT_URL or "https://discord.gg/7q4tn6dA6V"
 
 
 def _valid_http_url(value: str) -> bool:

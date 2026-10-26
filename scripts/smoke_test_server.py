@@ -27,7 +27,7 @@ async def run_smoke_test():
         bot_token="mock_bot_token_abc",
         redirect_uri=f"http://{host}:{port}/api/auth/callback",
         bot_invite_url="https://discord.com/oauth2/authorize?client_id=123",
-        support_server_url="https://discord.gg/kyoka",
+        support_server_url="https://discord.gg/7q4tn6dA6V",
         secret_key="smoke_test_secret_key_32_characters_long",
         is_production=False,
         database_url="",
