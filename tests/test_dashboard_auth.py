@@ -185,6 +185,140 @@ async def test_oauth_login_configured_redirects_to_discord():
         assert "client_id=1474805799988756673" in location
         assert "state=" in location
         assert "response_type=code" in location
+        assert "kyoka_oauth_state=" in resp.headers.get("Set-Cookie", "")
     finally:
         await client.close()
+
+
+@pytest.mark.asyncio
+async def test_oauth_callback_mismatched_state_redirects_to_pages_dashboard():
+    """Mismatched state must redirect to https://aizen-bot.pages.dev/dashboard.html?error=invalid_state, NEVER onrender."""
+    from dashboard_api.config import DashboardConfig
+    from dashboard_api.database import MockDatabaseAdapter
+    from dashboard_api.server import create_app
+    from aiohttp.test_utils import TestClient, TestServer
+
+    cfg = DashboardConfig(
+        client_id="1562505487214321714",
+        client_secret="test_secret_123",
+        redirect_uri="https://aizen-bot.pages.dev/api/auth/callback",
+        bot_token="token",
+        secret_key=SECRET_KEY,
+        is_production=True,
+    )
+    app = create_app(config=cfg, db=MockDatabaseAdapter(), serve_website=False)
+    server = TestServer(app)
+    client = TestClient(server)
+    await client.start_server()
+
+    try:
+        # Pass a bogus state and mismatched cookie
+        client.session.cookie_jar.update_cookies({"kyoka_oauth_state": "legitimate_cookie_state_value"})
+        resp = await client.get("/api/auth/callback?code=fake_code&state=forged_state_parameter", allow_redirects=False)
+        assert resp.status == 302
+        location = resp.headers.get("Location")
+        assert location is not None
+        assert location.startswith("https://aizen-bot.pages.dev/dashboard.html?error=invalid_state")
+        assert "onrender.com" not in location
+    finally:
+        await client.close()
+
+
+@pytest.mark.asyncio
+async def test_oauth_callback_missing_state_cookie_and_bad_state():
+    """Missing state cookie and invalid state HMAC must safely fail with invalid_state on aizen-bot.pages.dev."""
+    from dashboard_api.config import DashboardConfig
+    from dashboard_api.database import MockDatabaseAdapter
+    from dashboard_api.server import create_app
+    from aiohttp.test_utils import TestClient, TestServer
+
+    cfg = DashboardConfig(
+        client_id="1562505487214321714",
+        client_secret="test_secret_123",
+        redirect_uri="https://aizen-bot.pages.dev/api/auth/callback",
+        bot_token="token",
+        secret_key=SECRET_KEY,
+        is_production=True,
+    )
+    app = create_app(config=cfg, db=MockDatabaseAdapter(), serve_website=False)
+    server = TestServer(app)
+    client = TestClient(server)
+    await client.start_server()
+
+    try:
+        resp = await client.get("/api/auth/callback?code=fake_code&state=non_existent_state", allow_redirects=False)
+        assert resp.status == 302
+        location = resp.headers.get("Location")
+        assert location is not None
+        assert "https://aizen-bot.pages.dev/dashboard.html?error=invalid_state" in location
+        assert "onrender.com" not in location
+    finally:
+        await client.close()
+
+
+@pytest.mark.asyncio
+async def test_oauth_successful_flow_redirects_to_pages_dashboard(monkeypatch):
+    """Successful OAuth authorization must redirect to https://aizen-bot.pages.dev/dashboard.html#token=..."""
+    from unittest.mock import AsyncMock
+    from dashboard_api.config import DashboardConfig
+    from dashboard_api.database import MockDatabaseAdapter
+    from dashboard_api.server import create_app
+    from aiohttp.test_utils import TestClient, TestServer
+    import dashboard_api.routes.auth_routes as auth_mod
+
+    cfg = DashboardConfig(
+        client_id="1562505487214321714",
+        client_secret="test_secret_123",
+        redirect_uri="https://aizen-bot.pages.dev/api/auth/callback",
+        bot_token="token",
+        secret_key=SECRET_KEY,
+        is_production=True,
+    )
+
+    # Mock exchange_discord_code and fetch_discord_user
+    mock_exchange = AsyncMock(return_value={"access_token": "mock_access_token_abc"})
+    mock_fetch_user = AsyncMock(return_value={
+        "id": "1505515188991033409",
+        "username": "AizenLord",
+        "discriminator": "0001",
+        "avatar": "mock_avatar_hash"
+    })
+    monkeypatch.setattr(auth_mod, "exchange_discord_code", mock_exchange)
+    monkeypatch.setattr(auth_mod, "fetch_discord_user", mock_fetch_user)
+
+    app = create_app(config=cfg, db=MockDatabaseAdapter(), serve_website=False)
+    server = TestServer(app)
+    client = TestClient(server)
+    await client.start_server()
+
+    try:
+        valid_state = "valid_secure_state_token_12345"
+        client.session.cookie_jar.update_cookies({"kyoka_oauth_state": valid_state})
+        resp = await client.get(f"/api/auth/callback?code=good_code&state={valid_state}", allow_redirects=False)
+        assert resp.status == 302
+        location = resp.headers.get("Location")
+        assert location is not None
+        assert location.startswith("https://aizen-bot.pages.dev/dashboard.html#token=")
+        assert "onrender.com" not in location
+        assert cfg.session_cookie_name in resp.headers.get("Set-Cookie", "")
+    finally:
+        await client.close()
+
+
+def test_production_primary_frontend_url_never_returns_render():
+    """Verify primary_frontend_url always returns https://aizen-bot.pages.dev in production."""
+    from dashboard_api.config import DashboardConfig
+
+    cfg = DashboardConfig(
+        client_id="1562505487214321714",
+        client_secret="test_secret",
+        redirect_uri="https://aizen-bot.pages.dev/api/auth/callback",
+        bot_token="token",
+        secret_key="secret",
+        is_production=True,
+        frontend_origin="https://kyokasugisetsu.onrender.com,https://aizen-bot.pages.dev",
+    )
+    assert cfg.primary_frontend_url == "https://aizen-bot.pages.dev"
+    assert "onrender.com" not in cfg.primary_frontend_url
+
 

@@ -86,9 +86,11 @@ class DashboardConfig:
     @property
     def primary_frontend_url(self) -> str:
         """Return primary frontend root URL to redirect users after OAuth authorization."""
+        if self.is_production:
+            return "https://aizen-bot.pages.dev"
         if self.frontend_origin and self.frontend_origin != "*":
             first = self.frontend_origin.split(",")[0].strip().rstrip("/")
-            if first:
+            if first and not first.endswith(".onrender.com"):
                 return first
         return "https://aizen-bot.pages.dev" if self.is_production else "http://localhost:8080"
 
@@ -124,7 +126,7 @@ class DashboardConfig:
         bot_token = os.environ.get("DISCORD_TOKEN", "").strip()
 
         # Canonical DISCORD_REDIRECT_URI, fallback REDIRECT_URI
-        default_redirect = "https://kyoka-dashboard-website.onrender.com/api/auth/callback" if is_prod else "http://localhost:8080/api/auth/callback"
+        default_redirect = "https://aizen-bot.pages.dev/api/auth/callback" if is_prod else "http://localhost:8080/api/auth/callback"
         redirect_uri = (
             os.environ.get("DISCORD_REDIRECT_URI")
             or os.environ.get("REDIRECT_URI")

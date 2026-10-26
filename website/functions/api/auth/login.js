@@ -4,6 +4,7 @@
  *
  * Scopes: identify, guilds
  * Client ID: 1562505487214321714 (KYOKA 3.0 / Aizen Edition)
+ * Redirect URI: https://aizen-bot.pages.dev/api/auth/callback
  */
 
 export async function onRequest(context) {
@@ -17,21 +18,21 @@ export async function onRequest(context) {
     '1562505487214321714'
   ).trim();
 
-  // If backend configured and requested by user, option to proxy login
-  const backendBase = (
-    env.BACKEND_URL ||
-    env.KYOKA_BACKEND_URL ||
-    ''
-  ).replace(/\/+$/, '');
+  // Target frontend origin: always Cloudflare Pages in production
+  const destinationOrigin = url.origin.includes('localhost') ? url.origin : 'https://aizen-bot.pages.dev';
 
-  // Dynamic redirect URI: uses configured variable or current deployment origin
-  const redirectUri = (
+  let redirectUri = (
     env.DISCORD_REDIRECT_URI ||
-    `${url.origin}/api/auth/callback`
+    `${destinationOrigin}/api/auth/callback`
   ).trim();
 
-  // 2. Generate cryptographically secure CSRF state
-  const array = new Uint8Array(16);
+  // Safety guard: If DISCORD_REDIRECT_URI was mistakenly set to an onrender.com URL in dashboard, force Cloudflare
+  if (redirectUri.includes('onrender.com') || !redirectUri.startsWith('http')) {
+    redirectUri = `${destinationOrigin}/api/auth/callback`;
+  }
+
+  // 2. Generate cryptographically secure CSRF state (32 random bytes)
+  const array = new Uint8Array(32);
   crypto.getRandomValues(array);
   const state = Array.from(array, (b) => b.toString(16).padStart(2, '0')).join('');
 
@@ -48,7 +49,7 @@ export async function onRequest(context) {
   const discordAuthUrl = `https://discord.com/api/oauth2/authorize?${params.toString()}`;
 
   // 4. Set HttpOnly CSRF state cookie valid for 10 minutes (600s)
-  const isHttps = url.protocol === 'https:';
+  const isHttps = url.protocol === 'https:' || !url.hostname.includes('localhost');
   const stateCookie = `kyoka_oauth_state=${state}; Path=/; Max-Age=600; SameSite=Lax${isHttps ? '; Secure' : ''}; HttpOnly`;
 
   // 5. If called via AJAX/fetch requesting JSON format

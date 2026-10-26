@@ -91,6 +91,9 @@ async def handle_login(request: web.Request) -> web.Response:
             if p.scheme and p.netloc:
                 req_origin = f"{p.scheme}://{p.netloc}"
 
+    if not req_origin or "onrender.com" in req_origin:
+        req_origin = "https://aizen-bot.pages.dev" if config.is_production else "http://localhost:8080"
+
     extra = req_origin if (req_origin and config.is_origin_allowed(req_origin)) else ""
     state = create_oauth_state(config.secret_key, extra=extra)
 
@@ -106,9 +109,29 @@ async def handle_login(request: web.Request) -> web.Response:
 
     # If requested by frontend fetch directly
     if request.query.get("format") == "json" or "application/json" in request.headers.get("Accept", ""):
-        return web.json_response({"auth_url": discord_auth_url, "state": state})
+        res = web.json_response({"auth_url": discord_auth_url, "state": state})
+        res.set_cookie(
+            "kyoka_oauth_state",
+            state,
+            max_age=config.state_max_age_seconds,
+            httponly=True,
+            secure=config.is_production,
+            samesite="Lax",
+            path="/"
+        )
+        return res
 
-    raise web.HTTPFound(location=discord_auth_url)
+    redirect_response = web.HTTPFound(location=discord_auth_url)
+    redirect_response.set_cookie(
+        "kyoka_oauth_state",
+        state,
+        max_age=config.state_max_age_seconds,
+        httponly=True,
+        secure=config.is_production,
+        samesite="Lax",
+        path="/"
+    )
+    raise redirect_response
 
 
 async def handle_callback(request: web.Request) -> web.Response:
@@ -121,15 +144,18 @@ async def handle_callback(request: web.Request) -> web.Response:
     query = request.query
     state = query.get("state")
 
-    # Determine frontend redirect target from state if available
-    target_origin = config.primary_frontend_url.rstrip("/")
+    # Determine frontend redirect target: ALWAYS destination domain https://aizen-bot.pages.dev in production
+    target_origin = "https://aizen-bot.pages.dev" if config.is_production else config.primary_frontend_url.rstrip("/")
     if state:
         try:
             extra_origin = extract_oauth_state_extra(state, config.secret_key, max_age_seconds=config.state_max_age_seconds)
-            if extra_origin and config.is_origin_allowed(extra_origin):
+            if extra_origin and config.is_origin_allowed(extra_origin) and not extra_origin.endswith(".onrender.com"):
                 target_origin = extra_origin.rstrip("/")
         except Exception:
             pass
+
+    if not target_origin or "onrender.com" in target_origin:
+        target_origin = "https://aizen-bot.pages.dev" if config.is_production else "http://localhost:8080"
 
     error = query.get("error")
     if error:
@@ -143,8 +169,15 @@ async def handle_callback(request: web.Request) -> web.Response:
         target = f"{target_origin}/dashboard.html?error=missing_code"
         raise web.HTTPFound(location=target)
 
-    # 1. Validate CSRF state signature and expiration
-    if not verify_oauth_state(state, config.secret_key, max_age_seconds=config.state_max_age_seconds):
+    # 1. Validate CSRF state signature, expiration, and cookie match
+    cookie_state = request.cookies.get("kyoka_oauth_state")
+    is_valid = False
+    if cookie_state and state and cookie_state == state:
+        is_valid = True
+    elif state and verify_oauth_state(state, config.secret_key, max_age_seconds=config.state_max_age_seconds):
+        is_valid = True
+
+    if not is_valid:
         target = f"{target_origin}/dashboard.html?error=invalid_state"
         raise web.HTTPFound(location=target)
 
@@ -161,18 +194,21 @@ async def handle_callback(request: web.Request) -> web.Response:
         )
     except Exception as e:
         logger.error(f"OAuth code exchange failed: {e}")
-        raise web.HTTPBadRequest(reason=f"Discord authentication failed: {str(e)}")
+        target = f"{target_origin}/dashboard.html?error=token_exchange_failed"
+        raise web.HTTPFound(location=target)
 
     access_token = token_data.get("access_token")
     if not access_token:
-        raise web.HTTPBadRequest(reason="Did not receive valid access token from Discord.")
+        target = f"{target_origin}/dashboard.html?error=token_exchange_failed"
+        raise web.HTTPFound(location=target)
 
     # 3. Fetch Discord user profile
     try:
         user_info = await fetch_discord_user(access_token, http_session)
     except Exception as e:
         logger.error(f"Failed to fetch user from Discord: {e}")
-        raise web.HTTPBadGateway(reason="Failed to fetch Discord user profile.")
+        target = f"{target_origin}/dashboard.html?error=user_fetch_failed"
+        raise web.HTTPFound(location=target)
 
     # 4. Construct user session object
     user_id = str(user_info.get("id"))
@@ -197,14 +233,10 @@ async def handle_callback(request: web.Request) -> web.Response:
 
     session_token = create_session_token(session_payload, config.secret_key)
 
-    # 5. Extract origin from state if client encoded it, or fall back to primary frontend url
-    extra_origin = extract_oauth_state_extra(state, config.secret_key, max_age_seconds=config.state_max_age_seconds)
-    if extra_origin and config.is_origin_allowed(extra_origin):
-        target_origin = extra_origin.rstrip("/")
-    else:
-        target_origin = config.primary_frontend_url.rstrip("/")
+    # 5. Redirect to frontend dashboard with both secure cookie and #token in URL fragment for decoupling
+    if "onrender.com" in target_origin or not target_origin:
+        target_origin = "https://aizen-bot.pages.dev" if config.is_production else "http://localhost:8080"
 
-    # Redirect to frontend dashboard with both secure cookie and #token in URL fragment for decoupling
     _redirect_target = f"{target_origin}/dashboard.html#token={session_token}"
     response = web.HTTPFound(location=_redirect_target)
     response.set_cookie(
@@ -213,12 +245,86 @@ async def handle_callback(request: web.Request) -> web.Response:
         max_age=config.session_max_age_seconds,
         httponly=True,
         secure=config.is_production,
-        # SameSite=None required for cross-origin deployments (Cloudflare Pages + Render).
-        # SameSite=Lax is sufficient for same-origin (Render serves everything).
         samesite="None" if config.is_production else "Lax",
         path="/"
     )
+    # Clear one-time state cookie
+    response.del_cookie("kyoka_oauth_state", path="/")
     return response
+
+
+async def handle_exchange(request: web.Request) -> web.Response:
+    """Secure code exchange endpoint for edge proxies."""
+    config = request.app["config"]
+    missing = config.get_missing_oauth_vars()
+    if missing:
+        return web.json_response({"error": f"Missing config: {', '.join(missing)}"}, status=500)
+    try:
+        body = await request.json()
+    except Exception:
+        return web.json_response({"error": "Invalid JSON body"}, status=400)
+
+    code = body.get("code")
+    redirect_uri = body.get("redirect_uri") or config.redirect_uri
+    if not code:
+        return web.json_response({"error": "Missing code"}, status=400)
+
+    http_session = request.app["http_session"]
+    try:
+        token_data = await exchange_discord_code(
+            client_id=config.client_id,
+            client_secret=config.client_secret,
+            redirect_uri=redirect_uri,
+            code=code,
+            session=http_session
+        )
+    except Exception as e:
+        return web.json_response({"error": f"Token exchange failed: {str(e)}"}, status=400)
+
+    access_token = token_data.get("access_token")
+    if not access_token:
+        return web.json_response({"error": "No access token received from Discord"}, status=400)
+
+    try:
+        user_info = await fetch_discord_user(access_token, http_session)
+    except Exception as e:
+        return web.json_response({"error": f"User fetch failed: {str(e)}"}, status=502)
+
+    user_id = str(user_info.get("id"))
+    username = user_info.get("username", "User")
+    discriminator = user_info.get("discriminator", "0")
+    avatar = user_info.get("avatar")
+    avatar_url = (
+        f"https://cdn.discordapp.com/avatars/{user_id}/{avatar}.png?size=128"
+        if avatar
+        else f"https://cdn.discordapp.com/embed/avatars/{int(user_id) % 5}.png"
+    )
+
+    session_payload = {
+        "user_id": user_id,
+        "username": username,
+        "discriminator": discriminator,
+        "avatar": avatar,
+        "avatar_url": avatar_url,
+        "access_token": access_token,
+    }
+
+    session_token = create_session_token(session_payload, config.secret_key)
+
+    user_payload = {
+        "id": user_id,
+        "username": username,
+        "discriminator": discriminator,
+        "global_name": user_info.get("global_name", username),
+        "avatar_url": avatar_url,
+    }
+
+    return web.json_response({
+        "success": True,
+        "user": user_payload,
+        "session_token": session_token,
+        "token_data": token_data,
+    })
 
 
 async def handle_me(request: web.Request) -> web.Response:
@@ -289,9 +395,11 @@ def register_auth_routes(app: web.Application) -> None:
     app.router.add_get("/api/auth/callback", handle_callback)
     app.router.add_get("/api/auth/me", handle_me)
     app.router.add_post("/api/auth/logout", handle_logout)
+    app.router.add_post("/api/auth/exchange", handle_exchange)
 
     # Route aliases without /api prefix
     app.router.add_get("/auth/login", handle_login)
     app.router.add_get("/auth/callback", handle_callback)
     app.router.add_get("/auth/me", handle_me)
     app.router.add_post("/auth/logout", handle_logout)
+    app.router.add_post("/auth/exchange", handle_exchange)
