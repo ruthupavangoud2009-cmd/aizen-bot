@@ -403,12 +403,7 @@ document.addEventListener('DOMContentLoaded', () => {
     if (e.target.id === 'shop-checkout-modal') closeCheckoutModal();
   });
 
-  // Copy UPI
-  document.getElementById('copy-upi-btn')?.addEventListener('click', () => {
-    navigator.clipboard.writeText('aizen@upi');
-    soundFX.playSound('click');
-    showToast('Copied UPI ID: aizen@upi', 'success');
-  });
+
 
   // Auto Deliver / Verify button inside modal
   document.getElementById('modal-claim-btn')?.addEventListener('click', () => {
