@@ -289,7 +289,6 @@ function renderCatalog() {
   }
 
   container.innerHTML = filtered.map(item => {
-    const priceText = currentCurrency === 'INR' ? `₹${item.price_inr}` : `$${item.price_usd.toFixed(2)}`;
     return `
       <div class="product-card" data-id="${item.id}">
         <span class="product-badge ${item.badgeClass || ''}">${item.badge || 'IN STOCK'}</span>
@@ -297,9 +296,11 @@ function renderCatalog() {
         <h3 class="product-title">${item.name}</h3>
         <p class="product-desc">${item.desc}</p>
 
-        <div class="product-price-box">
-          <span class="price-val">${priceText}</span>
-          <span class="price-stock">
+        <div class="product-price-box" style="flex-wrap: wrap; gap: 0.35rem; align-items: baseline;">
+          <span class="price-val">₹${item.price_inr}</span>
+          <span style="font-size: 0.82rem; color: #F87171; text-decoration: line-through; margin-left: 0.2rem;">$${item.price_usd.toFixed(2)}</span>
+          <span style="font-size: 0.68rem; color: #EF4444; background: rgba(239, 68, 68, 0.18); padding: 0.1rem 0.35rem; border-radius: 4px; font-weight: 700;">USD Unavailable</span>
+          <span class="price-stock" style="margin-left: auto;">
             <span>●</span> ${item.is_auto_deliver ? '⚡ Instant Auto-Deliver' : `🟢 In Stock (${item.stock})`}
           </span>
         </div>
@@ -310,7 +311,7 @@ function renderCatalog() {
 
         <button class="btn btn-primary btn-buy-item" data-id="${item.id}" style="width: 100%; margin-top: auto;">
           <span>🧾</span>
-          <span>Buy Now / Make Bill</span>
+          <span>Buy Now / Make Bill (₹ INR)</span>
         </button>
       </div>
     `;
@@ -333,15 +334,24 @@ function openCheckoutModal(item) {
   if (!modal) return;
 
   const randomId = 'KDC-' + Math.random().toString(36).substring(2, 8).toUpperCase();
-  const priceVal = currentCurrency === 'INR' ? `₹${item.price_inr}` : `$${item.price_usd.toFixed(2)}`;
-  const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=180x180&data=upi://pay?pa=aizen@upi%26pn=KDC_Shop%26am=${item.price_inr}%26cu=INR%26tn=${randomId}`;
+  const qrUrl = '/assets/kdc_payment_qr.png';
 
   document.getElementById('modal-item-icon').textContent = item.icon;
   document.getElementById('modal-item-title').textContent = item.name;
   document.getElementById('modal-bill-id').textContent = randomId;
-  document.getElementById('modal-total-price').textContent = priceVal;
+  document.getElementById('modal-total-price').innerHTML = `₹${item.price_inr} <span style="font-size: 0.8rem; color: #FCA5A5; text-decoration: line-through; margin-left: 0.4rem; font-weight: 600;">$${item.price_usd.toFixed(2)} USD</span> <span style="font-size: 0.7rem; color: #EF4444; font-weight: 800; background: rgba(239, 68, 68, 0.18); padding: 0.1rem 0.4rem; border-radius: 4px;">USD Unavailable</span>`;
   document.getElementById('modal-fulfillment').textContent = item.is_auto_deliver ? '⚡ Instant Zip Auto-Delivery' : '🚀 Server Invite / Staff Delivery';
-  document.getElementById('modal-qr-img').src = qrUrl;
+  
+  const qrImg = document.getElementById('modal-qr-img');
+  if (qrImg) {
+    qrImg.src = qrUrl;
+    qrImg.alt = 'Official KDC UPI Payment QR Scanner';
+  }
+
+  const usdNotice = document.getElementById('modal-usd-notice');
+  if (usdNotice) {
+    usdNotice.style.display = 'block';
+  }
 
   modal.style.display = 'flex';
 }
@@ -380,9 +390,10 @@ document.addEventListener('DOMContentLoaded', () => {
 
   usdBtn?.addEventListener('click', () => {
     soundFX.playSound('click');
-    currentCurrency = 'USD';
-    usdBtn.classList.add('active');
-    inrBtn?.classList.remove('active');
+    showToast('❌ USD payments are currently unavailable. Please pay in ₹ INR using the official scanner.', 'error');
+    currentCurrency = 'INR';
+    inrBtn?.classList.add('active');
+    usdBtn?.classList.remove('active');
     renderCatalog();
   });
 

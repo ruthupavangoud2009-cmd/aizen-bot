@@ -222,3 +222,54 @@ def test_kdc_shop_review_crud_and_rating_summary(temp_shop: KDCShopManager):
     rev_ids = [r["id"] for r in temp_shop.get_reviews(limit=20)]
     assert new_rev["id"] not in rev_ids
 
+
+def test_kdc_scanner_image_files_exist():
+    """Verify official UPI payment QR scanner files exist for both bot and website."""
+    bot_qr = Path("assets/kdc_payment_qr.png")
+    web_qr = Path("website/assets/kdc_payment_qr.png")
+
+    assert bot_qr.exists(), "Bot scanner asset assets/kdc_payment_qr.png must exist"
+    assert web_qr.exists(), "Website scanner asset website/assets/kdc_payment_qr.png must exist"
+    assert bot_qr.stat().st_size > 10000, "Bot QR scanner must be a valid non-empty image"
+    assert web_qr.stat().st_size > 10000, "Website QR scanner must be a valid non-empty image"
+
+
+@pytest.mark.asyncio
+async def test_kdc_shop_scanner_and_makebill_commands():
+    """Verify scanner and makebill commands are registered with aliases."""
+    intents = discord.Intents.default()
+    bot = commands.Bot(command_prefix="+", intents=intents)
+    cog = KDCShop(bot)
+    await bot.add_cog(cog)
+
+    scanner_cmd = bot.get_command("scanner")
+    assert scanner_cmd is not None
+    assert "qr" in scanner_cmd.aliases
+    assert "kdcqr" in scanner_cmd.aliases
+    assert "upiscanner" in scanner_cmd.aliases
+
+    makebill_cmd = bot.get_command("makebill")
+    assert makebill_cmd is not None
+    assert "buyitem" in makebill_cmd.aliases
+    assert "shoporder" in makebill_cmd.aliases
+
+
+def test_kdc_shop_view_embed_labels_usd_unavailable(temp_shop: KDCShopManager):
+    """Verify that KDCShopView embed clearly marks USD as unavailable and highlights INR scanner."""
+    from src.cogs.general.kdc_shop import KDCShopView
+    mock_bot = discord.Client(intents=discord.Intents.default())
+    mock_cog = KDCShop(mock_bot)  # type: ignore
+
+    view = KDCShopView(temp_shop, mock_cog)
+    overview = view.generate_overview_embed()
+    assert "USD payments are currently unavailable" in overview.description
+    assert "INR" in overview.description
+
+    item = temp_shop.get_item("boost_2")
+    assert item is not None
+    item_embed = view.generate_item_embed(item)
+    pricing_field = [f for f in item_embed.fields if f.name == "💵 Pricing"][0]
+    assert "Unavailable" in pricing_field.value
+    assert "Scan to Pay" in pricing_field.value
+
+

@@ -308,28 +308,29 @@ class KDCShopView(View):
             description=(
                 "> **Welcome to KDC Shop!** High-speed Discord Server Boosts, Nitro Subscriptions, "
                 "and Instant Auto-Delivered Discord Bots.\n"
+                "> 💳 **Payment:** Scan official UPI QR (**₹ INR**). ❌ *USD payments are currently unavailable.*\n"
                 "> Select any product from the dropdown below to order or generate a verified bill.\n\n"
                 "**🚀 DISCORD SERVER BOOSTS (Warranty Protected)**\n"
-                "• **2 Boosts** — `₹200` / `$2.00` *(Level 1 Ready)*\n"
-                "• **4 Boosts** — `₹380` / `$3.80` *(Stickers & 128kbps)*\n"
-                "• **8 Boosts** — `₹720` / `$7.20` *(Level 2 Perks & Banner)*\n"
-                "• **10 Boosts** — `₹850` / `$8.50` *(High Stability Tier)*\n"
-                "• **14 Boosts** — `₹1,150` / `$11.50` *(Full Level 3 + Vanity URL)*\n\n"
+                "• **2 Boosts** — `₹200` *(~$2.00 USD - Unavailable)*\n"
+                "• **4 Boosts** — `₹380` *(~$3.80 USD - Unavailable)*\n"
+                "• **8 Boosts** — `₹720` *(~$7.20 USD - Unavailable)*\n"
+                "• **10 Boosts** — `₹850` *(~$8.50 USD - Unavailable)*\n"
+                "• **14 Boosts** — `₹1,150` *(~$11.50 USD - Unavailable)*\n\n"
                 "**💎 DISCORD NITRO SUBSCRIPTIONS**\n"
-                "• **1 Month Nitro ID + 2 Boosts** — `₹250` / `$2.50`\n"
-                "• **3 Months Nitro Promo Link** — `₹350` / `$3.50`\n"
-                "• **1 Year Nitro Full ID** — `₹2,200` / `$22.00`\n\n"
+                "• **1 Month Nitro ID + 2 Boosts** — `₹250` *(~$2.50 USD - Unavailable)*\n"
+                "• **3 Months Nitro Promo Link** — `₹350` *(~$3.50 USD - Unavailable)*\n"
+                "• **1 Year Nitro Full ID** — `₹2,200` *(~$22.00 USD - Unavailable)*\n\n"
                 "**🤖 PRE-BUILT AUTO-DELIVERY BOTS (Source Code Included)**\n"
-                "• **Basic Music Bot** — `₹50` / `$0.50` ⚡ *Instant Zip*\n"
-                "• **Auto Chat AI Bot** — `₹50` / `$0.50` ⚡ *Instant Zip*\n"
-                "• **Ticket Support Bot** — `₹120` / `$1.20` ⚡ *Instant Zip*\n"
-                "• **Anti-Nuke Security Bot** — `₹150` / `$1.50` ⚡ *Instant Zip*\n"
-                "• **All-In-One Ultimate Bot** — `₹300` / `$3.00` ⚡ *Flagship Suite*"
+                "• **Basic Music Bot** — `₹50` ⚡ *Instant Zip*\n"
+                "• **Auto Chat AI Bot** — `₹50` ⚡ *Instant Zip*\n"
+                "• **Ticket Support Bot** — `₹120` ⚡ *Instant Zip*\n"
+                "• **Anti-Nuke Security Bot** — `₹150` ⚡ *Instant Zip*\n"
+                "• **All-In-One Ultimate Bot** — `₹300` ⚡ *Flagship Suite*"
             ),
             color=0x7C3AED,
             timestamp=discord.utils.utcnow(),
         )
-        embed.set_footer(text="KDC Shop • Type 'stock' anytime to open • Instant Auto-Delivery")
+        embed.set_footer(text="KDC Shop • Type 'stock' or 'scanner' anytime • USD Unavailable (INR UPI Only)")
         embed.set_thumbnail(url="https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?w=400&q=80")
         return embed
 
@@ -344,7 +345,7 @@ class KDCShopView(View):
         )
         embed.add_field(
             name="💵 Pricing",
-            value=f"• **₹{int(item.price_inr)} INR**\n• **${item.price_usd:.2f} USD**",
+            value=f"• **₹{int(item.price_inr)} INR** *(Scan to Pay)*\n• ~~${item.price_usd:.2f} USD~~ *(❌ Unavailable)*",
             inline=True,
         )
         embed.add_field(
@@ -359,7 +360,7 @@ class KDCShopView(View):
                 inline=False,
             )
 
-        embed.set_footer(text="Click '🧾 Make Bill' below to generate your invoice and payment scanner!")
+        embed.set_footer(text="Click '🧾 Make Bill (INR)' below to generate your invoice and payment scanner!")
         return embed
 
     @discord.ui.button(label="🧾 Make Bill (INR)", style=discord.ButtonStyle.primary, emoji="🧾", row=1)
@@ -368,29 +369,47 @@ class KDCShopView(View):
 
     @discord.ui.button(label="🧾 Make Bill (USD)", style=discord.ButtonStyle.secondary, emoji="💵", row=1)
     async def make_bill_usd(self, interaction: discord.Interaction, button: Button):
-        await self._handle_make_bill(interaction, "USD")
+        embed = discord.Embed(
+            title="❌ USD PAYMENTS TEMPORARILY UNAVAILABLE",
+            description=(
+                "**USD Payments (PayPal / Stripe) are currently unavailable.**\n\n"
+                "Please click **'🧾 Make Bill (INR)'** to pay in Indian Rupees (**₹ INR**) using the official UPI payment scanner.\n\n"
+                "If you are an international buyer without UPI access, please contact staff or open a support ticket."
+            ),
+            color=0xEF4444,
+            timestamp=discord.utils.utcnow(),
+        )
+        embed.set_footer(text="KDC Shop • USD Unavailable • Please pay in INR")
+        await interaction.response.send_message(embed=embed, ephemeral=True)
 
     @discord.ui.button(label="💳 Payment Scanner", style=discord.ButtonStyle.success, emoji="💳", row=1)
     async def show_payment_scanner(self, interaction: discord.Interaction, button: Button):
         scanner_embed = discord.Embed(
-            title="💳 KDC SHOP • PAYMENT SCANNER & METHODS",
+            title="💳 KDC SHOP • OFFICIAL UPI PAYMENT SCANNER",
             description=(
-                "> **Scan with any UPI App (GPay, PhonePe, Paytm, BHIM) to pay instantly.**\n\n"
-                f"• **UPI ID:** `{self.shop_mgr.upi_id}`\n"
-                f"• **PayPal:** [{self.shop_mgr.paypal_link}]({self.shop_mgr.paypal_link})\n\n"
-                "**Instructions:**\n"
-                "1. Click **'🧾 Make Bill'** for your desired item to get your unique Invoice ID.\n"
-                "2. Scan & pay the exact invoice amount.\n"
-                "3. Click **'⚡ Verify Payment & Claim Bot'** and paste your Transaction ID / UTR.\n"
-                "4. For bots, the bot file will be delivered to you **instantly**!"
+                "> **Scan the QR code below with any UPI App (GPay, PhonePe, Paytm, BHIM, FamPay) to pay.**\n\n"
+                "• **Payment Method:** `₹ INR (UPI Scanner Only)`\n"
+                "• **USD / International:** `❌ Temporarily Unavailable`\n\n"
+                "**Payment & Auto-Delivery Steps:**\n"
+                "1. Click **'🧾 Make Bill (INR)'** on your selected item to generate your Invoice ID.\n"
+                "2. Scan this QR code and pay the exact amount.\n"
+                "3. Click **'⚡ Verify Payment & Claim Bot'** and enter your Transaction ID (UTR).\n"
+                "4. For bots, your zip package will be delivered **instantly**!"
             ),
             color=0x10B981,
+            timestamp=discord.utils.utcnow(),
         )
-        # UPI QR Code generated dynamically
-        qr_url = f"https://api.qrserver.com/v1/create-qr-code/?size=250x250&data=upi://pay?pa={self.shop_mgr.upi_id}%26pn=KDC_Shop%26cu=INR"
-        scanner_embed.set_image(url=qr_url)
-        scanner_embed.set_footer(text="KDC Shop • Verified Payments")
-        await interaction.response.send_message(embed=scanner_embed, ephemeral=True)
+        scanner_embed.set_footer(text="KDC Shop • Official UPI Scanner • USD Unavailable")
+
+        qr_file_path = Path("assets/kdc_payment_qr.png")
+        if qr_file_path.exists():
+            file = discord.File(qr_file_path, filename="kdc_payment_qr.png")
+            scanner_embed.set_image(url="attachment://kdc_payment_qr.png")
+            await interaction.response.send_message(embed=scanner_embed, file=file, ephemeral=True)
+        else:
+            qr_url = f"https://api.qrserver.com/v1/create-qr-code/?size=250x250&data=upi://pay?pa={self.shop_mgr.upi_id}%26pn=KDC_Shop%26cu=INR"
+            scanner_embed.set_image(url=qr_url)
+            await interaction.response.send_message(embed=scanner_embed, ephemeral=True)
 
     @discord.ui.button(label="⚡ Verify & Claim Bot", style=discord.ButtonStyle.primary, emoji="📦", row=2)
     async def verify_and_claim(self, interaction: discord.Interaction, button: Button):
@@ -401,7 +420,7 @@ class KDCShopView(View):
             any_bills = self.shop_mgr.list_bills(customer_id=interaction.user.id, limit=1)
             if not any_bills:
                 return await interaction.response.send_message(
-                    "❌ You do not have an active invoice. Please click **'🧾 Make Bill'** on a product first!",
+                    "❌ You do not have an active invoice. Please click **'🧾 Make Bill (INR)'** on a product first!",
                     ephemeral=True,
                 )
             target_bill = any_bills[0]
@@ -436,6 +455,20 @@ class KDCShopView(View):
         await interaction.response.send_message(embed=embed, view=view, ephemeral=True)
 
     async def _handle_make_bill(self, interaction: discord.Interaction, currency: str):
+        if currency.upper() == "USD":
+            embed = discord.Embed(
+                title="❌ USD PAYMENTS TEMPORARILY UNAVAILABLE",
+                description=(
+                    "**USD Payments are currently unavailable.**\n\n"
+                    "Please select **'🧾 Make Bill (INR)'** to generate an invoice and pay via the official UPI scanner.\n\n"
+                    "For manual international payments, contact staff."
+                ),
+                color=0xEF4444,
+                timestamp=discord.utils.utcnow(),
+            )
+            embed.set_footer(text="KDC Shop • USD Unavailable • Please pay in INR")
+            return await interaction.response.send_message(embed=embed, ephemeral=True)
+
         item_id = self.selected_item_id or (self.items[0].id if self.items else "boost_2")
         item = self.shop_mgr.get_item(item_id)
         if not item:
@@ -447,34 +480,38 @@ class KDCShopView(View):
             customer_id=interaction.user.id,
             customer_name=str(interaction.user),
             item_id=item.id,
-            currency=currency,
+            currency="INR",
             quantity=1,
         )
 
-        amount_str = f"₹{int(bill.total)}" if currency == "INR" else f"${bill.total:.2f}"
-        qr_url = f"https://api.qrserver.com/v1/create-qr-code/?size=250x250&data=upi://pay?pa={self.shop_mgr.upi_id}%26pn=KDC_Shop%26am={bill.total}%26cu=INR%26tn={bill.id}"
-
+        amount_str = f"₹{int(bill.total)}"
         bill_embed = discord.Embed(
             title=f"🧾 KDC SHOP INVOICE • `{bill.id}`",
             description=(
                 f"**Customer:** {interaction.user.mention} (`{interaction.user.name}`)\n"
                 f"**Product:** `{bill.item_name}`\n"
                 f"**Quantity:** `1`\n"
-                f"**Total Due:** `{currency} {amount_str}`\n"
-                f"**Status:** `🟡 PENDING PAYMENT`\n\n"
+                f"**Total Due:** `₹ {amount_str} INR`\n"
+                f"**USD Status:** `❌ USD Payments Unavailable (Pay via INR)`\n"
+                f"**Invoice Status:** `🟡 PENDING PAYMENT`\n\n"
                 f"**How to Pay:**\n"
-                f"• **UPI ID:** `{self.shop_mgr.upi_id}` (GPay / PhonePe / Paytm / BHIM)\n"
-                f"• **PayPal:** [{self.shop_mgr.paypal_link}]({self.shop_mgr.paypal_link})\n\n"
+                f"• Scan the official **UPI QR code** below using GPay, PhonePe, Paytm, BHIM, or FamPay.\n\n"
                 f"Once paid, click **'⚡ Verify Payment & Claim Bot'** below to receive your bot files or boost activation!"
             ),
             color=0xF59E0B,
             timestamp=discord.utils.utcnow(),
         )
-        if currency == "INR":
-            bill_embed.set_image(url=qr_url)
-        bill_embed.set_footer(text=f"Invoice ID: {bill.id} • KDC Shop")
+        bill_embed.set_footer(text=f"Invoice ID: {bill.id} • KDC Shop • UPI Scanner")
 
-        await interaction.response.send_message(embed=bill_embed, ephemeral=True)
+        qr_file_path = Path("assets/kdc_payment_qr.png")
+        if qr_file_path.exists():
+            file = discord.File(qr_file_path, filename="kdc_payment_qr.png")
+            bill_embed.set_image(url="attachment://kdc_payment_qr.png")
+            await interaction.response.send_message(embed=bill_embed, file=file, ephemeral=True)
+        else:
+            qr_url = f"https://api.qrserver.com/v1/create-qr-code/?size=250x250&data=upi://pay?pa={self.shop_mgr.upi_id}%26pn=KDC_Shop%26am={bill.total}%26cu=INR%26tn={bill.id}"
+            bill_embed.set_image(url=qr_url)
+            await interaction.response.send_message(embed=bill_embed, ephemeral=True)
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -488,7 +525,7 @@ class KDCShop(commands.Cog, name="KDCShop"):
         self.bot = bot
         self.shop_mgr = KDCShopManager()
 
-    # ── Universal Trigger: typing 'stock' anywhere ──
+    # ── Universal Trigger: typing 'stock' or 'scanner' anywhere ──
     @commands.Cog.listener()
     async def on_message(self, message: discord.Message) -> None:
         if message.author.bot:
@@ -499,6 +536,9 @@ class KDCShop(commands.Cog, name="KDCShop"):
         if clean in ("stock", "kdc stock", "kdc shop", "kdc"):
             ctx = await self.bot.get_context(message)
             await self.open_shop(ctx)
+        elif clean in ("scanner", "qr", "kdc scanner", "kdc qr", "upi scanner", "payqr"):
+            ctx = await self.bot.get_context(message)
+            await self.send_scanner_embed(ctx)
         elif clean in ("review", "reviews", "kdc review", "kdc reviews"):
             ctx = await self.bot.get_context(message)
             embed = self.generate_reviews_embed()
@@ -789,6 +829,101 @@ class KDCShop(commands.Cog, name="KDCShop"):
         embed = self.generate_reviews_embed()
         view = ReviewsView(self.shop_mgr, self)
         await ctx.send(embed=embed, view=view)
+
+    # ── Standalone Scanner Helper & Command ──
+    async def send_scanner_embed(self, ctx: Union[CustomContext, commands.Context]):
+        scanner_embed = discord.Embed(
+            title="💳 KDC SHOP • OFFICIAL UPI PAYMENT SCANNER",
+            description=(
+                "> **Scan the QR code below with any UPI App (GPay, PhonePe, Paytm, BHIM, FamPay) to pay.**\n\n"
+                "• **Payment Method:** `₹ INR (Official UPI Scanner)`\n"
+                "• **USD / International Payments:** `❌ Temporarily Unavailable`\n\n"
+                "**How to Order & Claim:**\n"
+                "1. Type `stock` to view products and select **'🧾 Make Bill (INR)'**.\n"
+                "2. Scan this QR code and complete your payment in ₹ INR.\n"
+                "3. Type `+stock verify <InvoiceID> <UTR>` or click **'⚡ Verify Payment & Claim Bot'**.\n"
+                "4. For pre-built bots, your `.zip` archive is dispatched **instantly**!"
+            ),
+            color=0x10B981,
+            timestamp=discord.utils.utcnow(),
+        )
+        scanner_embed.set_footer(text="KDC Shop • UPI Scanner • USD Unavailable • Please pay in INR")
+
+        qr_file_path = Path("assets/kdc_payment_qr.png")
+        if qr_file_path.exists():
+            file = discord.File(qr_file_path, filename="kdc_payment_qr.png")
+            scanner_embed.set_image(url="attachment://kdc_payment_qr.png")
+            await ctx.send(embed=scanner_embed, file=file)
+        else:
+            qr_url = f"https://api.qrserver.com/v1/create-qr-code/?size=250x250&data=upi://pay?pa={self.shop_mgr.upi_id}%26pn=KDC_Shop%26cu=INR"
+            scanner_embed.set_image(url=qr_url)
+            await ctx.send(embed=scanner_embed)
+
+    @commands.command(name="scanner", aliases=["qr", "kdcqr", "kdcscanner", "upiscanner"])
+    async def scanner_command(self, ctx: CustomContext):
+        """View the official KDC Shop UPI payment QR scanner (INR)."""
+        await self.send_scanner_embed(ctx)
+
+    # ── Standalone Bill Creation Command ──
+    @commands.command(name="makebill", aliases=["buyitem", "shoporder", "orderitem"])
+    async def makebill_command(self, ctx: CustomContext, item_id: str = "boost_2", currency: str = "INR"):
+        """Create an invoice bill for a product (e.g. +makebill boost_2 INR)."""
+        if currency.strip().upper() == "USD":
+            embed = discord.Embed(
+                title="❌ USD PAYMENTS TEMPORARILY UNAVAILABLE",
+                description=(
+                    "**USD Payments (PayPal / Stripe) are currently unavailable.**\n\n"
+                    "Please use `+makebill [item_id] INR` to pay in Indian Rupees (**₹ INR**) using the official UPI scanner.\n\n"
+                    "If you are an international buyer without UPI access, please contact staff or open a support ticket."
+                ),
+                color=0xEF4444,
+                timestamp=discord.utils.utcnow(),
+            )
+            embed.set_footer(text="KDC Shop • USD Unavailable • Please pay in INR")
+            return await ctx.send(embed=embed)
+
+        item = self.shop_mgr.get_item(item_id.strip().lower())
+        if not item:
+            return await ctx.send(f"❌ Product `{item_id}` not found. Type `stock` to view available products.")
+
+        guild_id = ctx.guild.id if ctx.guild else 0
+        bill = self.shop_mgr.create_bill(
+            guild_id=guild_id,
+            customer_id=ctx.author.id,
+            customer_name=str(ctx.author),
+            item_id=item.id,
+            currency="INR",
+            quantity=1,
+        )
+
+        amount_str = f"₹{int(bill.total)}"
+        bill_embed = discord.Embed(
+            title=f"🧾 KDC SHOP INVOICE • `{bill.id}`",
+            description=(
+                f"**Customer:** {ctx.author.mention} (`{ctx.author.name}`)\n"
+                f"**Product:** `{bill.item_name}`\n"
+                f"**Quantity:** `1`\n"
+                f"**Total Due:** `₹ {amount_str} INR`\n"
+                f"**USD Status:** `❌ USD Payments Unavailable (Pay via INR)`\n"
+                f"**Invoice Status:** `🟡 PENDING PAYMENT`\n\n"
+                f"**How to Pay:**\n"
+                f"• Scan the official **UPI QR code** below using GPay, PhonePe, Paytm, BHIM, or FamPay.\n"
+                f"• Once paid, type `+stock verify {bill.id} <UTR>` or click '⚡ Verify Payment & Claim Bot'."
+            ),
+            color=0xF59E0B,
+            timestamp=discord.utils.utcnow(),
+        )
+        bill_embed.set_footer(text=f"Invoice ID: {bill.id} • KDC Shop • UPI Scanner")
+
+        qr_file_path = Path("assets/kdc_payment_qr.png")
+        if qr_file_path.exists():
+            file = discord.File(qr_file_path, filename="kdc_payment_qr.png")
+            bill_embed.set_image(url="attachment://kdc_payment_qr.png")
+            await ctx.send(embed=bill_embed, file=file)
+        else:
+            qr_url = f"https://api.qrserver.com/v1/create-qr-code/?size=250x250&data=upi://pay?pa={self.shop_mgr.upi_id}%26pn=KDC_Shop%26am={bill.total}%26cu=INR%26tn={bill.id}"
+            bill_embed.set_image(url=qr_url)
+            await ctx.send(embed=bill_embed)
 
 
 async def setup(bot: commands.Bot) -> None:

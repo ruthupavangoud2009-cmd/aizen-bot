@@ -277,8 +277,8 @@
       <button class="shop-tab-btn" data-cat="bots">🤖 Pre-Built Bots (Instant)</button>
 
       <div class="currency-switcher-dock">
-        <button id="curr-inr-btn" class="curr-btn active" title="View Prices in Indian Rupees (₹)">₹ INR</button>
-        <button id="curr-usd-btn" class="curr-btn" title="View Prices in US Dollars ($)">$ USD</button>
+        <button id="curr-inr-btn" class="curr-btn active" title="Pay with Official UPI QR Scanner (₹ INR)">₹ INR (Scan to Pay)</button>
+        <button id="curr-usd-btn" class="curr-btn disabled-btn" title="USD Payments Temporarily Unavailable" style="opacity: 0.7; cursor: not-allowed; border-color: rgba(239, 68, 68, 0.4); color: #FCA5A5;">❌ $ USD (Unavailable)</button>
       </div>
     </div>
   </header>
@@ -332,6 +332,11 @@
         </div>
       </div>
 
+      <!-- USD Unavailable Notice -->
+      <div id="modal-usd-notice" style="background: rgba(239, 68, 68, 0.15); border: 1px solid rgba(239, 68, 68, 0.4); border-radius: var(--radius-md); padding: 0.65rem 1rem; margin-bottom: 1rem; color: #FCA5A5; font-size: 0.85rem; text-align: center;">
+        ⚠️ <strong>USD Payments Unavailable:</strong> International USD checkout is currently disabled. Please pay in <strong>₹ INR</strong> using the official UPI scanner below.
+      </div>
+
       <div style="background: rgba(10, 5, 20, 0.7); border: 1px solid var(--border-active); border-radius: var(--radius-md); padding: 1.25rem; margin-bottom: 1.25rem;">
         <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem;">
           <span style="color: var(--text-dim); font-size: 0.85rem;">Invoice ID:</span>
@@ -350,10 +355,10 @@
       <!-- Payment Instructions & QR Scanner -->
       <div style="text-align: center; margin-bottom: 1.5rem;">
         <p style="color: var(--text-main); font-size: 0.88rem; margin-bottom: 0.75rem;">
-          Scan with GPay, PhonePe, Paytm or BHIM UPI to complete payment:
+          Scan with <strong>GPay, PhonePe, Paytm, FamPay or BHIM UPI</strong> to complete payment:
         </p>
-        <div style="background: #ffffff; padding: 10px; border-radius: var(--radius-md); display: inline-block; box-shadow: 0 0 20px rgba(124, 58, 237, 0.3);">
-          <img id="modal-qr-img" src="https://api.qrserver.com/v1/create-qr-code/?size=180x180&data=upi://pay?pa=aizen@upi%26pn=KDC_Shop" alt="UPI Payment QR Code" style="width: 170px; height: 170px; display: block;" />
+        <div style="background: #ffffff; padding: 10px; border-radius: var(--radius-md); display: inline-block; box-shadow: 0 0 24px rgba(124, 58, 237, 0.35);">
+          <img id="modal-qr-img" src="/assets/kdc_payment_qr.png" alt="Official KDC UPI Payment QR Scanner" style="width: 180px; height: 180px; display: block; object-fit: contain; border-radius: 8px;" />
         </div>
         <div style="margin-top: 0.75rem; display: flex; justify-content: center; align-items: center; gap: 0.5rem;">
           <code style="background: rgba(124, 58, 237, 0.2); color: var(--purple-pastel); padding: 0.25rem 0.65rem; border-radius: 4px; font-weight: 700;">aizen@upi</code>
