@@ -14,6 +14,7 @@ from src.managers.reaction_role_manager import ReactionRoleManager
 from src.managers.custom_help_manager import CustomHelpManager
 from src.managers.voice_welcome_manager import VoiceWelcomeManager
 from src.managers.top_manager import TopManager
+from src.managers.kdc_shop_manager import KDCShopManager
 
 __all__ = [
     "GuildManager",
@@ -32,4 +33,5 @@ __all__ = [
     "CustomHelpManager",
     "VoiceWelcomeManager",
     "TopManager",
+    "KDCShopManager",
 ]

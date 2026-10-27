@@ -276,6 +276,8 @@ CATEGORY_SEARCH_ALIASES: dict[str, str] = {
     "config": "config", "setup": "config", "settings": "config", "prefix": "config", "logs": "config", "admin": "config", "administration": "config",
     # Social & Fun
     "social": "social", "fun": "social", "games": "social", "romance": "social", "anime": "social",
+    # KDC Shop & Stock
+    "stock": "service_bills", "kdc": "service_bills", "shop": "service_bills", "store": "service_bills", "kdcshop": "service_bills",
     # Owner & Developer
     "owner": "owner", "dev": "owner", "developer": "owner", "system": "owner", "eval": "owner",
 }
@@ -283,6 +285,7 @@ CATEGORY_SEARCH_ALIASES: dict[str, str] = {
 
 # Cog class names / qualified names strongly mapped to categories
 COG_MAPPINGS: dict[str, str] = {
+    "kdcshop": "service_bills",
     # Music (STRICT: only the real music cog)
     "music": "music",
 
@@ -529,6 +532,10 @@ def resolve_command_category(cmd: Any) -> CategoryMeta:
         root_name == "top" and any(part in ("app", "apply", "applications") for part in getattr(cmd, "qualified_name", "").lower().split())
     ):
         return CATEGORY_BY_ID["staff_applications"]
+
+    # KDC Shop & Stock
+    if root_name in ("stock", "kdc", "kdcshop", "shop", "store"):
+        return CATEGORY_BY_ID["service_bills"]
 
     # Blox Fruits Service Bills
     if root_name in (

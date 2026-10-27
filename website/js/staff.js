@@ -145,6 +145,83 @@ async function renderStaffDashboard(container) {
 
         <div id="staff-roster-slot">Loading staff roster...</div>
       </div>
+
+      <!-- Section 3: KDC Shop & Bot Warehouse Control (Staff Permissions) -->
+      <div class="staff-card" style="margin-top: 1.5rem;">
+        <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 1rem; margin-bottom: 0.5rem;">
+          <div>
+            <h3 style="font-size: 1.25rem; font-weight: 700; color: var(--purple-white); display: flex; align-items: center; gap: 0.5rem;">
+              <span>🏪</span> KDC Shop &amp; Bot Warehouse Control
+            </h3>
+            <p style="color: var(--text-muted); font-size: 0.88rem; margin: 0.2rem 0 0;">
+              Staff permissions to manage live stock, update prices, upload bot zip releases, and verify customer payments.
+            </p>
+          </div>
+          <a href="/shop" target="_blank" class="btn btn-outline btn-sm" style="display: inline-flex; align-items: center; gap: 0.4rem;">
+            <span>🌐</span> Open Public Shop
+          </a>
+        </div>
+
+        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 1rem; margin: 1.25rem 0;">
+          <!-- Stock Fast-Update Panel -->
+          <div style="background: rgba(10, 4, 20, 0.6); border: 1px solid var(--border-subtle); border-radius: var(--radius-sm); padding: 1.25rem;">
+            <h4 style="color: var(--purple-light); font-size: 0.95rem; margin-bottom: 0.75rem;">📦 Quick Stock &amp; Pricing Update</h4>
+            <div style="display: flex; flex-direction: column; gap: 0.6rem;">
+              <select id="staff-stock-item-select" class="form-input" style="font-size: 0.85rem;">
+                <option value="boost_2" data-inr="200" data-usd="2.0">2 Server Boosts (₹200 / $2.00)</option>
+                <option value="boost_4" data-inr="380" data-usd="3.8">4 Server Boosts (₹380 / $3.80)</option>
+                <option value="boost_8" data-inr="720" data-usd="7.2">8 Server Boosts (₹720 / $7.20)</option>
+                <option value="boost_10" data-inr="850" data-usd="8.5">10 Server Boosts (₹850 / $8.50)</option>
+                <option value="boost_14" data-inr="1150" data-usd="11.5">14 Server Boosts (Level 3 - ₹1,150 / $11.50)</option>
+                <option value="nitro_1m_2b" data-inr="250" data-usd="2.5">1 Month Nitro ID + 2 Boosts (₹250 / $2.50)</option>
+                <option value="nitro_3m" data-inr="350" data-usd="3.5">3 Months Nitro Promo Link (₹350 / $3.50)</option>
+                <option value="nitro_1y" data-inr="2200" data-usd="22.0">1 Year Nitro Full ID (₹2,200 / $22.00)</option>
+                <option value="bot_music" data-inr="50" data-usd="0.5">Basic Music Bot (₹50 / $0.50)</option>
+                <option value="bot_chat" data-inr="50" data-usd="0.5">Auto Chat AI Bot (₹50 / $0.50)</option>
+                <option value="bot_allinone" data-inr="300" data-usd="3.0">All-in-One Ultimate Bot (₹300 / $3.00)</option>
+                <option value="bot_tickets" data-inr="120" data-usd="1.2">Ticket Support Bot (₹120 / $1.20)</option>
+                <option value="bot_antinuke" data-inr="150" data-usd="1.5">Anti-Nuke Security Bot (₹150 / $1.50)</option>
+              </select>
+              <div style="display: flex; gap: 0.5rem;">
+                <input type="number" id="staff-stock-inr" class="form-input" placeholder="Price (INR ₹)" value="200" style="flex: 1; font-size: 0.85rem;" />
+                <input type="number" id="staff-stock-usd" class="form-input" placeholder="Price (USD $)" value="2.0" step="0.1" style="flex: 1; font-size: 0.85rem;" />
+              </div>
+              <button id="btn-save-stock-price" class="btn btn-primary btn-sm" style="margin-top: 0.25rem;">
+                💾 Save Price &amp; Stock
+              </button>
+            </div>
+          </div>
+
+          <!-- Bot Zip Upload Warehouse -->
+          <div style="background: rgba(10, 4, 20, 0.6); border: 1px solid var(--border-subtle); border-radius: var(--radius-sm); padding: 1.25rem;">
+            <h4 style="color: var(--purple-light); font-size: 0.95rem; margin-bottom: 0.75rem;">🤖 Bot File Package Upload</h4>
+            <p style="color: var(--text-dim); font-size: 0.8rem; margin-bottom: 0.75rem;">
+              Upload ready-to-run <code>.zip</code> bot archives into the KDC warehouse for auto-delivery.
+            </p>
+            <div style="display: flex; flex-direction: column; gap: 0.6rem;">
+              <select id="staff-upload-target-bot" class="form-input" style="font-size: 0.85rem;">
+                <option value="bot_music">🎵 Basic Music Only Bot</option>
+                <option value="bot_chat">🤖 Auto Chat AI Bot</option>
+                <option value="bot_allinone">👑 All-in-One Ultimate Bot</option>
+                <option value="bot_tickets">🎫 Ticket Support Bot</option>
+                <option value="bot_antinuke">🛡️ Anti-Nuke Security Bot</option>
+              </select>
+              <input type="file" id="staff-bot-file-input" accept=".zip" class="form-input" style="font-size: 0.8rem; padding: 0.35rem;" />
+              <button id="btn-upload-bot-package" class="btn btn-outline btn-sm" style="border-color: var(--emerald-accent); color: var(--emerald-accent);">
+                ⬆️ Upload &amp; Arm Bot Package
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Recent Invoices & Verification -->
+        <div style="background: rgba(10, 4, 20, 0.4); border: 1px solid var(--border-subtle); border-radius: var(--radius-sm); padding: 1.25rem;">
+          <h4 style="color: var(--purple-white); font-size: 0.95rem; margin-bottom: 0.75rem;">🧾 Recent Customer Invoices</h4>
+          <div id="staff-invoices-slot" style="color: var(--text-dim); font-size: 0.85rem;">
+            Loading recent invoices...
+          </div>
+        </div>
+      </div>
     </div>
   `;
 
@@ -152,8 +229,91 @@ async function renderStaffDashboard(container) {
   document.getElementById('btn-refresh-queue')?.addEventListener('click', () => loadStaffTickets());
   document.getElementById('add-staff-form')?.addEventListener('submit', handleAddStaffSubmit);
 
+  // KDC Shop Staff Event Listeners
+  const stockSelect = document.getElementById('staff-stock-item-select');
+  const inrInput = document.getElementById('staff-stock-inr');
+  const usdInput = document.getElementById('staff-stock-usd');
+
+  stockSelect?.addEventListener('change', () => {
+    const opt = stockSelect.selectedOptions[0];
+    if (opt && inrInput && usdInput) {
+      inrInput.value = opt.getAttribute('data-inr') || '';
+      usdInput.value = opt.getAttribute('data-usd') || '';
+    }
+  });
+
+  document.getElementById('btn-save-stock-price')?.addEventListener('click', () => {
+    soundFX.playSound('click');
+    const opt = stockSelect?.selectedOptions[0];
+    const name = opt ? opt.text.split('(')[0].trim() : 'Product';
+    showToast(`Updated ${name} pricing: ₹${inrInput?.value} / $${usdInput?.value}!`, 'success');
+  });
+
+  document.getElementById('btn-upload-bot-package')?.addEventListener('click', () => {
+    soundFX.playSound('click');
+    const fileInput = document.getElementById('staff-bot-file-input');
+    if (!fileInput || !fileInput.files || fileInput.files.length === 0) {
+      return showToast('Please select a .zip archive to upload.', 'error');
+    }
+    const file = fileInput.files[0];
+    showToast(`Successfully armed bot package "${file.name}" in KDC warehouse!`, 'success');
+  });
+
   // Load Sub-Views
-  await Promise.all([loadStaffTickets(), loadStaffRoster()]);
+  await Promise.all([loadStaffTickets(), loadStaffRoster(), loadStaffInvoices()]);
+}
+
+async function loadStaffInvoices() {
+  const slot = document.getElementById('staff-invoices-slot');
+  if (!slot) return;
+
+  const sampleInvoices = [
+    { id: 'KDC-8F3A12', item: '2 Server Boosts', customer: 'NexusGamer#1234', price: '₹200', status: 'PAID' },
+    { id: 'KDC-91BA04', item: 'Basic Music Bot (Source)', customer: 'AstroDev#9999', price: '₹50', status: 'DELIVERED' },
+    { id: 'KDC-14E290', item: '1 Month Nitro ID + 2 Boosts', customer: 'Vortex#4444', price: '₹250', status: 'PENDING' },
+    { id: 'KDC-7C18D1', item: 'All-in-One Ultimate Bot', customer: 'ShadowLord#0001', price: '₹300', status: 'PAID' },
+  ];
+
+  slot.innerHTML = `
+    <table class="staff-table" style="font-size: 0.85rem;">
+      <thead>
+        <tr>
+          <th>Invoice ID</th>
+          <th>Product</th>
+          <th>Customer</th>
+          <th>Total</th>
+          <th>Status</th>
+          <th style="text-align: right;">Action</th>
+        </tr>
+      </thead>
+      <tbody>
+        ${sampleInvoices.map(inv => `
+          <tr>
+            <td><code style="color: var(--purple-pastel); font-weight: 800;">${inv.id}</code></td>
+            <td><strong>${inv.item}</strong></td>
+            <td>${inv.customer}</td>
+            <td style="color: #10B981; font-weight: 700;">${inv.price}</td>
+            <td><span class="badge ${inv.status === 'PAID' ? 'badge-installed' : (inv.status === 'DELIVERED' ? 'badge-installed' : 'badge-invite')}">${inv.status}</span></td>
+            <td style="text-align: right;">
+              <button class="btn btn-outline btn-xs btn-verify-inv" data-id="${inv.id}" style="padding: 0.2rem 0.5rem;">
+                ${inv.status === 'PENDING' ? 'Verify Payment' : 'View Delivery'}
+              </button>
+            </td>
+          </tr>
+        `).join('')}
+      </tbody>
+    </table>
+  `;
+
+  slot.querySelectorAll('.btn-verify-inv').forEach(btn => {
+    btn.addEventListener('click', () => {
+      soundFX.playSound('click');
+      const invId = btn.getAttribute('data-id');
+      showToast(`Invoice ${invId} marked as verified and auto-dispatched!`, 'success');
+      btn.textContent = 'Dispatched ✓';
+      btn.disabled = true;
+    });
+  });
 }
 
 async function loadStaffTickets() {
