@@ -1992,7 +1992,7 @@ function renderLogsTab(panel, s) {
   }
 }
 
-// F. Tickets Suite — Modular Multi-Category Support System
+// F. Tickets Suite — Modular Multi-Category & Simple 1-Click Support System
 function renderTicketsTab(panel, s) {
   if (!s.tickets) s.tickets = {};
   const tk = s.tickets;
@@ -2007,74 +2007,53 @@ function renderTicketsTab(panel, s) {
       .replace(/'/g, '&#039;');
   };
 
-  if (!Array.isArray(tk.categories) || tk.categories.length === 0) {
-    tk.categories = [
-      {
-        id: 'general',
-        name: 'General Support',
-        emoji: '💬',
-        description: 'Server questions, role inquiries & general help',
-        category_channel_id: '',
-        staff_role_id: '',
-        welcome_message: 'Welcome {user}! Staff will assist you shortly. Please explain your issue.',
-        naming_format: 'ticket-{count}'
-      },
-      {
-        id: 'bug_reports',
-        name: 'Bug Reports & Technical',
-        emoji: '🔧',
-        description: 'Report bot anomalies, discord errors & glitches',
-        category_channel_id: '',
-        staff_role_id: '',
-        welcome_message: 'Welcome {user}! Our tech team has been alerted. Please provide screenshots or error logs.',
-        naming_format: 'bug-{count}'
-      },
-      {
-        id: 'billing',
-        name: 'Billing & Blox Fruits',
-        emoji: '💎',
-        description: 'Vouchers, passes, trades & premium activation',
-        category_channel_id: '',
-        staff_role_id: '',
-        welcome_message: 'Welcome {user}! A billing representative will review your receipt or trade request.',
-        naming_format: 'billing-{count}'
-      },
-      {
-        id: 'reports',
-        name: 'Player & Staff Reports',
-        emoji: '🛡️',
-        description: 'Report rule violations or player misconduct safely',
-        category_channel_id: '',
-        staff_role_id: '',
-        welcome_message: 'Welcome {user}! This ticket is private to senior moderators. Please provide the user ID and evidence.',
-        naming_format: 'report-{count}'
-      }
-    ];
+  if (!Array.isArray(tk.categories)) {
+    tk.categories = [];
+  }
+
+  // Determine current mode: simple vs categories
+  if (!tk.mode) {
+    tk.mode = tk.categories.length > 0 ? 'categories' : 'simple';
   }
 
   let selectedPreviewIndex = 0;
 
   function renderFullTicketsContent() {
+    const isSimple = tk.mode === 'simple' || tk.categories.length === 0;
+
     panel.innerHTML = `
       <div class="panel-header">
         <div style="display: flex; justify-content: space-between; align-items: flex-start; gap: 1rem; flex-wrap: wrap;">
           <div>
-            <h4>Modular Multi-Category Ticket System</h4>
-            <p>Deploy interactive ticket panels where members select specific inquiry categories, routing directly to dedicated Discord categories and alerting responsible staff roles.</p>
+            <h4>Ticket System & Support Hub</h4>
+            <p>Deploy interactive Discord tickets. Choose between a lightweight 1-click button or a modular multi-category inquiry portal.</p>
           </div>
-          <button id="tk-add-cat-btn-top" class="btn btn-primary btn-sm" style="display: inline-flex; align-items: center; gap: 0.4rem;">
-            <span>➕</span> Add Ticket Category
-          </button>
+          <div style="display: flex; gap: 0.5rem; flex-wrap: wrap;">
+            ${!isSimple ? `
+              <button id="tk-clear-all-cats-btn" class="btn btn-outline btn-sm" style="color: #FCA5A5; border-color: rgba(239, 68, 68, 0.4);">
+                🗑️ Clear All Categories (Simple Mode)
+              </button>
+            ` : ''}
+            <button id="tk-add-cat-btn-top" class="btn btn-primary btn-sm" style="display: inline-flex; align-items: center; gap: 0.4rem;">
+              <span>➕</span> ${isSimple ? 'Enable Multi-Category Mode' : 'Add Category'}
+            </button>
+          </div>
         </div>
       </div>
 
-      <!-- Master Switch -->
-      <div class="setting-row">
-        <div class="setting-info">
-          <label>Ticket System Status</label>
-          <p>Enable or disable Discord interactive ticket creation in this server.</p>
+      <!-- Mode Selector Pills -->
+      <div style="display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 1rem; margin-bottom: 1.5rem;">
+        <div class="ticket-mode-switch">
+          <button class="ticket-mode-pill ${isSimple ? 'active' : ''}" id="mode-pill-simple">
+            ⚡ Simple 1-Click Ticket
+          </button>
+          <button class="ticket-mode-pill ${!isSimple ? 'active' : ''}" id="mode-pill-categories">
+            🗂️ Multi-Category Portal (${tk.categories.length})
+          </button>
         </div>
-        <div class="setting-control">
+
+        <div style="display: flex; align-items: center; gap: 0.75rem;">
+          <span style="font-size: 0.85rem; font-weight: 700; color: var(--purple-white);">Ticket System:</span>
           <label class="switch">
             <input type="checkbox" id="tk-enabled" ${tk.enabled !== false ? 'checked' : ''} />
             <span class="slider"></span>
@@ -2088,7 +2067,7 @@ function renderTicketsTab(panel, s) {
           <span>📋</span> Discord Panel & Channel Routing
         </h5>
         <p style="color: var(--text-dim); font-size: 0.85rem; margin-bottom: 1.25rem;">
-          Configure the public portal embed and global default channels for ticket transcripts and creation.
+          Configure the public portal message and global routing parameters.
         </p>
 
         <div class="setting-row">
@@ -2107,7 +2086,7 @@ function renderTicketsTab(panel, s) {
             <p>Instructions informing members how to open tickets.</p>
           </div>
           <div class="setting-control" style="flex: 1; max-width: 480px;">
-            <textarea id="tk-panel-desc" class="form-input" rows="3" style="width: 100%; resize: vertical; font-family: inherit;">${escapeHtml(tk.panel_description || 'Select an inquiry category below or click Create Ticket to open a private channel with our staff team.\nAn authorized staff member will assist you shortly.')}</textarea>
+            <textarea id="tk-panel-desc" class="form-input" rows="3" style="width: 100%; resize: vertical; font-family: inherit;">${escapeHtml(tk.panel_description || (isSimple ? 'Click the button below to open a private ticket with our staff team.' : 'Select an inquiry category below or click Create Ticket to open a private channel with our staff team.\nAn authorized staff member will assist you shortly.'))}</textarea>
           </div>
         </div>
 
@@ -2122,6 +2101,49 @@ function renderTicketsTab(panel, s) {
           </div>
         </div>
 
+        ${isSimple ? `
+          <!-- Simple Mode Direct Routing Fields -->
+          <div class="setting-row">
+            <div class="setting-info">
+              <label>Target Discord Category ID</label>
+              <p>Category section Snowflake ID where new tickets will be created.</p>
+            </div>
+            <div class="setting-control">
+              <input type="text" id="tk-simple-cat-channel" class="form-input" placeholder="e.g. 109876543210987654" value="${escapeHtml(tk.category_id || '')}" />
+            </div>
+          </div>
+
+          <div class="setting-row">
+            <div class="setting-info">
+              <label>Staff / Support Role ID</label>
+              <p>Role Snowflake to ping & grant read/write access to new tickets.</p>
+            </div>
+            <div class="setting-control">
+              <input type="text" id="tk-simple-staff-role" class="form-input" placeholder="e.g. 109876543210987654" value="${escapeHtml(tk.support_role_id || '')}" />
+            </div>
+          </div>
+
+          <div class="setting-row">
+            <div class="setting-info">
+              <label>Ticket Channel Naming Template</label>
+              <p>Format for ticket channels (e.g. <code>ticket-{count}</code>).</p>
+            </div>
+            <div class="setting-control">
+              <input type="text" id="tk-simple-naming" class="form-input" value="${escapeHtml(tk.naming_format || 'ticket-{count}')}" />
+            </div>
+          </div>
+
+          <div class="setting-row">
+            <div class="setting-info">
+              <label>Ticket Greeting Message</label>
+              <p>Sent automatically when a ticket is opened. Available: <code>{user}</code>, <code>{server}</code>.</p>
+            </div>
+            <div class="setting-control" style="flex: 1; max-width: 480px;">
+              <textarea id="tk-simple-welcome" class="form-input" rows="2" style="width: 100%; resize: vertical; font-family: inherit;">${escapeHtml(tk.welcome_message || 'Welcome {user}! Staff will assist you shortly. Please explain your issue in detail.')}</textarea>
+            </div>
+          </div>
+        ` : ''}
+
         <div class="setting-row">
           <div class="setting-info">
             <label>Transcripts / Audit Log Channel</label>
@@ -2133,18 +2155,18 @@ function renderTicketsTab(panel, s) {
         </div>
       </div>
 
-      <!-- Live Discord Portal Preview (Matching Image 3) -->
+      <!-- Live Discord Portal Preview -->
       <div class="ticket-section-card">
         <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.75rem; flex-wrap: wrap; gap: 0.5rem;">
           <h5 style="color: var(--purple-white); display: flex; align-items: center; gap: 0.5rem; margin: 0;">
             <span>👁️</span> Real-Time Discord Portal Simulator
           </h5>
           <span style="font-size: 0.78rem; color: var(--purple-pastel); background: rgba(124, 58, 237, 0.2); padding: 0.2rem 0.6rem; border-radius: 4px; border: 1px solid rgba(168, 85, 247, 0.3);">
-            Faithful Discord Component Layout
+            ${isSimple ? '⚡ Simple 1-Click Layout' : '🗂️ Multi-Category Component Layout'}
           </span>
         </div>
         <p style="color: var(--text-dim); font-size: 0.85rem; margin-bottom: 1rem;">
-          This is exactly how members will experience your support portal inside Discord. Click the category dropdown below to test switching categories.
+          ${isSimple ? 'Members click the 1-click button to open a ticket immediately.' : 'Members select an inquiry category from the dropdown menu, then click Create Ticket.'}
         </p>
 
         <div class="discord-msg-preview" id="tk-discord-preview">
@@ -2152,26 +2174,41 @@ function renderTicketsTab(panel, s) {
         </div>
       </div>
 
-      <!-- Configured Categories Section -->
-      <div class="ticket-section-card">
-        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem; flex-wrap: wrap; gap: 0.75rem;">
-          <div>
-            <h5 style="color: var(--purple-white); margin-bottom: 0.25rem; display: flex; align-items: center; gap: 0.5rem;">
-              <span>🗂️</span> Configured Ticket Categories (${tk.categories.length})
-            </h5>
-            <p style="color: var(--text-dim); font-size: 0.82rem; margin: 0;">
-              Each category operates independently with its own Discord channel category, staff role permissions, and greeting text.
-            </p>
+      <!-- Configured Categories Section (Only in Multi-Category Mode) -->
+      ${!isSimple ? `
+        <div class="ticket-section-card">
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem; flex-wrap: wrap; gap: 0.75rem;">
+            <div>
+              <h5 style="color: var(--purple-white); margin-bottom: 0.25rem; display: flex; align-items: center; gap: 0.5rem;">
+                <span>🗂️</span> Configured Ticket Categories (${tk.categories.length})
+              </h5>
+              <p style="color: var(--text-dim); font-size: 0.82rem; margin: 0;">
+                You can edit, add, or delete any category. Deleting all categories switches to simple mode.
+              </p>
+            </div>
+            <div style="display: flex; gap: 0.5rem;">
+              <button id="tk-add-cat-btn-bottom" class="btn btn-outline btn-sm" style="display: inline-flex; align-items: center; gap: 0.4rem;">
+                <span>➕</span> Add Category
+              </button>
+            </div>
           </div>
-          <button id="tk-add-cat-btn-bottom" class="btn btn-outline btn-sm" style="display: inline-flex; align-items: center; gap: 0.4rem;">
-            <span>➕</span> Add Category
+
+          <div class="ticket-cat-list" id="tk-cat-list-container">
+            <!-- Rendered dynamically -->
+          </div>
+        </div>
+      ` : `
+        <div class="ticket-section-card" style="text-align: center; padding: 2rem;">
+          <div style="font-size: 2.2rem; margin-bottom: 0.5rem;">⚡</div>
+          <h5 style="color: var(--purple-white); font-weight: 700; margin-bottom: 0.4rem;">Running in Simple 1-Click Ticket Mode</h5>
+          <p style="color: var(--text-muted); font-size: 0.88rem; max-width: 520px; margin: 0 auto 1.25rem;">
+            No categories required. When members click the ticket button in Discord, a channel is opened directly. You can enable multiple categories anytime.
+          </p>
+          <button id="tk-switch-to-cats-btn" class="btn btn-primary btn-sm">
+            ➕ Switch to Multi-Category Mode
           </button>
         </div>
-
-        <div class="ticket-cat-list" id="tk-cat-list-container">
-          <!-- Rendered dynamically -->
-        </div>
-      </div>
+      `}
     `;
 
     renderCategoryCards();
@@ -2182,6 +2219,15 @@ function renderTicketsTab(panel, s) {
   function renderCategoryCards() {
     const listContainer = document.getElementById('tk-cat-list-container');
     if (!listContainer) return;
+
+    if (tk.categories.length === 0) {
+      listContainer.innerHTML = `
+        <div style="text-align: center; padding: 2rem; color: var(--text-dim);">
+          No categories configured. Click "Add Category" or switch to Simple Mode.
+        </div>
+      `;
+      return;
+    }
 
     listContainer.innerHTML = tk.categories.map((cat, idx) => `
       <div class="ticket-cat-card" data-cat-idx="${idx}">
@@ -2195,11 +2241,9 @@ function renderTicketsTab(panel, s) {
           </div>
           <div style="display: flex; align-items: center; gap: 0.5rem;">
             <span class="ticket-cat-badge">#${idx + 1}</span>
-            ${tk.categories.length > 1 ? `
-              <button class="btn btn-outline btn-sm tk-delete-cat-btn" data-idx="${idx}" style="color: #F87171; border-color: rgba(239, 68, 68, 0.4); padding: 0.25rem 0.5rem;" title="Delete this category">
-                🗑️
-              </button>
-            ` : ''}
+            <button class="btn btn-outline btn-sm tk-delete-cat-btn" data-idx="${idx}" style="color: #F87171; border-color: rgba(239, 68, 68, 0.4); padding: 0.25rem 0.6rem;" title="Delete this category">
+              🗑️ Delete
+            </button>
           </div>
         </div>
 
@@ -2249,14 +2293,16 @@ function renderTicketsTab(panel, s) {
     const previewMount = document.getElementById('tk-discord-preview');
     if (!previewMount) return;
 
-    if (selectedPreviewIndex >= tk.categories.length) {
+    const isSimple = tk.mode === 'simple' || tk.categories.length === 0;
+
+    if (!isSimple && selectedPreviewIndex >= tk.categories.length) {
       selectedPreviewIndex = Math.max(0, tk.categories.length - 1);
     }
 
-    const currentCat = tk.categories[selectedPreviewIndex] || {
-      name: 'Select Category',
+    const currentCat = (!isSimple && tk.categories[selectedPreviewIndex]) ? tk.categories[selectedPreviewIndex] : {
+      name: 'General Support',
       emoji: '🎫',
-      description: 'Choose a category to open a ticket'
+      description: 'Click below to open a ticket',
     };
 
     previewMount.innerHTML = `
@@ -2275,16 +2321,18 @@ function renderTicketsTab(panel, s) {
         <div class="discord-embed-title">
           <span>${escapeHtml(tk.panel_name || 'Kyoka Support Portal')}</span>
         </div>
-        <div class="discord-embed-body">${escapeHtml(tk.panel_description || 'Select an inquiry category below or click Create Ticket to open a private channel with our staff team.\nAn authorized staff member will assist you shortly.')}</div>
+        <div class="discord-embed-body">${escapeHtml(tk.panel_description || (isSimple ? 'Click the button below to open a private ticket with our staff team.' : 'Select an inquiry category below or click Create Ticket to open a private channel with our staff team.\nAn authorized staff member will assist you shortly.'))}</div>
 
-        <!-- Interactive Discord Select Component -->
-        <div class="discord-select-menu" id="tk-sim-select-btn" title="Click to cycle categories in preview">
-          <div style="display: flex; align-items: center; gap: 0.5rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">
-            <span style="font-size: 1.1rem;">${escapeHtml(currentCat.emoji || '🎫')}</span>
-            <span style="font-weight: 500; color: #F2F3F5;">${escapeHtml(currentCat.name || 'General Support')}</span>
+        <!-- Conditional Select Component: ONLY in Multi-Category Mode -->
+        ${!isSimple ? `
+          <div class="discord-select-menu" id="tk-sim-select-btn" title="Click to cycle categories in preview">
+            <div style="display: flex; align-items: center; gap: 0.5rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">
+              <span style="font-size: 1.1rem;">${escapeHtml(currentCat.emoji || '🎫')}</span>
+              <span style="font-weight: 500; color: #F2F3F5;">${escapeHtml(currentCat.name || 'General Support')}</span>
+            </div>
+            <span style="color: #949BA4; font-size: 0.8rem; margin-left: 0.5rem;">▼</span>
           </div>
-          <span style="color: #949BA4; font-size: 0.8rem; margin-left: 0.5rem;">▼</span>
-        </div>
+        ` : ''}
 
         <!-- Interactive Discord Create Ticket Button -->
         <div>
@@ -2303,12 +2351,52 @@ function renderTicketsTab(panel, s) {
     });
 
     document.getElementById('tk-sim-create-btn')?.addEventListener('click', () => {
-      showToast(`Simulation: Opened ticket for [${currentCat.name}] in Discord!`, 'success');
+      const catLabel = isSimple ? 'General Support' : currentCat.name;
+      showToast(`Simulation: Opened ticket for [${catLabel}] in Discord!`, 'success');
       soundFX?.playSuccess?.();
     });
   }
 
   function attachGlobalListeners() {
+    // Mode Switching
+    document.getElementById('mode-pill-simple')?.addEventListener('click', () => {
+      tk.mode = 'simple';
+      markChanged();
+      renderFullTicketsContent();
+      soundFX?.playClick?.();
+      showToast('Switched to Simple 1-Click Ticket Mode', 'info');
+    });
+
+    document.getElementById('mode-pill-categories')?.addEventListener('click', () => {
+      tk.mode = 'categories';
+      if (tk.categories.length === 0) {
+        addDefaultCategories();
+      }
+      markChanged();
+      renderFullTicketsContent();
+      soundFX?.playClick?.();
+      showToast('Switched to Multi-Category Ticket Mode', 'info');
+    });
+
+    document.getElementById('tk-switch-to-cats-btn')?.addEventListener('click', () => {
+      tk.mode = 'categories';
+      if (tk.categories.length === 0) {
+        addDefaultCategories();
+      }
+      markChanged();
+      renderFullTicketsContent();
+      soundFX?.playSuccess?.();
+    });
+
+    document.getElementById('tk-clear-all-cats-btn')?.addEventListener('click', () => {
+      tk.categories = [];
+      tk.mode = 'simple';
+      markChanged();
+      renderFullTicketsContent();
+      soundFX?.playClick?.();
+      showToast('All categories removed. Operating in Simple 1-Click Ticket Mode.', 'info');
+    });
+
     document.getElementById('tk-enabled')?.addEventListener('change', (e) => {
       tk.enabled = e.target.checked;
       markChanged();
@@ -2338,12 +2426,33 @@ function renderTicketsTab(panel, s) {
       markChanged();
     });
 
+    document.getElementById('tk-simple-cat-channel')?.addEventListener('input', (e) => {
+      tk.category_id = e.target.value.trim() || null;
+      markChanged();
+    });
+
+    document.getElementById('tk-simple-staff-role')?.addEventListener('input', (e) => {
+      tk.support_role_id = e.target.value.trim() || null;
+      markChanged();
+    });
+
+    document.getElementById('tk-simple-naming')?.addEventListener('input', (e) => {
+      tk.naming_format = e.target.value.trim() || 'ticket-{count}';
+      markChanged();
+    });
+
+    document.getElementById('tk-simple-welcome')?.addEventListener('input', (e) => {
+      tk.welcome_message = e.target.value;
+      markChanged();
+    });
+
     document.getElementById('tk-log-channel')?.addEventListener('input', (e) => {
       tk.log_channel_id = e.target.value.trim() || null;
       markChanged();
     });
 
     const addCat = () => {
+      tk.mode = 'categories';
       const newCatIndex = tk.categories.length + 1;
       tk.categories.push({
         id: `cat_${Date.now().toString(36)}`,
@@ -2356,15 +2465,60 @@ function renderTicketsTab(panel, s) {
         naming_format: `ticket-${newCatIndex}-{count}`
       });
       markChanged();
-      renderCategoryCards();
+      renderFullTicketsContent();
       selectedPreviewIndex = tk.categories.length - 1;
       updateDiscordPreview();
-      showToast('New ticket category added! Fill in its details.', 'info');
+      showToast('New ticket category added! Configure its details below.', 'info');
       soundFX?.playSuccess?.();
     };
 
     document.getElementById('tk-add-cat-btn-top')?.addEventListener('click', addCat);
     document.getElementById('tk-add-cat-btn-bottom')?.addEventListener('click', addCat);
+  }
+
+  function addDefaultCategories() {
+    tk.categories = [
+      {
+        id: 'general',
+        name: 'General Support',
+        emoji: '💬',
+        description: 'Server questions, role inquiries & general help',
+        category_channel_id: '',
+        staff_role_id: '',
+        welcome_message: 'Welcome {user}! Staff will assist you shortly. Please explain your issue.',
+        naming_format: 'ticket-{count}'
+      },
+      {
+        id: 'bug_reports',
+        name: 'Bug Reports & Technical',
+        emoji: '🔧',
+        description: 'Report bot anomalies, discord errors & glitches',
+        category_channel_id: '',
+        staff_role_id: '',
+        welcome_message: 'Welcome {user}! Our tech team has been alerted. Please provide screenshots or error logs.',
+        naming_format: 'bug-{count}'
+      },
+      {
+        id: 'billing',
+        name: 'Billing & Blox Fruits',
+        emoji: '💎',
+        description: 'Vouchers, passes, trades & premium activation',
+        category_channel_id: '',
+        staff_role_id: '',
+        welcome_message: 'Welcome {user}! A billing representative will review your receipt or trade request.',
+        naming_format: 'billing-{count}'
+      },
+      {
+        id: 'reports',
+        name: 'Player & Staff Reports',
+        emoji: '🛡️',
+        description: 'Report rule violations or player misconduct safely',
+        category_channel_id: '',
+        staff_role_id: '',
+        welcome_message: 'Welcome {user}! This ticket is private to senior moderators. Please provide the user ID and evidence.',
+        naming_format: 'report-{count}'
+      }
+    ];
   }
 
   function attachCategoryListeners() {
@@ -2443,16 +2597,15 @@ function renderTicketsTab(panel, s) {
     document.querySelectorAll('.tk-delete-cat-btn').forEach((el) => {
       el.addEventListener('click', (e) => {
         const idx = parseInt(e.currentTarget.dataset.idx, 10);
-        if (tk.categories.length <= 1) {
-          showToast('You must keep at least one ticket category!', 'warning');
-          return;
-        }
         const removed = tk.categories.splice(idx, 1);
+        if (tk.categories.length === 0) {
+          tk.mode = 'simple';
+          showToast('All categories removed. Switched to Simple 1-Click Ticket Mode!', 'info');
+        } else {
+          showToast(`Removed category "${removed[0]?.name || ''}"`, 'info');
+        }
         markChanged();
-        renderCategoryCards();
-        selectedPreviewIndex = 0;
-        updateDiscordPreview();
-        showToast(`Removed category "${removed[0]?.name || ''}"`, 'info');
+        renderFullTicketsContent();
       });
     });
   }

@@ -71,6 +71,20 @@ export async function onRequest(context) {
     const OWNER_ID = '1505515188991033409';
     const isOwner = String(session.user_id) === OWNER_ID;
 
+    // Authorized staff whitelist (PostgreSQL synced and fallback)
+    const KNOWN_STAFF_IDS = new Set([
+      '1505515188991033409', // Authoritative Bot Owner
+      '1532660258403647687', // mrhowler01 (Administrator)
+    ]);
+    const KNOWN_STAFF_NAMES = new Set(['mrhowler01', 'aizen', 'ruthupavan']);
+
+    const isStaff = isOwner ||
+      Boolean(session.is_staff) ||
+      KNOWN_STAFF_IDS.has(String(session.user_id)) ||
+      KNOWN_STAFF_NAMES.has(String(session.username || '').toLowerCase());
+
+    const staffRole = isOwner ? 'admin' : (session.staff_role || (isStaff ? 'admin' : null));
+
     return new Response(JSON.stringify({
       authenticated: true,
       user: {
@@ -80,6 +94,8 @@ export async function onRequest(context) {
         global_name: session.global_name || session.username,
         avatar_url: session.avatar_url,
         is_owner: isOwner,
+        is_staff: isStaff,
+        staff_role: staffRole,
       },
     }), {
       status: 200,

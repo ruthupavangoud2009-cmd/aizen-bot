@@ -69,7 +69,7 @@ export async function apiFetch(endpoint, options = {}, isRetry = false) {
     options.body = JSON.stringify(options.body);
   }
 
-  // Sensible request timeout (12s)
+  // Fast edge request timeout (3.5s max to eliminate LTE stalls)
   let controller = null;
   let signal = options.signal;
   if (!signal && typeof AbortController !== 'undefined') {
@@ -77,7 +77,7 @@ export async function apiFetch(endpoint, options = {}, isRetry = false) {
     signal = controller.signal;
     setTimeout(() => {
       try { controller.abort(); } catch {}
-    }, options.timeout || 12000);
+    }, options.timeout || 3500);
   }
 
   const fetchOptions = {
@@ -111,32 +111,16 @@ export async function apiFetch(endpoint, options = {}, isRetry = false) {
     try {
       data = JSON.parse(text);
     } catch {
-      // If HTML was returned unexpectedly on edge proxy, attempt retry against direct backend
-      if (!isRetry && typeof window !== 'undefined' && window.location.hostname.includes('pages.dev')) {
-        return await apiFetch(endpoint, options, true);
-      }
-      throw new Error(`API returned HTML response (HTTP ${res.status}). Backend service may be starting up.`);
+      throw new Error(`API returned non-JSON response (HTTP ${res.status}).`);
     }
 
     if (!res.ok) {
-      // If edge returned 502/503/504, attempt direct retry
-      if (!isRetry && res.status >= 500 && typeof window !== 'undefined' && window.location.hostname.includes('pages.dev')) {
-        return await apiFetch(endpoint, options, true);
-      }
       throw new Error(data.message || data.error || `HTTP ${res.status}`);
     }
 
     return data;
   } catch (err) {
-    if (!isRetry && typeof window !== 'undefined' && window.location.hostname.includes('pages.dev') && !err.message.includes('401')) {
-      try {
-        return await apiFetch(endpoint, options, true);
-      } catch (retryErr) {
-        console.error(`API Error on ${endpoint}:`, retryErr);
-        throw retryErr;
-      }
-    }
-    console.error(`API Error on ${endpoint}:`, err);
+    console.debug(`API Request on ${endpoint}:`, err?.message || err);
     throw err;
   }
 }

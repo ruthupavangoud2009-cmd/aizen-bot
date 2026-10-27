@@ -6,7 +6,7 @@
   <title>KYOKA 3.0 — Platform Features & Architecture</title>
   <meta name="description" content="Explore every module in KYOKA 3.0: Sovereign Anti-Nuke, Modular Giveaways, Neural AI, 24/7 Audio, TTS Voice Greetings, and Modular Logging." />
   <link rel="icon" type="image/svg+xml" href="/assets/logo.svg" />
-  <link rel="stylesheet" href="/css/style.css" />
+  <link rel="stylesheet" href="/css/style.css?v=3.1.0" />
 </head>
 <body>
   <!-- Ambient Aizen Spiritual Particles Canvas -->
@@ -57,9 +57,10 @@
         <li><a href="/features" class="nav-link active">Features</a></li>
         <li><a href="/commands" class="nav-link">Commands</a></li>
         <li><a href="/premium" class="nav-link">Premium</a></li>
-        <li><a href="/changelog" class="nav-link">Changelog</a></li>
-        <li><a href="/support" class="nav-link">Support</a></li>
         <li><a href="/dashboard" class="nav-link">Dashboard</a></li>
+        <li><a href="/tickets" class="nav-link">Tickets</a></li>
+        <li><a href="/staff" class="nav-link">Staff</a></li>
+        <li><a href="/support" class="nav-link">Support</a></li>
       </ul>
 
       <div class="nav-actions">
@@ -183,6 +184,73 @@
         </ul>
         <a href="/dashboard" class="btn btn-primary btn-sm">Configure Member Gate</a>
       </div>
+
+      <!-- Section 7: Koya-Style Welcome Canvas Studio -->
+      <div id="welcome-studio" class="feature-card" style="padding: 2.25rem;">
+        <div class="feature-card-banner"><img src="/assets/features/welcome_banner.png" alt="Koya-Style Welcome Studio Banner" loading="lazy" /></div>
+        <div class="feature-icon-wrapper">🎨</div>
+        <h3 class="feature-title">7. Koya-Style Welcome Canvas Studio</h3>
+        <p class="feature-desc">
+          Craft professional, high-resolution greeting cards rendered on custom HTML5 Canvas. Elevate your onboarding with custom background themes (Nebula, Sunset, Cyberpunk, or custom banner image URLs), member avatar glow rings, member join counters, and auto-roles.
+        </p>
+        <ul style="list-style: none; display: flex; flex-direction: column; gap: 0.5rem; margin-bottom: 1.5rem; font-size: 0.9rem; color: var(--text-muted);">
+          <li>✓ <strong>Live Canvas Studio</strong> — Real-time in-browser card designer with immediate visual feedback.</li>
+          <li>✓ <strong>Dynamic Variable Tokens</strong> — Personalize greeting with {user}, {server}, {count}, and {avatar}.</li>
+          <li>✓ <strong>Interactive Test Simulator</strong> — Send instant test cards directly to your Discord welcome channel.</li>
+        </ul>
+        <a href="/dashboard" class="btn btn-primary btn-sm">Open Welcome Studio</a>
+      </div>
+
+      <!-- Section 8: Web-to-Bot Live Music Studio -->
+      <div id="music-studio" class="feature-card" style="padding: 2.25rem;">
+        <div class="feature-card-banner"><img src="/assets/features/music_banner.png" alt="Web-to-Bot Live Music Studio" loading="lazy" /></div>
+        <div class="feature-icon-wrapper">🎧</div>
+        <h3 class="feature-title">8. Web-to-Bot Live Music Studio</h3>
+        <p class="feature-desc">
+          Control your server's soundscape directly from the web browser. Command Kyoka to join any Discord voice channel with a single click, search tracks on YouTube or Spotify, dispatch songs instantly, and manage the live queue without typing slash commands.
+        </p>
+        <ul style="list-style: none; display: flex; flex-direction: column; gap: 0.5rem; margin-bottom: 1.5rem; font-size: 0.9rem; color: var(--text-muted);">
+          <li>✓ <strong>1-Click Voice Channel Connect</strong> — Direct bot voice summoning from the web control panel.</li>
+          <li>✓ <strong>Live Web Track Search</strong> — Search and add tracks to queue in real time.</li>
+          <li>✓ <strong>Real-Time Studio Player Dock</strong> — Volume slider, pause/play, skip, equalizer, and autoplay.</li>
+        </ul>
+        <a href="/dashboard" class="btn btn-primary btn-sm">Launch Music Studio</a>
+      </div>
+
+      <!-- Section 9: Dual-Mode Ticket Hub -->
+      <div id="tickets" class="feature-card" style="padding: 2.25rem;">
+        <div class="feature-card-banner"><img src="/assets/features/ticket_panel.png" alt="Dual-Mode Ticket Hub Banner" loading="lazy" /></div>
+        <div class="feature-icon-wrapper">🎫</div>
+        <h3 class="feature-title">9. Dual-Mode Support Ticket Portals</h3>
+        <p class="feature-desc">
+          Total support flexibility: effortlessly toggle between Ultra-Simple 1-Click Tickets or Multi-Category Department Routing. Remove all categories with zero restrictions for a clean setup, or assign customized staff roles, emojis, and channel categories for each department.
+        </p>
+        <ul style="list-style: none; display: flex; flex-direction: column; gap: 0.5rem; margin-bottom: 1.5rem; font-size: 0.9rem; color: var(--text-muted);">
+          <li>✓ <strong>Simple 1-Click Mode</strong> — Zero clutter, 1-button tickets without category dropdowns.</li>
+          <li>✓ <strong>Unrestricted Category Controls</strong> — Add, edit, or delete any category with complete freedom.</li>
+          <li>✓ <strong>Synchronized Web Helpdesk</strong> — Open tickets on the web, auto-synced with Discord staff threads.</li>
+        </ul>
+        <div style="display: flex; gap: 0.75rem; flex-wrap: wrap;">
+          <a href="/tickets" class="btn btn-primary btn-sm">Open Ticket Desk</a>
+          <a href="/dashboard" class="btn btn-secondary btn-sm">Configure Tickets</a>
+        </div>
+      </div>
+
+      <!-- Section 10: Staff Operations Center -->
+      <div id="staff" class="feature-card" style="padding: 2.25rem;">
+        <div class="feature-card-banner"><img src="/assets/features/moderation_banner.png" alt="Staff Operations Center Banner" loading="lazy" /></div>
+        <div class="feature-icon-wrapper">🛡️</div>
+        <h3 class="feature-title">10. Staff Operations & Sync Center</h3>
+        <p class="feature-desc">
+          Empower your moderation team with a centralized web dashboard. Manage authorized website staff, assign administrator or support roles, and synchronize permissions instantly between Cloudflare Edge authentication and Discord bot commands.
+        </p>
+        <ul style="list-style: none; display: flex; flex-direction: column; gap: 0.5rem; margin-bottom: 1.5rem; font-size: 0.9rem; color: var(--text-muted);">
+          <li>✓ <strong>Role-Based Staff Access</strong> — Grant granular Admin or Support rights to verified moderators.</li>
+          <li>✓ <strong>Discord Command Synchronization</strong> — Manage staff directly via +staff add / /staff add.</li>
+          <li>✓ <strong>Edge Authentication</strong> — Fast, zero-lag verification powered by Cloudflare serverless functions.</li>
+        </ul>
+        <a href="/staff" class="btn btn-secondary btn-sm">Staff Command Center</a>
+      </div>
     </div>
   </main>
 
@@ -200,6 +268,8 @@
           <li><a href="/features">Features</a></li>
           <li><a href="/commands">Commands</a></li>
           <li><a href="/dashboard">Web Dashboard</a></li>
+          <li><a href="/tickets">Tickets</a></li>
+          <li><a href="/staff">Staff</a></li>
         </ul>
       </div>
       <div class="footer-col">
@@ -230,8 +300,8 @@
     </div>
   </footer>
 
-  <script type="module" src="/js/particles.js"></script>
-  <script type="module" src="/js/audio.js"></script>
-  <script type="module" src="/js/app.js"></script>
+  <script type="module" src="/js/particles.js?v=3.1.0"></script>
+  <script type="module" src="/js/audio.js?v=3.1.0"></script>
+  <script type="module" src="/js/app.js?v=3.1.0"></script>
 </body>
 </html>
