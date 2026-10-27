@@ -36,7 +36,7 @@ def _clean_proxy_url(value: str | None) -> str | None:
 
 def parse_proxy_pool(raw: str | None) -> list[str]:
     """Parse comma, semicolon, or newline-separated proxy URLs into unique clean URLs."""
-    if not raw:
+    if not raw or raw.strip().lower() in ("none", "direct", "off", "disabled", "false"):
         return []
     import re
     tokens = re.split(r'[,;\n\r]+', raw.strip())
@@ -133,16 +133,25 @@ class Config:
     # PostgreSQL / Supabase Database Settings
     DATABASE_URL: str = os.getenv("DATABASE_URL", "").strip()
 
+    # Default verified Webshare datacenter proxy for emergency 429 bypass
+    DEFAULT_BACKUP_PROXY: str = "http://wovozhfw:cfnxdvq5iyyi@64.137.10.153:5803"
+
     # Proxy Configuration (for Cloudflare / 429 bypass & multi-route failover)
-    DISCORD_PROXY: str | None = _clean_proxy_url(os.getenv("DISCORD_PROXY"))
+    DISCORD_PROXY: str | None = _clean_proxy_url(
+        os.getenv("DISCORD_PROXY") or DEFAULT_BACKUP_PROXY
+    )
     DISCORD_PROXY_POOL: list[str] = parse_proxy_pool(
-        os.getenv("DISCORD_PROXY_POOL") or os.getenv("DISCORD_PROXY") or ""
+        os.getenv("DISCORD_PROXY_POOL") or os.getenv("DISCORD_PROXY") or DEFAULT_BACKUP_PROXY
     )
 
     @classmethod
     def get_proxy_pool(cls) -> list[str]:
         """Return list of configured proxies for gateway failover & rotation."""
-        return parse_proxy_pool(os.getenv("DISCORD_PROXY_POOL") or os.getenv("DISCORD_PROXY") or "")
+        return parse_proxy_pool(
+            os.getenv("DISCORD_PROXY_POOL")
+            or os.getenv("DISCORD_PROXY")
+            or cls.DEFAULT_BACKUP_PROXY
+        )
 
     # Lavalink / Audio Settings
     LAVALINK_URI: str = os.getenv("LAVALINK_URI", "http://lavalinkv4.serenetia.com:80").strip()
