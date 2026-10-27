@@ -110,7 +110,7 @@ def _jittered_backoff(base: float, attempt: int, cap: float = 300.0) -> float:
 
 async def run_bot_loop() -> None:
     """Run bot with bounded exponential backoff for transient network errors,
-    Cloudflare / Discord 429 rate limits, and gateway disconnects."""
+    instant route failover on Discord 429 rate limits, and zero-downtime gateway reconnection."""
     global active_bot
 
     try:
@@ -119,27 +119,73 @@ async def run_bot_loop() -> None:
         logger.critical(f"Configuration error: {e}")
         return
 
-    # Backoff state — reset on successful connect+ready, increased on failure
-    backoff_base = 15.0     # seconds base for transient-error backoff
-    backoff_attempt = 0     # how many consecutive transient failures
-    proxy_consecutive_failures = 0
-    proxy_cooldown_until = 0.0
+    backoff_base = 15.0
+    backoff_attempt = 0
+
+    # Route cooldown tracking: route identifier -> monotonic timestamp when cooldown expires
+    route_cooldowns: dict[str, float] = {}
+
+    def get_route_label(proxy_url: str | None) -> str:
+        if not proxy_url:
+            return "direct connection"
+        import urllib.parse
+        parsed = urllib.parse.urlparse(proxy_url)
+        host = parsed.hostname or "proxy"
+        port = f":{parsed.port}" if parsed.port else ""
+        return f"proxy ({host}{port})"
 
     while True:
         try:
             now = time.monotonic()
-            use_proxy = bool(Config.DISCORD_PROXY) and (now >= proxy_cooldown_until)
-            active_proxy = Config.DISCORD_PROXY if use_proxy else None
+            proxy_pool = Config.get_proxy_pool()
+
+            # Assemble candidate routes: all configured proxies first, then direct connection
+            candidate_routes: list[str | None] = []
+            for p in proxy_pool:
+                if p not in candidate_routes:
+                    candidate_routes.append(p)
+            candidate_routes.append(None)  # Direct connection is always an available option
+
+            # Find candidates that are NOT currently on cooldown
+            available_routes = [
+                r for r in candidate_routes
+                if route_cooldowns.get(r or "direct", 0.0) <= now
+            ]
+
+            if available_routes:
+                active_proxy = available_routes[0]
+            else:
+                # All routes currently cooling down: find earliest expiring route
+                earliest_expire = min(
+                    route_cooldowns.get(r or "direct", now) for r in candidate_routes
+                )
+                remaining_wait = max(0.0, earliest_expire - now)
+                capped_wait = max(5.0, min(remaining_wait, 45.0))
+
+                logger.warning(
+                    f"⚠️ All gateway outbound routes are currently rate-limited by Discord "
+                    f"(earliest route unlocks in {remaining_wait:.0f}s). Cooling down for {capped_wait:.0f}s before retrying...\n"
+                    f"💡 INSTANT UNBLOCK TIPS:\n"
+                    f"  1. If hosting on Render: In Render Dashboard -> Settings -> change Region (e.g. Frankfurt -> Oregon / Singapore) for a fresh clean IP immediately!\n"
+                    f"  2. If running locally: Update or remove DISCORD_PROXY in your .env file to route via your clean home IP.\n"
+                    f"  3. Configure multiple proxies in DISCORD_PROXY_POOL (comma-separated) for automated round-robin failover."
+                )
+                await asyncio.sleep(capped_wait)
+                continue
+
+            current_route_key = active_proxy or "direct"
+            current_route_name = get_route_label(active_proxy)
+
             bot = KyokaBot(proxy=active_proxy)
             active_bot = bot
-            route_desc = "via proxy" if active_proxy else ("direct connection (proxy cooling down)" if Config.DISCORD_PROXY else "direct connection")
-            logger.info(f"Connecting {Config.BOT_NAME} in [{Config.ENVIRONMENT.upper()}] mode to Discord Gateway ({route_desc})...")
+            logger.info(f"Connecting {Config.BOT_NAME} in [{Config.ENVIRONMENT.upper()}] mode to Discord Gateway ({current_route_name})...")
+
             async with bot:
                 await bot.start(Config.TOKEN)
-            # Clean exit: reset backoff and proxy failure counts
+
+            # Clean exit / graceful disconnect
             backoff_attempt = 0
-            proxy_consecutive_failures = 0
-            proxy_cooldown_until = 0.0
+            route_cooldowns.pop(current_route_key, None)
             await asyncio.sleep(5)
 
         except discord.HTTPException as e:
@@ -154,29 +200,41 @@ async def run_bot_loop() -> None:
                         except ValueError:
                             pass
 
-                # Detect Cloudflare IP ban (HTML page returned instead of JSON)
-                is_cloudflare_block = (
-                    "<!doctype" in response_text.lower()
-                    or "cloudflare" in response_text.lower()
-                    or "access denied" in response_text.lower()
-                )
+                block_penalty = float(retry_after) if retry_after else 1800.0
 
-                if is_cloudflare_block:
-                    wait_time = 120.0  # 2 minutes cooldown
+                # Mark the current route on cooldown for the rate limit duration
+                route_cooldowns[current_route_key] = time.monotonic() + block_penalty
+
+                # Check if an alternative route is available right now
+                proxy_pool = Config.get_proxy_pool()
+                candidate_routes = [p for p in proxy_pool] + [None]
+                other_unblocked = [
+                    r for r in candidate_routes
+                    if (r or "direct") != current_route_key
+                    and route_cooldowns.get(r or "direct", 0.0) <= time.monotonic()
+                ]
+
+                if other_unblocked:
+                    next_route = other_unblocked[0]
+                    next_name = get_route_label(next_route)
                     logger.warning(
-                        f"Cloudflare IP block detected on Render shared IP. "
-                        f"Cooling down for {wait_time:.0f}s before reconnecting. "
-                        f"(TIP: Change Render service Region to Singapore, Ohio, or Oregon in Settings to get an unblocked IP instantly!)"
+                        f"🚨 Discord Gateway Rate Limit (429) hit on [{current_route_name}]: {response_text[:180]}. "
+                        f"(Discord assigned block time: {block_penalty:.0f}s / {block_penalty/60:.1f}m).\n"
+                        f"⚡ INSTANT FAILOVER: Bypassing {block_penalty:.0f}s wait! Switching immediately to alternative route [{next_name}] in 3.0s..."
                     )
+                    await asyncio.sleep(3.0)
+                    backoff_attempt = 0
+                    continue
                 else:
-                    wait_time = max(retry_after if retry_after else backoff_base, 45.0)
+                    # All routes blocked
+                    wait_time = max(15.0, min(block_penalty, 60.0))
                     logger.warning(
-                        f"Discord Gateway Rate Limit (429) active: {response_text}. "
-                        f"Cooling down for {wait_time:.0f}s before reconnecting to allow Discord rate-limit window to reset..."
+                        f"🚨 Discord Gateway Rate Limit (429) active on [{current_route_name}]: {response_text[:180]}.\n"
+                        f"Cooldown remaining: {block_penalty:.0f}s. Pausing for {wait_time:.0f}s before re-evaluating route availability...\n"
+                        f"💡 INSTANT UNBLOCK TIP: If hosting on Render, go to Render Settings -> Region -> change to Oregon or Singapore to get an unblocked IP in 10s!"
                     )
-
-                await asyncio.sleep(wait_time)
-                backoff_attempt = min(backoff_attempt + 1, 6)
+                    await asyncio.sleep(wait_time)
+                    backoff_attempt = min(backoff_attempt + 1, 6)
 
             else:
                 logger.error(f"Discord HTTP Exception ({e.status}): {e}. Retrying in 15s...")
@@ -192,61 +250,30 @@ async def run_bot_loop() -> None:
             break
 
         except _TRANSIENT_AIOHTTP_ERRORS as e:
-            # These are transient network failures (proxy timeout, DNS, TLS, etc.).
-            # Apply bounded exponential backoff with full jitter and route failover.
             exc_type = type(e).__name__
             wait = _jittered_backoff(backoff_base, backoff_attempt)
             backoff_attempt = min(backoff_attempt + 1, 6)
 
-            if Config.DISCORD_PROXY:
-                if use_proxy:
-                    proxy_consecutive_failures += 1
-                    if proxy_consecutive_failures >= 2:
-                        proxy_cooldown_until = time.monotonic() + 900.0  # 15m cooldown
-                        next_route = "direct connection (proxy cooling down)"
-                    else:
-                        proxy_cooldown_until = time.monotonic() + 60.0
-                        next_route = "direct connection"
-                else:
-                    next_route = "direct connection"
-                logger.warning(
-                    f"Transient network error ({exc_type}): {e}. "
-                    f"Retrying in {wait:.1f}s (attempt {backoff_attempt}, switching next attempt to {next_route})..."
-                )
-            else:
-                logger.warning(
-                    f"Transient network error ({exc_type}): {e}. "
-                    f"Retrying in {wait:.1f}s (attempt {backoff_attempt}, direct connection)..."
-                )
+            # Mark current route as transiently failing for 60s
+            route_cooldowns[current_route_key] = time.monotonic() + 60.0
+
+            logger.warning(
+                f"Transient network error ({exc_type}) on [{current_route_name}]: {e}. "
+                f"Cooling down route for 60s and retrying in {wait:.1f}s..."
+            )
             await asyncio.sleep(wait)
 
         except Exception as e:
-            # Unknown / unexpected error — log type and message for diagnosis, retry with backoff.
             exc_type = type(e).__name__
             exc_str = str(e)
             if "Connection timeout to host" in exc_str or "Cannot connect to host" in exc_str or "TimeoutError" in exc_type:
                 wait = _jittered_backoff(backoff_base, backoff_attempt)
                 backoff_attempt = min(backoff_attempt + 1, 6)
-                if Config.DISCORD_PROXY:
-                    if use_proxy:
-                        proxy_consecutive_failures += 1
-                        if proxy_consecutive_failures >= 2:
-                            proxy_cooldown_until = time.monotonic() + 900.0
-                            next_route = "direct connection (proxy cooling down)"
-                        else:
-                            proxy_cooldown_until = time.monotonic() + 60.0
-                            next_route = "direct connection"
-                    else:
-                        next_route = "direct connection"
-                    logger.warning(
-                        f"Network connection timeout ({exc_type}): {exc_str[:200]}. "
-                        f"Retrying in {wait:.1f}s (attempt {backoff_attempt}, switching next attempt to {next_route})..."
-                    )
-                else:
-                    logger.warning(
-                        f"Network connection timeout ({exc_type}): {exc_str[:200]}. "
-                        f"Retrying in {wait:.1f}s (attempt {backoff_attempt}, direct connection)..."
-                    )
+                route_cooldowns[current_route_key] = time.monotonic() + 60.0
+                logger.warning(
+                    f"Connection timeout ({exc_type}) on [{current_route_name}]: {exc_str[:180]}. "
+                    f"Retrying in {wait:.1f}s..."
+                )
                 await asyncio.sleep(wait)
             else:
                 logger.error(

@@ -34,6 +34,20 @@ def _clean_proxy_url(value: str | None) -> str | None:
     return val or None
 
 
+def parse_proxy_pool(raw: str | None) -> list[str]:
+    """Parse comma, semicolon, or newline-separated proxy URLs into unique clean URLs."""
+    if not raw:
+        return []
+    import re
+    tokens = re.split(r'[,;\n\r]+', raw.strip())
+    results: list[str] = []
+    for t in tokens:
+        cleaned = _clean_proxy_url(t)
+        if cleaned and cleaned not in results:
+            results.append(cleaned)
+    return results
+
+
 @dataclass(frozen=True)
 class ThemeColors:
     """Standardized color palette for Kyoka cryptographic cyber theme."""
@@ -119,8 +133,16 @@ class Config:
     # PostgreSQL / Supabase Database Settings
     DATABASE_URL: str = os.getenv("DATABASE_URL", "").strip()
 
-    # Proxy Configuration (for Cloudflare / 429 bypass)
+    # Proxy Configuration (for Cloudflare / 429 bypass & multi-route failover)
     DISCORD_PROXY: str | None = _clean_proxy_url(os.getenv("DISCORD_PROXY"))
+    DISCORD_PROXY_POOL: list[str] = parse_proxy_pool(
+        os.getenv("DISCORD_PROXY_POOL") or os.getenv("DISCORD_PROXY") or ""
+    )
+
+    @classmethod
+    def get_proxy_pool(cls) -> list[str]:
+        """Return list of configured proxies for gateway failover & rotation."""
+        return parse_proxy_pool(os.getenv("DISCORD_PROXY_POOL") or os.getenv("DISCORD_PROXY") or "")
 
     # Lavalink / Audio Settings
     LAVALINK_URI: str = os.getenv("LAVALINK_URI", "http://lavalinkv4.serenetia.com:80").strip()
