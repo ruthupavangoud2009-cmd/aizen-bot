@@ -7,7 +7,7 @@ services:
     buildCommand: pip install -r requirements.txt
     startCommand: python -m dashboard_api.run
     plan: free
-    region: singapore
+    region: virginia
     healthCheckPath: /api/health
     envVars:
       - key: PYTHON_VERSION
