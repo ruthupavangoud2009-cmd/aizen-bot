@@ -1,5 +1,5 @@
 """
-Kyro Discord Bot - Unblocked Native Stream Extractor & Search Engine
+Kyoka Discord Bot - Unblocked Native Stream Extractor & Search Engine
 Ultra-fast, high-fidelity audio pipeline powered by:
 - Tier 1: JioSaavn 320kbps HD Audio Engine (0% Cloud Block, 100M+ Worldwide Tracks)
 - Tier 2: JioSaavn Autocomplete & Detailed Lookup Cascade
@@ -27,7 +27,7 @@ import yt_dlp
 
 from src.cogs.music._models import Track, PlaylistResult, PlaylistTrackItem
 
-logger = logging.getLogger("Kyro.Music.Extractor")
+logger = logging.getLogger("Kyoka.Music.Extractor")
 
 # DES decryption cipher for JioSaavn 320kbps encrypted media streams
 _SAAVN_DES_CIPHER = pyDes.des(

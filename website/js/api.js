@@ -157,37 +157,7 @@ export async function getAuthStatus() {
 }
 
 export function loginWithDiscord() {
-  const CLIENT_ID = '1562505487214321714';
-  const origin = typeof window !== 'undefined' ? window.location.origin : 'https://aizen-bot.pages.dev';
-  const callbackUrl = `${origin}/api/auth/callback`;
-
-  // Generate cryptographically random CSRF state
-  let state = '';
-  try {
-    const array = new Uint8Array(16);
-    if (typeof crypto !== 'undefined' && crypto.getRandomValues) {
-      crypto.getRandomValues(array);
-      state = Array.from(array, b => b.toString(16).padStart(2, '0')).join('');
-    } else {
-      state = Math.random().toString(36).substring(2) + Date.now().toString(36);
-    }
-    if (typeof sessionStorage !== 'undefined') {
-      sessionStorage.setItem('kyoka_oauth_state', state);
-    }
-  } catch {
-    state = 'kyoka_state_' + Date.now();
-  }
-
-  const params = new URLSearchParams({
-    client_id: CLIENT_ID,
-    response_type: 'code',
-    redirect_uri: callbackUrl,
-    scope: 'identify guilds',
-    state: state,
-    prompt: 'consent',
-  });
-
-  window.location.href = `https://discord.com/oauth2/authorize?${params.toString()}`;
+  window.location.href = '/api/auth/login';
 }
 
 /**
@@ -202,17 +172,17 @@ export async function logoutUser() {
   } catch (err) {
     console.warn('Logout API notification failed, redirecting anyway:', err);
   }
-  window.location.href = '/dashboard.html';
+  window.location.href = '/dashboard';
 }
 
 /**
  * Fetch all Discord servers manageable by the authenticated user
  */
 export async function fetchGuilds(forceRefresh = false) {
-  const query = forceRefresh ? '?refresh=1&installed_only=1' : '?installed_only=1';
+  const query = forceRefresh ? '?refresh=1' : '';
   const res = await apiFetch(`/guilds${query}`);
   const guilds = Array.isArray(res?.guilds) ? res.guilds : [];
-  return guilds.filter(g => (g.can_manage && g.bot_installed) || g.status === 'unavailable');
+  return guilds.filter(g => g.can_manage);
 }
 
 /**

@@ -3,7 +3,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 from discord.ext import commands
 
-from src.utils.containers import KyroContainer, send_container_response
+from src.utils.containers import KyokaContainer, send_container_response
 
 if TYPE_CHECKING:
     from src.cogs.music.music import Music
@@ -12,7 +12,7 @@ if TYPE_CHECKING:
 async def execute_autoplay(cog: Music, ctx: commands.Context, state: str = "") -> None:
     player = cog.controller.get_player(ctx.guild.id)
     if not player or not player.is_connected:
-        container = KyroContainer(accent_color=None)
+        container = KyokaContainer(accent_color=None)
         container.add_text("**No active player found in this server.** Play a song first with `?play <song>`.")
         await send_container_response(ctx, container)
         return
@@ -26,6 +26,6 @@ async def execute_autoplay(cog: Music, ctx: commands.Context, state: str = "") -
         player.smart_autoplay = not player.smart_autoplay
 
     status_str = "ENABLED" if player.smart_autoplay else "DISABLED"
-    container = KyroContainer(accent_color=None)
+    container = KyokaContainer(accent_color=None)
     container.add_text(f"**Smart Autoplay is now:** `{status_str}`")
     await send_container_response(ctx, container)

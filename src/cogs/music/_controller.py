@@ -7,15 +7,15 @@ import discord
 from src.cogs.music._player import GuildPlayer
 
 if TYPE_CHECKING:
-    from src.core.bot import KyroBot
+    from src.core.bot import KyokaBot, KyroBot
 
-logger = logging.getLogger("Kyro.Music.Controller")
+logger = logging.getLogger("Kyoka.Music.Controller")
 
 
 class MusicController:
     """Manages active GuildPlayer instances across all Discord servers."""
 
-    def __init__(self, bot: KyroBot) -> None:
+    def __init__(self, bot: KyokaBot | KyroBot) -> None:
         self.bot = bot
         self.players: Dict[int, GuildPlayer] = {}
         self._247_cache: set[int] = set()

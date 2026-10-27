@@ -59,9 +59,9 @@ export async function onRequest(context) {
       if (response.status >= 300 && response.status < 400) {
         let loc = response.headers.get('location');
         if (loc) {
-          loc = loc.replace(/^https?:\/\/[^\/]+\/dashboard\.html/, 'https://aizen-bot.pages.dev/dashboard.html');
-          if (loc.startsWith('/dashboard.html')) {
-            loc = `https://aizen-bot.pages.dev${loc}`;
+          loc = loc.replace(/^https?:\/\/[^\/]+\/dashboard(\.html)?/, 'https://aizen-bot.pages.dev/dashboard');
+          if (loc.startsWith('/dashboard.html') || loc.startsWith('/dashboard')) {
+            loc = `https://aizen-bot.pages.dev/dashboard`;
           }
           responseHeaders.set('Location', loc);
         }
@@ -91,7 +91,7 @@ export async function onRequest(context) {
 
   if (url.pathname === '/api/auth/callback') {
     const destinationOrigin = url.origin.includes('localhost') ? url.origin : 'https://aizen-bot.pages.dev';
-    return Response.redirect(`${destinationOrigin}/dashboard.html?error=invalid_state`, 302);
+    return Response.redirect(`${destinationOrigin}/dashboard?error=invalid_state`, 302);
   }
 
   // Graceful standalone fallback when backend is not configured or in transition

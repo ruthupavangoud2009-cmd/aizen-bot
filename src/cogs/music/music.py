@@ -10,7 +10,7 @@ from discord import app_commands
 from discord.ext import commands
 
 from src.core.context import CustomContext
-from src.utils.containers import KyroContainer, send_container_response
+from src.utils.containers import KyokaContainer, KyroContainer, send_container_response
 from src.cogs.music._controller import MusicController
 from src.cogs.music._views import MusicControlView
 from src.cogs.music._analytics import MusicAnalytics
@@ -34,16 +34,16 @@ from src.cogs.music._commands.controls import (
 from src.cogs.music._commands.playlist import handle_playlist, handle_like, handle_unlike
 
 if TYPE_CHECKING:
-    from src.core.bot import KyroBot
+    from src.core.bot import KyokaBot, KyroBot
 
-logger = logging.getLogger("Kyro.Music")
+logger = logging.getLogger("Kyoka.Music")
 
 
 class Music(commands.Cog):
     """High-Performance Native Discord Audio & Studio Music Engine."""
     category: str = "Music"
 
-    def __init__(self, bot: KyroBot) -> None:
+    def __init__(self, bot: KyokaBot | KyroBot) -> None:
         self.bot = bot
         # Preserve active controller and players across hot-reloads
         if hasattr(bot, "_music_controller") and bot._music_controller:
@@ -212,9 +212,23 @@ class Music(commands.Cog):
 
         # bot itself was disconnected from voice
         if bot_user_id and member.id == bot_user_id and after.channel is None:
+            # Stale packet guard: if the bot is actually still in a voice channel in this guild,
+            # this is a delayed/duplicate event from an earlier transition. Ignore it.
+            guild = member.guild
+            bot_me = guild.me or (guild.get_member(bot_user_id) if bot_user_id else None)
+            if bot_me and getattr(bot_me, "voice", None) and getattr(bot_me.voice, "channel", None) is not None:
+                logger.debug(
+                    f"Guild {guild.id}: ignoring stale voice disconnect event (bot still in {bot_me.voice.channel.name})."
+                )
+                return
+
             player = self.controller.get_player(member.guild.id)
             if player:
-                # A null voice state is ALSO the delayed answer to a disconnect Kyro
+                # If player voice client is active and connected, do not tear down
+                if getattr(player.voice_client, "connected", False) and getattr(player.voice_client, "channel", None) is not None:
+                    return
+
+                # A null voice state is ALSO the delayed answer to a disconnect Kyoka
                 # initiated itself (reconnect / stop / self-heal). Discord can deliver
                 # it after the new session is already live — tearing down here would
                 # make the bot join a channel and immediately disconnect itself.
@@ -230,11 +244,11 @@ class Music(commands.Cog):
                 if not getattr(player, "_disconnect_announced", False):
                     if player.home_channel and before.channel:
                         try:
-                            container = KyroContainer(accent_color=None)
+                            container = KyokaContainer(accent_color=None)
                             container.add_section(
                                 content=(
                                     "**Voice Disconnected**\n"
-                                    f"> Kyro has disconnected from {before.channel.mention}."
+                                    f"> Kyoka has disconnected from {before.channel.mention}."
                                 )
                             )
                             await send_container_response(player.home_channel, container)
@@ -274,6 +288,11 @@ class Music(commands.Cog):
             ):
                 return
 
+            player = self.controller.get_player(guild.id)
+            # If connect_voice is actively in-flight or player is already connected, do NOT auto-connect!
+            if player and (getattr(player, "_is_connecting", False) or getattr(player, "is_connected", False)):
+                return
+
             vc = guild.voice_client
             is_connected = False
             if vc is not None:
@@ -299,7 +318,7 @@ class Music(commands.Cog):
                 if was_auto_paused:
                     if player.home_channel:
                         try:
-                            container = KyroContainer(accent_color=None)
+                            container = KyokaContainer(accent_color=None)
                             container.add_section(
                                 content=(
                                     "**Playback Resumed**\n"
@@ -380,7 +399,7 @@ class Music(commands.Cog):
             player.cancel_empty_vc_timer(auto_resume=False)
             await player.connect_voice(channel)
             logger.info(
-                f"Guild {guild.id}: Kyro joined {channel.name} (added by a user)."
+                f"Guild {guild.id}: Kyoka joined {channel.name} (added by a user)."
             )
         except asyncio.CancelledError:
             raise
@@ -421,12 +440,12 @@ class Music(commands.Cog):
     @commands.hybrid_command(
         name="join",
         aliases=["connect", "j"],
-        description="Connect Kyro to your current voice channel.",
+        description="Connect Kyoka to your current voice channel.",
     )
     async def join(self, ctx: CustomContext) -> None:
         """Connect to voice channel with smart moving support."""
         if not ctx.guild or not getattr(ctx.guild, "id", None):
-            container = KyroContainer(accent_color=None)
+            container = KyokaContainer(accent_color=None)
             container.add_text("**This command can only be used in a server.**")
             await send_container_response(ctx, container)
             return
@@ -435,7 +454,7 @@ class Music(commands.Cog):
         voice_state = getattr(member, "voice", None)
         target_channel = getattr(voice_state, "channel", None) if voice_state else None
         if not member or not voice_state or not target_channel or not getattr(target_channel, "id", None):
-            container = KyroContainer(accent_color=None)
+            container = KyokaContainer(accent_color=None)
             container.add_text("**Join a voice channel first, then try again.**")
             await send_container_response(ctx, container)
             return
@@ -446,7 +465,7 @@ class Music(commands.Cog):
             ctx.guild.id in getattr(meeting_cog, "_sessions", {})
             or ctx.guild.id in getattr(meeting_cog, "_connecting_guilds", set())
         ):
-            container = KyroContainer(accent_color=None)
+            container = KyokaContainer(accent_color=None)
             container.add_section(
                 content=(
                     "**Voice Session Conflict**\n"
@@ -465,7 +484,7 @@ class Music(commands.Cog):
         bot_vc = getattr(bot_voice_state, "channel", None) if bot_voice_state else None
         if bot_vc and getattr(bot_vc, "id", None) and target_channel and getattr(target_channel, "id", None):
             if bot_vc.id == target_channel.id:
-                container = KyroContainer(accent_color=None)
+                container = KyokaContainer(accent_color=None)
                 container.add_text(f"**Already connected to** {target_channel.mention}.")
                 await send_container_response(ctx, container)
                 return
@@ -473,7 +492,7 @@ class Music(commands.Cog):
             current_listeners = [m for m in bot_vc.members if not m.bot]
             # Only block moving if actively playing AND has active human listeners
             if player.is_playing and len(current_listeners) > 0:
-                container = KyroContainer(accent_color=None)
+                container = KyokaContainer(accent_color=None)
                 container.add_section(
                     content=(
                         "**Voice Channel Conflict**\n"
@@ -487,7 +506,7 @@ class Music(commands.Cog):
         try:
             player.cancel_empty_vc_timer(auto_resume=False)
             await player.connect_voice(target_channel)
-            container = KyroContainer(accent_color=None)
+            container = KyokaContainer(accent_color=None)
             container.add_section(
                 content=(
                     "**Voice Channel Connected**\n"
@@ -496,11 +515,11 @@ class Music(commands.Cog):
             )
             await send_container_response(ctx, container)
         except (RuntimeError, ValueError) as e:
-            container = KyroContainer(accent_color=None)
+            container = KyokaContainer(accent_color=None)
             container.add_text(f"**Voice Connection Error:** {e}")
             await send_container_response(ctx, container)
         except Exception as e:
-            container = KyroContainer(accent_color=None)
+            container = KyokaContainer(accent_color=None)
             container.add_text(f"**Failed to connect to voice channel:** `{e}`")
             await send_container_response(ctx, container)
 
@@ -673,7 +692,7 @@ class Music(commands.Cog):
     @commands.command(
         name="247",
         aliases=["stay"],
-        description="Toggle 24/7 mode to keep Kyro connected in voice even when empty.",
+        description="Toggle 24/7 mode to keep Kyoka connected in voice even when empty.",
     )
     @commands.has_permissions(manage_guild=True)
     async def stay_247(self, ctx: CustomContext) -> None:
@@ -714,7 +733,7 @@ class Music(commands.Cog):
         player_playing = player.is_playing if player else False
         player_queue_len = len(player.queue) if player else 0
 
-        container = KyroContainer(accent_color=0x7C3AED)
+        container = KyokaContainer(accent_color=0x7C3AED)
         container.add_section(
             content=(
                 "**🎵 KYOKA Audio Engine & Voice Diagnostics**\n\n"
@@ -766,6 +785,6 @@ class Music(commands.Cog):
             raise error
 
 
-async def setup(bot: KyroBot) -> None:
-    """Load the Music Cog into KyroBot."""
+async def setup(bot: KyokaBot | KyroBot) -> None:
+    """Load the Music Cog into KyokaBot."""
     await bot.add_cog(Music(bot))

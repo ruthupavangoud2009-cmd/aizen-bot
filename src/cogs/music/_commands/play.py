@@ -8,12 +8,12 @@ from discord.ext import commands
 
 from src.cogs.music._extractor import NativeExtractor, is_playlist_url, UNWANTED_VERSION_KEYWORDS
 from src.cogs.music._models import Track
-from src.utils.containers import KyroContainer, send_container_response, edit_container_response
+from src.utils.containers import KyokaContainer, KyroContainer, send_container_response, edit_container_response
 
 if TYPE_CHECKING:
     from src.cogs.music.music import Music
 
-logger = logging.getLogger("Kyro.Music.Play")
+logger = logging.getLogger("Kyoka.Music.Play")
 
 
 async def execute_play(cog: Music, ctx: commands.Context, query: Optional[str] = None) -> None:
@@ -26,7 +26,7 @@ async def execute_play(cog: Music, ctx: commands.Context, query: Optional[str] =
             pass
 
     if not ctx.guild or not getattr(ctx.guild, "id", None):
-        container = KyroContainer(accent_color=None)
+        container = KyokaContainer(accent_color=None)
         container.add_text("**This command can only be used in a server.**")
         await send_container_response(ctx, container)
         return
@@ -35,7 +35,7 @@ async def execute_play(cog: Music, ctx: commands.Context, query: Optional[str] =
     voice_state = getattr(member, "voice", None)
     voice_channel = getattr(voice_state, "channel", None) if voice_state else None
     if not member or not voice_state or not voice_channel or not getattr(voice_channel, "id", None):
-        container = KyroContainer(accent_color=None)
+        container = KyokaContainer(accent_color=None)
         container.add_text("**Join a voice channel first, then try again.**")
         await send_container_response(ctx, container)
         return
@@ -49,7 +49,7 @@ async def execute_play(cog: Music, ctx: commands.Context, query: Optional[str] =
         current_listeners = [m for m in bot_vc.members if not m.bot]
         # Only block moving if actively streaming music AND has active human listeners
         if player_check and player_check.is_playing and len(current_listeners) > 0:
-            container = KyroContainer(accent_color=None)
+            container = KyokaContainer(accent_color=None)
             container.add_section(
                 content=(
                     "**Voice Channel Conflict**\n"
@@ -66,7 +66,7 @@ async def execute_play(cog: Music, ctx: commands.Context, query: Optional[str] =
         (hasattr(meeting_cog, "_sessions") and ctx.guild.id in meeting_cog._sessions)
         or (hasattr(meeting_cog, "_connecting_guilds") and ctx.guild.id in getattr(meeting_cog, "_connecting_guilds", set()))
     ):
-        container = KyroContainer(accent_color=None)
+        container = KyokaContainer(accent_color=None)
         container.add_section(
             content=(
                 "**Voice Session Conflict**\n"
@@ -89,7 +89,7 @@ async def execute_play(cog: Music, ctx: commands.Context, query: Optional[str] =
         from src.core.lavalink import LavalinkUnavailable
         agent = getattr(cog, "agent", None)
         if isinstance(e, (RuntimeError, ValueError)):
-            container = KyroContainer(accent_color=None)
+            container = KyokaContainer(accent_color=None)
             container.add_text(f"**Voice Connection Error:** {e}")
             await send_container_response(ctx, container)
             return
@@ -104,7 +104,7 @@ async def execute_play(cog: Music, ctx: commands.Context, query: Optional[str] =
                 )
                 await send_container_response(ctx, card)
             else:
-                container = KyroContainer(accent_color=None)
+                container = KyokaContainer(accent_color=None)
                 container.add_text(f"⚠️ **Audio Streaming Engine Offline:** `{e}`\n> Reconnecting cluster nodes...")
                 await send_container_response(ctx, container)
             return
@@ -149,7 +149,7 @@ async def execute_play(cog: Music, ctx: commands.Context, query: Optional[str] =
             await send_container_response(ctx, card)
             return
 
-        container = KyroContainer(accent_color=None)
+        container = KyokaContainer(accent_color=None)
         container.add_text(f"**Failed to connect to voice channel:** `{e}`")
         await send_container_response(ctx, container)
         return
@@ -158,7 +158,7 @@ async def execute_play(cog: Music, ctx: commands.Context, query: Optional[str] =
     if not query or not query.strip():
         if player.is_paused:
             player.resume()
-            container = KyroContainer(accent_color=None)
+            container = KyokaContainer(accent_color=None)
             container.add_text("**Resumed playback.**")
             await send_container_response(ctx, container)
             return
@@ -168,7 +168,7 @@ async def execute_play(cog: Music, ctx: commands.Context, query: Optional[str] =
                 await player.play_track(next_track)
             return
         else:
-            container = KyroContainer(accent_color=None)
+            container = KyokaContainer(accent_color=None)
             container.add_text("**Please provide a song title or URL.**\n> Usage: `?play <song title or URL>`")
             await send_container_response(ctx, container)
             return
@@ -176,7 +176,7 @@ async def execute_play(cog: Music, ctx: commands.Context, query: Optional[str] =
     import wavelink
 
     # Send Searching Track card
-    search_container = KyroContainer(accent_color=None)
+    search_container = KyokaContainer(accent_color=None)
     search_container.add_text(f"**Searching:** `{query}`...")
     search_msg = await send_container_response(ctx, search_container)
 
@@ -235,7 +235,7 @@ async def execute_play(cog: Music, ctx: commands.Context, query: Optional[str] =
                     await player.add_tracks(remaining_tracks)
 
                 # 2. Immediately send/edit the Queued Playlist confirmation card!
-                pl_card = KyroContainer(accent_color=None)
+                pl_card = KyokaContainer(accent_color=None)
                 pl_card.add_section(
                     content=(
                         f"**Queued Playlist: [{pl.title}]({clean_q})**\n"
@@ -262,12 +262,12 @@ async def execute_play(cog: Music, ctx: commands.Context, query: Optional[str] =
 
                 return
             elif any(sp in clean_q for sp in ("spotify.com", "spotify.link", "spoti.fi", "spotify.app.link")):
-                err_c = KyroContainer(accent_color=None)
+                err_c = KyokaContainer(accent_color=None)
                 err_c.add_section(
                     content=(
                         "**Spotify Playlist Unavailable / Private**\n"
-                        "> Kyro could not load this Spotify playlist.\n"
-                        "> If this is a personal playlist, please open **Spotify** -> click **3 dots (`...`)** -> **Make Public** so Kyro can load the songs!"
+                        "> Kyoka could not load this Spotify playlist.\n"
+                        "> If this is a personal playlist, please open **Spotify** -> click **3 dots (`...`)** -> **Make Public** so Kyoka can load the songs!"
                     )
                 )
                 if search_msg:
@@ -279,11 +279,11 @@ async def execute_play(cog: Music, ctx: commands.Context, query: Optional[str] =
                 await send_container_response(ctx, err_c)
                 return
             else:
-                err_c = KyroContainer(accent_color=None)
+                err_c = KyokaContainer(accent_color=None)
                 err_c.add_section(
                     content=(
                         "**Playlist Unavailable / Private**\n"
-                        "> Kyro could not load tracks from this playlist URL.\n"
+                        "> Kyoka could not load tracks from this playlist URL.\n"
                         "> Please verify that the playlist is **Public** or **Unlisted** and contains accessible tracks."
                     )
                 )
@@ -359,7 +359,7 @@ async def execute_play(cog: Music, ctx: commands.Context, query: Optional[str] =
                         await player.add_track(first_track)
                         await player.add_tracks(remaining_tracks)
 
-                    pl_card = KyroContainer(accent_color=None)
+                    pl_card = KyokaContainer(accent_color=None)
                     pl_card.add_section(
                         content=(
                             f"**Queued Playlist: [{pl.name}]({query})**\n"
@@ -516,9 +516,46 @@ async def execute_play(cog: Music, ctx: commands.Context, query: Optional[str] =
             except Exception as e:
                 logger.debug(f"Spotify bridge search notice: {e}")
 
+        # Fallback 4: SoundCloud Search via Lavalink
+        if not track and not is_direct_url:
+            try:
+                results = await asyncio.wait_for(
+                    wavelink.Playable.search(lookup_target, source=wavelink.TrackSource.SoundCloud),
+                    timeout=8.0
+                )
+                if results and not isinstance(results, wavelink.Playlist):
+                    chosen = results[0]
+                    target_low = lookup_target.lower()
+                    for cand in results[:5]:
+                        c_t = (cand.title or "").lower()
+                        c_a = (cand.author or "").lower()
+                        has_unwanted = any(
+                            kw in c_t or kw in c_a
+                            for kw in UNWANTED_VERSION_KEYWORDS
+                            if kw not in target_low
+                        )
+                        if not has_unwanted:
+                            chosen = cand
+                            break
+                    top_p = chosen
+                    track = Track(
+                        title=top_p.title or "Unknown Track",
+                        author=top_p.author or "Unknown Artist",
+                        url=top_p.uri or query,
+                        stream_url="",
+                        duration=int((top_p.length or 0) / 1000),
+                        thumbnail=top_p.artwork,
+                        requester=ctx.author.display_name,
+                        requester_id=ctx.author.id,
+                        query=query,
+                    )
+                    track._playable = top_p
+            except Exception as e:
+                logger.debug(f"SoundCloud fallback search notice: {e}")
+
         # If still no track found, edit the searching message to inform user
         if not track:
-            err_container = KyroContainer(accent_color=None)
+            err_container = KyokaContainer(accent_color=None)
             err_container.add_text(f"**No results found for:** `{query}`")
             if search_msg:
                 try:
@@ -555,7 +592,7 @@ async def execute_play(cog: Music, ctx: commands.Context, query: Optional[str] =
         else:
             await player.add_track(track)
             pos = len(player.queue)
-            queue_container = KyroContainer(accent_color=None)
+            queue_container = KyokaContainer(accent_color=None)
             queue_container.add_section(
                 content=(
                     f"**Added to Queue [Position #{pos}]**\n"
@@ -586,7 +623,7 @@ async def execute_play(cog: Music, ctx: commands.Context, query: Optional[str] =
                 advice="Please try again or try another song.",
             )
         else:
-            err_card = KyroContainer(accent_color=None)
+            err_card = KyokaContainer(accent_color=None)
             err_card.add_text(f"**Playback Error:** `{e}`")
         if search_msg:
             try:

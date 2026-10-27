@@ -156,14 +156,15 @@ async def handle_list_guilds(request: web.Request) -> web.Response:
         if not can_manage:
             status = "permission_required"
             is_installed = False
-        elif not bot_check_ok and not bot_guild_ids:
-            # Discord API verification failed; do NOT report bot absent
-            status = "unavailable"
-            is_installed = False
         elif gid_str in bot_guild_ids:
             status = "installed"
             is_installed = True
+        elif not bot_check_ok:
+            # Discord API verification failed or rate-limited; never falsely report bot absent
+            status = "unavailable"
+            is_installed = False
         else:
+            # Verification succeeded and bot is genuinely absent
             status = "not_installed"
             is_installed = False
 
@@ -186,6 +187,10 @@ async def handle_list_guilds(request: web.Request) -> web.Response:
             g for g in manageable
             if (g["can_manage"] and g["bot_installed"]) or g["status"] == "unavailable"
         ]
+
+    manageable_only = request.query.get("manageable_only", "").lower() in ("1", "true", "yes")
+    if manageable_only:
+        manageable = [g for g in manageable if g["can_manage"]]
 
     return web.json_response({
         "guilds": manageable,

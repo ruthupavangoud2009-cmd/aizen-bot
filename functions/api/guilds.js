@@ -105,14 +105,26 @@ export async function onRequest(context) {
 
     if (cleanBotToken) {
       try {
-        const botRes = await fetch('https://discord.com/api/users/@me/guilds?limit=200', {
-          headers: { Authorization: `Bot ${cleanBotToken}` },
-        });
-        if (botRes.ok) {
-          const botGuilds = await botRes.json();
-          if (Array.isArray(botGuilds)) {
-            botGuildIds = new Set(botGuilds.map(b => String(b.id)));
-            botCheckOk = true;
+        let afterId = null;
+        for (let page = 0; page < 10; page++) {
+          const fetchUrl = `https://discord.com/api/users/@me/guilds?limit=200${afterId ? `&after=${afterId}` : ''}`;
+          const botRes = await fetch(fetchUrl, {
+            headers: { Authorization: `Bot ${cleanBotToken}` },
+          });
+          if (botRes.ok) {
+            const pageGuilds = await botRes.json();
+            if (Array.isArray(pageGuilds)) {
+              for (const bg of pageGuilds) {
+                botGuildIds.add(String(bg.id));
+              }
+              botCheckOk = true;
+              if (pageGuilds.length < 200) break;
+              afterId = String(pageGuilds[pageGuilds.length - 1].id);
+            } else {
+              break;
+            }
+          } else {
+            break;
           }
         }
       } catch (e) {
@@ -131,14 +143,15 @@ export async function onRequest(context) {
       let status = 'unavailable';
       let isInstalled = false;
 
-      if (botCheckOk) {
-        if (botGuildIds.has(gid)) {
-          status = 'installed';
-          isInstalled = true;
-        } else {
-          status = 'not_installed';
-          isInstalled = false;
-        }
+      if (botGuildIds.has(gid)) {
+        status = 'installed';
+        isInstalled = true;
+      } else if (botCheckOk) {
+        status = 'not_installed';
+        isInstalled = false;
+      } else {
+        status = 'unavailable';
+        isInstalled = false;
       }
 
       return {

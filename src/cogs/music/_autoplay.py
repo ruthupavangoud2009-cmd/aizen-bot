@@ -19,7 +19,7 @@ from src.cogs.music._extractor import (
     YOUTUBE_URL_REGEX,
 )
 
-logger = logging.getLogger("Kyro.Music.Autoplay")
+logger = logging.getLogger("Kyoka.Music.Autoplay")
 
 ARTIST_CLUSTERS = {
     # Bollywood / Hindi Romantic & Soulful

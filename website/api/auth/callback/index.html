@@ -68,17 +68,17 @@
         <div style="font-size: 2.5rem; margin-bottom: 0.5rem;">⚠️</div>
         <h2 style="color: #EF4444; margin-bottom: 0.5rem;">Authorization Cancelled</h2>
         <p style="color: #94A3B8; margin-bottom: 1.5rem;">${errorDesc || error}</p>
-        <a href="/dashboard.html" class="btn btn-primary">Return to Dashboard</a>
+        <a href="/dashboard" class="btn btn-primary">Return to Dashboard</a>
       `;
     } else if (code) {
       statusText.textContent = 'Authorization code received. Connecting to server session...';
       // Forward to dashboard with code for local handling
       sessionStorage.setItem('kyoka_oauth_code', code);
       setTimeout(() => {
-        window.location.href = `/dashboard.html?code=${encodeURIComponent(code)}&state=${encodeURIComponent(state || '')}`;
+        window.location.href = `/dashboard?code=${encodeURIComponent(code)}&state=${encodeURIComponent(state || '')}`;
       }, 600);
     } else {
-      window.location.href = '/dashboard.html';
+      window.location.href = '/dashboard';
     }
   </script>
 </body>

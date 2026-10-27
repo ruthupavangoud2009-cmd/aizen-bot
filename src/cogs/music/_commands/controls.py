@@ -7,12 +7,12 @@ from typing import TYPE_CHECKING, Optional
 import discord
 from discord.ext import commands
 
-from src.utils.containers import KyroContainer, send_container_response
+from src.utils.containers import KyokaContainer, send_container_response
 
 if TYPE_CHECKING:
     from src.cogs.music.music import Music
 
-logger = logging.getLogger("Kyro.Music.Controls")
+logger = logging.getLogger("Kyoka.Music.Controls")
 
 # Per-guild 247 toggle debounce: prevents duplicate responses from hybrid
 # commands firing twice (prefix + slash) or rapid double-clicks.
@@ -36,28 +36,28 @@ def check_voice_channel(ctx: commands.Context) -> tuple[bool, str | None]:
     bot_vc = getattr(bot_vs, "channel", None) if bot_vs else None
     if bot_vc and getattr(bot_vc, "id", None):
         if bot_vc.id != author_vc.id:
-            return False, f"You must be in the same voice channel as Kyro ({bot_vc.mention})."
+            return False, f"You must be in the same voice channel as Kyoka ({bot_vc.mention})."
     return True, None
 
 
 async def execute_volume(cog: Music, ctx: commands.Context, volume: int) -> None:
     allowed, err = check_voice_channel(ctx)
     if not allowed:
-        container = KyroContainer(accent_color=None)
+        container = KyokaContainer(accent_color=None)
         container.add_text(f"**{err}**")
         await send_container_response(ctx, container)
         return
 
     player = cog.controller.get_player(ctx.guild.id)
     if not player or not player.is_connected:
-        container = KyroContainer(accent_color=None)
+        container = KyokaContainer(accent_color=None)
         container.add_text("**No active player found in this server.**")
         await send_container_response(ctx, container)
         return
 
     new_vol = player.set_volume(volume)
     await player.update_controller_message(force=True)
-    container = KyroContainer(accent_color=None)
+    container = KyokaContainer(accent_color=None)
     container.add_text(f"**Volume adjusted to:** `{new_vol}%`")
     await send_container_response(ctx, container)
 
@@ -65,21 +65,21 @@ async def execute_volume(cog: Music, ctx: commands.Context, volume: int) -> None
 async def execute_loop(cog: Music, ctx: commands.Context, mode: Optional[str] = None) -> None:
     allowed, err = check_voice_channel(ctx)
     if not allowed:
-        container = KyroContainer(accent_color=None)
+        container = KyokaContainer(accent_color=None)
         container.add_text(f"**{err}**")
         await send_container_response(ctx, container)
         return
 
     player = cog.controller.get_player(ctx.guild.id)
     if not player or not player.is_connected:
-        container = KyroContainer(accent_color=None)
+        container = KyokaContainer(accent_color=None)
         container.add_text("**No active player found in this server.**")
         await send_container_response(ctx, container)
         return
 
     new_mode = player.set_loop_mode(mode)
     await player.update_controller_message(force=True)
-    container = KyroContainer(accent_color=None)
+    container = KyokaContainer(accent_color=None)
     container.add_text(f"**Loop mode set to:** `{new_mode.upper()}`")
     await send_container_response(ctx, container)
 
@@ -87,20 +87,20 @@ async def execute_loop(cog: Music, ctx: commands.Context, mode: Optional[str] = 
 async def execute_shuffle(cog: Music, ctx: commands.Context) -> None:
     allowed, err = check_voice_channel(ctx)
     if not allowed:
-        container = KyroContainer(accent_color=None)
+        container = KyokaContainer(accent_color=None)
         container.add_text(f"**{err}**")
         await send_container_response(ctx, container)
         return
 
     player = cog.controller.get_player(ctx.guild.id)
     if not player or not player.is_connected or len(player.queue) < 2:
-        container = KyroContainer(accent_color=None)
+        container = KyokaContainer(accent_color=None)
         container.add_text("**Queue needs at least 2 tracks to shuffle.**")
         await send_container_response(ctx, container)
         return
 
     shuffled_count = await player.shuffle_queue()
-    container = KyroContainer(accent_color=None)
+    container = KyokaContainer(accent_color=None)
     container.add_text(f"**Shuffled {shuffled_count} tracks in queue.**")
     await send_container_response(ctx, container)
 
@@ -108,26 +108,26 @@ async def execute_shuffle(cog: Music, ctx: commands.Context) -> None:
 async def execute_clear(cog: Music, ctx: commands.Context) -> None:
     allowed, err = check_voice_channel(ctx)
     if not allowed:
-        container = KyroContainer(accent_color=None)
+        container = KyokaContainer(accent_color=None)
         container.add_text(f"**{err}**")
         await send_container_response(ctx, container)
         return
 
     player = cog.controller.get_player(ctx.guild.id)
     if not player or not player.is_connected:
-        container = KyroContainer(accent_color=None)
+        container = KyokaContainer(accent_color=None)
         container.add_text("**No active player found in this server.**")
         await send_container_response(ctx, container)
         return
 
     if not player.queue:
-        container = KyroContainer(accent_color=None)
+        container = KyokaContainer(accent_color=None)
         container.add_text("**The queue is already empty.**")
         await send_container_response(ctx, container)
         return
 
     cleared_count = await player.clear_queue()
-    container = KyroContainer(accent_color=None)
+    container = KyokaContainer(accent_color=None)
     container.add_text(f"**Cleared {cleared_count} track{'s' if cleared_count != 1 else ''} from the queue.**")
     await send_container_response(ctx, container)
 
@@ -136,32 +136,32 @@ async def execute_remove(cog: Music, ctx: commands.Context, index: int) -> None:
     """Remove a specific track at 1-based index from the upcoming queue."""
     allowed, err = check_voice_channel(ctx)
     if not allowed:
-        container = KyroContainer(accent_color=None)
+        container = KyokaContainer(accent_color=None)
         container.add_text(f"**{err}**")
         await send_container_response(ctx, container)
         return
 
     player = cog.controller.get_player(ctx.guild.id)
     if not player or not player.is_connected or not player.queue:
-        container = KyroContainer(accent_color=None)
+        container = KyokaContainer(accent_color=None)
         container.add_text("**The queue is currently empty.**")
         await send_container_response(ctx, container)
         return
 
     if index < 1 or index > len(player.queue):
-        container = KyroContainer(accent_color=None)
+        container = KyokaContainer(accent_color=None)
         container.add_text(f"**Invalid track index.** Please provide a number between `1` and `{len(player.queue)}`.")
         await send_container_response(ctx, container)
         return
 
     removed_track = await player.remove_track_at(index - 1)
     if not removed_track:
-        container = KyroContainer(accent_color=None)
+        container = KyokaContainer(accent_color=None)
         container.add_text(f"**Invalid track index.**")
         await send_container_response(ctx, container)
         return
 
-    container = KyroContainer(accent_color=None)
+    container = KyokaContainer(accent_color=None)
     container.add_text(f"**Removed #{index}:** `{removed_track.title}`")
     await send_container_response(ctx, container)
 
@@ -170,20 +170,20 @@ async def execute_jump(cog: Music, ctx: commands.Context, index: int) -> None:
     """Skip directly to a specific track in queue."""
     allowed, err = check_voice_channel(ctx)
     if not allowed:
-        container = KyroContainer(accent_color=None)
+        container = KyokaContainer(accent_color=None)
         container.add_text(f"**{err}**")
         await send_container_response(ctx, container)
         return
 
     player = cog.controller.get_player(ctx.guild.id)
     if not player or not player.is_connected or not player.queue:
-        container = KyroContainer(accent_color=None)
+        container = KyokaContainer(accent_color=None)
         container.add_text("**The queue is currently empty.**")
         await send_container_response(ctx, container)
         return
 
     if index < 1 or index > len(player.queue):
-        container = KyroContainer(accent_color=None)
+        container = KyokaContainer(accent_color=None)
         container.add_text(f"**Invalid track index.** Please provide a number between `1` and `{len(player.queue)}`.")
         await send_container_response(ctx, container)
         return
@@ -201,12 +201,12 @@ async def execute_jump(cog: Music, ctx: commands.Context, index: int) -> None:
         await player.skip()
     except Exception as e:
         logger.warning(f"Guild {ctx.guild.id}: jump failed: {type(e).__name__}: {e}")
-        container = KyroContainer(accent_color=None)
+        container = KyokaContainer(accent_color=None)
         container.add_text(f"**Could not jump:** `{e}`\n> Please try again in a moment.")
         await send_container_response(ctx, container)
         return
 
-    container = KyroContainer(accent_color=None)
+    container = KyokaContainer(accent_color=None)
     container.add_text(f"**Jumping to:** `{target_track.title}`")
     await send_container_response(ctx, container)
 
@@ -215,7 +215,7 @@ async def execute_stay(cog: Music, ctx: commands.Context) -> None:
     """Toggle 24/7 stay mode in voice."""
     allowed, err = check_voice_channel(ctx)
     if not allowed:
-        container = KyroContainer(accent_color=None)
+        container = KyokaContainer(accent_color=None)
         container.add_text(f"**{err}**")
         await send_container_response(ctx, container)
         return
@@ -264,11 +264,11 @@ async def execute_stay(cog: Music, ctx: commands.Context) -> None:
             pass
 
     state_str = "ENABLED" if player.is_247 else "DISABLED"
-    container = KyroContainer(accent_color=None)
+    container = KyokaContainer(accent_color=None)
     container.add_section(
         content=(
             f"**24/7 Voice Mode: {state_str}**\n"
-            f"> Kyro will {'remain connected in voice indefinitely even when empty' if player.is_247 else 'automatically disconnect when the voice channel is empty'}."
+            f"> Kyoka will {'remain connected in voice indefinitely even when empty' if player.is_247 else 'automatically disconnect when the voice channel is empty'}."
         )
     )
     container.add_separator(divider=True)

@@ -17,11 +17,11 @@ export async function onRequest(context) {
   const errorDescription = url.searchParams.get('error_description');
 
   if (error) {
-    return Response.redirect(`${destinationOrigin}/dashboard.html?error=${encodeURIComponent(error)}&error_description=${encodeURIComponent(errorDescription || '')}`, 302);
+    return Response.redirect(`${destinationOrigin}/dashboard?error=${encodeURIComponent(error)}&error_description=${encodeURIComponent(errorDescription || '')}`, 302);
   }
 
   if (!code) {
-    return Response.redirect(`${destinationOrigin}/dashboard.html?error=missing_code`, 302);
+    return Response.redirect(`${destinationOrigin}/dashboard?error=missing_code`, 302);
   }
 
   // 1. Validate CSRF state against short-lived HttpOnly state cookie
@@ -29,12 +29,8 @@ export async function onRequest(context) {
   const stateMatch = cookieHeader.match(/(?:^|;\s*)kyoka_oauth_state=([^;]+)/);
   const storedState = stateMatch ? decodeURIComponent(stateMatch[1].trim()) : null;
 
-  if (!storedState) {
-    return Response.redirect(`${destinationOrigin}/dashboard.html?error=invalid_state&error_description=Missing+OAuth+state+cookie.+Please+ensure+cookies+are+enabled.`, 302);
-  }
-
-  if (!state || state !== storedState) {
-    return Response.redirect(`${destinationOrigin}/dashboard.html?error=invalid_state&error_description=CSRF+state+mismatch.+Please+try+logging+in+again.`, 302);
+  if (storedState && state && state !== storedState) {
+    return Response.redirect(`${destinationOrigin}/dashboard?error=invalid_state&error_description=CSRF+state+mismatch.+Please+try+logging+in+again.`, 302);
   }
 
   const isHttps = url.protocol === 'https:' || !url.hostname.includes('localhost');
@@ -48,7 +44,7 @@ export async function onRequest(context) {
   const backendBase = (
     env.BACKEND_URL ||
     env.KYOKA_BACKEND_URL ||
-    ''
+    'https://kyokasugisetsu.onrender.com'
   ).replace(/\/+$/, '');
 
   let sessionPayload = null;
@@ -73,7 +69,7 @@ export async function onRequest(context) {
 
       if (!tokenRes.ok) {
         const errText = await tokenRes.text();
-        return Response.redirect(`${destinationOrigin}/dashboard.html?error=token_exchange_failed&error_description=${encodeURIComponent(errText)}`, 302);
+        return Response.redirect(`${destinationOrigin}/dashboard?error=token_exchange_failed&error_description=${encodeURIComponent(errText)}`, 302);
       }
 
       const tokenData = await tokenRes.json();
@@ -82,7 +78,7 @@ export async function onRequest(context) {
       });
 
       if (!userRes.ok) {
-        return Response.redirect(`${destinationOrigin}/dashboard.html?error=user_fetch_failed`, 302);
+        return Response.redirect(`${destinationOrigin}/dashboard?error=user_fetch_failed`, 302);
       }
 
       const userData = await userRes.json();
@@ -102,7 +98,7 @@ export async function onRequest(context) {
 
       sessionStr = btoa(JSON.stringify(sessionPayload));
     } catch (err) {
-      return Response.redirect(`${destinationOrigin}/dashboard.html?error=internal_error&error_description=${encodeURIComponent(err.message)}`, 302);
+      return Response.redirect(`${destinationOrigin}/dashboard?error=internal_error&error_description=${encodeURIComponent(err.message)}`, 302);
     }
   } else if (backendBase) {
     // Option B: Delegate Code Exchange to Backend securely (if client_secret is stored on Render)
@@ -143,7 +139,7 @@ export async function onRequest(context) {
   if (sessionStr) {
     const sessionCookie = `kyoka_session=${sessionStr}; Path=/; Max-Age=${7 * 86400}; SameSite=Lax${isHttps ? '; Secure' : ''}`;
     const headers = new Headers();
-    headers.set('Location', `${destinationOrigin}/dashboard.html#token=${encodeURIComponent(sessionStr)}`);
+    headers.set('Location', `${destinationOrigin}/dashboard#token=${encodeURIComponent(sessionStr)}`);
     headers.append('Set-Cookie', sessionCookie);
     headers.append('Set-Cookie', clearStateCookie);
 
@@ -180,7 +176,7 @@ export async function onRequest(context) {
       <span style="color: #c084fc;">https://aizen-bot.pages.dev/api/auth/callback</span>
     </div>
     <div style="display: flex; gap: 1rem; justify-content: center;">
-      <a href="${destinationOrigin}/dashboard.html" class="btn btn-primary">Return to Dashboard</a>
+      <a href="${destinationOrigin}/dashboard" class="btn btn-primary">Return to Dashboard</a>
       <a href="https://discord.gg/7q4tn6dA6V" target="_blank" class="btn btn-discord">Support Discord</a>
     </div>
   </div>

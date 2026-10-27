@@ -123,7 +123,7 @@ function renderAccessDeniedView(container, user) {
         [SECURITY ALERT] Unauthorized dashboard access attempt registered and audited.
       </div>
       <div style="display: flex; gap: 1rem; justify-content: center;">
-        <a href="/dashboard.html" class="btn btn-primary">
+        <a href="/dashboard" class="btn btn-primary">
           Return to Server Dashboard
         </a>
         <a href="/" class="btn btn-outline">

@@ -4,13 +4,13 @@ import logging
 from typing import TYPE_CHECKING, Optional, Any
 import discord
 
-from src.utils.containers import KyroContainer, send_container_response
+from src.utils.containers import KyokaContainer, KyroContainer, send_container_response
 
 if TYPE_CHECKING:
-    from src.core.bot import KyroBot
+    from src.core.bot import KyokaBot, KyroBot
     from src.cogs.music._player import GuildPlayer
 
-logger = logging.getLogger("Kyro.Music.Views")
+logger = logging.getLogger("Kyoka.Music.Views")
 
 
 class MusicControlView(discord.ui.View):
@@ -18,7 +18,7 @@ class MusicControlView(discord.ui.View):
 
     def __init__(
         self,
-        bot: KyroBot,
+        bot: KyokaBot | KyroBot,
         player: Optional[GuildPlayer] = None,
         guild_id: Optional[int] = None,
         track_url: Optional[str] = None,
@@ -93,7 +93,7 @@ class MusicControlView(discord.ui.View):
         return self.player
 
     def _check_voice(self, interaction: discord.Interaction, player: Optional[GuildPlayer]) -> Optional[str]:
-        """Verify that user is connected to the same voice channel as Kyro."""
+        """Verify that user is connected to the same voice channel as Kyoka."""
         if not player or not player.is_connected or not player.voice_client or not player.voice_client.channel:
             return "Player is not connected to a voice channel."
 
@@ -120,17 +120,17 @@ class MusicControlView(discord.ui.View):
         vc = getattr(player, "voice_client", None)
         bot_vc = getattr(vc, "channel", None) if vc else None
         if not bot_vc or not getattr(bot_vc, "id", None):
-            return "Kyro is not connected to a voice channel."
+            return "Kyoka is not connected to a voice channel."
 
         if user_vc.id != bot_vc.id:
-            return f"You must be in the same voice channel as Kyro ({bot_vc.mention}) to use music controls."
+            return f"You must be in the same voice channel as Kyoka ({bot_vc.mention}) to use music controls."
 
         return None
 
     @discord.ui.button(
         label="Pause",
         style=discord.ButtonStyle.secondary,
-        custom_id="kyro:music:playpause",
+        custom_id="kyoka:music:playpause",
     )
     async def btn_pause_resume(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
         try:
@@ -142,13 +142,13 @@ class MusicControlView(discord.ui.View):
         player = self._get_player(interaction)
         err = self._check_voice(interaction, player)
         if err:
-            c = KyroContainer()
+            c = KyokaContainer()
             c.add_section(content=f"**Voice Error**\n> {err}")
             await send_container_response(interaction, c, ephemeral=True)
             return
 
         if not player or not player.is_connected or not player.current:
-            c = KyroContainer()
+            c = KyokaContainer()
             c.add_section(content="**Playback Notice**\n> No active track is currently playing or paused.")
             await send_container_response(interaction, c, ephemeral=True)
             return
@@ -170,7 +170,7 @@ class MusicControlView(discord.ui.View):
     @discord.ui.button(
         label="Skip",
         style=discord.ButtonStyle.secondary,
-        custom_id="kyro:music:skip",
+        custom_id="kyoka:music:skip",
     )
     async def btn_skip(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
         try:
@@ -182,13 +182,13 @@ class MusicControlView(discord.ui.View):
         player = self._get_player(interaction)
         err = self._check_voice(interaction, player)
         if err:
-            c = KyroContainer()
+            c = KyokaContainer()
             c.add_section(content=f"**Voice Error**\n> {err}")
             await send_container_response(interaction, c, ephemeral=True)
             return
 
         if not player or not player.is_connected or not player.current:
-            c = KyroContainer()
+            c = KyokaContainer()
             c.add_section(content="**Skip Notice**\n> Nothing is currently playing to skip.")
             await send_container_response(interaction, c, ephemeral=True)
             return
@@ -197,7 +197,7 @@ class MusicControlView(discord.ui.View):
             await player.skip()
         except Exception as e:
             logger.warning(f"Skip button failed in guild {interaction.guild_id}: {type(e).__name__}: {e}")
-            c = KyroContainer()
+            c = KyokaContainer()
             c.add_section(content=f"**Skip Notice**\n> Could not skip right now: `{e}`")
             await send_container_response(interaction, c, ephemeral=True)
             return
@@ -205,7 +205,7 @@ class MusicControlView(discord.ui.View):
     @discord.ui.button(
         label="Vol -",
         style=discord.ButtonStyle.secondary,
-        custom_id="kyro:music:voldown",
+        custom_id="kyoka:music:voldown",
     )
     async def btn_vol_down(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
         try:
@@ -217,7 +217,7 @@ class MusicControlView(discord.ui.View):
         player = self._get_player(interaction)
         err = self._check_voice(interaction, player)
         if err:
-            c = KyroContainer()
+            c = KyokaContainer()
             c.add_section(content=f"**Voice Error**\n> {err}")
             await send_container_response(interaction, c, ephemeral=True)
             return
@@ -229,7 +229,7 @@ class MusicControlView(discord.ui.View):
     @discord.ui.button(
         label="Vol +",
         style=discord.ButtonStyle.secondary,
-        custom_id="kyro:music:volup",
+        custom_id="kyoka:music:volup",
     )
     async def btn_vol_up(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
         try:
@@ -241,7 +241,7 @@ class MusicControlView(discord.ui.View):
         player = self._get_player(interaction)
         err = self._check_voice(interaction, player)
         if err:
-            c = KyroContainer()
+            c = KyokaContainer()
             c.add_section(content=f"**Voice Error**\n> {err}")
             await send_container_response(interaction, c, ephemeral=True)
             return
@@ -253,7 +253,7 @@ class MusicControlView(discord.ui.View):
     @discord.ui.button(
         label="Stop",
         style=discord.ButtonStyle.danger,
-        custom_id="kyro:music:stop",
+        custom_id="kyoka:music:stop",
     )
     async def btn_stop(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
         try:
@@ -265,7 +265,7 @@ class MusicControlView(discord.ui.View):
         player = self._get_player(interaction)
         err = self._check_voice(interaction, player)
         if err:
-            c = KyroContainer()
+            c = KyokaContainer()
             c.add_section(content=f"**Voice Error**\n> {err}")
             await send_container_response(interaction, c, ephemeral=True)
             return
@@ -276,7 +276,7 @@ class MusicControlView(discord.ui.View):
     @discord.ui.button(
         label="Like",
         style=discord.ButtonStyle.secondary,
-        custom_id="kyro:music:like",
+        custom_id="kyoka:music:like",
         row=1,
     )
     async def btn_like(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
@@ -288,13 +288,13 @@ class MusicControlView(discord.ui.View):
 
         player = self._get_player(interaction)
         if not player or not player.current:
-            c = KyroContainer()
+            c = KyokaContainer()
             c.add_section(content="**Favorites Notice**\n> No track is currently playing to add to Favorites.")
             await send_container_response(interaction, c, ephemeral=True)
             return
 
         if not getattr(self.bot, "db", None) or not getattr(self.bot.db, "pool", None):
-            c = KyroContainer()
+            c = KyokaContainer()
             c.add_section(content="**Database Notice**\n> Database service is currently offline. Please try again later.")
             await send_container_response(interaction, c, ephemeral=True)
             return
@@ -318,7 +318,7 @@ class MusicControlView(discord.ui.View):
             )
 
         if not pl_row:
-            c = KyroContainer()
+            c = KyokaContainer()
             c.add_section(content="**Database Error**\n> Failed to access your Favorites playlist.")
             await send_container_response(interaction, c, ephemeral=True)
             return
@@ -333,7 +333,7 @@ class MusicControlView(discord.ui.View):
             save_title,
         )
         if existing:
-            c = KyroContainer()
+            c = KyokaContainer()
             c.add_section(content=f"**Favorites Notice**\n> `{save_title}` is already in your **Favorites**.")
             await send_container_response(interaction, c, ephemeral=True)
             return
@@ -347,14 +347,14 @@ class MusicControlView(discord.ui.View):
             current.duration,
             track_web_url,
         )
-        c = KyroContainer()
+        c = KyokaContainer()
         c.add_section(content=f"**Favorites Added**\n> Saved **[{save_title}]({track_web_url})** to your **Favorites** playlist!")
         await send_container_response(interaction, c, ephemeral=True)
 
     @discord.ui.button(
         label="Loop",
         style=discord.ButtonStyle.secondary,
-        custom_id="kyro:music:loop",
+        custom_id="kyoka:music:loop",
         row=1,
     )
     async def btn_loop(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
@@ -367,21 +367,21 @@ class MusicControlView(discord.ui.View):
         player = self._get_player(interaction)
         err = self._check_voice(interaction, player)
         if err:
-            c = KyroContainer()
+            c = KyokaContainer()
             c.add_section(content=f"**Voice Error**\n> {err}")
             await send_container_response(interaction, c, ephemeral=True)
             return
 
         new_mode = player.set_loop_mode()
         await player.update_controller_message(force=True)
-        c = KyroContainer()
+        c = KyokaContainer()
         c.add_section(content=f"**Loop Mode**\n> Loop mode set to **{new_mode.upper()}**.")
         await send_container_response(interaction, c, ephemeral=True)
 
     @discord.ui.button(
         label="Autoplay",
         style=discord.ButtonStyle.secondary,
-        custom_id="kyro:music:autoplay",
+        custom_id="kyoka:music:autoplay",
         row=1,
     )
     async def btn_autoplay(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
@@ -394,7 +394,7 @@ class MusicControlView(discord.ui.View):
         player = self._get_player(interaction)
         err = self._check_voice(interaction, player)
         if err:
-            c = KyroContainer()
+            c = KyokaContainer()
             c.add_section(content=f"**Voice Error**\n> {err}")
             await send_container_response(interaction, c, ephemeral=True)
             return
@@ -402,14 +402,14 @@ class MusicControlView(discord.ui.View):
         player.smart_autoplay = not player.smart_autoplay
         state = "Enabled" if player.smart_autoplay else "Disabled"
         await player.update_controller_message(force=True)
-        c = KyroContainer()
+        c = KyokaContainer()
         c.add_section(content=f"**Smart Autoplay**\n> Smart Autoplay **{state}**.")
         await send_container_response(interaction, c, ephemeral=True)
 
     @discord.ui.button(
         label="Queue",
         style=discord.ButtonStyle.secondary,
-        custom_id="kyro:music:queue",
+        custom_id="kyoka:music:queue",
         row=1,
     )
     async def btn_queue(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
@@ -421,7 +421,7 @@ class MusicControlView(discord.ui.View):
 
         player = self._get_player(interaction)
         if not player or (not player.queue and not player.current):
-            c = KyroContainer()
+            c = KyokaContainer()
             c.add_section(content="**Queue Empty**\n> The playback queue is currently empty.")
             await send_container_response(interaction, c, ephemeral=True)
             return
@@ -433,7 +433,7 @@ class MusicControlView(discord.ui.View):
             curr_text = f"**Now Playing:** {curr_link} `[{player.current.formatted_duration}]`\n\n"
 
         if not player.queue:
-            c = KyroContainer()
+            c = KyokaContainer()
             c.add_section(content=f"{curr_text}**Upcoming Queue:** None\n> Use `?play <song>` to add more songs.")
             await send_container_response(interaction, c, ephemeral=True)
             return
@@ -446,7 +446,7 @@ class MusicControlView(discord.ui.View):
 
         remaining = len(player.queue) - 10
         rem_text = f"\n*...and {remaining} more in queue*" if remaining > 0 else ""
-        c = KyroContainer()
+        c = KyokaContainer()
         c.add_section(
             content=f"{curr_text}**Upcoming Queue ({len(player.queue)} tracks):**\n" + "\n".join(q_lines) + rem_text
         )
@@ -457,7 +457,7 @@ class MusicControlView(discord.ui.View):
         try:
             if not interaction.response.is_done():
                 await interaction.response.defer(ephemeral=True)
-            c = KyroContainer()
+            c = KyokaContainer()
             c.add_section(content="**Control Notice**\n> An unexpected issue occurred while executing this action.")
             await send_container_response(interaction, c, ephemeral=True)
         except Exception:

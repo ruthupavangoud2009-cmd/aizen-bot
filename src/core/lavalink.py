@@ -1,17 +1,17 @@
 """
-Kyro Discord Bot - Hardened Lavalink Node Factory
+Kyoka Discord Bot - Hardened Lavalink Node Factory
 ==================================================
 
 Two problems are solved here.
 
 **1. Unbounded HTTP calls.** Wavelink creates its own ``aiohttp.ClientSession``
-with the library default timeout of **300 seconds**. Kyro awaits several
+with the library default timeout of **300 seconds**. Kyoka awaits several
 Lavalink REST calls directly (``skip``, ``play``, ``stop``, ``move_to``), so a
 single slow or unreachable node used to freeze the whole music subsystem: the
 awaiting command never returned and the per-guild locks stayed held for the
 entire duration, making every later command wait behind it.
 
-Every node Kyro creates goes through this module, so the transport always fails
+Every node Kyoka creates goes through this module, so the transport always fails
 fast instead of hanging.
 
 **2. No failover.** A Lavalink node is a single point of failure: when it dies
@@ -37,7 +37,7 @@ import wavelink
 if TYPE_CHECKING:
     import discord
 
-logger = logging.getLogger("Kyro.Lavalink")
+logger = logging.getLogger("Kyoka.Lavalink")
 
 # Total request budget, TCP connect budget and socket-read budget for every
 # call made against the Lavalink REST API.
@@ -199,7 +199,7 @@ async def close_pool_nodes() -> None:
 # searches keep working.
 #
 # The directory below is refreshed every few minutes by its maintainers and only
-# lists nodes that were online at that moment. Kyro probes the entries itself
+# lists nodes that were online at that moment. Kyoka probes the entries itself
 # and only ever uses a node that passed the full check.
 
 _public_nodes_cache: tuple[float, list[tuple[str, str]]] | None = None

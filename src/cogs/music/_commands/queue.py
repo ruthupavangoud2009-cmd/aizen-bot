@@ -3,7 +3,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Union
 from discord.ext import commands
 
-from src.utils.containers import KyroContainer, send_container_response
+from src.utils.containers import KyokaContainer, send_container_response
 
 if TYPE_CHECKING:
     from src.cogs.music.music import Music
@@ -23,12 +23,12 @@ async def execute_queue(cog: Music, ctx: commands.Context, page: Union[int, str]
 
     player = cog.controller.get_player(ctx.guild.id)
     if not player or not player.is_connected or (not player.current and not player.queue):
-        container = KyroContainer(accent_color=None)
+        container = KyokaContainer(accent_color=None)
         container.add_text("**No active queue found in this server.**")
         await send_container_response(ctx, container)
         return
 
-    container = KyroContainer(accent_color=None)
+    container = KyokaContainer(accent_color=None)
     if player.current:
         curr_title = player.current.title.replace("[", "(").replace("]", ")")
         curr_link = f"[{curr_title}]({player.current.url})" if player.current.url else f"**{curr_title}**"

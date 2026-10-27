@@ -16,14 +16,14 @@ from src.core.lavalink import (
     err_text,
     probe_node,
 )
-from src.utils.containers import KyroContainer
+from src.utils.containers import KyokaContainer, KyroContainer
 
 if TYPE_CHECKING:
-    from src.core.bot import KyroBot
+    from src.core.bot import KyokaBot, KyroBot
     from src.cogs.music.music import Music
     from src.cogs.music._player import GuildPlayer
 
-logger = logging.getLogger("Kyro.Music.Agent")
+logger = logging.getLogger("Kyoka.Music.Agent")
 
 
 class MusicAgent:
@@ -38,7 +38,7 @@ class MusicAgent:
     5. Universal Command Shield & Graceful Circuit Breakers across 100% of music commands.
     """
 
-    def __init__(self, bot: KyroBot, music_cog: Music) -> None:
+    def __init__(self, bot: KyokaBot | KyroBot, music_cog: Music) -> None:
         self.bot = bot
         self.music = music_cog
 
@@ -285,7 +285,7 @@ class MusicAgent:
         """
         Universal circuit breaker for ALL music commands (prefix and slash).
         Catches transient connection timeouts, node drops, and stream errors,
-        triggers autonomous self-healing, and displays a polished Kyro container.
+        triggers autonomous self-healing, and displays a polished Kyoka container.
 
         Classification is done on the EXCEPTION TYPE, not on the message text.
         Many transport exceptions (TimeoutError, ClientOSError, ...) carry an
@@ -366,7 +366,7 @@ class MusicAgent:
             action = "Verified channel capacity and permission boundaries."
             advice = f"Notice: `{err_str}`"
 
-        # Build and dispatch stylish KyroComponents card
+        # Build and dispatch stylish KyokaComponents card
         card = self.build_maintenance_card(
             title=title,
             issue_desc=f"`{err_type}: {err_str[:120]}`",
@@ -388,16 +388,16 @@ class MusicAgent:
         issue_desc: str = "Temporary connection blip detected.",
         action_taken: str = "Automated voice session reset performed.",
         advice: str = "Please try playing your track again in a few moments.",
-    ) -> KyroContainer:
-        """Produce a stylish Kyro Components V2 container for transient music errors."""
+    ) -> KyokaContainer:
+        """Produce a stylish Kyoka Components container for transient music errors."""
         e_reg = getattr(self.bot, "custom_emojis", None)
         dot = e_reg.get("heart_dot", "•") if e_reg else "•"
         shield_icon = e_reg.get("icons_shield", "🛡️") if e_reg else "🛡️"
 
-        container = KyroContainer(accent_color=None)
+        container = KyokaContainer(accent_color=None)
         container.add_section(
             content=(
-                f"**{shield_icon} Kyro Music Agent • Autonomous Shield**\n"
+                f"**{shield_icon} Kyoka Music Agent • Autonomous Shield**\n"
                 f"> *{title}*"
             )
         )

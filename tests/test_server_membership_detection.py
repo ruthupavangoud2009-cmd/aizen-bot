@@ -1,12 +1,15 @@
-"""Authoritative tests for KYOKA 3.0 Server Membership Detection and False Add Bot prevention.
+"""Authoritative tests for KYOKA 3.0 Server Membership Detection, Management Features & Regression.
 
-Validates:
-1. KYOKA installed and user can manage the server -> visible with installed status & bot_installed: True.
-2. KYOKA absent -> excluded when installed_only=1, never shown as active.
-3. KYOKA installed but membership check fails -> returns 'unavailable' status & verification_status: unavailable.
-4. Refresh after installation (?refresh=1) -> purges caches and returns updated guild status immediately.
-5. Guild ID normalization -> int vs str vs large 64-bit snowflake IDs compare accurately.
-6. Authoritative bot instance checking -> prioritizes live running KyokaBot instance.
+Covers the 9 mandatory regression test scenarios:
+1. Bot installed -> Manage Server appears (status: installed, bot_installed: True).
+2. Bot absent -> Add Bot appears only for authorized managers (status: not_installed, unmanageable servers excluded).
+3. Bot installed but database cache is stale -> membership is correctly refreshed with ?refresh=1.
+4. Wrong bot identity or wrong server ID -> no false positive.
+5. OAuth token expired -> clear reconnect flow (401/error response).
+6. Discord API timeout, rate limit, or error -> no false claim that the bot is absent (status: unavailable).
+7. User cannot manage a server -> protected management actions are rejected (HTTP 403 Forbidden).
+8. Every management button reaches the correct backend operation (settings, test-event, automod).
+9. Existing authentication and working website features continue to work.
 """
 import time
 from typing import Any
@@ -67,8 +70,8 @@ class TestServerMembershipDetection(AioHTTPTestCase):
         }, self.config.secret_key)
         return {self.config.session_cookie_name: token}
 
-    async def test_case_1_installed_and_manageable_server_is_installed(self):
-        """User can manage and KYOKA is installed -> status: installed, bot_installed: True."""
+    async def test_case_1_bot_installed_manage_server_appears(self):
+        """1. Bot installed -> Manage Server appears with status: installed and bot_installed: True."""
         user_guilds = [
             {"id": "1001", "name": "Installed Admin Server", "permissions": 8, "owner": False},
             {"id": "2002", "name": "Installed Owner Server", "permissions": 0, "owner": True},
@@ -76,7 +79,7 @@ class TestServerMembershipDetection(AioHTTPTestCase):
         self.db.known_bot_guilds = {1001, 2002}
         cookies = self._make_session_cookie("12345", user_guilds)
 
-        resp = await self.client.get("/api/guilds?installed_only=1", cookies=cookies)
+        resp = await self.client.get("/api/guilds", cookies=cookies)
         assert resp.status == 200
         data = await resp.json()
         assert len(data["guilds"]) == 2
@@ -85,69 +88,46 @@ class TestServerMembershipDetection(AioHTTPTestCase):
             assert g["bot_installed"] is True
             assert g["status"] == "installed"
 
-    async def test_case_2_absent_server_not_shown_when_installed_only(self):
-        """User owns/manages server, but KYOKA is NOT installed -> excluded when installed_only=1."""
+    async def test_case_2_bot_absent_add_bot_appears_only_for_authorized_managers(self):
+        """2. Bot absent -> Add Bot appears only for authorized managers; unmanageable servers excluded with manageable_only."""
         user_guilds = [
-            {"id": "1001", "name": "Present Server", "permissions": 8, "owner": True},
-            {"id": "9999", "name": "Absent Server", "permissions": 8, "owner": True},
+            {"id": "1001", "name": "Installed Server", "permissions": 8, "owner": False},
+            {"id": "7777", "name": "Manageable Absent Server", "permissions": 32, "owner": False},  # Manage Guild
+            {"id": "8888", "name": "Unmanageable Server", "permissions": 0, "owner": False},      # No manage rights
         ]
         self.db.known_bot_guilds = {1001}
         cookies = self._make_session_cookie("12345", user_guilds)
 
-        resp = await self.client.get("/api/guilds?installed_only=1", cookies=cookies)
+        # 1. Query with manageable_only=1 (used by dashboard): unmanageable server 8888 is excluded
+        resp = await self.client.get("/api/guilds?manageable_only=1", cookies=cookies)
         assert resp.status == 200
         data = await resp.json()
-        guild_ids = [g["id"] for g in data["guilds"]]
-        assert "1001" in guild_ids
-        assert "9999" not in guild_ids
+        guild_map = {g["id"]: g for g in data["guilds"]}
 
-    async def test_case_3_unverified_membership_returns_unavailable_not_absent(self):
-        """When membership check cannot be verified, return status: unavailable with verification error state."""
-        user_guilds = [
-            {"id": "1001", "name": "Server In Limbo", "permissions": 8, "owner": True},
-        ]
-        cookies = self._make_session_cookie("12345", user_guilds)
+        # Manageable absent server 7777 must appear with not_installed and valid invite_url
+        assert "7777" in guild_map
+        assert guild_map["7777"]["can_manage"] is True
+        assert guild_map["7777"]["bot_installed"] is False
+        assert guild_map["7777"]["status"] == "not_installed"
+        assert "discord.com/oauth2/authorize" in guild_map["7777"]["invite_url"]
 
-        # In standard flow, if bot_check_ok is False and bot_guild_ids is empty
-        # simulate verification unavailable
-        from dashboard_api.routes import guild_routes
-        original_fetch = guild_routes.fetch_bot_guilds
+        # Installed server 1001 must appear with installed
+        assert "1001" in guild_map
+        assert guild_map["1001"]["status"] == "installed"
+        assert guild_map["1001"]["bot_installed"] is True
 
-        async def mock_failed_fetch(*args, **kwargs):
-            return set(), False
+        # Server without management rights 8888 must NOT appear when manageable_only=1
+        assert "8888" not in guild_map
 
-        guild_routes.fetch_bot_guilds = mock_failed_fetch
-        try:
-            # Bypass mock_test_token by providing a different token to trigger live path
-            token = create_session_token({
-                "user_id": "12345",
-                "username": "TestManager",
-                "access_token": "non_mock_token",
-            }, self.config.secret_key)
+        # 2. Query without filter: unmanageable server 8888 has can_manage: False and status: permission_required
+        resp_all = await self.client.get("/api/guilds", cookies=cookies)
+        assert resp_all.status == 200
+        all_guilds = {g["id"]: g for g in (await resp_all.json())["guilds"]}
+        assert all_guilds["8888"]["can_manage"] is False
+        assert all_guilds["8888"]["status"] == "permission_required"
 
-            # Mock fetch_user_guilds to return the manageable guild
-            original_user_fetch = guild_routes.fetch_user_guilds
-            async def mock_user_fetch(*args, **kwargs):
-                return user_guilds
-            guild_routes.fetch_user_guilds = mock_user_fetch
-
-            try:
-                # Clear auxiliary db ids so it isolates verification failure
-                self.db.known_bot_guilds = set()
-                resp = await self.client.get("/api/guilds?installed_only=1", cookies={self.config.session_cookie_name: token})
-                assert resp.status == 200
-                data = await resp.json()
-                assert data["verification_status"] == "unavailable"
-                assert len(data["guilds"]) == 1
-                assert data["guilds"][0]["status"] == "unavailable"
-                assert data["guilds"][0]["bot_installed"] is False
-            finally:
-                guild_routes.fetch_user_guilds = original_user_fetch
-        finally:
-            guild_routes.fetch_bot_guilds = original_fetch
-
-    async def test_case_4_refresh_updates_list_and_purges_cache(self):
-        """Refreshing with ?refresh=1 immediately reflects new installations."""
+    async def test_case_3_bot_installed_stale_cache_refreshed(self):
+        """3. Bot installed but database cache is stale -> membership is refreshed with ?refresh=1."""
         user_guilds = [
             {"id": "1001", "name": "Server 1001", "permissions": 8, "owner": True},
             {"id": "5555", "name": "Newly Joined Server", "permissions": 8, "owner": True},
@@ -155,43 +135,162 @@ class TestServerMembershipDetection(AioHTTPTestCase):
         self.db.known_bot_guilds = {1001}
         cookies = self._make_session_cookie("12345", user_guilds)
 
-        # First query: 5555 is absent
-        resp1 = await self.client.get("/api/guilds?installed_only=1", cookies=cookies)
+        # Before invite: 5555 is not_installed
+        resp1 = await self.client.get("/api/guilds", cookies=cookies)
         data1 = await resp1.json()
-        assert not any(g["id"] == "5555" for g in data1["guilds"])
+        g5555_before = next(g for g in data1["guilds"] if g["id"] == "5555")
+        assert g5555_before["status"] == "not_installed"
+        assert g5555_before["bot_installed"] is False
 
-        # KYOKA is invited and added to 5555
+        # Bot is added to server 5555
         self.db.known_bot_guilds.add(5555)
 
-        # Query with refresh=1
-        resp2 = await self.client.get("/api/guilds?refresh=1&installed_only=1", cookies=cookies)
+        # Scanner refresh with ?refresh=1 immediately updates status to installed
+        resp2 = await self.client.get("/api/guilds?refresh=1", cookies=cookies)
         assert resp2.status == 200
         data2 = await resp2.json()
-        assert any(g["id"] == "5555" for g in data2["guilds"])
+        g5555_after = next(g for g in data2["guilds"] if g["id"] == "5555")
+        assert g5555_after["status"] == "installed"
+        assert g5555_after["bot_installed"] is True
 
-    async def test_case_5_guild_id_normalization_int_vs_str(self):
-        """Verify integer vs string snowflake guild IDs match accurately without type mismatch."""
+    async def test_case_4_wrong_bot_identity_or_wrong_server_id_no_false_positive(self):
+        """4. Wrong bot identity or wrong server ID -> no false positive."""
         user_guilds = [
-            # Discord API delivers string snowflakes
-            {"id": "1562505487214321714", "name": "Snowflake Server", "permissions": 8, "owner": True},
+            {"id": "999999999999999999", "name": "Foreign Server", "permissions": 8, "owner": True},
         ]
-        # Bot instance or DB delivers integer snowflakes
-        self.db.known_bot_guilds = {1562505487214321714}
+        # Bot only knows guild 1001
+        self.db.known_bot_guilds = {1001}
         cookies = self._make_session_cookie("12345", user_guilds)
 
-        resp = await self.client.get("/api/guilds?installed_only=1", cookies=cookies)
+        resp = await self.client.get("/api/guilds", cookies=cookies)
         assert resp.status == 200
         data = await resp.json()
         assert len(data["guilds"]) == 1
-        assert data["guilds"][0]["id"] == "1562505487214321714"
-        assert data["guilds"][0]["bot_installed"] is True
-        assert data["guilds"][0]["status"] == "installed"
+        assert data["guilds"][0]["id"] == "999999999999999999"
+        assert data["guilds"][0]["bot_installed"] is False
+        assert data["guilds"][0]["status"] == "not_installed"
 
-    async def test_case_6_live_bot_instance_authoritative_resolution(self):
-        """Authoritative KyokaBot instance guilds are used directly."""
+    async def test_case_5_oauth_token_expired_reconnect_flow(self):
+        """5. OAuth token expired -> clear reconnect flow with HTTP 502/401."""
+        from dashboard_api.routes import guild_routes
+        original_fetch = guild_routes.fetch_user_guilds
+
+        async def mock_expired_token(*args, **kwargs):
+            raise RuntimeError("Failed to fetch user guilds from Discord (HTTP 401)")
+
+        guild_routes.fetch_user_guilds = mock_expired_token
+        try:
+            token = create_session_token({
+                "user_id": "12345",
+                "username": "ExpiredUser",
+                "access_token": "expired_access_token",
+            }, self.config.secret_key)
+            resp = await self.client.get("/api/guilds", cookies={self.config.session_cookie_name: token})
+            assert resp.status in (401, 502)
+        finally:
+            guild_routes.fetch_user_guilds = original_fetch
+
+    async def test_case_6_discord_api_error_or_rate_limit_returns_unavailable_not_absent(self):
+        """6. Discord API timeout, rate limit, or error -> returns status: unavailable, never false absent."""
+        user_guilds = [
+            {"id": "1001", "name": "Server During Outage", "permissions": 8, "owner": True},
+        ]
+        from dashboard_api.routes import guild_routes
+        original_bot_fetch = guild_routes.fetch_bot_guilds
+        original_user_fetch = guild_routes.fetch_user_guilds
+
+        async def mock_failed_bot_fetch(*args, **kwargs):
+            return set(), False  # Verification failed (e.g. rate limit 429)
+
+        async def mock_user_fetch(*args, **kwargs):
+            return user_guilds
+
+        guild_routes.fetch_bot_guilds = mock_failed_bot_fetch
+        guild_routes.fetch_user_guilds = mock_user_fetch
+        try:
+            token = create_session_token({
+                "user_id": "12345",
+                "username": "TestUser",
+                "access_token": "live_token",
+            }, self.config.secret_key)
+            self.db.known_bot_guilds = set()
+            resp = await self.client.get("/api/guilds", cookies={self.config.session_cookie_name: token})
+            assert resp.status == 200
+            data = await resp.json()
+            assert data["verification_status"] == "unavailable"
+            assert len(data["guilds"]) == 1
+            # Crucial: Must be unavailable, NEVER falsely reported as not_installed
+            assert data["guilds"][0]["status"] == "unavailable"
+            assert data["guilds"][0]["bot_installed"] is False
+        finally:
+            guild_routes.fetch_bot_guilds = original_bot_fetch
+            guild_routes.fetch_user_guilds = original_user_fetch
+
+    async def test_case_7_unauthorized_user_management_actions_rejected(self):
+        """7. User cannot manage a server -> protected management actions are rejected with HTTP 403."""
+        # User only manages server 1001, NOT server 2002
+        user_guilds = [
+            {"id": "1001", "name": "Managed Server", "permissions": 8, "owner": True},
+        ]
+        cookies = self._make_session_cookie("12345", user_guilds)
+
+        # GET settings for unmanaged server 2002 -> 403
+        resp_get = await self.client.get("/api/guilds/2002/settings", cookies=cookies)
+        assert resp_get.status == 403
+
+        # PATCH settings for unmanaged server 2002 -> 403
+        resp_patch = await self.client.patch("/api/guilds/2002/settings", json={"general": {"prefix": "!"}}, cookies=cookies)
+        assert resp_patch.status == 403
+
+        # Test event simulation for unmanaged server 2002 -> 403
+        resp_sim = await self.client.post("/api/guilds/2002/test-event", json={"event_type": "welcome"}, cookies=cookies)
+        assert resp_sim.status == 403
+
+    async def test_case_8_management_actions_reach_correct_backend(self):
+        """8. Every management button reaches the correct backend operation."""
+        user_guilds = [
+            {"id": "1001", "name": "Managed Server", "permissions": 8, "owner": True},
+        ]
+        cookies = self._make_session_cookie("12345", user_guilds)
+
+        # 1. Save settings (PATCH /api/guilds/{id}/settings)
+        resp_settings = await self.client.patch("/api/guilds/1001/settings", json={
+            "general": {"prefix": "?"},
+            "welcome_leave": {"welcome_enabled": True, "welcome_message": "Hello {user}!"},
+        }, cookies=cookies)
+        assert resp_settings.status == 200
+        data_settings = await resp_settings.json()
+        assert data_settings["success"] is True
+        assert data_settings["settings"]["general"]["prefix"] == "?"
+
+        # 2. Test event simulation (POST /api/guilds/{id}/test-event)
+        resp_sim = await self.client.post("/api/guilds/1001/test-event", json={"event_type": "welcome"}, cookies=cookies)
+        assert resp_sim.status == 200
+        data_sim = await resp_sim.json()
+        assert data_sim["success"] is True
+        assert "simulated_message" in data_sim
+
+        # 3. AutoMod test simulation (POST /api/guilds/{id}/automod/test)
+        resp_am = await self.client.post("/api/guilds/1001/automod/test", json={"message_text": "discord.gg/invitelink"}, cookies=cookies)
+        assert resp_am.status == 200
+        data_am = await resp_am.json()
+        assert data_am["success"] is True
+        assert "is_violation" in data_am
+
+    async def test_case_9_existing_auth_and_session_token_verification(self):
+        """9. Existing authentication and working website features continue to work."""
+        session_data = {
+            "user_id": "1505515188991033409",
+            "username": "AizenOwner",
+            "access_token": "mock_test_token",
+            "mock_guilds": [{"id": "1001", "name": "Aizen Sanctuary", "permissions": 8, "owner": True}],
+        }
+        token = create_session_token(session_data, self.config.secret_key)
+        assert isinstance(token, str) and "." in token
+
+        # Verify normalized ID resolution on live bot instance
         session = self.app["http_session"]
-        bot_inst = MockBotInstance([8888, 9999])
-        guild_ids, ok = await fetch_bot_guilds("bogus_token", session, force_refresh=True, bot_instance=bot_inst)
+        bot_inst = MockBotInstance([1562505487214321714])
+        guild_ids, ok = await fetch_bot_guilds("token", session, force_refresh=True, bot_instance=bot_inst)
         assert ok is True
-        assert "8888" in guild_ids
-        assert "9999" in guild_ids
+        assert "1562505487214321714" in guild_ids

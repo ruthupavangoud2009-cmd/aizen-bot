@@ -1,11 +1,9 @@
-/owner /owner.html 200
-/dashboard /dashboard.html 200
-/tickets /tickets.html 200
-/staff /staff.html 200
-/commands /commands.html 200
-/features /features.html 200
-/premium /premium.html 200
-/support /support.html 200
-/privacy /privacy.html 200
-/terms /terms.html 200
-/changelog /changelog.html 200
+# KYOKA 3.0 Cloudflare Pages Redirects
+# NOTE: Do NOT add rules like "/dashboard /dashboard.html 200".
+# Cloudflare Pages natively serves HTML files at pretty URLs (e.g. /dashboard -> dashboard.html).
+# Adding a 200 rewrite for the same name triggers an infinite 308 redirect loop (ERR_TOO_MANY_REDIRECTS).
+
+# Shorthand aliases
+/login /api/auth/login 302
+/logout /api/auth/logout 302
+/invite https://discord.com/oauth2/authorize?client_id=1562505487214321714&permissions=8&scope=bot%20applications.commands 302

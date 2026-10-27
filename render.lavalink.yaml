@@ -1,5 +1,5 @@
 # ==========================================
-# Kyro - dedicated Lavalink audio node
+# Kyoka - dedicated Lavalink audio node
 # ==========================================
 # Render blueprint for the Background Worker that runs the Lavalink v4 node.
 # The Discord bot itself stays in its own Web Service (render.yaml) and points
@@ -17,7 +17,7 @@
 
 services:
   - type: worker
-    name: kyro-lavalink
+    name: kyoka-lavalink
     runtime: docker
     dockerfilePath: ./lavalink-node/Dockerfile
     dockerContext: ./lavalink-node

@@ -4,7 +4,7 @@ from typing import TYPE_CHECKING
 from discord.ext import commands
 
 from src.cogs.music._commands.controls import check_voice_channel
-from src.utils.containers import KyroContainer, send_container_response
+from src.utils.containers import KyokaContainer, send_container_response
 
 if TYPE_CHECKING:
     from src.cogs.music.music import Music
@@ -13,20 +13,20 @@ if TYPE_CHECKING:
 async def execute_stop(cog: Music, ctx: commands.Context) -> None:
     allowed, err = check_voice_channel(ctx)
     if not allowed:
-        container = KyroContainer(accent_color=None)
+        container = KyokaContainer(accent_color=None)
         container.add_text(f"**{err}**")
         await send_container_response(ctx, container)
         return
 
     player = cog.controller.get_player(ctx.guild.id)
     if not player or not player.is_connected:
-        container = KyroContainer(accent_color=None)
+        container = KyokaContainer(accent_color=None)
         container.add_text("**No active player found in this server.**")
         await send_container_response(ctx, container)
         return
 
     player._disconnect_announced = True
     await player.stop()
-    container = KyroContainer(accent_color=None)
+    container = KyokaContainer(accent_color=None)
     container.add_text("**Player stopped, queue cleared and disconnected from voice.**")
     await send_container_response(ctx, container)

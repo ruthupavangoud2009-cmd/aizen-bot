@@ -1,5 +1,5 @@
 """
-Kyro Discord Bot - User Saved Playlists & Like System (Native Engine)
+Kyoka Discord Bot - User Saved Playlists & Like System (Native Engine)
 Instant playback, zero premature skips via dynamic query re-resolution,
 and full playlist management (add, removetrack, view, list, delete).
 """
@@ -19,12 +19,12 @@ from src.cogs.music._playlist_views import (
     PlaylistBrowseView,
     execute_saved_playlist_playback,
 )
-from src.utils.containers import KyroContainer, send_container_response
+from src.utils.containers import KyokaContainer, send_container_response
 
 if TYPE_CHECKING:
     from src.cogs.music.music import Music
 
-logger = logging.getLogger("Kyro.Music.Cmd.Playlist")
+logger = logging.getLogger("Kyoka.Music.Cmd.Playlist")
 
 
 def resolve_playlist_track_query(row: dict) -> str:
@@ -103,7 +103,7 @@ async def handle_like(ctx: CustomContext, cog: Music) -> None:
         track_web_url,
     )
 
-    container = KyroContainer(accent_color=None)
+    container = KyokaContainer(accent_color=None)
     container.add_section(
         content=(
             f"**Added to Favorites**\n"
@@ -113,7 +113,7 @@ async def handle_like(ctx: CustomContext, cog: Music) -> None:
         accessory={"type": 11, "media": {"url": current.thumbnail}} if current.thumbnail else None,
     )
     container.add_separator(divider=True)
-    container.add_text("-# Powered by Kyro Studio")
+    container.add_text("-# Powered by Kyoka Studio")
     await send_container_response(ctx, container)
 
 
@@ -209,7 +209,7 @@ async def handle_unlike(ctx: CustomContext, cog: Music, *, query: Optional[str] 
     # Delete track from playlist
     await db.execute("DELETE FROM user_playlist_tracks WHERE id = $1;", target_track["id"])
 
-    container = KyroContainer(accent_color=None)
+    container = KyokaContainer(accent_color=None)
     container.add_section(
         content=(
             f"**Removed from Playlist**\n"
@@ -218,7 +218,7 @@ async def handle_unlike(ctx: CustomContext, cog: Music, *, query: Optional[str] 
         )
     )
     container.add_separator(divider=True)
-    container.add_text("-# Powered by Kyro Studio")
+    container.add_text("-# Powered by Kyoka Studio")
     await send_container_response(ctx, container)
 
 
@@ -306,7 +306,7 @@ async def handle_playlist(
             clean_pl_name,
         )
 
-        container = KyroContainer(accent_color=None)
+        container = KyokaContainer(accent_color=None)
         container.add_section(
             content=(
                 f"**Playlist Created**\n"
@@ -327,7 +327,7 @@ async def handle_playlist(
 
         # Handle external playlist URL import: ?playlist add <name> <playlist_url>
         if query and is_playlist_url(query):
-            wait_c = KyroContainer(accent_color=None)
+            wait_c = KyokaContainer(accent_color=None)
             wait_c.add_text(f"**Importing playlist:** `{query}`...")
             await send_container_response(ctx, wait_c)
 
@@ -369,7 +369,7 @@ async def handle_playlist(
                 except Exception:
                     pass
 
-            container = KyroContainer(accent_color=None)
+            container = KyokaContainer(accent_color=None)
             container.add_section(
                 content=(
                     f"**Imported Playlist to `{pl_row['playlist_name']}`**\n"
@@ -379,7 +379,7 @@ async def handle_playlist(
                 )
             )
             container.add_separator(divider=True)
-            container.add_text("-# Powered by Kyro Studio")
+            container.add_text("-# Powered by Kyoka Studio")
             await send_container_response(ctx, container)
             return
 
@@ -444,7 +444,7 @@ async def handle_playlist(
             url_to_save,
         )
 
-        container = KyroContainer(accent_color=None)
+        container = KyokaContainer(accent_color=None)
         container.add_section(
             content=(
                 f"**Added to `{pl_row['playlist_name']}`**\n"
@@ -514,7 +514,7 @@ async def handle_playlist(
                 await ctx.send_warning(f"No song matching `{target_param}` found in `{pl_row['playlist_name']}`.\n> Tip: View song list via `?playlist view {pl_row['playlist_name']}`")
                 return
 
-        container = KyroContainer(accent_color=None)
+        container = KyokaContainer(accent_color=None)
         container.add_section(
             content=(
                 f"**Removed from `{pl_row['playlist_name']}`**\n"
@@ -684,7 +684,7 @@ async def handle_playlist(
         export_text = "\n".join(export_lines[:50])
         more_notice = f"\n...and {len(tracks) - 50} more tracks" if len(tracks) > 50 else ""
 
-        container = KyroContainer(accent_color=None)
+        container = KyokaContainer(accent_color=None)
         container.add_section(
             content=(
                 f"**Exported Playlist: `{pl_row['playlist_name']}`**\n"
@@ -693,7 +693,7 @@ async def handle_playlist(
             )
         )
         container.add_separator(divider=True)
-        container.add_text(f"```text\n{export_text}{more_notice}\n```\n-# Powered by Kyro Studio")
+        container.add_text(f"```text\n{export_text}{more_notice}\n```\n-# Powered by Kyoka Studio")
         await send_container_response(ctx, container)
         return
 
@@ -724,7 +724,7 @@ async def handle_playlist(
             "DELETE FROM user_playlists WHERE id = $1;",
             pl_row["id"],
         )
-        container = KyroContainer(accent_color=None)
+        container = KyokaContainer(accent_color=None)
         container.add_section(content=f"**Playlist Deleted:** `{pl_row['playlist_name']}`")
         await send_container_response(ctx, container)
         return

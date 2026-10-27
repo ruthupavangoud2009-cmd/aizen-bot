@@ -76,10 +76,10 @@ async function renderStaffDashboard(container) {
           </p>
         </div>
         <div style="display: flex; gap: 0.75rem; flex-wrap: wrap;">
-          <a href="/tickets.html" class="btn btn-outline" style="min-height: 44px; display: inline-flex; align-items: center; gap: 0.5rem;">
+          <a href="/tickets" class="btn btn-outline" style="min-height: 44px; display: inline-flex; align-items: center; gap: 0.5rem;">
             <span>🎫</span> Open Tickets Hub
           </a>
-          <a href="/dashboard.html" class="btn btn-primary" style="min-height: 44px; display: inline-flex; align-items: center; gap: 0.5rem;">
+          <a href="/dashboard" class="btn btn-primary" style="min-height: 44px; display: inline-flex; align-items: center; gap: 0.5rem;">
             <span>⚙️</span> Server Workspace
           </a>
         </div>
@@ -191,7 +191,7 @@ async function loadStaffTickets() {
                   Claim
                 </button>
               ` : ''}
-              <a href="/tickets.html" class="btn btn-primary" style="padding: 0.25rem 0.6rem; font-size: 0.75rem;">
+              <a href="/tickets" class="btn btn-primary" style="padding: 0.25rem 0.6rem; font-size: 0.75rem;">
                 Open &rarr;
               </a>
             </div>

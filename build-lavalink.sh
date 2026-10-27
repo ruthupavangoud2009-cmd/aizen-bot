@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # ==========================================
-# Kyro - Lavalink node build script
+# Kyoka - Lavalink node build script
 # ==========================================
 # Used by the dedicated Render Background Worker that runs the Lavalink node.
 # The Discord bot itself does NOT need this - the bot service keeps using

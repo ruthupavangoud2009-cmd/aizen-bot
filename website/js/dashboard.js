@@ -138,7 +138,7 @@ function updateNavUser(user) {
   if (!slot) return;
 
   const ownerBtn = user.is_owner
-    ? `<a href="/owner.html" class="btn btn-outline btn-sm" style="border-color: var(--purple-vibrant); color: var(--purple-pastel); font-size: 0.8rem; padding: 0.35rem 0.65rem;" title="Aizen Owner Control Center">👑 Owner Suite</a>`
+    ? `<a href="/owner" class="btn btn-outline btn-sm" style="border-color: var(--purple-vibrant); color: var(--purple-pastel); font-size: 0.8rem; padding: 0.35rem 0.65rem;" title="Aizen Owner Control Center">👑 Owner Suite</a>`
     : '';
 
   slot.innerHTML = `
@@ -213,14 +213,11 @@ function renderServerSelector(container) {
   state.selectedGuildId = null;
   state.selectedGuildObj = null;
   state.hasUnsavedChanges = false;
-  history.replaceState(null, '', '/dashboard.html');
+  history.replaceState(null, '', '/dashboard');
 
-  // Authoritative filter: strictly display servers where user has manage permissions AND KYOKA is installed,
-  // or where verification check failed (status === 'unavailable') so user can retry.
-  state.guilds = (state.guilds || []).filter(g => {
-    if (g.status === 'unavailable') return true;
-    return Boolean(g.can_manage && (g.status === 'installed' || g.bot_installed));
-  });
+  // Display only servers the logged-in user is authorized to manage.
+  // Installed servers show Manage Server; absent servers show Add Bot; unavailable show Retry.
+  state.guilds = (state.guilds || []).filter(g => Boolean(g.can_manage));
 
   if (state.guilds.length === 0) {
     container.innerHTML = `
@@ -284,14 +281,11 @@ function renderServerSelector(container) {
 }
 
 function renderGuildCards(guilds, grid, mainContainer) {
-  // Authoritative filter: ONLY show servers with bot installed + manage permission, or verification failed
-  const displayGuilds = guilds.filter(g => {
-    if (g.status === 'unavailable') return true;
-    return Boolean(g.can_manage && (g.status === 'installed' || g.bot_installed));
-  });
+  // Authoritative filter: ONLY show servers the user has permission to manage
+  const displayGuilds = guilds.filter(g => g.can_manage);
 
   if (displayGuilds.length === 0) {
-    grid.innerHTML = `<p style="grid-column: 1 / -1; text-align: center; color: var(--text-dim); padding: 2rem;">No installed servers found with your management permissions.</p>`;
+    grid.innerHTML = `<p style="grid-column: 1 / -1; text-align: center; color: var(--text-dim); padding: 2rem;">No manageable Discord servers found for your account. You must have Administrator or Manage Server permissions.</p>`;
     return;
   }
 
@@ -301,7 +295,7 @@ function renderGuildCards(guilds, grid, mainContainer) {
       ? `<img src="${g.icon_url}" alt="${g.name}" class="server-icon" />`
       : `<div class="server-icon-placeholder">${initial}</div>`;
 
-    const status = g.status || (g.bot_installed ? 'installed' : 'unavailable');
+    const status = g.status || (g.bot_installed ? 'installed' : 'not_installed');
 
     let statusBadge = '';
     let actionBtn = '';
@@ -310,16 +304,25 @@ function renderGuildCards(guilds, grid, mainContainer) {
       statusBadge = `<span class="server-badge badge-installed">Bot Added</span>`;
       actionBtn = `
         <div style="display: flex; gap: 0.5rem; width: 100%; margin-top: auto;">
-          <button class="btn btn-primary manage-btn" data-gid="${g.id}" style="flex: 1;">Open Dashboard</button>
+          <button class="btn btn-primary manage-btn" data-gid="${g.id}" style="flex: 1;">Manage Server</button>
           <button class="btn btn-outline wizard-btn" data-gid="${g.id}" title="Launch Guided Setup Wizard" style="padding: 0.5rem 0.75rem; border-color: var(--purple-primary); color: var(--purple-pastel);">✨ Wizard</button>
         </div>
       `;
     } else if (status === 'unavailable') {
-      // Clear verification error and Retry; do not falsely show an invite button or silently treat as absent
-      statusBadge = `<span class="server-badge" style="background: rgba(239, 68, 68, 0.2); color: #fca5a5; border: 1px solid rgba(239, 68, 68, 0.4);">Verification Failed</span>`;
+      // Clear verification error and Retry; do not falsely claim absent
+      statusBadge = `<span class="server-badge" style="background: rgba(239, 68, 68, 0.2); color: #fca5a5; border: 1px solid rgba(239, 68, 68, 0.4);">Verification Unavailable</span>`;
       actionBtn = `
         <div style="display: flex; gap: 0.5rem; width: 100%; margin-top: auto;">
-          <button class="btn btn-outline retry-verify-btn" data-gid="${g.id}" style="flex: 1; border-color: rgba(239, 68, 68, 0.4); color: #fca5a5;">🔄 Retry Verification</button>
+          <button class="btn btn-outline retry-verify-btn" data-gid="${g.id}" style="flex: 1; border-color: rgba(239, 68, 68, 0.4); color: #fca5a5;">🔄 Retry</button>
+        </div>
+      `;
+    } else {
+      // Genuinely absent: Display Add Bot button with OAuth invite
+      const inviteUrl = g.invite_url || `https://discord.com/oauth2/authorize?client_id=1562505487214321714&guild_id=${g.id}&permissions=8&scope=bot%20applications.commands`;
+      statusBadge = `<span class="server-badge" style="background: rgba(148, 163, 184, 0.15); color: #cbd5e1; border: 1px solid rgba(148, 163, 184, 0.3);">Not Added</span>`;
+      actionBtn = `
+        <div style="display: flex; gap: 0.5rem; width: 100%; margin-top: auto;">
+          <a href="${inviteUrl}" target="_blank" rel="noopener noreferrer" class="btn btn-secondary add-bot-btn" data-gid="${g.id}" style="flex: 1; text-align: center; text-decoration: none;">Add Bot</a>
         </div>
       `;
     }
@@ -351,6 +354,19 @@ function renderGuildCards(guilds, grid, mainContainer) {
     });
   });
 
+  grid.querySelectorAll('.add-bot-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      // Refresh status automatically when user completes invite flow and returns to tab
+      const onReturnFocus = () => {
+        window.removeEventListener('focus', onReturnFocus);
+        setTimeout(() => {
+          initDashboard(true);
+        }, 1200);
+      };
+      window.addEventListener('focus', onReturnFocus);
+    });
+  });
+
   grid.querySelectorAll('.wizard-btn').forEach(btn => {
     btn.addEventListener('click', (e) => {
       e.stopPropagation();
@@ -372,7 +388,7 @@ async function selectGuild(guildId, container) {
   const guild = state.guilds.find(g => g.id === guildId) || { name: 'Server Settings', id: guildId, bot_installed: true };
   state.selectedGuildObj = guild;
 
-  history.replaceState(null, '', `/dashboard.html?guild_id=${guildId}`);
+  history.replaceState(null, '', `/dashboard?guild_id=${guildId}`);
   renderLoading(container, `Loading configuration for ${guild.name}...`);
 
   try {
@@ -403,7 +419,7 @@ function renderWorkspace(container, guild) {
     <div class="guild-workspace">
       <!-- Breadcrumbs -->
       <div class="dashboard-breadcrumbs">
-        <a href="/dashboard.html" id="breadcrumb-servers">Servers</a>
+        <a href="/dashboard" id="breadcrumb-servers">Servers</a>
         <span class="separator">/</span>
         <span style="color: var(--text-main); font-weight: 600;">${guildName}</span>
         <span class="separator">/</span>
@@ -1695,7 +1711,7 @@ function renderReactionRolesTab(panel, s) {
       <p style="color: var(--text-muted); max-width: 500px; margin: 0 auto 1.5rem; font-size: 0.9rem;">
         Reaction role panels are managed directly through Discord slash interfaces with interactive dropdowns and buttons.
       </p>
-      <a href="/commands.html" class="btn btn-primary btn-sm">Explore Role Menu Commands</a>
+      <a href="/commands" class="btn btn-primary btn-sm">Explore Role Menu Commands</a>
     </div>
   `;
 }
@@ -1856,7 +1872,7 @@ function renderPrefixCommandsTab(panel, s) {
     <div style="margin-top: 1.5rem; text-align: center; background: rgba(22, 11, 42, 0.7); border: 1px solid var(--border-subtle); border-radius: var(--radius-md); padding: 2rem;">
       <h5 style="color: var(--purple-white); margin-bottom: 0.5rem;">Explore Full Command Inventory</h5>
       <p style="color: var(--text-muted); font-size: 0.88rem; max-width: 450px; margin: 0 auto 1.5rem;">View syntax and permission requirements across all 320 commands.</p>
-      <a href="/commands.html" class="btn btn-outline btn-sm">Open Commands Explorer</a>
+      <a href="/commands" class="btn btn-outline btn-sm">Open Commands Explorer</a>
     </div>
   `;
 
@@ -1890,7 +1906,7 @@ function renderPremiumTab(panel, s) {
           <span style="font-size: 0.85rem; color: var(--text-muted);">Status: <strong style="color: ${isPrem ? 'var(--emerald-accent)' : 'var(--text-dim)'};">${isPrem ? 'ACTIVE' : 'STANDARD (FREE)'}</strong> • Expiry: ${expires}</span>
         </div>
         <div style="display: flex; gap: 0.75rem; align-items: center;">
-          <a href="/premium.html" class="btn btn-primary btn-sm" style="box-shadow: 0 0 15px rgba(124, 58, 237, 0.5);">
+          <a href="/premium" class="btn btn-primary btn-sm" style="box-shadow: 0 0 15px rgba(124, 58, 237, 0.5);">
             💎 Upgrade Server
           </a>
         </div>
@@ -3003,7 +3019,7 @@ function renderDiagnosticsTab(panel, s) {
         All API requests are authenticated against verified Discord sessions and strictly scoped to the authorized server guild ID. Ordinary guild administrators are blocked from accessing owner endpoints via server-side permission gates.
       </p>
       ${isOwner ? `
-        <a href="/owner.html" class="btn btn-outline btn-sm" style="border-color: var(--purple-vibrant); color: var(--purple-pastel);">
+        <a href="/owner" class="btn btn-outline btn-sm" style="border-color: var(--purple-vibrant); color: var(--purple-pastel);">
           👑 Open Aizen Owner Control Center
         </a>
       ` : `

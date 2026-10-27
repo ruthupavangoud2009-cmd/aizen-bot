@@ -5,7 +5,7 @@ import discord
 from discord.ext import commands
 
 from src.cogs.music._views import MusicControlView
-from src.utils.containers import KyroContainer, send_container_response
+from src.utils.containers import KyokaContainer, send_container_response
 
 if TYPE_CHECKING:
     from src.cogs.music.music import Music
@@ -14,7 +14,7 @@ if TYPE_CHECKING:
 async def execute_nowplaying(cog: Music, ctx: commands.Context) -> None:
     player = cog.controller.get_player(ctx.guild.id)
     if not player or not player.is_connected or not player.current:
-        container = KyroContainer(accent_color=None)
+        container = KyokaContainer(accent_color=None)
         container.add_text("**Nothing is currently playing.**")
         await send_container_response(ctx, container)
         return

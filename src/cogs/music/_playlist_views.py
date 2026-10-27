@@ -1,5 +1,5 @@
 """
-Kyro Discord Bot - Interactive Components V2 Playlist Views
+Kyoka Discord Bot - Interactive Components V2 Playlist Views
 Provides interactive Dropdown Select Menu for playlist selection,
 quick Play / Shuffle Play buttons, live paginated track browsing, and safe deletion.
 """
@@ -14,14 +14,14 @@ import discord
 
 from src.cogs.music._models import Track
 from src.cogs.music._extractor import NativeExtractor
-from src.utils.containers import KyroContainer, send_container_response, edit_container_response
+from src.utils.containers import KyokaContainer, KyroContainer, send_container_response, edit_container_response
 
 if TYPE_CHECKING:
-    from src.core.bot import KyroBot
+    from src.core.bot import KyokaBot, KyroBot
     from src.cogs.music.music import Music
     from src.cogs.music._player import GuildPlayer
 
-logger = logging.getLogger("Kyro.Music.PlaylistViews")
+logger = logging.getLogger("Kyoka.Music.PlaylistViews")
 
 
 def format_duration(seconds: int) -> str:
@@ -49,7 +49,7 @@ def resolve_track_query(row: dict) -> str:
 
 
 async def execute_saved_playlist_playback(
-    bot: KyroBot,
+    bot: KyokaBot | KyroBot,
     cog: Music,
     guild: discord.Guild,
     user: discord.User | discord.Member,
@@ -61,7 +61,7 @@ async def execute_saved_playlist_playback(
 ) -> None:
     """Execute playback of a saved playlist with immediate full queueing and optional shuffle."""
     if not tracks:
-        c = KyroContainer()
+        c = KyokaContainer()
         c.add_section(content=f"**Playlist Notice**\n> Playlist `{pl_row['playlist_name']}` is empty.")
         if interaction:
             await send_container_response(interaction, c, ephemeral=True)
@@ -76,7 +76,7 @@ async def execute_saved_playlist_playback(
     voice_state = getattr(member, "voice", None) if member else None
     user_vc = getattr(voice_state, "channel", None) if voice_state else None
     if not member or not voice_state or not user_vc or not getattr(user_vc, "id", None):
-        c = KyroContainer()
+        c = KyokaContainer()
         c.add_section(content="**Voice Error**\n> Join a voice channel first, then try again.")
         if interaction:
             await send_container_response(interaction, c, ephemeral=True)
@@ -93,7 +93,7 @@ async def execute_saved_playlist_playback(
     try:
         await player.connect_voice(user_vc)
     except (RuntimeError, ValueError) as e:
-        c = KyroContainer()
+        c = KyokaContainer()
         c.add_section(content=f"**Voice Connection Error**\n> {e}")
         if interaction:
             await send_container_response(interaction, c, ephemeral=True)
@@ -101,7 +101,7 @@ async def execute_saved_playlist_playback(
             await send_container_response(channel, c)
         return
     except Exception as e:
-        c = KyroContainer()
+        c = KyokaContainer()
         c.add_section(content=f"**Connection Error**\n> Failed to connect to voice channel: `{e}`")
         if interaction:
             await send_container_response(interaction, c, ephemeral=True)
@@ -183,7 +183,7 @@ async def execute_saved_playlist_playback(
             pass
 
     if not first_track:
-        c = KyroContainer()
+        c = KyokaContainer()
         c.add_section(content=f"**Playback Error**\n> Failed to load first track `{first_row.get('title')}`.")
         if interaction:
             await send_container_response(interaction, c, ephemeral=True)
@@ -238,7 +238,7 @@ async def execute_saved_playlist_playback(
     upcoming_preview = "\n".join(upcoming_lines) if upcoming_lines else "No upcoming tracks."
     remaining_count = len(play_order) - (1 if was_idle else 0) - len(upcoming_lines)
 
-    container = KyroContainer(accent_color=None)
+    container = KyokaContainer(accent_color=None)
     status_title = "Now Playing" if was_idle else "Queued Playlist"
     mode_str = "Shuffle" if shuffle else "Sequential"
     container.add_section(
@@ -272,7 +272,7 @@ class PlaylistCreateModal(discord.ui.Modal, title="Create New Playlist"):
     async def on_submit(self, interaction: discord.Interaction) -> None:
         pl_name = self.name_input.value.strip()
         if not pl_name:
-            c = KyroContainer()
+            c = KyokaContainer()
             c.add_section(content="**Error**\n> Playlist name cannot be empty.")
             await send_container_response(interaction, c, ephemeral=True)
             return
@@ -287,7 +287,7 @@ class PlaylistCreateModal(discord.ui.Modal, title="Create New Playlist"):
             pl_name,
         )
         if existing:
-            c = KyroContainer()
+            c = KyokaContainer()
             c.add_section(content=f"**Notice**\n> You already have a playlist named `{pl_name}`.")
             await send_container_response(interaction, c, ephemeral=True)
             return
@@ -298,7 +298,7 @@ class PlaylistCreateModal(discord.ui.Modal, title="Create New Playlist"):
             user_id,
         )
         if count_row and count_row["cnt"] >= 25:
-            c = KyroContainer()
+            c = KyokaContainer()
             c.add_section(content="**Limit Reached**\n> You have reached the maximum limit of 25 playlists.")
             await send_container_response(interaction, c, ephemeral=True)
             return
@@ -354,13 +354,13 @@ class PlaylistSelectMenu(discord.ui.Select):
             min_values=1,
             max_values=1,
             options=options,
-            custom_id="kyro:playlist:select",
+            custom_id="kyoka:playlist:select",
         )
 
     async def callback(self, interaction: discord.Interaction) -> None:
         view: PlaylistHubView = self.view  # type: ignore
         if interaction.user.id != view.author_id:
-            c = KyroContainer()
+            c = KyokaContainer()
             c.add_section(content="**Access Denied**\n> This playlist hub belongs to someone else.")
             await send_container_response(interaction, c, ephemeral=True)
             return
@@ -375,7 +375,7 @@ class PlaylistHubView(discord.ui.View):
 
     def __init__(
         self,
-        bot: KyroBot,
+        bot: KyokaBot | KyroBot,
         cog: Music,
         author_id: int,
         author_name: str,
@@ -420,9 +420,9 @@ class PlaylistHubView(discord.ui.View):
         self.btn_view.disabled = not has_sel
         self.btn_delete.disabled = not has_sel
 
-    def build_container(self) -> KyroContainer:
+    def build_container(self) -> KyokaContainer:
         """Construct a sleek, compact Components V2 card for the Playlist Hub."""
-        container = KyroContainer(accent_color=None)
+        container = KyokaContainer(accent_color=None)
 
         if not self.playlists:
             container.add_section(
@@ -469,7 +469,7 @@ class PlaylistHubView(discord.ui.View):
 
     async def interaction_check(self, interaction: discord.Interaction) -> bool:
         if interaction.user.id != self.author_id:
-            c = KyroContainer()
+            c = KyokaContainer()
             c.add_section(content="**Access Denied**\n> This playlist hub belongs to someone else.")
             await send_container_response(interaction, c, ephemeral=True)
             return False
@@ -478,13 +478,13 @@ class PlaylistHubView(discord.ui.View):
     @discord.ui.button(
         label="Play",
         style=discord.ButtonStyle.secondary,
-        custom_id="kyro:playlist:btn_play",
+        custom_id="kyoka:playlist:btn_play",
         row=1,
     )
     async def btn_play(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
         selected_pl = self._get_selected_pl()
         if not selected_pl or not interaction.guild:
-            c = KyroContainer()
+            c = KyokaContainer()
             c.add_section(content="**Selection Required**\n> Please select a playlist first.")
             await send_container_response(interaction, c, ephemeral=True)
             return
@@ -509,13 +509,13 @@ class PlaylistHubView(discord.ui.View):
     @discord.ui.button(
         label="Shuffle Play",
         style=discord.ButtonStyle.secondary,
-        custom_id="kyro:playlist:btn_shuffle",
+        custom_id="kyoka:playlist:btn_shuffle",
         row=1,
     )
     async def btn_shuffle(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
         selected_pl = self._get_selected_pl()
         if not selected_pl or not interaction.guild:
-            c = KyroContainer()
+            c = KyokaContainer()
             c.add_section(content="**Selection Required**\n> Please select a playlist first.")
             await send_container_response(interaction, c, ephemeral=True)
             return
@@ -540,13 +540,13 @@ class PlaylistHubView(discord.ui.View):
     @discord.ui.button(
         label="View Songs",
         style=discord.ButtonStyle.secondary,
-        custom_id="kyro:playlist:btn_view",
+        custom_id="kyoka:playlist:btn_view",
         row=1,
     )
     async def btn_view(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
         selected_pl = self._get_selected_pl()
         if not selected_pl:
-            c = KyroContainer()
+            c = KyokaContainer()
             c.add_section(content="**Selection Required**\n> Please select a playlist first.")
             await send_container_response(interaction, c, ephemeral=True)
             return
@@ -573,7 +573,7 @@ class PlaylistHubView(discord.ui.View):
     @discord.ui.button(
         label="+ New",
         style=discord.ButtonStyle.primary,
-        custom_id="kyro:playlist:btn_new",
+        custom_id="kyoka:playlist:btn_new",
         row=1,
     )
     async def btn_new(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
@@ -583,13 +583,13 @@ class PlaylistHubView(discord.ui.View):
     @discord.ui.button(
         label="Delete",
         style=discord.ButtonStyle.danger,
-        custom_id="kyro:playlist:btn_delete",
+        custom_id="kyoka:playlist:btn_delete",
         row=1,
     )
     async def btn_delete(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
         selected_pl = self._get_selected_pl()
         if not selected_pl:
-            c = KyroContainer()
+            c = KyokaContainer()
             c.add_section(content="**Selection Required**\n> Please select a playlist first.")
             await send_container_response(interaction, c, ephemeral=True)
             return
@@ -601,7 +601,7 @@ class PlaylistHubView(discord.ui.View):
             playlist=selected_pl,
             hub_view=self,
         )
-        c = KyroContainer(accent_color=None)
+        c = KyokaContainer(accent_color=None)
         c.add_section(
             content=(
                 f"**Confirm Deletion**\n"
@@ -616,7 +616,7 @@ class PlaylistBrowseView(discord.ui.View):
 
     def __init__(
         self,
-        bot: KyroBot,
+        bot: KyokaBot | KyroBot,
         cog: Music,
         author_id: int,
         author_name: str,
@@ -645,8 +645,8 @@ class PlaylistBrowseView(discord.ui.View):
         self.btn_prev.disabled = (self.current_page <= 1)
         self.btn_next.disabled = (self.current_page >= self.total_pages)
 
-    def build_container(self) -> KyroContainer:
-        container = KyroContainer(accent_color=None)
+    def build_container(self) -> KyokaContainer:
+        container = KyokaContainer(accent_color=None)
         display_name = self.playlist["playlist_name"]
         total_sec = sum(t["duration"] or 0 for t in self.tracks)
         total_dur = format_duration(total_sec)
@@ -677,7 +677,7 @@ class PlaylistBrowseView(discord.ui.View):
 
     async def interaction_check(self, interaction: discord.Interaction) -> bool:
         if interaction.user.id != self.author_id:
-            c = KyroContainer()
+            c = KyokaContainer()
             c.add_section(content="**Access Denied**\n> This browser belongs to someone else.")
             await send_container_response(interaction, c, ephemeral=True)
             return False
@@ -686,7 +686,7 @@ class PlaylistBrowseView(discord.ui.View):
     @discord.ui.button(
         label="Previous",
         style=discord.ButtonStyle.secondary,
-        custom_id="kyro:playlist:browse_prev",
+        custom_id="kyoka:playlist:browse_prev",
     )
     async def btn_prev(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
         if self.current_page > 1:
@@ -700,7 +700,7 @@ class PlaylistBrowseView(discord.ui.View):
     @discord.ui.button(
         label="Next",
         style=discord.ButtonStyle.secondary,
-        custom_id="kyro:playlist:browse_next",
+        custom_id="kyoka:playlist:browse_next",
     )
     async def btn_next(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
         if self.current_page < self.total_pages:
@@ -714,7 +714,7 @@ class PlaylistBrowseView(discord.ui.View):
     @discord.ui.button(
         label="Back to Hub",
         style=discord.ButtonStyle.primary,
-        custom_id="kyro:playlist:browse_back",
+        custom_id="kyoka:playlist:browse_back",
     )
     async def btn_back(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
         container = self.hub_view.build_container()
@@ -726,7 +726,7 @@ class PlaylistDeleteConfirmView(discord.ui.View):
 
     def __init__(
         self,
-        bot: KyroBot,
+        bot: KyokaBot | KyroBot,
         cog: Music,
         author_id: int,
         playlist: dict,
@@ -741,7 +741,7 @@ class PlaylistDeleteConfirmView(discord.ui.View):
 
     async def interaction_check(self, interaction: discord.Interaction) -> bool:
         if interaction.user.id != self.author_id:
-            c = KyroContainer()
+            c = KyokaContainer()
             c.add_section(content="**Access Denied**\n> This prompt belongs to someone else.")
             await send_container_response(interaction, c, ephemeral=True)
             return False
@@ -750,7 +750,7 @@ class PlaylistDeleteConfirmView(discord.ui.View):
     @discord.ui.button(
         label="Confirm Delete",
         style=discord.ButtonStyle.danger,
-        custom_id="kyro:playlist:confirm_delete",
+        custom_id="kyoka:playlist:confirm_delete",
     )
     async def btn_confirm(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
         db = self.bot.db
@@ -785,7 +785,7 @@ class PlaylistDeleteConfirmView(discord.ui.View):
         self.hub_view.add_item(self.hub_view.btn_delete)
         self.hub_view._update_button_states()
 
-        c = KyroContainer(accent_color=None)
+        c = KyokaContainer(accent_color=None)
         c.add_section(
             content=(
                 f"**Playlist Deleted**\n"
@@ -794,13 +794,13 @@ class PlaylistDeleteConfirmView(discord.ui.View):
             )
         )
         c.add_separator(divider=True)
-        c.add_text("-# Powered by Kyro Studio")
+        c.add_text("-# Powered by Kyoka Studio")
         await edit_container_response(interaction, c, view=self.hub_view)
 
     @discord.ui.button(
         label="Cancel",
         style=discord.ButtonStyle.secondary,
-        custom_id="kyro:playlist:cancel_delete",
+        custom_id="kyoka:playlist:cancel_delete",
     )
     async def btn_cancel(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
         c = self.hub_view.build_container()
