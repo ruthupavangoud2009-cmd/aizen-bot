@@ -582,6 +582,32 @@ async def handle_add_to_queue(request: web.Request) -> web.Response:
 
     # Forward to remote bot bridge if live bot is reachable across services
     bot, player = await _resolve_live_bot_player(guild_id)
+    if bot:
+        guild = bot.get_guild(guild_id)
+        if guild:
+            controller = getattr(bot, "_music_controller", None) or getattr(bot.get_cog("Music"), "controller", None)
+            if controller:
+                player = controller.get_or_create_player(guild)
+                if not player.is_connected:
+                    ch_id = body.get("channel_id")
+                    target_vc = None
+                    if ch_id:
+                        try:
+                            target_vc = guild.get_channel(int(ch_id))
+                        except Exception:
+                            pass
+                    if not target_vc:
+                        for ch in guild.voice_channels:
+                            perms = ch.permissions_for(guild.me)
+                            if perms.connect and perms.speak:
+                                target_vc = ch
+                                break
+                    if target_vc:
+                        try:
+                            await player.connect_voice(target_vc)
+                        except Exception as e:
+                            logger.debug(f"Auto connect failed: {e}")
+
     if player and player.is_connected:
         try:
             import wavelink
@@ -595,8 +621,16 @@ async def handle_add_to_queue(request: web.Request) -> web.Response:
                     player.queue.append(track)
         except Exception as e:
             logger.debug(f"Live player enqueue note: {e}")
-    elif not player:
-        bridge_res = await _call_bot_bridge(f"/api/music/{guild_id}/play", method="POST", json_data={"query": uri or title, "requester": requester})
+    else:
+        bridge_res = await _call_bot_bridge(
+            f"/api/music/{guild_id}/play",
+            method="POST",
+            json_data={
+                "query": uri or title,
+                "requester": requester,
+                "channel_id": body.get("channel_id"),
+            }
+        )
         if bridge_res and "error" in bridge_res:
             return web.json_response({"success": False, "error": bridge_res["error"]}, status=400)
 

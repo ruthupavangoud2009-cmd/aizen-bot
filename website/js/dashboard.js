@@ -301,7 +301,7 @@ function renderGuildCards(guilds, grid, mainContainer) {
     let actionBtn = '';
 
     if (status === 'installed' || g.bot_installed) {
-      statusBadge = `<span class="server-badge badge-installed">Bot Added</span>`;
+      statusBadge = `<span class="server-badge badge-installed">Bot Active</span>`;
       actionBtn = `
         <div style="display: flex; gap: 0.5rem; width: 100%; margin-top: auto;">
           <button class="btn btn-primary manage-btn" data-gid="${g.id}" style="flex: 1;">Manage Server</button>
@@ -309,26 +309,28 @@ function renderGuildCards(guilds, grid, mainContainer) {
         </div>
       `;
     } else if (status === 'unavailable') {
-      // Clear verification error and Retry; do not falsely claim absent
-      statusBadge = `<span class="server-badge" style="background: rgba(239, 68, 68, 0.2); color: #fca5a5; border: 1px solid rgba(239, 68, 68, 0.4);">Verification Unavailable</span>`;
+      // Allow user to enter workspace immediately even if live verification is unconfirmed
+      statusBadge = `<span class="server-badge" style="background: rgba(168, 85, 247, 0.25); color: #e9d5ff; border: 1px solid rgba(168, 85, 247, 0.4);">Authorized</span>`;
       actionBtn = `
         <div style="display: flex; gap: 0.5rem; width: 100%; margin-top: auto;">
-          <button class="btn btn-outline retry-verify-btn" data-gid="${g.id}" style="flex: 1; border-color: rgba(239, 68, 68, 0.4); color: #fca5a5;">🔄 Retry</button>
+          <button class="btn btn-primary manage-btn" data-gid="${g.id}" style="flex: 1;">Configure Server</button>
+          <button class="btn btn-outline retry-verify-btn" data-gid="${g.id}" title="Re-check Live Bot Verification" style="padding: 0.5rem 0.65rem; border-color: rgba(168, 85, 247, 0.4); color: #c084fc;">🔄</button>
         </div>
       `;
     } else {
-      // Genuinely absent: Display Add Bot button with OAuth invite
+      // Genuinely absent: Display Add Bot button with OAuth invite AND Setup button
       const inviteUrl = g.invite_url || `https://discord.com/oauth2/authorize?client_id=1562505487214321714&guild_id=${g.id}&permissions=8&scope=bot%20applications.commands`;
-      statusBadge = `<span class="server-badge" style="background: rgba(148, 163, 184, 0.15); color: #cbd5e1; border: 1px solid rgba(148, 163, 184, 0.3);">Not Added</span>`;
+      statusBadge = `<span class="server-badge" style="background: rgba(148, 163, 184, 0.15); color: #cbd5e1; border: 1px solid rgba(148, 163, 184, 0.3);">Invite Needed</span>`;
       actionBtn = `
         <div style="display: flex; gap: 0.5rem; width: 100%; margin-top: auto;">
           <a href="${inviteUrl}" target="_blank" rel="noopener noreferrer" class="btn btn-secondary add-bot-btn" data-gid="${g.id}" style="flex: 1; text-align: center; text-decoration: none;">Add Bot</a>
+          <button class="btn btn-outline manage-btn" data-gid="${g.id}" title="Pre-configure server modules" style="padding: 0.5rem 0.75rem;">⚙️ Setup</button>
         </div>
       `;
     }
 
     return `
-      <div class="server-card">
+      <div class="server-card" data-card-gid="${g.id}" style="cursor: pointer;">
         <div class="server-icon-wrapper">
           ${iconHtml}
           ${statusBadge}
@@ -340,16 +342,32 @@ function renderGuildCards(guilds, grid, mainContainer) {
     `;
   }).join('');
 
+  // Make whole card clickable
+  grid.querySelectorAll('.server-card').forEach(card => {
+    card.addEventListener('click', (e) => {
+      if (e.target.closest('button') || e.target.closest('a')) return;
+      const gid = card.getAttribute('data-card-gid');
+      if (gid) {
+        soundFX.playSound('click');
+        selectGuild(gid, mainContainer);
+      }
+    });
+  });
+
   grid.querySelectorAll('.manage-btn').forEach(btn => {
-    btn.addEventListener('click', () => {
+    btn.addEventListener('click', (e) => {
+      e.stopPropagation();
       const gid = btn.getAttribute('data-gid');
+      soundFX.playSound('click');
       selectGuild(gid, mainContainer);
     });
   });
 
   grid.querySelectorAll('.retry-verify-btn').forEach(btn => {
-    btn.addEventListener('click', () => {
+    btn.addEventListener('click', (e) => {
+      e.stopPropagation();
       soundFX.playSound('click');
+      showToast('Re-checking server verification status...', 'info');
       initDashboard(true);
     });
   });
@@ -901,193 +919,560 @@ function renderOverviewTab(panel, s) {
   });
 }
 
-// B. Welcome & Leave
+// B. Welcome & Leave — Koya-Style Comprehensive Suite
 function renderWelcomeLeaveTab(panel, s) {
   if (!s.welcome_leave) s.welcome_leave = {};
   const wl = s.welcome_leave;
+  if (!wl.embed_color) wl.embed_color = '#7C3AED';
+  if (!wl.card_theme) wl.card_theme = 'nebula';
+
+  let currentSubTab = 'welcome'; // 'welcome' | 'leave' | 'dm' | 'card'
+
+  function drawWelcomeCanvas() {
+    const canvas = document.getElementById('koya-welcome-canvas');
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    const w = canvas.width;
+    const h = canvas.height;
+
+    // Background gradient based on theme
+    const theme = wl.card_theme || 'nebula';
+    const bgGrad = ctx.createLinearGradient(0, 0, w, h);
+    if (theme === 'cyan') {
+      bgGrad.addColorStop(0, '#041724');
+      bgGrad.addColorStop(0.5, '#083344');
+      bgGrad.addColorStop(1, '#0e4a5e');
+    } else if (theme === 'sunset') {
+      bgGrad.addColorStop(0, '#1c1007');
+      bgGrad.addColorStop(0.5, '#451a03');
+      bgGrad.addColorStop(1, '#78350f');
+    } else if (theme === 'midnight') {
+      bgGrad.addColorStop(0, '#090a0f');
+      bgGrad.addColorStop(0.5, '#13141f');
+      bgGrad.addColorStop(1, '#1e2030');
+    } else { // nebula
+      bgGrad.addColorStop(0, '#0d0714');
+      bgGrad.addColorStop(0.5, '#1a0b2e');
+      bgGrad.addColorStop(1, '#2e1065');
+    }
+    ctx.fillStyle = bgGrad;
+    ctx.fillRect(0, 0, w, h);
+
+    // Decorative grid dots
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.04)';
+    for (let x = 20; x < w; x += 30) {
+      for (let y = 20; y < h; y += 30) {
+        ctx.beginPath();
+        ctx.arc(x, y, 1.5, 0, Math.PI * 2);
+        ctx.fill();
+      }
+    }
+
+    // Glowing accent circle behind avatar
+    const accentColor = wl.embed_color || '#7C3AED';
+    const glowGrad = ctx.createRadialGradient(100, 100, 10, 100, 100, 80);
+    glowGrad.addColorStop(0, accentColor);
+    glowGrad.addColorStop(1, 'transparent');
+    ctx.fillStyle = glowGrad;
+    ctx.beginPath();
+    ctx.arc(100, 100, 80, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Avatar ring
+    ctx.strokeStyle = accentColor;
+    ctx.lineWidth = 4;
+    ctx.beginPath();
+    ctx.arc(100, 100, 52, 0, Math.PI * 2);
+    ctx.stroke();
+
+    // Avatar circle fill
+    ctx.fillStyle = '#1e1f22';
+    ctx.beginPath();
+    ctx.arc(100, 100, 48, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Default Avatar letter / placeholder
+    ctx.fillStyle = '#ffffff';
+    ctx.font = 'bold 36px sans-serif';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText('👤', 100, 100);
+
+    // Header Text: "WELCOME TO THE SERVER"
+    const serverName = (state.selectedGuildObj?.name || 'THIS SERVER').toUpperCase();
+    ctx.textAlign = 'left';
+    ctx.textBaseline = 'alphabetic';
+    ctx.fillStyle = accentColor;
+    ctx.font = 'bold 14px sans-serif';
+    ctx.letterSpacing = '2px';
+    ctx.fillText(`WELCOME TO ${serverName}`, 180, 75);
+
+    // Username Hero
+    ctx.fillStyle = '#ffffff';
+    ctx.font = 'bold 28px sans-serif';
+    ctx.fillText('NewMember#0001', 180, 115);
+
+    // Member count pill
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.12)';
+    ctx.beginPath();
+    ctx.roundRect(180, 130, 220, 28, 6);
+    ctx.fill();
+
+    ctx.fillStyle = '#cbd5e1';
+    ctx.font = '13px sans-serif';
+    ctx.fillText('🎉 You are member #1,582', 192, 149);
+  }
+
+  function renderSubTabContent() {
+    const contentMount = document.getElementById('koya-subtab-content');
+    if (!contentMount) return;
+
+    if (currentSubTab === 'welcome') {
+      contentMount.innerHTML = `
+        <div class="setting-row">
+          <div class="setting-info">
+            <label>Enable Welcome Announcements</label>
+            <p>Broadcast personalized greeting when new members join your server.</p>
+          </div>
+          <div class="setting-control">
+            <label class="switch">
+              <input type="checkbox" id="wl-welcome-en" ${wl.welcome_enabled !== false ? 'checked' : ''} />
+              <span class="slider"></span>
+            </label>
+          </div>
+        </div>
+
+        <div class="setting-row">
+          <div class="setting-info">
+            <label>Welcome Text Channel Snowflake</label>
+            <p>Discord channel ID where welcome messages are broadcasted.</p>
+          </div>
+          <div class="setting-control">
+            <input type="text" id="wl-welcome-ch" class="form-input" value="${wl.welcome_channel_id || ''}" placeholder="e.g. 123456789012345678" />
+          </div>
+        </div>
+
+        <div class="setting-row">
+          <div class="setting-info">
+            <label>Auto-Role on Join</label>
+            <p>Role Snowflake ID automatically granted to new members upon arrival.</p>
+          </div>
+          <div class="setting-control">
+            <input type="text" id="wl-auto-role" class="form-input" value="${wl.auto_role_id || ''}" placeholder="Role ID (e.g. 987654321098765432)" />
+          </div>
+        </div>
+
+        <div class="setting-row">
+          <div class="setting-info">
+            <label>Welcome Message Template</label>
+            <p>Click variable chips below to insert directly into message template.</p>
+          </div>
+          <div class="setting-control" style="width: 100%;">
+            <div class="var-chips-row">
+              <span class="var-chip" data-var="{user}">+ {user}</span>
+              <span class="var-chip" data-var="{user.name}">+ {user.name}</span>
+              <span class="var-chip" data-var="{user.mention}">+ {user.mention}</span>
+              <span class="var-chip" data-var="{server}">+ {server}</span>
+              <span class="var-chip" data-var="{member_count}">+ {member_count}</span>
+            </div>
+            <textarea id="wl-welcome-msg" class="form-input" rows="3" style="width: 100%; resize: vertical;">${wl.welcome_message || 'Welcome {user} to {server}! You are member #{member_count}. Enjoy your stay!'}</textarea>
+          </div>
+        </div>
+
+        <!-- Live Discord Chat Simulator (Koya Style) -->
+        <div style="margin-top: 1.5rem;">
+          <label style="font-weight: 700; color: var(--purple-light); font-size: 0.85rem; text-transform: uppercase; letter-spacing: 0.5px;">Live Discord Chat Simulator</label>
+          <div class="discord-chat-simulator">
+            <div class="discord-msg-row">
+              <img src="/assets/logo.svg" alt="Kyoka" class="discord-bot-avatar" />
+              <div class="discord-msg-content">
+                <div class="discord-msg-header">
+                  <span class="discord-bot-name">Kyoka</span>
+                  <span class="discord-bot-tag">APP</span>
+                  <span class="discord-msg-time">Today at 4:20 PM</span>
+                </div>
+                <div id="discord-sim-body" class="discord-msg-body">
+                  ${(wl.welcome_message || 'Welcome {user} to {server}! You are member #{member_count}.')
+                    .replace('{user}', '<span class="discord-mention">@NewMember</span>')
+                    .replace('{user.mention}', '<span class="discord-mention">@NewMember</span>')
+                    .replace('{user.name}', 'NewMember')
+                    .replace('{server}', `<strong>${state.selectedGuildObj?.name || 'This Server'}</strong>`)
+                    .replace('{member_count}', '<strong>1,582</strong>')}
+                </div>
+
+                <!-- Embedded Card -->
+                <div class="embed-preview-card" style="border-left-color: ${wl.embed_color || '#7C3AED'};">
+                  <div class="embed-preview-content">
+                    <div class="embed-author">
+                      <img src="/assets/logo.svg" class="embed-author-img" alt="Kyoka" />
+                      <span>Kyoka Welcome Dispatcher</span>
+                    </div>
+                    <div class="embed-title">Welcome to ${state.selectedGuildObj?.name || 'the Server'}!</div>
+                    <div class="embed-desc">Make sure to check out the rules and claim your roles in the setup channels.</div>
+                    <div class="embed-footer">Kyoka 3.0 • Member #1,582</div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div style="margin-top: 1.25rem; display: flex; gap: 0.75rem; flex-wrap: wrap;">
+          <button id="test-welcome-sim-btn" class="btn btn-primary btn-sm">
+            🚀 Send Test Welcome Message
+          </button>
+        </div>
+      `;
+
+      // Reactive update
+      const textarea = document.getElementById('wl-welcome-msg');
+      const simBody = document.getElementById('discord-sim-body');
+      textarea?.addEventListener('input', (e) => {
+        wl.welcome_message = e.target.value;
+        markChanged();
+        if (simBody) {
+          simBody.innerHTML = e.target.value
+            .replace(/{user}/g, '<span class="discord-mention">@NewMember</span>')
+            .replace(/{user\.mention}/g, '<span class="discord-mention">@NewMember</span>')
+            .replace(/{user\.name}/g, 'NewMember')
+            .replace(/{server}/g, `<strong>${state.selectedGuildObj?.name || 'This Server'}</strong>`)
+            .replace(/{member_count}/g, '<strong>1,582</strong>');
+        }
+      });
+
+      // Variable chip insertion
+      contentMount.querySelectorAll('.var-chip').forEach(chip => {
+        chip.addEventListener('click', () => {
+          soundFX.playSound('click');
+          const token = chip.getAttribute('data-var');
+          if (textarea && token) {
+            const start = textarea.selectionStart || textarea.value.length;
+            const end = textarea.selectionEnd || textarea.value.length;
+            const text = textarea.value;
+            textarea.value = text.substring(0, start) + token + text.substring(end);
+            textarea.selectionStart = textarea.selectionEnd = start + token.length;
+            textarea.focus();
+            textarea.dispatchEvent(new Event('input'));
+          }
+        });
+      });
+
+      document.getElementById('wl-welcome-en')?.addEventListener('change', (e) => {
+        wl.welcome_enabled = e.target.checked;
+        markChanged();
+      });
+
+      document.getElementById('wl-welcome-ch')?.addEventListener('input', (e) => {
+        wl.welcome_channel_id = e.target.value.trim();
+        markChanged();
+      });
+
+      document.getElementById('wl-auto-role')?.addEventListener('input', (e) => {
+        wl.auto_role_id = e.target.value.trim();
+        markChanged();
+      });
+
+      document.getElementById('test-welcome-sim-btn')?.addEventListener('click', async () => {
+        soundFX.playSound('click');
+        try {
+          const res = await testEventSimulation(state.selectedGuildId, 'welcome');
+          showToast(res.note || 'Test welcome notification dispatched successfully!', 'success');
+        } catch (err) {
+          showToast(err.message, 'error');
+        }
+      });
+
+    } else if (currentSubTab === 'leave') {
+      contentMount.innerHTML = `
+        <div class="setting-row">
+          <div class="setting-info">
+            <label>Enable Goodbye Announcements</label>
+            <p>Broadcast notification when members leave or are removed from the server.</p>
+          </div>
+          <div class="setting-control">
+            <label class="switch">
+              <input type="checkbox" id="wl-leave-en" ${wl.leave_enabled !== false ? 'checked' : ''} />
+              <span class="slider"></span>
+            </label>
+          </div>
+        </div>
+
+        <div class="setting-row">
+          <div class="setting-info">
+            <label>Goodbye Text Channel Snowflake</label>
+            <p>Discord channel ID where farewell notifications are posted.</p>
+          </div>
+          <div class="setting-control">
+            <input type="text" id="wl-leave-ch" class="form-input" value="${wl.leave_channel_id || ''}" placeholder="e.g. 123456789012345678" />
+          </div>
+        </div>
+
+        <div class="setting-row">
+          <div class="setting-info">
+            <label>Goodbye Message Template</label>
+            <p>Click variable chips to insert tokens into farewell template.</p>
+          </div>
+          <div class="setting-control" style="width: 100%;">
+            <div class="var-chips-row">
+              <span class="var-chip" data-var="{user}">+ {user}</span>
+              <span class="var-chip" data-var="{user.name}">+ {user.name}</span>
+              <span class="var-chip" data-var="{server}">+ {server}</span>
+              <span class="var-chip" data-var="{member_count}">+ {member_count}</span>
+            </div>
+            <textarea id="wl-leave-msg" class="form-input" rows="3" style="width: 100%; resize: vertical;">${wl.leave_message || '{user} has departed from {server}. We are down to {member_count} members.'}</textarea>
+          </div>
+        </div>
+
+        <!-- Live Goodbye Simulator -->
+        <div style="margin-top: 1.5rem;">
+          <label style="font-weight: 700; color: var(--purple-light); font-size: 0.85rem; text-transform: uppercase;">Live Departure Simulator</label>
+          <div class="discord-chat-simulator">
+            <div class="discord-msg-row">
+              <img src="/assets/logo.svg" alt="Kyoka" class="discord-bot-avatar" />
+              <div class="discord-msg-content">
+                <div class="discord-msg-header">
+                  <span class="discord-bot-name">Kyoka</span>
+                  <span class="discord-bot-tag">APP</span>
+                  <span class="discord-msg-time">Today at 4:22 PM</span>
+                </div>
+                <div id="discord-sim-leave-body" class="discord-msg-body">
+                  ${(wl.leave_message || '{user} has departed from {server}. We are down to {member_count} members.')
+                    .replace('{user}', '<strong>FormerMember</strong>')
+                    .replace('{user.name}', 'FormerMember')
+                    .replace('{server}', `<strong>${state.selectedGuildObj?.name || 'This Server'}</strong>`)
+                    .replace('{member_count}', '<strong>1,581</strong>')}
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div style="margin-top: 1.25rem;">
+          <button id="test-leave-sim-btn" class="btn btn-secondary btn-sm">
+            👋 Send Test Goodbye Message
+          </button>
+        </div>
+      `;
+
+      const leaveTextarea = document.getElementById('wl-leave-msg');
+      const leaveSimBody = document.getElementById('discord-sim-leave-body');
+      leaveTextarea?.addEventListener('input', (e) => {
+        wl.leave_message = e.target.value;
+        markChanged();
+        if (leaveSimBody) {
+          leaveSimBody.innerHTML = e.target.value
+            .replace(/{user}/g, '<strong>FormerMember</strong>')
+            .replace(/{user\.name}/g, 'FormerMember')
+            .replace(/{server}/g, `<strong>${state.selectedGuildObj?.name || 'This Server'}</strong>`)
+            .replace(/{member_count}/g, '<strong>1,581</strong>');
+        }
+      });
+
+      contentMount.querySelectorAll('.var-chip').forEach(chip => {
+        chip.addEventListener('click', () => {
+          soundFX.playSound('click');
+          const token = chip.getAttribute('data-var');
+          if (leaveTextarea && token) {
+            const start = leaveTextarea.selectionStart || leaveTextarea.value.length;
+            const end = leaveTextarea.selectionEnd || leaveTextarea.value.length;
+            const text = leaveTextarea.value;
+            leaveTextarea.value = text.substring(0, start) + token + text.substring(end);
+            leaveTextarea.selectionStart = leaveTextarea.selectionEnd = start + token.length;
+            leaveTextarea.focus();
+            leaveTextarea.dispatchEvent(new Event('input'));
+          }
+        });
+      });
+
+      document.getElementById('wl-leave-en')?.addEventListener('change', (e) => {
+        wl.leave_enabled = e.target.checked;
+        markChanged();
+      });
+
+      document.getElementById('wl-leave-ch')?.addEventListener('input', (e) => {
+        wl.leave_channel_id = e.target.value.trim();
+        markChanged();
+      });
+
+      document.getElementById('test-leave-sim-btn')?.addEventListener('click', async () => {
+        soundFX.playSound('click');
+        try {
+          const res = await testEventSimulation(state.selectedGuildId, 'leave');
+          showToast(res.note || 'Test farewell message dispatched!', 'success');
+        } catch (err) {
+          showToast(err.message, 'error');
+        }
+      });
+
+    } else if (currentSubTab === 'dm') {
+      contentMount.innerHTML = `
+        <div class="setting-row">
+          <div class="setting-info">
+            <label>Enable Direct Message (DM) Greeting</label>
+            <p>Send a private welcome message directly into the new member's Discord DM inbox.</p>
+          </div>
+          <div class="setting-control">
+            <label class="switch">
+              <input type="checkbox" id="wl-dm-en" ${wl.dm_enabled ? 'checked' : ''} />
+              <span class="slider"></span>
+            </label>
+          </div>
+        </div>
+
+        <div class="setting-row">
+          <div class="setting-info">
+            <label>Direct Message (DM) Content</label>
+            <p>Personalized greeting delivered to user's direct messages.</p>
+          </div>
+          <div class="setting-control" style="width: 100%;">
+            <div class="var-chips-row">
+              <span class="var-chip" data-var="{user}">+ {user}</span>
+              <span class="var-chip" data-var="{server}">+ {server}</span>
+            </div>
+            <textarea id="wl-dm-msg" class="form-input" rows="3" style="width: 100%; resize: vertical;">${wl.dm_message || 'Hey {user}, welcome to {server}! Check out our announcement channels and let us know if you need any assistance.'}</textarea>
+          </div>
+        </div>
+      `;
+
+      document.getElementById('wl-dm-en')?.addEventListener('change', (e) => {
+        wl.dm_enabled = e.target.checked;
+        markChanged();
+      });
+
+      document.getElementById('wl-dm-msg')?.addEventListener('input', (e) => {
+        wl.dm_message = e.target.value;
+        markChanged();
+      });
+
+      contentMount.querySelectorAll('.var-chip').forEach(chip => {
+        chip.addEventListener('click', () => {
+          const textarea = document.getElementById('wl-dm-msg');
+          const token = chip.getAttribute('data-var');
+          if (textarea && token) {
+            textarea.value += ' ' + token;
+            textarea.dispatchEvent(new Event('input'));
+          }
+        });
+      });
+
+    } else if (currentSubTab === 'card') {
+      contentMount.innerHTML = `
+        <div class="setting-row">
+          <div class="setting-info">
+            <label>Graphic Welcome Card Banner</label>
+            <p>Generate high-resolution graphical welcome cards (Koya-style) sent with join announcements.</p>
+          </div>
+          <div class="setting-control">
+            <label class="switch">
+              <input type="checkbox" id="wl-card-en" ${wl.card_enabled !== false ? 'checked' : ''} />
+              <span class="slider"></span>
+            </label>
+          </div>
+        </div>
+
+        <div class="setting-row">
+          <div class="setting-info">
+            <label>Card Visual Theme</label>
+            <p>Choose aesthetic gradient atmosphere for the welcome graphic.</p>
+          </div>
+          <div class="setting-control">
+            <select id="wl-card-theme" class="form-input">
+              <option value="nebula" ${wl.card_theme === 'nebula' ? 'selected' : ''}>🌌 Nebula Violet</option>
+              <option value="cyan" ${wl.card_theme === 'cyan' ? 'selected' : ''}>⚡ Cyber Cyan</option>
+              <option value="sunset" ${wl.card_theme === 'sunset' ? 'selected' : ''}>🌅 Sunset Gold</option>
+              <option value="midnight" ${wl.card_theme === 'midnight' ? 'selected' : ''}>🌑 Midnight Stealth</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="setting-row">
+          <div class="setting-info">
+            <label>Accent Ring & Glow Color</label>
+            <p>Select primary accent color for the avatar halo and highlights.</p>
+          </div>
+          <div class="setting-control">
+            <div class="swatch-group">
+              <button class="swatch-btn ${wl.embed_color === '#7C3AED' ? 'active' : ''}" data-color="#7C3AED" style="background: #7C3AED;" title="Aizen Violet"></button>
+              <button class="swatch-btn ${wl.embed_color === '#06B6D4' ? 'active' : ''}" data-color="#06B6D4" style="background: #06B6D4;" title="Cyber Cyan"></button>
+              <button class="swatch-btn ${wl.embed_color === '#10B981' ? 'active' : ''}" data-color="#10B981" style="background: #10B981;" title="Emerald"></button>
+              <button class="swatch-btn ${wl.embed_color === '#F59E0B' ? 'active' : ''}" data-color="#F59E0B" style="background: #F59E0B;" title="Amber Gold"></button>
+              <button class="swatch-btn ${wl.embed_color === '#EF4444' ? 'active' : ''}" data-color="#EF4444" style="background: #EF4444;" title="Crimson"></button>
+              <input type="color" id="wl-card-color-picker" value="${wl.embed_color || '#7C3AED'}" style="width: 32px; height: 32px; padding: 0; border: none; background: transparent; cursor: pointer;" title="Custom Color" />
+            </div>
+          </div>
+        </div>
+
+        <!-- Live Canvas Preview -->
+        <div style="margin-top: 1.5rem;">
+          <label style="font-weight: 700; color: var(--purple-light); font-size: 0.85rem; text-transform: uppercase;">Live Graphic Card Preview (600x200)</label>
+          <div class="koya-canvas-wrapper">
+            <canvas id="koya-welcome-canvas" width="600" height="200"></canvas>
+          </div>
+        </div>
+      `;
+
+      drawWelcomeCanvas();
+
+      document.getElementById('wl-card-en')?.addEventListener('change', (e) => {
+        wl.card_enabled = e.target.checked;
+        markChanged();
+      });
+
+      document.getElementById('wl-card-theme')?.addEventListener('change', (e) => {
+        wl.card_theme = e.target.value;
+        markChanged();
+        drawWelcomeCanvas();
+      });
+
+      contentMount.querySelectorAll('.swatch-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+          const col = btn.getAttribute('data-color');
+          wl.embed_color = col;
+          markChanged();
+          contentMount.querySelectorAll('.swatch-btn').forEach(b => b.classList.remove('active'));
+          btn.classList.add('active');
+          const picker = document.getElementById('wl-card-color-picker');
+          if (picker) picker.value = col;
+          drawWelcomeCanvas();
+        });
+      });
+
+      document.getElementById('wl-card-color-picker')?.addEventListener('input', (e) => {
+        wl.embed_color = e.target.value;
+        markChanged();
+        contentMount.querySelectorAll('.swatch-btn').forEach(b => b.classList.remove('active'));
+        drawWelcomeCanvas();
+      });
+    }
+  }
 
   panel.innerHTML = `
     <div class="panel-header">
-      <h4>Welcome & Departure Notifications</h4>
-      <p>Configure automated greetings, departure announcements, and live embed previews.</p>
+      <h4>👋 Welcome & Departure Suite</h4>
+      <p>Configure automated greetings, farewell announcements, direct messages, and visual welcome cards.</p>
     </div>
 
-    <div class="setting-row">
-      <div class="setting-info">
-        <label>Enable Welcome Announcements</label>
-        <p>Broadcast personalized greeting message when new members join your server.</p>
-      </div>
-      <div class="setting-control">
-        <label class="switch">
-          <input type="checkbox" id="wl-welcome-en" ${wl.welcome_enabled !== false ? 'checked' : ''} />
-          <span class="slider"></span>
-        </label>
-      </div>
+    <!-- Koya-Style Sub-Tabs Navigation -->
+    <div class="koya-subtabs">
+      <button class="koya-subtab-btn ${currentSubTab === 'welcome' ? 'active' : ''}" data-sub="welcome">💬 Welcome Message</button>
+      <button class="koya-subtab-btn ${currentSubTab === 'leave' ? 'active' : ''}" data-sub="leave">👋 Goodbye Message</button>
+      <button class="koya-subtab-btn ${currentSubTab === 'dm' ? 'active' : ''}" data-sub="dm">✉️ Direct Message (DM)</button>
+      <button class="koya-subtab-btn ${currentSubTab === 'card' ? 'active' : ''}" data-sub="card">🎨 Graphic Welcome Card</button>
     </div>
 
-    <div class="setting-row">
-      <div class="setting-info">
-        <label>Welcome Channel Snowflake</label>
-        <p>Discord text channel snowflake ID where welcome messages are published.</p>
-      </div>
-      <div class="setting-control">
-        <input type="text" id="wl-welcome-ch" class="form-input" value="${wl.welcome_channel_id || ''}" placeholder="e.g. 123456789012345678" />
-      </div>
-    </div>
-
-    <div class="setting-row">
-      <div class="setting-info">
-        <label>Welcome Message Template</label>
-        <p>Supports tokens: <code>{user}</code>, <code>{server}</code>, <code>{member_count}</code>.</p>
-      </div>
-      <div class="setting-control" style="width: 100%;">
-        <textarea id="wl-welcome-msg" class="form-input" rows="3" style="width: 100%; resize: vertical;">${wl.welcome_message || 'Welcome {user} to {server}! You are member #{member_count}.'}</textarea>
-      </div>
-    </div>
-
-    <div class="setting-row">
-      <div class="setting-info">
-        <label>Direct Message (DM) Greeting</label>
-        <p>Send greeting message directly to the new member's Discord DMs in addition to channel announcement.</p>
-      </div>
-      <div class="setting-control">
-        <label class="switch">
-          <input type="checkbox" id="wl-dm-en" ${wl.dm_enabled ? 'checked' : ''} />
-          <span class="slider"></span>
-        </label>
-      </div>
-    </div>
-
-    <!-- Live Discord Embed Preview Simulator -->
-    <div style="margin-top: 1rem;">
-      <label style="font-weight: 700; color: var(--purple-light); font-size: 0.85rem; text-transform: uppercase;">Live Welcome Embed Preview</label>
-      <div class="embed-preview-container">
-        <div class="embed-preview-card">
-          <div class="embed-preview-content">
-            <div class="embed-author">
-              <img src="/assets/logo.svg" class="embed-author-img" alt="KYOKA" />
-              <span>KYOKA Welcome Dispatcher</span>
-            </div>
-            <div class="embed-title">New Member Joined</div>
-            <div id="embed-preview-text" class="embed-desc">
-              ${(wl.welcome_message || 'Welcome {user} to {server}!').replace('{user}', '@NewMember').replace('{server}', state.selectedGuildObj?.name || 'This Server').replace('{member_count}', '1,582')}
-            </div>
-            <div class="embed-footer">KYOKA 3.0 • Real-Time Cloud Event</div>
-          </div>
-        </div>
-      </div>
-    </div>
-
-    <!-- Departure Announcements Section -->
-    <div class="panel-header" style="margin-top: 2rem; border-top: 1px solid rgba(255,255,255,0.08); padding-top: 1.5rem;">
-      <h4>Departure & Leave Announcements</h4>
-      <p>Configure farewell messages when members leave or are removed from your server.</p>
-    </div>
-
-    <div class="setting-row">
-      <div class="setting-info">
-        <label>Enable Departure Announcements</label>
-        <p>Broadcast notification when a member leaves the server.</p>
-      </div>
-      <div class="setting-control">
-        <label class="switch">
-          <input type="checkbox" id="wl-leave-en" ${wl.leave_enabled !== false ? 'checked' : ''} />
-          <span class="slider"></span>
-        </label>
-      </div>
-    </div>
-
-    <div class="setting-row">
-      <div class="setting-info">
-        <label>Departure Channel Snowflake</label>
-        <p>Discord text channel snowflake ID where departure messages are published.</p>
-      </div>
-      <div class="setting-control">
-        <input type="text" id="wl-leave-ch" class="form-input" value="${wl.leave_channel_id || ''}" placeholder="e.g. 123456789012345678" />
-      </div>
-    </div>
-
-    <div class="setting-row">
-      <div class="setting-info">
-        <label>Departure Message Template</label>
-        <p>Supports tokens: <code>{user}</code>, <code>{server}</code>, <code>{member_count}</code>.</p>
-      </div>
-      <div class="setting-control" style="width: 100%;">
-        <textarea id="wl-leave-msg" class="form-input" rows="3" style="width: 100%; resize: vertical;">${wl.leave_message || '{user} has departed from {server}. We are down to {member_count} members.'}</textarea>
-      </div>
-    </div>
-
-    <div style="margin-top: 1.5rem; display: flex; gap: 1rem; flex-wrap: wrap;">
-      <button id="test-welcome-sim-btn" class="btn btn-secondary btn-sm">
-        🚀 Test Welcome Simulation
-      </button>
-      <button id="test-leave-sim-btn" class="btn btn-secondary btn-sm">
-        👋 Test Departure Simulation
-      </button>
-    </div>
+    <div id="koya-subtab-content"></div>
   `;
 
-  // Attach live reactive input to preview
-  const msgInput = document.getElementById('wl-welcome-msg');
-  msgInput?.addEventListener('input', (e) => {
-    wl.welcome_message = e.target.value;
-    markChanged();
-    const preview = document.getElementById('embed-preview-text');
-    if (preview) {
-      preview.textContent = e.target.value
-        .replace('{user}', '@NewMember')
-        .replace('{server}', state.selectedGuildObj?.name || 'This Server')
-        .replace('{member_count}', '1,582');
-    }
-  });
+  renderSubTabContent();
 
-  document.getElementById('wl-welcome-en')?.addEventListener('change', (e) => {
-    wl.welcome_enabled = e.target.checked;
-    markChanged();
-  });
-
-  document.getElementById('wl-welcome-ch')?.addEventListener('input', (e) => {
-    wl.welcome_channel_id = e.target.value.trim();
-    markChanged();
-  });
-
-  document.getElementById('wl-dm-en')?.addEventListener('change', (e) => {
-    wl.dm_enabled = e.target.checked;
-    markChanged();
-  });
-
-  document.getElementById('wl-leave-en')?.addEventListener('change', (e) => {
-    wl.leave_enabled = e.target.checked;
-    markChanged();
-  });
-
-  document.getElementById('wl-leave-ch')?.addEventListener('input', (e) => {
-    wl.leave_channel_id = e.target.value.trim();
-    markChanged();
-  });
-
-  const leaveMsgInput = document.getElementById('wl-leave-msg');
-  leaveMsgInput?.addEventListener('input', (e) => {
-    wl.leave_message = e.target.value;
-    markChanged();
-  });
-
-  document.getElementById('test-welcome-sim-btn')?.addEventListener('click', async () => {
-    try {
-      const res = await testEventSimulation(state.selectedGuildId, 'welcome');
-      showToast(res.note || 'Test welcome simulation generated successfully!', 'success');
-    } catch (err) {
-      showToast(err.message, 'error');
-    }
-  });
-
-  document.getElementById('test-leave-sim-btn')?.addEventListener('click', async () => {
-    try {
-      const res = await testEventSimulation(state.selectedGuildId, 'leave');
-      showToast(res.note || 'Test departure simulation generated successfully!', 'success');
-    } catch (err) {
-      showToast(err.message, 'error');
-    }
+  panel.querySelectorAll('.koya-subtab-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      soundFX.playSound('click');
+      currentSubTab = btn.getAttribute('data-sub');
+      panel.querySelectorAll('.koya-subtab-btn').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      renderSubTabContent();
+    });
   });
 }
 
@@ -2075,11 +2460,12 @@ async function renderMusicStudioTab(panel, s) {
               ${voiceIndicator}
               <span style="font-size: 0.78rem; color: var(--text-dim); margin-left: 0.5rem;">[${playback.provider || 'Kyoka Audio'}]</span>
             </div>
-            <div style="display: flex; gap: 0.5rem; align-items: center;">
-              <button id="studio-summon-btn" class="btn btn-outline btn-sm" style="font-size: 0.8rem; padding: 0.3rem 0.7rem;">
-                ${playback.is_connected ? '🔄 Reconnect Voice' : '⚡ Connect Voice'}
+            <div class="music-vc-input-group">
+              <input type="text" id="studio-vc-input" class="form-input" placeholder="VC Name or ID..." style="max-width: 170px; font-size: 0.8rem; padding: 0.35rem 0.65rem;" value="${playback.voice_channel ? playback.voice_channel.name : 'General'}" title="Enter voice channel name or snowflake ID" />
+              <button id="studio-summon-btn" class="btn btn-primary btn-sm" style="font-size: 0.8rem; padding: 0.35rem 0.85rem;">
+                ${playback.is_connected ? '🔄 Reconnect VC' : '⚡ Connect to Voice'}
               </button>
-              ${playback.is_connected ? `<button id="studio-disconnect-btn" class="btn btn-outline btn-sm" style="font-size: 0.8rem; padding: 0.3rem 0.7rem; border-color: rgba(239, 68, 68, 0.4); color: #fca5a5;">Disconnect</button>` : ''}
+              ${playback.is_connected ? `<button id="studio-disconnect-btn" class="btn btn-outline btn-sm" style="font-size: 0.8rem; padding: 0.35rem 0.7rem; border-color: rgba(239, 68, 68, 0.4); color: #fca5a5;">Disconnect</button>` : ''}
             </div>
           </div>
 
@@ -2099,8 +2485,16 @@ async function renderMusicStudioTab(panel, s) {
                   <div class="track-artist-hero">${trackArtist}</div>
                   <div class="track-requester-hero">${trackRequester}</div>
                 </div>
-                <span class="badge ${isPlaying ? 'badge-installed' : 'badge-invite'}" style="font-size: 0.75rem;">
+                <span class="badge ${isPlaying ? 'badge-installed' : 'badge-invite'}" style="font-size: 0.75rem; display: inline-flex; align-items: center;">
                   ${String(playback?.status || 'idle').toUpperCase()}
+                  ${isPlaying ? `
+                    <span class="equalizer-bars">
+                      <span class="eq-bar"></span>
+                      <span class="eq-bar"></span>
+                      <span class="eq-bar"></span>
+                      <span class="eq-bar"></span>
+                    </span>
+                  ` : ''}
                 </span>
               </div>
 
@@ -2151,8 +2545,8 @@ async function renderMusicStudioTab(panel, s) {
 
           <!-- Track Search & Add Card -->
           <div class="music-search-section">
-            <h5 style="color: var(--purple-white); font-weight: 700; margin-bottom: 0.5rem;">🔍 Search &amp; Add Tracks</h5>
-            <p style="color: var(--text-dim); font-size: 0.85rem; margin-bottom: 1rem;">Query music across YouTube, Spotify, and SoundCloud or paste direct track links.</p>
+            <h5 style="color: var(--purple-white); font-weight: 700; margin-bottom: 0.5rem;">🔍 Search &amp; Play Tracks from Website</h5>
+            <p style="color: var(--text-dim); font-size: 0.85rem; margin-bottom: 0.5rem;">Pick songs directly from the website to stream live into your Discord Voice Channel.</p>
 
             <div class="search-input-group">
               <input type="text" id="studio-search-input" class="form-input" placeholder="Search track name, artist, or paste URL..." style="flex-grow: 1;" />
@@ -2164,7 +2558,17 @@ async function renderMusicStudioTab(panel, s) {
               <button id="studio-search-btn" class="btn btn-primary" style="padding: 0.5rem 1.25rem;">Search</button>
             </div>
 
-            <div id="studio-search-results" class="search-results-list" style="display: none;"></div>
+            <!-- Quick Play Pills -->
+            <div class="quick-play-pills">
+              <span style="font-size: 0.78rem; color: var(--text-dim); margin-right: 0.25rem; align-self: center;">Quick Play:</span>
+              <button class="quick-play-pill" data-query="Lofi hip hop beats to relax study to">🎵 Lofi Beats</button>
+              <button class="quick-play-pill" data-query="Aizen Treachery theme Bleach OST">⚔️ Aizen Theme</button>
+              <button class="quick-play-pill" data-query="Synthwave chill mix 2026">⚡ Synthwave</button>
+              <button class="quick-play-pill" data-query="Gaming mix energetic electronic">🎧 Gaming Chill</button>
+              <button class="quick-play-pill" data-query="Acoustic guitar instrumental relax">🎸 Acoustic Chill</button>
+            </div>
+
+            <div id="studio-search-results" class="search-results-list" style="display: none; margin-top: 1rem;"></div>
           </div>
 
           <!-- Upcoming Queue Section -->
@@ -2317,8 +2721,9 @@ async function renderMusicStudioTab(panel, s) {
       // Connect / Disconnect voice
       document.getElementById('studio-summon-btn')?.addEventListener('click', async () => {
         soundFX.playSound('click');
-        await controlMusicPlayback(state.selectedGuildId, 'join', 'Music Lounge');
-        showToast('Connecting bot to voice channel...', 'info');
+        const vcTarget = document.getElementById('studio-vc-input')?.value.trim() || 'General';
+        showToast(`Connecting bot to voice channel "${vcTarget}"...`, 'info');
+        await controlMusicPlayback(state.selectedGuildId, 'join', vcTarget);
         await refreshStudioState();
       });
       document.getElementById('studio-disconnect-btn')?.addEventListener('click', async () => {
@@ -2346,6 +2751,40 @@ async function renderMusicStudioTab(panel, s) {
           await removeMusicTrack(state.selectedGuildId, idx);
           showToast('Track removed from queue.', 'info');
           await refreshStudioState();
+        });
+      });
+
+      // Quick Play Pills handler
+      mount.querySelectorAll('.quick-play-pill').forEach(pill => {
+        pill.addEventListener('click', async () => {
+          const q = pill.getAttribute('data-query');
+          if (!q) return;
+          soundFX.playSound('click');
+          showToast(`Searching "${q}"...`, 'info');
+          try {
+            const searchData = await searchMusicTracks(q, 'yt');
+            const results = searchData.results || [];
+            if (results.length > 0) {
+              const topTrack = results[0];
+              const vcTarget = document.getElementById('studio-vc-input')?.value.trim() || 'General';
+              if (!playback.is_connected) {
+                await controlMusicPlayback(state.selectedGuildId, 'join', vcTarget);
+              }
+              await addMusicTrack(state.selectedGuildId, {
+                title: topTrack.title,
+                artist: topTrack.artist,
+                duration: topTrack.duration,
+                thumbnail: topTrack.thumbnail,
+                uri: topTrack.uri,
+              });
+              showToast(`Playing "${topTrack.title}" live from website!`, 'success');
+              await refreshStudioState();
+            } else {
+              showToast('No tracks found for preset.', 'warning');
+            }
+          } catch (e) {
+            showToast(`Quick play notice: ${e.message}`, 'error');
+          }
         });
       });
 
@@ -2386,7 +2825,7 @@ async function renderMusicStudioTab(panel, s) {
                     </div>
                   </div>
                   <button class="btn btn-primary btn-sm add-track-btn" data-title="${encodeURIComponent(r.title)}" data-artist="${encodeURIComponent(r.artist)}" data-duration="${r.duration}" data-thumbnail="${r.thumbnail}" data-uri="${r.uri}" style="padding: 0.35rem 0.85rem; font-size: 0.82rem;">
-                    + Add to Queue
+                    + Play / Queue
                   </button>
                 </div>
               `).join('');
@@ -2401,8 +2840,12 @@ async function renderMusicStudioTab(panel, s) {
                     thumbnail: b.getAttribute('data-thumbnail'),
                     uri: b.getAttribute('data-uri'),
                   };
+                  const vcTarget = document.getElementById('studio-vc-input')?.value.trim() || 'General';
+                  if (!playback.is_connected) {
+                    await controlMusicPlayback(state.selectedGuildId, 'join', vcTarget);
+                  }
                   await addMusicTrack(state.selectedGuildId, tPayload);
-                  showToast(`Added "${tPayload.title}" to the queue!`, 'success');
+                  showToast(`Selected "${tPayload.title}" from website!`, 'success');
                   if (resultsContainer) resultsContainer.style.display = 'none';
                   if (searchInput) searchInput.value = '';
                   await refreshStudioState();
@@ -2433,13 +2876,14 @@ async function renderMusicStudioTab(panel, s) {
           : err.message;
 
         mount.innerHTML = `
-          <div style="background: rgba(239, 68, 68, 0.08); border: 1px solid rgba(239, 68, 68, 0.25); border-radius: var(--radius-md); padding: 3rem 1.5rem; text-align: center;">
+          <div style="background: rgba(124, 58, 237, 0.08); border: 1px solid rgba(124, 58, 237, 0.25); border-radius: var(--radius-md); padding: 3rem 1.5rem; text-align: center;">
             <span style="font-size: 2.5rem; display: block; margin-bottom: 0.75rem;">🎧</span>
-            <h4 style="color: #fca5a5; font-weight: 700; margin-bottom: 0.5rem;">Audio Console Standby</h4>
+            <h4 style="color: var(--purple-white); font-weight: 700; margin-bottom: 0.5rem;">Audio Console Ready</h4>
             <p style="font-size: 0.9rem; color: var(--text-dim); max-width: 500px; margin: 0 auto 1.5rem;">${reason}</p>
-            <div style="display: flex; gap: 0.75rem; justify-content: center; flex-wrap: wrap;">
-              <button id="retry-studio-btn" class="btn btn-outline btn-sm" style="border-color: rgba(239, 68, 68, 0.5); color: #fca5a5;">🔄 Retry Connection</button>
-              <button id="summon-voice-btn" class="btn btn-primary btn-sm">⚡ Summon Bot to Voice</button>
+            <div style="display: flex; gap: 0.75rem; justify-content: center; flex-wrap: wrap; align-items: center;">
+              <input type="text" id="standby-vc-input" class="form-input" placeholder="Voice Channel (e.g. General)" style="max-width: 220px;" value="General" />
+              <button id="summon-voice-btn" class="btn btn-primary btn-sm">⚡ Make Bot Join Voice Channel</button>
+              <button id="retry-studio-btn" class="btn btn-outline btn-sm">🔄 Refresh Player</button>
             </div>
           </div>
         `;
@@ -2449,9 +2893,10 @@ async function renderMusicStudioTab(panel, s) {
         });
         document.getElementById('summon-voice-btn')?.addEventListener('click', async () => {
           soundFX.playSound('click');
+          const targetVc = document.getElementById('standby-vc-input')?.value.trim() || 'General';
           try {
-            await controlMusicPlayback(state.selectedGuildId, 'join');
-            showToast('Voice connection signal sent to KYOKA.', 'info');
+            await controlMusicPlayback(state.selectedGuildId, 'join', targetVc);
+            showToast(`Voice connection signal sent for "${targetVc}".`, 'info');
             await refreshStudioState();
           } catch (e) {
             showToast(e.message, 'warning');

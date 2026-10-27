@@ -1833,4 +1833,272 @@ html.reduce-motion *::after {
   }
 }
 
+/* ==========================================================================
+   KOYA-STYLE WELCOME & GOODBYE SUITE
+   ========================================================================== */
+.koya-subtabs {
+  display: flex;
+  gap: 0.5rem;
+  background: rgba(15, 17, 26, 0.7);
+  padding: 0.35rem;
+  border-radius: var(--radius-md);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  margin-bottom: 1.5rem;
+  flex-wrap: wrap;
+}
+
+.koya-subtab-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.6rem 1.2rem;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  border: none;
+  color: var(--text-dim);
+  font-size: 0.9rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.koya-subtab-btn:hover {
+  color: #fff;
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.koya-subtab-btn.active {
+  background: var(--purple-primary);
+  color: #fff;
+  box-shadow: 0 4px 14px rgba(124, 58, 237, 0.4);
+}
+
+.var-chips-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin: 0.6rem 0 1rem;
+}
+
+.var-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.3rem 0.65rem;
+  background: rgba(124, 58, 237, 0.15);
+  border: 1px solid rgba(124, 58, 237, 0.35);
+  color: var(--purple-light);
+  border-radius: 6px;
+  font-size: 0.78rem;
+  font-family: 'JetBrains Mono', monospace;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  user-select: none;
+}
+
+.var-chip:hover {
+  background: rgba(124, 58, 237, 0.3);
+  border-color: var(--purple-primary);
+  color: #fff;
+  transform: translateY(-1px);
+}
+
+.var-chip:active {
+  transform: scale(0.96);
+}
+
+/* Authentic Discord Chat Simulator */
+.discord-chat-simulator {
+  background: #313338;
+  border-radius: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  padding: 1.25rem;
+  margin-top: 1rem;
+  font-family: 'gg sans', 'Noto Sans', 'Helvetica Neue', Helvetica, Arial, sans-serif;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+}
+
+.discord-msg-row {
+  display: flex;
+  gap: 1rem;
+  align-items: flex-start;
+}
+
+.discord-bot-avatar {
+  width: 42px;
+  height: 42px;
+  border-radius: 50%;
+  object-fit: cover;
+  flex-shrink: 0;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+}
+
+.discord-msg-content {
+  flex: 1;
+  min-width: 0;
+}
+
+.discord-msg-header {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  margin-bottom: 0.25rem;
+}
+
+.discord-bot-name {
+  font-size: 0.95rem;
+  font-weight: 600;
+  color: #F2F3F5;
+}
+
+.discord-bot-tag {
+  display: inline-flex;
+  align-items: center;
+  background: #5865F2;
+  color: #fff;
+  font-size: 0.65rem;
+  font-weight: 700;
+  padding: 0.1rem 0.3rem;
+  border-radius: 3px;
+  line-height: 1;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.discord-msg-time {
+  font-size: 0.72rem;
+  color: #949BA4;
+  margin-left: 0.25rem;
+}
+
+.discord-msg-body {
+  font-size: 0.95rem;
+  color: #DBDEE1;
+  line-height: 1.45;
+  margin-bottom: 0.6rem;
+  word-break: break-word;
+}
+
+.discord-mention {
+  background: rgba(88, 101, 242, 0.3);
+  color: #C9CDFB;
+  font-weight: 500;
+  padding: 0.1rem 0.3rem;
+  border-radius: 3px;
+  transition: background 0.15s;
+}
+
+.discord-mention:hover {
+  background: #5865F2;
+  color: #fff;
+}
+
+/* Koya-Style Welcome Canvas Banner Preview */
+.koya-canvas-wrapper {
+  margin-top: 1rem;
+  border-radius: 8px;
+  overflow: hidden;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: #111214;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.5);
+  max-width: 600px;
+}
+
+.koya-canvas-wrapper canvas {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+
+/* Color Palette Swatches */
+.swatch-group {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-top: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.swatch-btn {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  border: 2px solid transparent;
+  cursor: pointer;
+  transition: transform 0.15s, border-color 0.15s;
+}
+
+.swatch-btn:hover {
+  transform: scale(1.15);
+}
+
+.swatch-btn.active {
+  border-color: #fff;
+  transform: scale(1.1);
+}
+
+/* Quick Play Music Pills */
+.quick-play-pills {
+  display: flex;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+  margin-top: 0.75rem;
+}
+
+.quick-play-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.35rem 0.75rem;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 20px;
+  font-size: 0.8rem;
+  color: var(--text-dim);
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.quick-play-pill:hover {
+  background: rgba(124, 58, 237, 0.25);
+  border-color: var(--purple-light);
+  color: #fff;
+  transform: translateY(-1px);
+}
+
+/* Equalizer Bars Animation */
+.equalizer-bars {
+  display: inline-flex;
+  align-items: flex-end;
+  gap: 3px;
+  height: 16px;
+  margin-left: 0.5rem;
+}
+
+.eq-bar {
+  width: 3px;
+  background: var(--purple-light);
+  border-radius: 1px;
+  animation: eq-bounce 1.2s ease-in-out infinite alternate;
+}
+
+.eq-bar:nth-child(1) { height: 40%; animation-delay: 0s; }
+.eq-bar:nth-child(2) { height: 90%; animation-delay: 0.3s; }
+.eq-bar:nth-child(3) { height: 60%; animation-delay: 0.15s; }
+.eq-bar:nth-child(4) { height: 80%; animation-delay: 0.45s; }
+
+@keyframes eq-bounce {
+  0% { height: 20%; }
+  100% { height: 100%; }
+}
+
+.music-vc-input-group {
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
+  flex-wrap: wrap;
+  margin-top: 0.5rem;
+}
+
+
 

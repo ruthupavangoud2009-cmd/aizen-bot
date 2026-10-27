@@ -514,8 +514,40 @@ class HealthServer:
         value = body.get("value")
         player = music_cog.controller.get_player(guild_id)
 
+        guild = bot.get_guild(guild_id)
+        if not guild:
+            return web.json_response({"error": "Guild not found on this bot instance"}, status=404, headers=self._cors_headers())
+
+        # Allow 'join' action even when player is not yet connected
+        if action == "join":
+            channel_id = body.get("channel_id") or value
+            target_vc = None
+            if channel_id:
+                try:
+                    target_vc = guild.get_channel(int(channel_id))
+                except (ValueError, TypeError):
+                    target_vc = discord.utils.get(guild.voice_channels, name=str(channel_id).strip())
+
+            if not target_vc:
+                for ch in guild.voice_channels:
+                    perms = ch.permissions_for(guild.me)
+                    if perms.connect and perms.speak:
+                        target_vc = ch
+                        break
+
+            if not target_vc:
+                return web.json_response({"error": "No accessible voice channel found to join in this server."}, status=400, headers=self._cors_headers())
+
+            try:
+                active_player = music_cog.controller.get_or_create_player(guild)
+                await active_player.connect_voice(target_vc)
+                return await self._handle_api_music(request)
+            except Exception as join_err:
+                logger.error(f"Failed to join voice channel {target_vc.name} for guild {guild_id}: {join_err}")
+                return web.json_response({"error": f"Failed to connect to voice channel: {join_err}"}, status=500, headers=self._cors_headers())
+
         if not player or not player.is_connected:
-            return web.json_response({"error": "No active audio player connected for this guild. Join a voice channel and start playback with +play first."}, status=404, headers=self._cors_headers())
+            return web.json_response({"error": "No active audio player connected for this guild. Click 'Connect Voice' or specify a voice channel first."}, status=404, headers=self._cors_headers())
 
         try:
             if action == "pause":
@@ -565,6 +597,10 @@ class HealthServer:
         if not bot:
             return web.json_response({"error": "Bot gateway offline"}, status=503, headers=self._cors_headers())
 
+        guild = bot.get_guild(guild_id)
+        if not guild:
+            return web.json_response({"error": "Guild not found on this bot instance"}, status=404, headers=self._cors_headers())
+
         music_cog = bot.get_cog("Music")
         if not music_cog or not hasattr(music_cog, "controller"):
             return web.json_response({"error": "Music subsystem unavailable"}, status=503, headers=self._cors_headers())
@@ -578,9 +614,31 @@ class HealthServer:
         if not query:
             return web.json_response({"error": "Track query or URL required"}, status=400, headers=self._cors_headers())
 
-        player = music_cog.controller.get_player(guild_id)
-        if not player or not player.is_connected:
-            return web.json_response({"error": "Bot is not connected to a voice channel in this server."}, status=400, headers=self._cors_headers())
+        player = music_cog.controller.get_or_create_player(guild)
+        if not player.is_connected:
+            channel_id = body.get("channel_id")
+            target_vc = None
+            if channel_id:
+                try:
+                    target_vc = guild.get_channel(int(channel_id))
+                except (ValueError, TypeError):
+                    target_vc = discord.utils.get(guild.voice_channels, name=str(channel_id).strip())
+
+            if not target_vc:
+                for ch in guild.voice_channels:
+                    perms = ch.permissions_for(guild.me)
+                    if perms.connect and perms.speak:
+                        target_vc = ch
+                        break
+
+            if not target_vc:
+                return web.json_response({"error": "Bot is not in a voice channel and no accessible voice channel was found to join."}, status=400, headers=self._cors_headers())
+
+            try:
+                await player.connect_voice(target_vc)
+            except Exception as conn_err:
+                logger.error(f"Auto-connect to voice channel failed: {conn_err}")
+                return web.json_response({"error": f"Could not connect to voice channel: {conn_err}"}, status=500, headers=self._cors_headers())
 
         # Search track via Wavelink / Lavalink
         try:
