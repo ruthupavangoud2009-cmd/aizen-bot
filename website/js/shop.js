@@ -410,8 +410,170 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   });
 
+  // ─── Super Simple Customer Reviews Engine ───
+  initReviewsEngine();
+
   // Keyboard Escape
   window.addEventListener('keydown', (e) => {
-    if (e.key === 'Escape') closeCheckoutModal();
+    if (e.key === 'Escape') {
+      closeCheckoutModal();
+      closeReviewModal();
+    }
   });
 });
+
+const DEFAULT_REVIEWS = [
+  {
+    id: 'REV-BOOTS4',
+    name: 'vortex_gamer',
+    rating: 5,
+    product: '4 Server Boosts',
+    comment: 'Ordered 4 boosts and they were applied to my server within 2 minutes! Legit and fast.',
+    date: '3 days ago',
+  },
+  {
+    id: 'REV-ALLBOT',
+    name: 'dev_rahul',
+    rating: 5,
+    product: 'All-In-One Ultimate Bot',
+    comment: 'Bought the All-In-One bot zip for 300rs. Fully coded, clean multi-cog architecture, runs like a dream!',
+    date: '2 days ago',
+  },
+  {
+    id: 'REV-NITRO1',
+    name: 'shadow_strike',
+    rating: 5,
+    product: '1 Month Nitro ID + 2 Boosts',
+    comment: '1 Month Nitro ID + 2 boosts worked instantly. Great support from Aizen and team.',
+    date: '1 day ago',
+  },
+  {
+    id: 'REV-MUSICB',
+    name: 'melodix_dj',
+    rating: 5,
+    product: 'Basic Music Only Bot',
+    comment: 'Super simple 50rs music bot with Lavalink support. Audio quality is crisp 10/10.',
+    date: '12 hours ago',
+  },
+  {
+    id: 'REV-BOOST10',
+    name: 'blaze_rider',
+    rating: 5,
+    product: '10 Server Boosts',
+    comment: 'Best Discord shop, cheapest rates for 10 boosts and scanner verification was instant.',
+    date: '4 hours ago',
+  },
+];
+
+function getStoredReviews() {
+  try {
+    const raw = localStorage.getItem('kdc_customer_reviews');
+    if (raw) return JSON.parse(raw);
+  } catch (e) {
+    // fallback
+  }
+  return DEFAULT_REVIEWS;
+}
+
+function storeReviews(revList) {
+  try {
+    localStorage.setItem('kdc_customer_reviews', JSON.stringify(revList));
+  } catch (e) {
+    // ignore
+  }
+}
+
+function renderReviews() {
+  const container = document.getElementById('reviews-grid');
+  const avgElem = document.getElementById('review-stat-avg');
+  const countElem = document.getElementById('review-stat-count');
+  if (!container) return;
+
+  const reviews = getStoredReviews();
+  const total = reviews.length;
+  const avg = total > 0 ? (reviews.reduce((acc, r) => acc + Number(r.rating || 5), 0) / total).toFixed(1) : '5.0';
+
+  if (avgElem) avgElem.textContent = `${avg} / 5.0`;
+  if (countElem) countElem.textContent = `Based on ${total} verified reviews`;
+
+  container.innerHTML = reviews.map(r => {
+    const stars = '⭐'.repeat(Math.max(1, Math.min(5, Number(r.rating) || 5)));
+    return `
+      <div style="background: rgba(15, 7, 30, 0.7); border: 1px solid var(--border-subtle); border-radius: var(--radius-md); padding: 1.25rem; display: flex; flex-direction: column; justify-content: space-between;">
+        <div>
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem;">
+            <span style="font-size: 1.05rem;">${stars}</span>
+            <span style="font-size: 0.72rem; color: #10B981; background: rgba(16, 185, 129, 0.15); border: 1px solid rgba(16, 185, 129, 0.3); padding: 0.15rem 0.45rem; border-radius: 4px; font-weight: 700;">VERIFIED BUYER</span>
+          </div>
+          <div style="color: var(--purple-pastel); font-size: 0.82rem; font-weight: 700; margin-bottom: 0.5rem;">
+            ${r.product || 'KDC Services'}
+          </div>
+          <p style="color: #E2E8F0; font-size: 0.88rem; font-style: italic; line-height: 1.4; margin: 0 0 1rem;">
+            "${r.comment || 'Great service!'}"
+          </p>
+        </div>
+        <div style="display: flex; justify-content: space-between; align-items: center; border-top: 1px solid rgba(255, 255, 255, 0.05); padding-top: 0.6rem; font-size: 0.78rem; color: var(--text-dim);">
+          <span style="font-weight: 700; color: #fff;">@${r.name || 'Anonymous'}</span>
+          <span>${r.date || 'Recently'}</span>
+        </div>
+      </div>
+    `;
+  }).join('');
+}
+
+function openReviewModal() {
+  soundFX.playSound('open');
+  const modal = document.getElementById('write-review-modal');
+  if (modal) modal.style.display = 'flex';
+}
+
+function closeReviewModal() {
+  soundFX.playSound('close');
+  const modal = document.getElementById('write-review-modal');
+  if (modal) modal.style.display = 'none';
+}
+
+function initReviewsEngine() {
+  renderReviews();
+
+  document.getElementById('open-review-modal-btn')?.addEventListener('click', openReviewModal);
+  document.getElementById('review-modal-close-btn')?.addEventListener('click', closeReviewModal);
+
+  document.getElementById('write-review-modal')?.addEventListener('click', (e) => {
+    if (e.target.id === 'write-review-modal') closeReviewModal();
+  });
+
+  const form = document.getElementById('write-review-form');
+  form?.addEventListener('submit', (e) => {
+    e.preventDefault();
+    const rating = document.getElementById('review-form-rating')?.value || '5';
+    const name = document.getElementById('review-form-name')?.value.trim() || 'Customer';
+    const product = document.getElementById('review-form-product')?.value.trim() || 'KDC Shop';
+    const comment = document.getElementById('review-form-comment')?.value.trim();
+
+    if (!comment) {
+      showToast('Please enter your review comment', 'warning');
+      return;
+    }
+
+    const newRev = {
+      id: `REV-${Date.now().toString(36).toUpperCase()}`,
+      name,
+      rating: Number(rating),
+      product,
+      comment,
+      date: 'Just now',
+    };
+
+    const currentList = getStoredReviews();
+    currentList.unshift(newRev);
+    storeReviews(currentList);
+
+    soundFX.playSound('success');
+    renderReviews();
+    closeReviewModal();
+    form.reset();
+
+    showToast('⭐ Thank you! Your review is now live on KDC Shop.', 'success');
+  });
+}

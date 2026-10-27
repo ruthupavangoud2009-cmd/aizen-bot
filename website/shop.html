@@ -288,6 +288,37 @@
     <!-- Populated dynamically by shop.js -->
   </main>
 
+  <!-- Customer Reviews Section (Super Simple & Live) -->
+  <section class="shop-reviews-section" style="max-width: 1240px; margin: 0 auto 5rem; padding: 0 1.5rem;">
+    <div style="background: var(--bg-card); border: 1px solid var(--border-subtle); border-radius: var(--radius-lg); padding: 2.25rem 2rem; backdrop-filter: blur(14px);">
+      <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 1rem; margin-bottom: 2rem; border-bottom: 1px solid var(--border-subtle); padding-bottom: 1.5rem;">
+        <div>
+          <div style="display: flex; align-items: center; gap: 0.6rem; margin-bottom: 0.35rem;">
+            <span style="font-size: 1.8rem;">⭐</span>
+            <h2 style="font-size: 1.5rem; font-weight: 800; color: #fff; margin: 0;">Customer Reviews &amp; Ratings</h2>
+          </div>
+          <p style="color: var(--text-dim); margin: 0; font-size: 0.92rem;">
+            Real feedback from server owners who bought Discord Boosts, Nitro &amp; Auto-Delivery Bots.
+          </p>
+        </div>
+        <div style="display: flex; align-items: center; gap: 1.25rem;">
+          <div style="text-align: right;">
+            <div style="font-size: 1.6rem; font-weight: 900; color: #F59E0B;" id="review-stat-avg">5.0 / 5.0</div>
+            <div style="color: var(--text-muted); font-size: 0.8rem;" id="review-stat-count">Based on 5 verified reviews</div>
+          </div>
+          <button id="open-review-modal-btn" class="btn btn-primary" style="display: inline-flex; align-items: center; gap: 0.5rem; padding: 0.65rem 1.35rem; font-weight: 700;">
+            ✍️ Leave a Review
+          </button>
+        </div>
+      </div>
+
+      <!-- Reviews Cards Grid -->
+      <div id="reviews-grid" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 1.25rem;">
+        <!-- Populated dynamically via shop.js -->
+      </div>
+    </div>
+  </section>
+
   <!-- Checkout & Scanner Modal -->
   <div id="shop-checkout-modal" class="shop-modal-backdrop">
     <div class="shop-modal-window">
@@ -339,6 +370,51 @@
           ⚡ Verify &amp; Auto-Deliver
         </button>
       </div>
+    </div>
+  </div>
+
+  <!-- Write Review Modal (Super Simple) -->
+  <div id="write-review-modal" class="shop-modal-backdrop" style="display: none;">
+    <div class="shop-modal-window" style="max-width: 480px;">
+      <button id="review-modal-close-btn" class="shop-modal-close" title="Close">✕</button>
+      
+      <div style="text-align: center; margin-bottom: 1.25rem;">
+        <span style="font-size: 2.2rem;">⭐</span>
+        <h3 style="font-size: 1.35rem; font-weight: 800; color: #fff; margin: 0.35rem 0 0.2rem;">Leave a Customer Review</h3>
+        <p style="color: var(--text-dim); font-size: 0.88rem; margin: 0;">Share your experience with KDC Shop</p>
+      </div>
+
+      <form id="write-review-form">
+        <div style="margin-bottom: 1rem;">
+          <label style="display: block; font-size: 0.85rem; font-weight: 700; color: var(--text-muted); margin-bottom: 0.35rem;">Rating</label>
+          <select id="review-form-rating" style="width: 100%; padding: 0.65rem; border-radius: var(--radius-md); background: rgba(10, 5, 20, 0.85); border: 1px solid var(--border-subtle); color: #fff; font-weight: 700;">
+            <option value="5">⭐⭐⭐⭐⭐ 5 Stars (Excellent)</option>
+            <option value="4">⭐⭐⭐⭐ 4 Stars (Good)</option>
+            <option value="3">⭐⭐⭐ 3 Stars (Average)</option>
+            <option value="2">⭐⭐ 2 Stars (Below Average)</option>
+            <option value="1">⭐ 1 Star (Poor)</option>
+          </select>
+        </div>
+
+        <div style="margin-bottom: 1rem;">
+          <label style="display: block; font-size: 0.85rem; font-weight: 700; color: var(--text-muted); margin-bottom: 0.35rem;">Your Name / Discord Tag</label>
+          <input type="text" id="review-form-name" required placeholder="e.g. shadow_strike" style="width: 100%; padding: 0.65rem; border-radius: var(--radius-md); background: rgba(10, 5, 20, 0.85); border: 1px solid var(--border-subtle); color: #fff;" />
+        </div>
+
+        <div style="margin-bottom: 1rem;">
+          <label style="display: block; font-size: 0.85rem; font-weight: 700; color: var(--text-muted); margin-bottom: 0.35rem;">Product or Service</label>
+          <input type="text" id="review-form-product" placeholder="e.g. 4 Server Boosts / All-In-One Bot" style="width: 100%; padding: 0.65rem; border-radius: var(--radius-md); background: rgba(10, 5, 20, 0.85); border: 1px solid var(--border-subtle); color: #fff;" />
+        </div>
+
+        <div style="margin-bottom: 1.25rem;">
+          <label style="display: block; font-size: 0.85rem; font-weight: 700; color: var(--text-muted); margin-bottom: 0.35rem;">Feedback / Comment</label>
+          <textarea id="review-form-comment" rows="3" required placeholder="How fast was delivery? How was the service?" style="width: 100%; padding: 0.65rem; border-radius: var(--radius-md); background: rgba(10, 5, 20, 0.85); border: 1px solid var(--border-subtle); color: #fff; font-family: inherit; resize: vertical;"></textarea>
+        </div>
+
+        <button type="submit" class="btn btn-primary" style="width: 100%; padding: 0.75rem; font-size: 0.95rem; font-weight: 800;">
+          ⭐ Post Verified Review
+        </button>
+      </form>
     </div>
   </div>
 

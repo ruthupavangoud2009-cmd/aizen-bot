@@ -276,8 +276,8 @@ CATEGORY_SEARCH_ALIASES: dict[str, str] = {
     "config": "config", "setup": "config", "settings": "config", "prefix": "config", "logs": "config", "admin": "config", "administration": "config",
     # Social & Fun
     "social": "social", "fun": "social", "games": "social", "romance": "social", "anime": "social",
-    # KDC Shop & Stock
-    "stock": "service_bills", "kdc": "service_bills", "shop": "service_bills", "store": "service_bills", "kdcshop": "service_bills",
+    # KDC Shop & Stock & Reviews
+    "stock": "service_bills", "kdc": "service_bills", "shop": "service_bills", "store": "service_bills", "kdcshop": "service_bills", "review": "service_bills", "reviews": "service_bills",
     # Owner & Developer
     "owner": "owner", "dev": "owner", "developer": "owner", "system": "owner", "eval": "owner",
 }
@@ -533,8 +533,8 @@ def resolve_command_category(cmd: Any) -> CategoryMeta:
     ):
         return CATEGORY_BY_ID["staff_applications"]
 
-    # KDC Shop & Stock
-    if root_name in ("stock", "kdc", "kdcshop", "shop", "store"):
+    # KDC Shop & Stock & Reviews
+    if root_name in ("stock", "kdc", "kdcshop", "shop", "store", "review", "reviews"):
         return CATEGORY_BY_ID["service_bills"]
 
     # Blox Fruits Service Bills

@@ -155,6 +155,95 @@ class TransactionVerifyModal(Modal, title="Verify Payment & Claim Bot"):
         await interaction.response.send_message(embed=boost_embed, ephemeral=True)
 
 
+class ReviewSubmitModal(Modal, title="Write a Customer Review"):
+    """Super simple modal for customers to submit feedback & star ratings."""
+
+    def __init__(self, shop_mgr: KDCShopManager, default_product: str = "KDC Shop"):
+        super().__init__()
+        self.shop_mgr = shop_mgr
+
+        self.rating_input = TextInput(
+            label="Rating (1 to 5 Stars)",
+            placeholder="5",
+            required=True,
+            min_length=1,
+            max_length=1,
+        )
+        self.add_item(self.rating_input)
+
+        self.product_input = TextInput(
+            label="Product or Service Reviewed",
+            placeholder="e.g. 4 Boosts, Music Bot, Nitro ID",
+            default=default_product,
+            required=False,
+            max_length=60,
+        )
+        self.add_item(self.product_input)
+
+        self.comment_input = TextInput(
+            label="Your Review / Feedback",
+            placeholder="How was the delivery speed, quality, or customer support?",
+            style=discord.TextStyle.paragraph,
+            required=True,
+            min_length=5,
+            max_length=500,
+        )
+        self.add_item(self.comment_input)
+
+    async def on_submit(self, interaction: discord.Interaction):
+        try:
+            rating_val = int(self.rating_input.value.strip())
+            rating_val = max(1, min(5, rating_val))
+        except ValueError:
+            rating_val = 5
+
+        product_val = self.product_input.value.strip() or "KDC Shop"
+        comment_val = self.comment_input.value.strip()
+
+        review = self.shop_mgr.add_review(
+            user_id=interaction.user.id,
+            username=str(interaction.user.name),
+            rating=rating_val,
+            comment=comment_val,
+            product=product_val,
+            verified=True,
+        )
+
+        stars_str = "⭐" * rating_val
+        embed = discord.Embed(
+            title="⭐ THANK YOU FOR YOUR REVIEW!",
+            description=(
+                f"**Rating:** {stars_str} (`{rating_val}/5`)\n"
+                f"**Product:** `{product_val}`\n"
+                f"**Feedback:** *\"{comment_val}\"*\n\n"
+                f"Your review (`{review['id']}`) is now verified and live on Discord and the KDC Website!"
+            ),
+            color=0x10B981,
+            timestamp=discord.utils.utcnow(),
+        )
+        embed.set_footer(text="KDC Shop • Verified Customer Feedback")
+        await interaction.response.send_message(embed=embed, ephemeral=True)
+
+
+class ReviewsView(View):
+    """Interactive view for browsing and submitting reviews."""
+
+    def __init__(self, shop_mgr: KDCShopManager, cog: "KDCShop"):
+        super().__init__(timeout=180.0)
+        self.shop_mgr = shop_mgr
+        self.cog = cog
+
+    @discord.ui.button(label="✍️ Write a Review", style=discord.ButtonStyle.success, emoji="⭐", row=0)
+    async def write_review(self, interaction: discord.Interaction, button: Button):
+        modal = ReviewSubmitModal(self.shop_mgr)
+        await interaction.response.send_modal(modal)
+
+    @discord.ui.button(label="🔄 Refresh Reviews", style=discord.ButtonStyle.secondary, emoji="🔄", row=0)
+    async def refresh_reviews(self, interaction: discord.Interaction, button: Button):
+        embed = self.cog.generate_reviews_embed()
+        await interaction.response.edit_message(embed=embed, view=self)
+
+
 class KDCItemSelect(Select):
     """Dropdown menu listing KDC Shop products."""
 
@@ -340,6 +429,12 @@ class KDCShopView(View):
         )
         await interaction.response.send_message(embed=embed, ephemeral=True)
 
+    @discord.ui.button(label="⭐ Reviews", style=discord.ButtonStyle.secondary, emoji="⭐", row=2)
+    async def reviews_button(self, interaction: discord.Interaction, button: Button):
+        embed = self.cog.generate_reviews_embed()
+        view = ReviewsView(self.shop_mgr, self.cog)
+        await interaction.response.send_message(embed=embed, view=view, ephemeral=True)
+
     async def _handle_make_bill(self, interaction: discord.Interaction, currency: str):
         item_id = self.selected_item_id or (self.items[0].id if self.items else "boost_2")
         item = self.shop_mgr.get_item(item_id)
@@ -404,6 +499,11 @@ class KDCShop(commands.Cog, name="KDCShop"):
         if clean in ("stock", "kdc stock", "kdc shop", "kdc"):
             ctx = await self.bot.get_context(message)
             await self.open_shop(ctx)
+        elif clean in ("review", "reviews", "kdc review", "kdc reviews"):
+            ctx = await self.bot.get_context(message)
+            embed = self.generate_reviews_embed()
+            view = ReviewsView(self.shop_mgr, self)
+            await ctx.send(embed=embed, view=view)
 
     # ── Command: +stock / +kdc / +shop ──
     @commands.group(name="stock", aliases=["kdc", "shop", "kdcshop", "store"], invoke_without_command=True)
@@ -592,6 +692,103 @@ class KDCShop(commands.Cog, name="KDCShop"):
             color=0x7C3AED,
         )
         await ctx.send(embed=embed)
+
+    # ── Review System Helpers & Commands (Super Simple) ──
+    def generate_reviews_embed(self) -> discord.Embed:
+        stats = self.shop_mgr.get_rating_summary()
+        reviews = self.shop_mgr.get_reviews(limit=6)
+
+        stars_str = stats.get("stars_str", "⭐⭐⭐⭐⭐")
+        avg = stats.get("average", 5.0)
+        total = stats.get("total", 0)
+
+        embed = discord.Embed(
+            title="⭐ KDC SHOP — CUSTOMER REVIEWS & RATINGS",
+            description=(
+                f"**Overall Store Rating:** {stars_str} **`{avg} / 5.0`**\n"
+                f"**Total Verified Reviews:** `{total}` happy customer(s)\n"
+                f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+            ),
+            color=0xF59E0B,
+            timestamp=discord.utils.utcnow(),
+        )
+
+        if not reviews:
+            embed.add_field(
+                name="No Reviews Yet",
+                value="Be the first to leave a review using `+review 5 <your message>`!",
+                inline=False,
+            )
+        else:
+            for r in reviews:
+                r_stars = "⭐" * int(r["rating"])
+                ts_str = f"<t:{int(r['created_at'])}:R>"
+                embed.add_field(
+                    name=f"{r_stars} {r['product']} • by @{r['username']}",
+                    value=f"💬 *\"{r['comment']}\"*\n📅 {ts_str} • Verified Buyer",
+                    inline=False,
+                )
+
+        embed.set_footer(text="KDC Shop • Type +review to leave your feedback!")
+        return embed
+
+    # ── Command: +review (Super Simple) ──
+    @commands.command(name="review", aliases=["addreview", "vouchshop"])
+    async def review_command(
+        self,
+        ctx: CustomContext,
+        rating: Optional[int] = None,
+        *,
+        comment: Optional[str] = None,
+    ):
+        """Leave a super simple review for KDC Shop (e.g. +review 5 Great service!)."""
+        if rating is None or not comment:
+            # If used without arguments, open interactive panel
+            view = ReviewsView(self.shop_mgr, self)
+            embed = discord.Embed(
+                title="⭐ Write a KDC Shop Review",
+                description=(
+                    "Leaving a review is super simple!\n\n"
+                    "**Quick Command Usage:**\n"
+                    "• `+review 5 Fast delivery and legit boosts!`\n"
+                    "• `+review 5 All-in-one bot zip is awesome!`\n\n"
+                    "Or click **'✍️ Write a Review'** below to open the review window!"
+                ),
+                color=0x7C3AED,
+            )
+            return await ctx.send(embed=embed, view=view)
+
+        # Quick direct submission
+        rating_clean = max(1, min(5, int(rating)))
+        rev = self.shop_mgr.add_review(
+            user_id=ctx.author.id,
+            username=str(ctx.author.name),
+            rating=rating_clean,
+            comment=comment.strip(),
+            product="KDC Services",
+            verified=True,
+        )
+
+        stars_str = "⭐" * rating_clean
+        embed = discord.Embed(
+            title="⭐ Review Submitted Successfully!",
+            description=(
+                f"**Rating:** {stars_str} (`{rating_clean}/5`)\n"
+                f"**Feedback:** *\"{comment.strip()}\"*\n\n"
+                f"Your review (`{rev['id']}`) is now recorded and visible on Discord & KDC Shop website!"
+            ),
+            color=0x10B981,
+        )
+        embed.set_footer(text="Thank you for supporting KDC Shop!")
+        await ctx.send(embed=embed)
+
+    # ── Command: +reviews ──
+    @commands.command(name="reviews", aliases=["ratings", "shopreviews", "voucheslist"])
+    async def reviews_command(self, ctx: CustomContext):
+        """View KDC Shop verified customer reviews and aggregate rating."""
+        embed = self.generate_reviews_embed()
+        view = ReviewsView(self.shop_mgr, self)
+        await ctx.send(embed=embed, view=view)
 
 
 async def setup(bot: commands.Bot) -> None:

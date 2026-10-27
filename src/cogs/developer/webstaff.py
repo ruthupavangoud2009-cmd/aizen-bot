@@ -71,7 +71,7 @@ class WebStaffCog(commands.Cog, name="WebStaff"):
 
     # ─── HYBRID COMMAND GROUP: +webstaff / /webstaff ─────────────────────────
 
-    @commands.hybrid_group(name="webstaff", aliases=["staff", "addstaff", "web_staff"], description="Manage website staff access from Discord.", invoke_without_command=True)
+    @commands.hybrid_group(name="webstaff", aliases=["sitestaff", "addstaff", "web_staff"], description="Manage website staff access from Discord.", invoke_without_command=True)
     async def webstaff_group(self, ctx: commands.Context) -> None:
         """List website staff members."""
         await self.webstaff_list(ctx)

@@ -154,7 +154,7 @@ class CommandRegistry:
                 self.register_command(
                     name=app_cmd.name,
                     category=getattr(app_cmd, "category", "Slash"),
-                    description=app_cmd.description or "",
+                    description=getattr(app_cmd, "description", "") or "",
                     is_slash=True,
                     is_prefix=False,
                     is_hidden=False,

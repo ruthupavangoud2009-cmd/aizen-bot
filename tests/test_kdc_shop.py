@@ -175,3 +175,50 @@ async def test_kdc_shop_cog_registration():
     assert "deliver" in subcmds
     assert "verify" in subcmds
     assert "bills" in subcmds
+
+    # Verify review commands
+    review_cmd = bot.get_command("review")
+    assert review_cmd is not None
+    assert "addreview" in review_cmd.aliases
+
+    reviews_cmd = bot.get_command("reviews")
+    assert reviews_cmd is not None
+    assert "ratings" in reviews_cmd.aliases
+
+
+def test_kdc_shop_review_crud_and_rating_summary(temp_shop: KDCShopManager):
+    """Verify customer review submission, aggregation, and rating statistics."""
+    # 1. Verify default seed reviews are loaded
+    seed_revs = temp_shop.get_reviews(limit=10)
+    assert len(seed_revs) >= 5
+
+    # 2. Add a new customer review
+    new_rev = temp_shop.add_review(
+        user_id=88888888,
+        username="happy_customer",
+        rating=5,
+        comment="Incredible bot zip! Set up in under 60 seconds.",
+        product="Basic Music Only Bot",
+    )
+    assert new_rev["id"].startswith("REV-")
+    assert new_rev["rating"] == 5
+    assert new_rev["username"] == "happy_customer"
+
+    # 3. Verify it appears at the top of get_reviews
+    latest = temp_shop.get_reviews(limit=1)[0]
+    assert latest["id"] == new_rev["id"]
+    assert latest["comment"] == "Incredible bot zip! Set up in under 60 seconds."
+
+    # 4. Check rating summary
+    summary = temp_shop.get_rating_summary()
+    assert summary["total"] >= 6
+    assert summary["average"] >= 4.5
+    assert summary["stars_str"] == "⭐⭐⭐⭐⭐"
+
+    # 5. Delete review
+    deleted = temp_shop.delete_review(new_rev["id"])
+    assert deleted is True
+    # Verify removed
+    rev_ids = [r["id"] for r in temp_shop.get_reviews(limit=20)]
+    assert new_rev["id"] not in rev_ids
+

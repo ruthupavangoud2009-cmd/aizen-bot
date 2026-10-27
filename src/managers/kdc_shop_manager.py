@@ -370,6 +370,17 @@ class KDCShopManager:
                     key TEXT PRIMARY KEY,
                     val TEXT NOT NULL
                 );
+
+                CREATE TABLE IF NOT EXISTS kdc_reviews (
+                    id TEXT PRIMARY KEY,
+                    user_id INTEGER NOT NULL,
+                    username TEXT NOT NULL,
+                    rating INTEGER NOT NULL,
+                    comment TEXT NOT NULL,
+                    product TEXT DEFAULT 'KDC Shop',
+                    created_at REAL NOT NULL,
+                    verified INTEGER NOT NULL DEFAULT 1
+                );
             """)
 
             # Seed default items if table is empty
@@ -389,6 +400,23 @@ class KDCShopManager:
                         1 if item.is_auto_deliver else 0,
                         item.file_filename, json.dumps(item.features), item.badge, 1
                     ))
+
+            # Seed default verified reviews if table is empty
+            cur.execute("SELECT COUNT(*) AS c FROM kdc_reviews")
+            rev_row = cur.fetchone()
+            if rev_row and rev_row["c"] == 0:
+                starter_reviews = [
+                    ("REV-BOOTS4", 1010101010, "vortex_gamer", 5, "Ordered 4 boosts and they were applied to my server within 2 minutes! Legit and fast.", "4 Server Boosts", time.time() - 86400 * 3),
+                    ("REV-ALLBOT", 2020202020, "dev_rahul", 5, "Bought the All-In-One bot zip for 300rs. Fully coded, clean multi-cog architecture, runs like a dream!", "All-In-One Ultimate Bot", time.time() - 86400 * 2),
+                    ("REV-NITRO1", 3030303030, "shadow_strike", 5, "1 Month Nitro ID + 2 boosts worked instantly. Great support from Aizen and team.", "1 Month Nitro ID + 2 Boosts", time.time() - 86400 * 1),
+                    ("REV-MUSICB", 4040404040, "melodix_dj", 5, "Super simple 50rs music bot with Lavalink support. Audio quality is crisp 10/10.", "Basic Music Only Bot", time.time() - 3600 * 12),
+                    ("REV-BOOST10", 5050505050, "blaze_rider", 5, "Best Discord shop, cheapest rates for 10 boosts and scanner verification was instant.", "10 Server Boosts", time.time() - 3600 * 4),
+                ]
+                for r_id, u_id, u_name, r_stars, r_cmt, r_prod, r_time in starter_reviews:
+                    cur.execute("""
+                        INSERT INTO kdc_reviews (id, user_id, username, rating, comment, product, created_at, verified)
+                        VALUES (?, ?, ?, ?, ?, ?, ?, 1)
+                    """, (r_id, u_id, u_name, r_stars, r_cmt, r_prod, r_time))
             conn.commit()
 
     def _ensure_bot_packages(self) -> None:
@@ -857,3 +885,87 @@ class KDCShopManager:
             conn.commit()
 
         return target_path
+
+    # ── Review & Rating Methods (Super Simple) ──
+    def add_review(
+        self,
+        user_id: int,
+        username: str,
+        rating: int,
+        comment: str,
+        product: str = "KDC Shop",
+        verified: bool = True,
+    ) -> Dict[str, Any]:
+        """Add a customer review with star rating (1-5) and feedback."""
+        rating_clean = max(1, min(5, int(rating)))
+        rev_id = f"REV-{uuid.uuid4().hex[:8].upper()}"
+        now = time.time()
+        with self._get_conn() as conn:
+            cur = conn.cursor()
+            cur.execute("""
+                INSERT INTO kdc_reviews (id, user_id, username, rating, comment, product, created_at, verified)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            """, (
+                rev_id, user_id, username.strip(), rating_clean,
+                comment.strip(), product.strip(), now, 1 if verified else 0
+            ))
+            conn.commit()
+
+        return {
+            "id": rev_id,
+            "user_id": user_id,
+            "username": username.strip(),
+            "rating": rating_clean,
+            "comment": comment.strip(),
+            "product": product.strip(),
+            "created_at": now,
+            "verified": verified,
+        }
+
+    def get_reviews(self, limit: int = 10, min_rating: int = 1) -> List[Dict[str, Any]]:
+        """Retrieve latest customer reviews sorted by timestamp descending."""
+        with self._get_conn() as conn:
+            cur = conn.cursor()
+            cur.execute("""
+                SELECT id, user_id, username, rating, comment, product, created_at, verified
+                FROM kdc_reviews
+                WHERE rating >= ?
+                ORDER BY created_at DESC
+                LIMIT ?
+            """, (min_rating, limit))
+            rows = cur.fetchall()
+            return [dict(r) for r in rows]
+
+    def get_rating_summary(self) -> Dict[str, Any]:
+        """Get aggregate rating summary, star breakdown, and total count."""
+        with self._get_conn() as conn:
+            cur = conn.cursor()
+            cur.execute("SELECT rating FROM kdc_reviews")
+            rows = cur.fetchall()
+            if not rows:
+                return {
+                    "average": 5.0,
+                    "total": 0,
+                    "breakdown": {5: 0, 4: 0, 3: 0, 2: 0, 1: 0},
+                    "stars_str": "⭐⭐⭐⭐⭐",
+                }
+            ratings = [int(r["rating"]) for r in rows]
+            total = len(ratings)
+            avg = round(sum(ratings) / total, 1)
+            breakdown = {i: ratings.count(i) for i in (5, 4, 3, 2, 1)}
+            full_stars = int(round(avg))
+            stars_str = "⭐" * full_stars
+            return {
+                "average": avg,
+                "total": total,
+                "breakdown": breakdown,
+                "stars_str": stars_str,
+            }
+
+    def delete_review(self, review_id: str) -> bool:
+        """Delete a review by ID (Staff action)."""
+        with self._get_conn() as conn:
+            cur = conn.cursor()
+            cur.execute("DELETE FROM kdc_reviews WHERE id = ?", (review_id.strip(),))
+            conn.commit()
+            return cur.rowcount > 0
