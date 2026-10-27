@@ -497,8 +497,12 @@ async def handle_update_settings(request: web.Request) -> web.Response:
         tk = payload["tickets"]
         if isinstance(tk, dict):
             validated_tk = {}
+            if "enabled" in tk:
+                validated_tk["enabled"] = bool(tk["enabled"])
             if "panel_name" in tk:
                 validated_tk["panel_name"] = str(tk["panel_name"])[:64]
+            if "panel_description" in tk:
+                validated_tk["panel_description"] = str(tk["panel_description"])[:1000]
             if "channel_id" in tk:
                 validated_tk["channel_id"] = _clean_snowflake(tk["channel_id"])
             if "category_id" in tk:
@@ -513,6 +517,20 @@ async def handle_update_settings(request: web.Request) -> web.Response:
                 validated_tk["button_emoji"] = str(tk["button_emoji"])[:64]
             if "naming_format" in tk:
                 validated_tk["naming_format"] = str(tk["naming_format"])[:64]
+            if "categories" in tk and isinstance(tk["categories"], list):
+                valid_cats = []
+                for cat in tk["categories"]:
+                    if isinstance(cat, dict) and cat.get("name"):
+                        valid_cats.append({
+                            "name": str(cat["name"]).strip()[:64],
+                            "emoji": str(cat.get("emoji", "🎫")).strip()[:32],
+                            "description": str(cat.get("description", "")).strip()[:200],
+                            "category_channel_id": _clean_snowflake(cat.get("category_channel_id") or cat.get("category_id")),
+                            "staff_role_id": _clean_snowflake(cat.get("staff_role_id")),
+                            "welcome_message": str(cat.get("welcome_message", "")).strip()[:1000],
+                            "naming_format": str(cat.get("naming_format", "ticket-{count}")).strip()[:64],
+                        })
+                validated_tk["categories"] = valid_cats
             validated_updates["tickets"] = validated_tk
 
     # 11. Roles & Utilities Validation

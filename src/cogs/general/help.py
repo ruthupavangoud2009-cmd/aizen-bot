@@ -268,7 +268,7 @@ class HelpView(discord.ui.View):
         self.add_item(btn_close)
 
         # Row 2: Link Buttons matching Screenshot 1
-        bot_name = self.cog.bot.user.name if hasattr(self.cog.bot, "user") and self.cog.bot.user else "Kyoka"
+        bot_name = "Kyoka"
         if Config.INVITE_URL:
             self.add_item(
                 discord.ui.Button(
@@ -936,7 +936,7 @@ class Help(commands.Cog):
         container = KyokaContainer(accent_color=None)
         container.add_section(
             content=(
-                f"**Hey, I'm {Config.BOT_NAME}**\n"
+                f"**Hey, I'm Kyoka 3.0**\n"
                 f"> Built for our community — keeping your server safe, active, and effortlessly connected."
             )
         )
@@ -1071,8 +1071,9 @@ class Help(commands.Cog):
         embed = KyokaHelpEmbed(
             title="⛩️ KYOKA HELP — Kyoka 3.0",
             description=(
-                f"**Hey, I'm {Config.BOT_NAME}**\n"
+                f"**Hey, I'm Kyoka 3.0**\n"
                 f"> Built for our community — keeping your server safe, active, and effortlessly connected.\n\n"
+                f"> *\"Power isn't given. It's taken.\"* — Aizen\n"
                 f"> Choose a category below to explore commands.\n\n"
                 f"• **Latency:** `{ws_ping}ms`\n"
                 f"• **Prefix:** `{p}` | **Slash:** `/`\n"

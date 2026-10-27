@@ -49,7 +49,59 @@ function ensureSettingsDefaults(s) {
   if (!s.antinuke) s.antinuke = { enabled: false, log_channel_id: null, punishment: 'strip_roles', protections: { vanity: true, everyone: true, role: true, channel: true, ban: true, kick: true, bot: true, webhook: true, prune: true, automod: true, integration: true, emoji: true, sticker: true }, whitelisted_users: [], extra_owners: [] };
   if (!s.antinuke.protections) s.antinuke.protections = { vanity: true, everyone: true, role: true, channel: true, ban: true, kick: true, bot: true, webhook: true, prune: true, automod: true, integration: true, emoji: true, sticker: true };
   if (!s.logs) s.logs = { all_channel_id: null, mod_channel_id: null, message_channel_id: null, member_channel_id: null, server_channel_id: null, voice_channel_id: null };
-  if (!s.tickets) s.tickets = { enabled: false, panel_name: 'Support Tickets', channel_id: null, category_id: null, support_role_id: null, log_channel_id: null, naming_format: 'ticket-{count}', button_label: 'Create Ticket', button_emoji: '🎫', total_tickets: 0, active_tickets_count: 0 };
+  if (!s.tickets) s.tickets = {};
+  if (typeof s.tickets.enabled !== 'boolean') s.tickets.enabled = true;
+  if (!s.tickets.panel_name) s.tickets.panel_name = 'Kyoka Support Portal';
+  if (!s.tickets.panel_description) s.tickets.panel_description = 'Select an inquiry category below or click Create Ticket to open a private channel with our staff team.\nAn authorized staff member will assist you shortly.';
+  if (!s.tickets.button_label) s.tickets.button_label = 'Create Ticket';
+  if (!s.tickets.button_emoji) s.tickets.button_emoji = '🎫';
+  if (!s.tickets.log_channel_id) s.tickets.log_channel_id = null;
+  if (!s.tickets.naming_format) s.tickets.naming_format = 'ticket-{count}';
+  if (typeof s.tickets.max_open_per_user !== 'number') s.tickets.max_open_per_user = 2;
+  if (!Array.isArray(s.tickets.categories) || s.tickets.categories.length === 0) {
+    s.tickets.categories = [
+      {
+        id: 'general',
+        name: 'General Support',
+        emoji: '💬',
+        description: 'Server questions, role inquiries & general help',
+        category_channel_id: '',
+        staff_role_id: '',
+        welcome_message: 'Welcome {user}! Staff will assist you shortly. Please explain your issue.',
+        naming_format: 'ticket-{count}'
+      },
+      {
+        id: 'bug_reports',
+        name: 'Bug Reports & Technical',
+        emoji: '🔧',
+        description: 'Report bot anomalies, discord errors & glitches',
+        category_channel_id: '',
+        staff_role_id: '',
+        welcome_message: 'Welcome {user}! Our tech team has been alerted. Please provide screenshots or error logs.',
+        naming_format: 'bug-{count}'
+      },
+      {
+        id: 'billing',
+        name: 'Billing & Blox Fruits',
+        emoji: '💎',
+        description: 'Vouchers, passes, trades & premium activation',
+        category_channel_id: '',
+        staff_role_id: '',
+        welcome_message: 'Welcome {user}! A billing representative will review your receipt or trade request.',
+        naming_format: 'billing-{count}'
+      },
+      {
+        id: 'reports',
+        name: 'Player & Staff Reports',
+        emoji: '🛡️',
+        description: 'Report rule violations or player misconduct safely',
+        category_channel_id: '',
+        staff_role_id: '',
+        welcome_message: 'Welcome {user}! This ticket is private to senior moderators. Please provide the user ID and evidence.',
+        naming_format: 'report-{count}'
+      }
+    ];
+  }
   if (!s.leveling) s.leveling = { enabled: true, xp_rate: 1.0, cooldown_seconds: 60, announcement_channel_id: null, role_rewards: [], top_leaderboard: [] };
   if (!Array.isArray(s.leveling.top_leaderboard)) s.leveling.top_leaderboard = [];
   if (!s.giveaways) s.giveaways = { default_channel_id: null, embed_color: '#7C3AED', claim_deadline_seconds: 86400, total_giveaways: 0, active_giveaways: [] };
@@ -534,6 +586,36 @@ function renderWorkspace(container, guild) {
 
         <!-- Main Dynamic Settings Form Panel -->
         <section class="settings-content">
+          <div class="quick-guide-banner" id="quick-guide-banner">
+            <div>
+              <div style="font-weight: 700; color: #FFFFFF; font-size: 0.95rem; display: flex; align-items: center; gap: 0.5rem;">
+                <span>⚡</span> Kyoka Quick Setup Guide
+              </div>
+              <div style="font-size: 0.82rem; color: var(--text-dim); margin-top: 0.2rem;">
+                Fast shortcuts to jump into and configure your server's key modules:
+              </div>
+              <div class="quick-guide-steps">
+                <button class="quick-guide-step-pill" data-target-tab="tickets">
+                  <span>🎫</span> Multi-Category Tickets
+                </button>
+                <button class="quick-guide-step-pill" data-target-tab="welcome_leave">
+                  <span>👋</span> Welcome Suite
+                </button>
+                <button class="quick-guide-step-pill" data-target-tab="music_studio">
+                  <span>🎧</span> Live Music Studio
+                </button>
+                <button class="quick-guide-step-pill" data-target-tab="antinuke">
+                  <span>🛡️</span> Anti-Nuke Defense
+                </button>
+                <button class="quick-guide-step-pill" data-target-tab="ai">
+                  <span>🧠</span> Neural AI Persona
+                </button>
+              </div>
+            </div>
+            <button id="dismiss-guide-btn" class="btn btn-outline btn-sm" style="font-size: 0.75rem; padding: 0.25rem 0.6rem; border-color: rgba(168, 85, 247, 0.3); color: var(--text-dim);" title="Hide guide">
+              ✕
+            </button>
+          </div>
           <div id="tab-overview" class="tab-panel active"></div>
           <div id="tab-welcome_leave" class="tab-panel"></div>
           <div id="tab-verification" class="tab-panel"></div>
@@ -645,6 +727,19 @@ function renderWorkspace(container, guild) {
       const tab = btn.getAttribute('data-tab');
       switchTab(tab);
     });
+  });
+
+  // Quick Guide listeners
+  container.querySelectorAll('.quick-guide-step-pill').forEach(pill => {
+    pill.addEventListener('click', () => {
+      const target = pill.getAttribute('data-target-tab');
+      if (target) switchTab(target);
+    });
+  });
+
+  document.getElementById('dismiss-guide-btn')?.addEventListener('click', () => {
+    const banner = document.getElementById('quick-guide-banner');
+    if (banner) banner.style.display = 'none';
   });
 
   // Render initial active tab
@@ -1897,82 +1992,472 @@ function renderLogsTab(panel, s) {
   }
 }
 
-// F. Tickets
+// F. Tickets Suite — Modular Multi-Category Support System
 function renderTicketsTab(panel, s) {
   if (!s.tickets) s.tickets = {};
   const tk = s.tickets;
 
-  panel.innerHTML = `
-    <div class="panel-header">
-      <h4>Modular Ticket Panels & Customer Support</h4>
-      <p>Deploy interactive ticket creation panels with customizable buttons and staff roles.</p>
-    </div>
+  const escapeHtml = (str) => {
+    if (!str) return '';
+    return String(str)
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#039;');
+  };
 
-    <div class="setting-row">
-      <div class="setting-info">
-        <label>Ticket Panel Name</label>
-        <p>Internal identifier for this panel configuration.</p>
-      </div>
-      <div class="setting-control">
-        <input type="text" id="tk-name" class="form-input" value="${tk.panel_name || 'Support Tickets'}" />
-      </div>
-    </div>
+  if (!Array.isArray(tk.categories) || tk.categories.length === 0) {
+    tk.categories = [
+      {
+        id: 'general',
+        name: 'General Support',
+        emoji: '💬',
+        description: 'Server questions, role inquiries & general help',
+        category_channel_id: '',
+        staff_role_id: '',
+        welcome_message: 'Welcome {user}! Staff will assist you shortly. Please explain your issue.',
+        naming_format: 'ticket-{count}'
+      },
+      {
+        id: 'bug_reports',
+        name: 'Bug Reports & Technical',
+        emoji: '🔧',
+        description: 'Report bot anomalies, discord errors & glitches',
+        category_channel_id: '',
+        staff_role_id: '',
+        welcome_message: 'Welcome {user}! Our tech team has been alerted. Please provide screenshots or error logs.',
+        naming_format: 'bug-{count}'
+      },
+      {
+        id: 'billing',
+        name: 'Billing & Blox Fruits',
+        emoji: '💎',
+        description: 'Vouchers, passes, trades & premium activation',
+        category_channel_id: '',
+        staff_role_id: '',
+        welcome_message: 'Welcome {user}! A billing representative will review your receipt or trade request.',
+        naming_format: 'billing-{count}'
+      },
+      {
+        id: 'reports',
+        name: 'Player & Staff Reports',
+        emoji: '🛡️',
+        description: 'Report rule violations or player misconduct safely',
+        category_channel_id: '',
+        staff_role_id: '',
+        welcome_message: 'Welcome {user}! This ticket is private to senior moderators. Please provide the user ID and evidence.',
+        naming_format: 'report-{count}'
+      }
+    ];
+  }
 
-    <div class="setting-row">
-      <div class="setting-info">
-        <label>Button Label & Emoji</label>
-        <p>Text and emoji displayed on the interactive Discord component button.</p>
-      </div>
-      <div class="setting-control" style="display: flex; gap: 0.5rem;">
-        <input type="text" id="tk-btn-emoji" class="form-input" style="width: 60px; text-align: center;" value="${tk.button_emoji || '🎫'}" />
-        <input type="text" id="tk-btn-label" class="form-input" value="${tk.button_label || 'Create Ticket'}" />
-      </div>
-    </div>
+  let selectedPreviewIndex = 0;
 
-    <div class="setting-row">
-      <div class="setting-info">
-        <label>Ticket Channel Naming Format</label>
-        <p>Template for new ticket channels (e.g. <code>ticket-{count}</code>).</p>
+  function renderFullTicketsContent() {
+    panel.innerHTML = `
+      <div class="panel-header">
+        <div style="display: flex; justify-content: space-between; align-items: flex-start; gap: 1rem; flex-wrap: wrap;">
+          <div>
+            <h4>Modular Multi-Category Ticket System</h4>
+            <p>Deploy interactive ticket panels where members select specific inquiry categories, routing directly to dedicated Discord categories and alerting responsible staff roles.</p>
+          </div>
+          <button id="tk-add-cat-btn-top" class="btn btn-primary btn-sm" style="display: inline-flex; align-items: center; gap: 0.4rem;">
+            <span>➕</span> Add Ticket Category
+          </button>
+        </div>
       </div>
-      <div class="setting-control">
-        <input type="text" id="tk-naming" class="form-input" value="${tk.naming_format || 'ticket-{count}'}" />
-      </div>
-    </div>
 
-    <!-- Ticket Simulator Preview -->
-    <div style="margin-top: 1rem;">
-      <label style="font-weight: 700; color: var(--purple-light); font-size: 0.85rem; text-transform: uppercase;">Ticket Button Discord Preview</label>
-      <div class="ticket-preview-box">
-        <div style="color: var(--purple-white); font-weight: 700; font-size: 0.95rem;">${tk.panel_name || 'Support Tickets'}</div>
-        <p style="color: var(--text-muted); font-size: 0.85rem;">Click the button below to open a private ticket with our support staff.</p>
-        <button class="ticket-btn-sim">
-          <span id="tk-preview-emoji">${tk.button_emoji || '🎫'}</span>
-          <span id="tk-preview-label">${tk.button_label || 'Create Ticket'}</span>
-        </button>
+      <!-- Master Switch -->
+      <div class="setting-row">
+        <div class="setting-info">
+          <label>Ticket System Status</label>
+          <p>Enable or disable Discord interactive ticket creation in this server.</p>
+        </div>
+        <div class="setting-control">
+          <label class="switch">
+            <input type="checkbox" id="tk-enabled" ${tk.enabled !== false ? 'checked' : ''} />
+            <span class="slider"></span>
+          </label>
+        </div>
       </div>
-    </div>
-  `;
 
-  document.getElementById('tk-name')?.addEventListener('input', (e) => {
-    tk.panel_name = e.target.value;
-    markChanged();
-  });
-  document.getElementById('tk-btn-label')?.addEventListener('input', (e) => {
-    tk.button_label = e.target.value;
-    const p = document.getElementById('tk-preview-label');
-    if (p) p.textContent = e.target.value || 'Create Ticket';
-    markChanged();
-  });
-  document.getElementById('tk-btn-emoji')?.addEventListener('input', (e) => {
-    tk.button_emoji = e.target.value;
-    const p = document.getElementById('tk-preview-emoji');
-    if (p) p.textContent = e.target.value || '🎫';
-    markChanged();
-  });
-  document.getElementById('tk-naming')?.addEventListener('input', (e) => {
-    tk.naming_format = e.target.value;
-    markChanged();
-  });
+      <!-- Ticket Panel Configuration -->
+      <div class="ticket-section-card">
+        <h5 style="color: var(--purple-white); margin-bottom: 0.35rem; display: flex; align-items: center; gap: 0.5rem;">
+          <span>📋</span> Discord Panel & Channel Routing
+        </h5>
+        <p style="color: var(--text-dim); font-size: 0.85rem; margin-bottom: 1.25rem;">
+          Configure the public portal embed and global default channels for ticket transcripts and creation.
+        </p>
+
+        <div class="setting-row">
+          <div class="setting-info">
+            <label>Support Portal Title</label>
+            <p>Title displayed at the top of the Discord support embed.</p>
+          </div>
+          <div class="setting-control">
+            <input type="text" id="tk-panel-name" class="form-input" value="${escapeHtml(tk.panel_name || 'Kyoka Support Portal')}" />
+          </div>
+        </div>
+
+        <div class="setting-row">
+          <div class="setting-info">
+            <label>Support Portal Description</label>
+            <p>Instructions informing members how to open tickets.</p>
+          </div>
+          <div class="setting-control" style="flex: 1; max-width: 480px;">
+            <textarea id="tk-panel-desc" class="form-input" rows="3" style="width: 100%; resize: vertical; font-family: inherit;">${escapeHtml(tk.panel_description || 'Select an inquiry category below or click Create Ticket to open a private channel with our staff team.\nAn authorized staff member will assist you shortly.')}</textarea>
+          </div>
+        </div>
+
+        <div class="setting-row">
+          <div class="setting-info">
+            <label>Ticket Button Label & Emoji</label>
+            <p>Label and icon on the interactive component button.</p>
+          </div>
+          <div class="setting-control" style="display: flex; gap: 0.5rem;">
+            <input type="text" id="tk-btn-emoji" class="form-input" style="width: 60px; text-align: center;" value="${escapeHtml(tk.button_emoji || '🎫')}" />
+            <input type="text" id="tk-btn-label" class="form-input" value="${escapeHtml(tk.button_label || 'Create Ticket')}" />
+          </div>
+        </div>
+
+        <div class="setting-row">
+          <div class="setting-info">
+            <label>Transcripts / Audit Log Channel</label>
+            <p>Channel Snowflake ID where closed ticket logs and transcripts are archived.</p>
+          </div>
+          <div class="setting-control">
+            <input type="text" id="tk-log-channel" class="form-input" placeholder="e.g. 109876543210987654" value="${escapeHtml(tk.log_channel_id || '')}" />
+          </div>
+        </div>
+      </div>
+
+      <!-- Live Discord Portal Preview (Matching Image 3) -->
+      <div class="ticket-section-card">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.75rem; flex-wrap: wrap; gap: 0.5rem;">
+          <h5 style="color: var(--purple-white); display: flex; align-items: center; gap: 0.5rem; margin: 0;">
+            <span>👁️</span> Real-Time Discord Portal Simulator
+          </h5>
+          <span style="font-size: 0.78rem; color: var(--purple-pastel); background: rgba(124, 58, 237, 0.2); padding: 0.2rem 0.6rem; border-radius: 4px; border: 1px solid rgba(168, 85, 247, 0.3);">
+            Faithful Discord Component Layout
+          </span>
+        </div>
+        <p style="color: var(--text-dim); font-size: 0.85rem; margin-bottom: 1rem;">
+          This is exactly how members will experience your support portal inside Discord. Click the category dropdown below to test switching categories.
+        </p>
+
+        <div class="discord-msg-preview" id="tk-discord-preview">
+          <!-- Populated by updateDiscordPreview -->
+        </div>
+      </div>
+
+      <!-- Configured Categories Section -->
+      <div class="ticket-section-card">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem; flex-wrap: wrap; gap: 0.75rem;">
+          <div>
+            <h5 style="color: var(--purple-white); margin-bottom: 0.25rem; display: flex; align-items: center; gap: 0.5rem;">
+              <span>🗂️</span> Configured Ticket Categories (${tk.categories.length})
+            </h5>
+            <p style="color: var(--text-dim); font-size: 0.82rem; margin: 0;">
+              Each category operates independently with its own Discord channel category, staff role permissions, and greeting text.
+            </p>
+          </div>
+          <button id="tk-add-cat-btn-bottom" class="btn btn-outline btn-sm" style="display: inline-flex; align-items: center; gap: 0.4rem;">
+            <span>➕</span> Add Category
+          </button>
+        </div>
+
+        <div class="ticket-cat-list" id="tk-cat-list-container">
+          <!-- Rendered dynamically -->
+        </div>
+      </div>
+    `;
+
+    renderCategoryCards();
+    updateDiscordPreview();
+    attachGlobalListeners();
+  }
+
+  function renderCategoryCards() {
+    const listContainer = document.getElementById('tk-cat-list-container');
+    if (!listContainer) return;
+
+    listContainer.innerHTML = tk.categories.map((cat, idx) => `
+      <div class="ticket-cat-card" data-cat-idx="${idx}">
+        <div class="ticket-cat-header">
+          <div style="display: flex; align-items: center; gap: 0.75rem;">
+            <span style="font-size: 1.4rem;">${escapeHtml(cat.emoji || '🎫')}</span>
+            <div>
+              <div style="font-weight: 700; color: #FFFFFF; font-size: 1rem;">${escapeHtml(cat.name || 'Untitled Category')}</div>
+              <div style="font-size: 0.78rem; color: var(--text-dim);">${escapeHtml(cat.description || 'No description provided')}</div>
+            </div>
+          </div>
+          <div style="display: flex; align-items: center; gap: 0.5rem;">
+            <span class="ticket-cat-badge">#${idx + 1}</span>
+            ${tk.categories.length > 1 ? `
+              <button class="btn btn-outline btn-sm tk-delete-cat-btn" data-idx="${idx}" style="color: #F87171; border-color: rgba(239, 68, 68, 0.4); padding: 0.25rem 0.5rem;" title="Delete this category">
+                🗑️
+              </button>
+            ` : ''}
+          </div>
+        </div>
+
+        <div class="ticket-cat-grid">
+          <div>
+            <label style="font-size: 0.78rem; font-weight: 700; color: var(--text-muted); display: block; margin-bottom: 0.35rem;">Category Name</label>
+            <input type="text" class="form-input tk-cat-name" data-idx="${idx}" value="${escapeHtml(cat.name || '')}" placeholder="e.g. Bug Reports" />
+          </div>
+
+          <div>
+            <label style="font-size: 0.78rem; font-weight: 700; color: var(--text-muted); display: block; margin-bottom: 0.35rem;">Emoji Icon</label>
+            <input type="text" class="form-input tk-cat-emoji" data-idx="${idx}" style="text-align: center; width: 80px;" value="${escapeHtml(cat.emoji || '🎫')}" placeholder="🔧" />
+          </div>
+
+          <div style="grid-column: 1 / -1;">
+            <label style="font-size: 0.78rem; font-weight: 700; color: var(--text-muted); display: block; margin-bottom: 0.35rem;">Helper Description</label>
+            <input type="text" class="form-input tk-cat-desc" data-idx="${idx}" value="${escapeHtml(cat.description || '')}" placeholder="Brief summary displayed in select dropdown" />
+          </div>
+
+          <div>
+            <label style="font-size: 0.78rem; font-weight: 700; color: var(--text-muted); display: block; margin-bottom: 0.35rem;">Target Discord Category ID (Optional)</label>
+            <input type="text" class="form-input tk-cat-channel" data-idx="${idx}" value="${escapeHtml(cat.category_channel_id || '')}" placeholder="Snowflake ID (e.g. 109876543210987654)" />
+          </div>
+
+          <div>
+            <label style="font-size: 0.78rem; font-weight: 700; color: var(--text-muted); display: block; margin-bottom: 0.35rem;">Staff / Support Role ID (Optional)</label>
+            <input type="text" class="form-input tk-cat-role" data-idx="${idx}" value="${escapeHtml(cat.staff_role_id || '')}" placeholder="Role Snowflake to ping & grant ticket access" />
+          </div>
+
+          <div>
+            <label style="font-size: 0.78rem; font-weight: 700; color: var(--text-muted); display: block; margin-bottom: 0.35rem;">Channel Naming Template</label>
+            <input type="text" class="form-input tk-cat-naming" data-idx="${idx}" value="${escapeHtml(cat.naming_format || 'ticket-{count}')}" placeholder="e.g. bug-{count}" />
+          </div>
+
+          <div style="grid-column: 1 / -1;">
+            <label style="font-size: 0.78rem; font-weight: 700; color: var(--text-muted); display: block; margin-bottom: 0.35rem;">Custom Ticket Greeting Message</label>
+            <textarea class="form-input tk-cat-welcome" data-idx="${idx}" rows="2" style="width: 100%; font-family: inherit; resize: vertical;" placeholder="Sent automatically inside the new ticket channel. Available variables: {user}, {server}, {category}">${escapeHtml(cat.welcome_message || '')}</textarea>
+          </div>
+        </div>
+      </div>
+    `).join('');
+
+    attachCategoryListeners();
+  }
+
+  function updateDiscordPreview() {
+    const previewMount = document.getElementById('tk-discord-preview');
+    if (!previewMount) return;
+
+    if (selectedPreviewIndex >= tk.categories.length) {
+      selectedPreviewIndex = Math.max(0, tk.categories.length - 1);
+    }
+
+    const currentCat = tk.categories[selectedPreviewIndex] || {
+      name: 'Select Category',
+      emoji: '🎫',
+      description: 'Choose a category to open a ticket'
+    };
+
+    previewMount.innerHTML = `
+      <div class="discord-msg-header">
+        <img src="/assets/logo.svg" alt="Kyoka Avatar" class="discord-bot-avatar" />
+        <div>
+          <div class="discord-bot-title-group">
+            <span class="discord-bot-username">Kyoka</span>
+            <span class="discord-app-badge">APP</span>
+            <span class="discord-timestamp">Today at 9:21 AM</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="discord-embed-card">
+        <div class="discord-embed-title">
+          <span>${escapeHtml(tk.panel_name || 'Kyoka Support Portal')}</span>
+        </div>
+        <div class="discord-embed-body">${escapeHtml(tk.panel_description || 'Select an inquiry category below or click Create Ticket to open a private channel with our staff team.\nAn authorized staff member will assist you shortly.')}</div>
+
+        <!-- Interactive Discord Select Component -->
+        <div class="discord-select-menu" id="tk-sim-select-btn" title="Click to cycle categories in preview">
+          <div style="display: flex; align-items: center; gap: 0.5rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">
+            <span style="font-size: 1.1rem;">${escapeHtml(currentCat.emoji || '🎫')}</span>
+            <span style="font-weight: 500; color: #F2F3F5;">${escapeHtml(currentCat.name || 'General Support')}</span>
+          </div>
+          <span style="color: #949BA4; font-size: 0.8rem; margin-left: 0.5rem;">▼</span>
+        </div>
+
+        <!-- Interactive Discord Create Ticket Button -->
+        <div>
+          <button class="discord-btn-primary" id="tk-sim-create-btn">
+            <span>${escapeHtml(tk.button_emoji || '🎫')}</span>
+            <span>${escapeHtml(tk.button_label || 'Create Ticket')}</span>
+          </button>
+        </div>
+      </div>
+    `;
+
+    document.getElementById('tk-sim-select-btn')?.addEventListener('click', () => {
+      selectedPreviewIndex = (selectedPreviewIndex + 1) % Math.max(1, tk.categories.length);
+      updateDiscordPreview();
+      soundFX?.playClick?.();
+    });
+
+    document.getElementById('tk-sim-create-btn')?.addEventListener('click', () => {
+      showToast(`Simulation: Opened ticket for [${currentCat.name}] in Discord!`, 'success');
+      soundFX?.playSuccess?.();
+    });
+  }
+
+  function attachGlobalListeners() {
+    document.getElementById('tk-enabled')?.addEventListener('change', (e) => {
+      tk.enabled = e.target.checked;
+      markChanged();
+    });
+
+    document.getElementById('tk-panel-name')?.addEventListener('input', (e) => {
+      tk.panel_name = e.target.value;
+      updateDiscordPreview();
+      markChanged();
+    });
+
+    document.getElementById('tk-panel-desc')?.addEventListener('input', (e) => {
+      tk.panel_description = e.target.value;
+      updateDiscordPreview();
+      markChanged();
+    });
+
+    document.getElementById('tk-btn-emoji')?.addEventListener('input', (e) => {
+      tk.button_emoji = e.target.value;
+      updateDiscordPreview();
+      markChanged();
+    });
+
+    document.getElementById('tk-btn-label')?.addEventListener('input', (e) => {
+      tk.button_label = e.target.value;
+      updateDiscordPreview();
+      markChanged();
+    });
+
+    document.getElementById('tk-log-channel')?.addEventListener('input', (e) => {
+      tk.log_channel_id = e.target.value.trim() || null;
+      markChanged();
+    });
+
+    const addCat = () => {
+      const newCatIndex = tk.categories.length + 1;
+      tk.categories.push({
+        id: `cat_${Date.now().toString(36)}`,
+        name: `Inquiry Category #${newCatIndex}`,
+        emoji: '📁',
+        description: 'New ticket routing category',
+        category_channel_id: '',
+        staff_role_id: '',
+        welcome_message: 'Welcome {user}! Staff will assist you shortly.',
+        naming_format: `ticket-${newCatIndex}-{count}`
+      });
+      markChanged();
+      renderCategoryCards();
+      selectedPreviewIndex = tk.categories.length - 1;
+      updateDiscordPreview();
+      showToast('New ticket category added! Fill in its details.', 'info');
+      soundFX?.playSuccess?.();
+    };
+
+    document.getElementById('tk-add-cat-btn-top')?.addEventListener('click', addCat);
+    document.getElementById('tk-add-cat-btn-bottom')?.addEventListener('click', addCat);
+  }
+
+  function attachCategoryListeners() {
+    document.querySelectorAll('.tk-cat-name').forEach((el) => {
+      el.addEventListener('input', (e) => {
+        const idx = parseInt(e.target.dataset.idx, 10);
+        if (tk.categories[idx]) {
+          tk.categories[idx].name = e.target.value;
+          updateDiscordPreview();
+          markChanged();
+        }
+      });
+    });
+
+    document.querySelectorAll('.tk-cat-emoji').forEach((el) => {
+      el.addEventListener('input', (e) => {
+        const idx = parseInt(e.target.dataset.idx, 10);
+        if (tk.categories[idx]) {
+          tk.categories[idx].emoji = e.target.value;
+          updateDiscordPreview();
+          markChanged();
+        }
+      });
+    });
+
+    document.querySelectorAll('.tk-cat-desc').forEach((el) => {
+      el.addEventListener('input', (e) => {
+        const idx = parseInt(e.target.dataset.idx, 10);
+        if (tk.categories[idx]) {
+          tk.categories[idx].description = e.target.value;
+          markChanged();
+        }
+      });
+    });
+
+    document.querySelectorAll('.tk-cat-channel').forEach((el) => {
+      el.addEventListener('input', (e) => {
+        const idx = parseInt(e.target.dataset.idx, 10);
+        if (tk.categories[idx]) {
+          tk.categories[idx].category_channel_id = e.target.value.trim() || '';
+          markChanged();
+        }
+      });
+    });
+
+    document.querySelectorAll('.tk-cat-role').forEach((el) => {
+      el.addEventListener('input', (e) => {
+        const idx = parseInt(e.target.dataset.idx, 10);
+        if (tk.categories[idx]) {
+          tk.categories[idx].staff_role_id = e.target.value.trim() || '';
+          markChanged();
+        }
+      });
+    });
+
+    document.querySelectorAll('.tk-cat-naming').forEach((el) => {
+      el.addEventListener('input', (e) => {
+        const idx = parseInt(e.target.dataset.idx, 10);
+        if (tk.categories[idx]) {
+          tk.categories[idx].naming_format = e.target.value.trim() || 'ticket-{count}';
+          markChanged();
+        }
+      });
+    });
+
+    document.querySelectorAll('.tk-cat-welcome').forEach((el) => {
+      el.addEventListener('input', (e) => {
+        const idx = parseInt(e.target.dataset.idx, 10);
+        if (tk.categories[idx]) {
+          tk.categories[idx].welcome_message = e.target.value;
+          markChanged();
+        }
+      });
+    });
+
+    document.querySelectorAll('.tk-delete-cat-btn').forEach((el) => {
+      el.addEventListener('click', (e) => {
+        const idx = parseInt(e.currentTarget.dataset.idx, 10);
+        if (tk.categories.length <= 1) {
+          showToast('You must keep at least one ticket category!', 'warning');
+          return;
+        }
+        const removed = tk.categories.splice(idx, 1);
+        markChanged();
+        renderCategoryCards();
+        selectedPreviewIndex = 0;
+        updateDiscordPreview();
+        showToast(`Removed category "${removed[0]?.name || ''}"`, 'info');
+      });
+    });
+  }
+
+  renderFullTicketsContent();
 }
 
 // G. Leveling & XP

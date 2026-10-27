@@ -528,6 +528,31 @@ class PostgresDatabaseAdapter(BaseDatabaseAdapter):
                     "active_tickets_count": int(active_tickets_count),
                 }
 
+                # Load custom ticket categories if configured
+                cat_rows = await conn.fetch(
+                    "SELECT name, emoji, description, staff_role_id, category_channel_id, welcome_message, naming_format FROM ticket_categories WHERE guild_id = $1 ORDER BY sort_order ASC;",
+                    guild_id
+                )
+                categories_list = []
+                for cr in cat_rows:
+                    categories_list.append({
+                        "name": cr["name"],
+                        "emoji": cr["emoji"] or "🎫",
+                        "description": cr["description"] or "",
+                        "staff_role_id": str(cr["staff_role_id"]) if cr["staff_role_id"] else None,
+                        "category_channel_id": str(cr["category_channel_id"]) if cr["category_channel_id"] else None,
+                        "welcome_message": cr["welcome_message"] or "",
+                        "naming_format": cr["naming_format"] or "ticket-{count}",
+                    })
+                if not categories_list:
+                    categories_list = [
+                        {"name": "General Support", "emoji": "🎫", "description": "General assistance and questions", "staff_role_id": None, "category_channel_id": None, "welcome_message": "Thank you for contacting support! Staff will assist you shortly.", "naming_format": "support-{count}"},
+                        {"name": "Bug Reports & Technical", "emoji": "🔧", "description": "Report glitches, bot errors, or technical bugs", "staff_role_id": None, "category_channel_id": None, "welcome_message": "Please describe the bug in detail and provide screenshots if possible.", "naming_format": "bug-{count}"},
+                        {"name": "Billing & Blox Fruits", "emoji": "💰", "description": "Service billing, orders, fruits & Robux payment", "staff_role_id": None, "category_channel_id": None, "welcome_message": "Welcome to billing! An agent will confirm your order and invoice shortly.", "naming_format": "billing-{count}"},
+                        {"name": "Player & Staff Reports", "emoji": "🚨", "description": "Report rule breakers or staff misconduct confidentially", "staff_role_id": None, "category_channel_id": None, "welcome_message": "This report is private and only visible to senior management.", "naming_format": "report-{count}"},
+                    ]
+                tickets["categories"] = categories_list
+
                 # 7. Leveling & XP
                 top_profiles = await conn.fetch(
                     "SELECT user_id, xp, level FROM user_profiles WHERE guild_id = $1 ORDER BY xp DESC LIMIT 5;",
@@ -980,6 +1005,37 @@ class PostgresDatabaseAdapter(BaseDatabaseAdapter):
                             """,
                             guild_id, panel_name, ch_id, cat_id, supp_role, log_ch, naming, btn_label, btn_emoji
                         )
+
+                    # Persist customized ticket categories
+                    if "categories" in tk and isinstance(tk["categories"], list):
+                        try:
+                            await conn.execute("DELETE FROM ticket_categories WHERE guild_id = $1;", guild_id)
+                            for idx, cat in enumerate(tk["categories"]):
+                                await conn.execute(
+                                    """
+                                    INSERT INTO ticket_categories (
+                                        guild_id, panel_name, name, emoji, description, staff_role_id,
+                                        category_channel_id, welcome_message, sort_order, is_active
+                                    ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, 1)
+                                    ON CONFLICT (guild_id, panel_name, name) DO UPDATE SET
+                                        emoji = EXCLUDED.emoji,
+                                        description = EXCLUDED.description,
+                                        staff_role_id = EXCLUDED.staff_role_id,
+                                        category_channel_id = EXCLUDED.category_channel_id,
+                                        welcome_message = EXCLUDED.welcome_message;
+                                    """,
+                                    guild_id,
+                                    tk.get("panel_name", "Support Tickets").lower(),
+                                    str(cat.get("name", "Support")).strip()[:64],
+                                    str(cat.get("emoji", "🎫")).strip()[:32],
+                                    str(cat.get("description", "")).strip()[:200],
+                                    int(cat["staff_role_id"]) if cat.get("staff_role_id") else None,
+                                    int(cat["category_channel_id"]) if cat.get("category_channel_id") else None,
+                                    str(cat.get("welcome_message", "")).strip()[:1000],
+                                    idx
+                                )
+                        except Exception as cat_err:
+                            logger.debug(f"Error persisting ticket categories: {cat_err}")
 
                 # 6. Update Music
                 if "music" in updates:
@@ -2226,6 +2282,12 @@ class MockDatabaseAdapter(BaseDatabaseAdapter):
                 "button_emoji": "🎫",
                 "total_tickets": 0,
                 "active_tickets_count": 0,
+                "categories": [
+                    {"name": "General Support", "emoji": "🎫", "description": "General assistance and questions", "staff_role_id": None, "category_channel_id": None, "welcome_message": "Thank you for contacting support! Staff will assist you shortly.", "naming_format": "support-{count}"},
+                    {"name": "Bug Reports & Technical", "emoji": "🔧", "description": "Report glitches, bot errors, or technical bugs", "staff_role_id": None, "category_channel_id": None, "welcome_message": "Please describe the bug in detail and provide screenshots if possible.", "naming_format": "bug-{count}"},
+                    {"name": "Billing & Blox Fruits", "emoji": "💰", "description": "Service billing, orders, fruits & Robux payment", "staff_role_id": None, "category_channel_id": None, "welcome_message": "Welcome to billing! An agent will confirm your order and invoice shortly.", "naming_format": "billing-{count}"},
+                    {"name": "Player & Staff Reports", "emoji": "🚨", "description": "Report rule breakers or staff misconduct confidentially", "staff_role_id": None, "category_channel_id": None, "welcome_message": "This report is private and only visible to senior management.", "naming_format": "report-{count}"},
+                ],
             },
             "leveling": {
                 "enabled": True,

@@ -1111,3 +1111,55 @@ nav, header, main, footer, .dashboard-wrapper, .section {
 .reduce-motion .eq-bar {
   animation: none !important;
 }
+
+/* ==========================================================================
+   Creator Signature Badge — Aizen (ruthupavan)
+   ========================================================================== */
+.creator-signature-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.6rem;
+  padding: 0.45rem 1.15rem;
+  background: linear-gradient(135deg, rgba(30, 14, 60, 0.85), rgba(15, 7, 30, 0.95));
+  border: 1px solid rgba(168, 85, 247, 0.4);
+  box-shadow: 0 0 16px rgba(124, 58, 237, 0.25), inset 0 0 10px rgba(168, 85, 247, 0.1);
+  border-radius: 9999px;
+  font-size: 0.82rem;
+  color: #E2E8F0;
+  text-decoration: none;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  letter-spacing: 0.02em;
+}
+
+.creator-signature-badge:hover {
+  border-color: #C084FC;
+  box-shadow: 0 0 24px rgba(168, 85, 247, 0.5), inset 0 0 14px rgba(168, 85, 247, 0.2);
+  transform: translateY(-1px);
+  color: #FFFFFF;
+}
+
+.creator-pulse-gem {
+  width: 8px;
+  height: 8px;
+  background: #A855F7;
+  border-radius: 50%;
+  box-shadow: 0 0 8px #C084FC;
+  animation: creatorGlowPulse 2s infinite ease-in-out;
+  flex-shrink: 0;
+}
+
+@keyframes creatorGlowPulse {
+  0%, 100% { opacity: 0.6; transform: scale(0.9); }
+  50% { opacity: 1; transform: scale(1.3); box-shadow: 0 0 14px #E879F9; }
+}
+
+.creator-name {
+  font-weight: 700;
+  color: #FFFFFF;
+}
+
+.creator-tag {
+  color: #C084FC;
+  font-weight: 600;
+}
+

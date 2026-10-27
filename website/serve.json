@@ -1,0 +1,19 @@
+{
+  "public": ".",
+  "cleanUrls": true,
+  "rewrites": [
+    { "source": "/", "destination": "/index.html" },
+    { "source": "/dashboard", "destination": "/dashboard.html" },
+    { "source": "/features", "destination": "/features.html" },
+    { "source": "/commands", "destination": "/commands.html" },
+    { "source": "/premium", "destination": "/premium.html" },
+    { "source": "/support", "destination": "/support.html" },
+    { "source": "/changelog", "destination": "/changelog.html" },
+    { "source": "/tickets", "destination": "/tickets.html" },
+    { "source": "/staff", "destination": "/staff.html" },
+    { "source": "/owner", "destination": "/owner.html" },
+    { "source": "/terms", "destination": "/terms.html" },
+    { "source": "/privacy", "destination": "/privacy.html" }
+  ],
+  "directoryListing": false
+}
