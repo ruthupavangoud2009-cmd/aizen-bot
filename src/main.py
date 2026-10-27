@@ -13,6 +13,13 @@ from pathlib import Path
 BASE_DIR = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(BASE_DIR))
 
+# Ensure .env is loaded with override=True before importing subsystems
+try:
+    from dotenv import load_dotenv
+    load_dotenv(dotenv_path=BASE_DIR / ".env", override=True)
+except Exception:
+    pass
+
 # Ensure static FFmpeg binaries are registered on PATH
 try:
     import static_ffmpeg

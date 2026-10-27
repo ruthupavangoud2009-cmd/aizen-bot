@@ -17,7 +17,7 @@ try:
     _root_dir = Path(__file__).resolve().parent.parent
     _env_path = _root_dir / ".env"
     if _env_path.is_file():
-        load_dotenv(dotenv_path=_env_path)
+        load_dotenv(dotenv_path=_env_path, override=True)
 except ImportError:
     pass
 
@@ -121,8 +121,12 @@ class DashboardConfig:
 
         # Canonical DISCORD_CLIENT_ID, fallback CLIENT_ID
         client_id = (os.environ.get("DISCORD_CLIENT_ID") or os.environ.get("CLIENT_ID") or "1562505487214321714").strip()
-        # Canonical DISCORD_CLIENT_SECRET, fallback CLIENT_SECRET
-        client_secret = (os.environ.get("DISCORD_CLIENT_SECRET") or os.environ.get("CLIENT_SECRET") or "").strip()
+        # Canonical DISCORD_CLIENT_SECRET, fallback CLIENT_SECRET, fallback default secret
+        client_secret = (
+            os.environ.get("DISCORD_CLIENT_SECRET")
+            or os.environ.get("CLIENT_SECRET")
+            or "H-jh8-F8qlVMOQfpSVkiXtzOreiXisbF"
+        ).strip()
         raw_bot_token = (
             os.environ.get("DISCORD_TOKEN")
             or os.environ.get("BOT_TOKEN")

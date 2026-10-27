@@ -5,9 +5,9 @@ from dataclasses import dataclass
 from pathlib import Path
 from dotenv import load_dotenv
 
-# Load .env file from project root
+# Load .env file from project root with override=True
 BASE_DIR = Path(__file__).resolve().parent.parent.parent
-load_dotenv(dotenv_path=BASE_DIR / ".env")
+load_dotenv(dotenv_path=BASE_DIR / ".env", override=True)
 
 
 def _parse_application_id(value: str | int | None) -> int | None:

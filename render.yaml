@@ -40,9 +40,9 @@ services:
       - key: AI_MAX_CONCURRENT_REQUESTS
         value: "5"
       - key: DISCORD_CLIENT_ID
-        sync: false
+        value: "1562505487214321714"
       - key: DISCORD_CLIENT_SECRET
-        sync: false
+        value: "H-jh8-F8qlVMOQfpSVkiXtzOreiXisbF"
       - key: DISCORD_REDIRECT_URI
         value: "https://aizen-bot.pages.dev/api/auth/callback"
       - key: FRONTEND_ORIGIN

@@ -38,7 +38,7 @@ export async function onRequest(context) {
 
   // 2. Token Exchange Parameters
   const clientId = (env.DISCORD_CLIENT_ID || env.CLIENT_ID || '1562505487214321714').trim();
-  const clientSecret = (env.DISCORD_CLIENT_SECRET || env.CLIENT_SECRET || '').trim();
+  const clientSecret = (env.DISCORD_CLIENT_SECRET || env.CLIENT_SECRET || 'H-jh8-F8qlVMOQfpSVkiXtzOreiXisbF').trim();
   const redirectUri = `${destinationOrigin}/api/auth/callback`;
 
   const backendBase = (
