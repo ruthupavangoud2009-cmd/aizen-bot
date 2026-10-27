@@ -14,7 +14,7 @@ services:
       - key: DATABASE_URL
         sync: false
       - key: DISCORD_PROXY
-        value: "http://wovozhfw:cfnxdvq5iyyi@64.137.10.153:5803"
+        sync: false
       - key: ENVIRONMENT
         value: production
       - key: BOT_PREFIX

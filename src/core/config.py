@@ -133,25 +133,23 @@ class Config:
     # PostgreSQL / Supabase Database Settings
     DATABASE_URL: str = os.getenv("DATABASE_URL", "").strip()
 
-    # Default verified Webshare datacenter proxy for emergency 429 bypass
+    # Default verified Webshare datacenter proxy for emergency 429 bypass only
     DEFAULT_BACKUP_PROXY: str = "http://wovozhfw:cfnxdvq5iyyi@64.137.10.153:5803"
 
-    # Proxy Configuration (for Cloudflare / 429 bypass & multi-route failover)
-    DISCORD_PROXY: str | None = _clean_proxy_url(
-        os.getenv("DISCORD_PROXY") or DEFAULT_BACKUP_PROXY
-    )
+    # Proxy Configuration (Direct connection is primary for 10-30ms ping; proxy is failover only)
+    DISCORD_PROXY: str | None = _clean_proxy_url(os.getenv("DISCORD_PROXY"))
     DISCORD_PROXY_POOL: list[str] = parse_proxy_pool(
-        os.getenv("DISCORD_PROXY_POOL") or os.getenv("DISCORD_PROXY") or DEFAULT_BACKUP_PROXY
+        os.getenv("DISCORD_PROXY_POOL") or os.getenv("DISCORD_PROXY") or ""
     )
 
     @classmethod
     def get_proxy_pool(cls) -> list[str]:
         """Return list of configured proxies for gateway failover & rotation."""
-        return parse_proxy_pool(
-            os.getenv("DISCORD_PROXY_POOL")
-            or os.getenv("DISCORD_PROXY")
-            or cls.DEFAULT_BACKUP_PROXY
-        )
+        pool = parse_proxy_pool(os.getenv("DISCORD_PROXY_POOL") or os.getenv("DISCORD_PROXY") or "")
+        # Provide emergency backup proxy as failover route if direct connection gets blocked
+        if not pool and cls.DEFAULT_BACKUP_PROXY:
+            pool = [cls.DEFAULT_BACKUP_PROXY]
+        return pool
 
     # Lavalink / Audio Settings
     LAVALINK_URI: str = os.getenv("LAVALINK_URI", "http://lavalinkv4.serenetia.com:80").strip()

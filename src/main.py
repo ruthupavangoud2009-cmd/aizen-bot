@@ -146,12 +146,12 @@ async def run_bot_loop() -> None:
             now = time.monotonic()
             proxy_pool = Config.get_proxy_pool()
 
-            # Assemble candidate routes: all configured proxies first, then direct connection
-            candidate_routes: list[str | None] = []
+            # Assemble candidate routes: DIRECT CONNECTION FIRST for lowest latency (10-30ms)
+            # Proxies are ONLY used as backup failover if direct connection is on 429 cooldown
+            candidate_routes: list[str | None] = [None]  # Direct connection is ALWAYS primary
             for p in proxy_pool:
-                if p not in candidate_routes:
+                if p and p not in candidate_routes:
                     candidate_routes.append(p)
-            candidate_routes.append(None)  # Direct connection is always an available option
 
             # Find candidates that are NOT currently on cooldown
             available_routes = [

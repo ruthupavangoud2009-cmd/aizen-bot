@@ -29,25 +29,25 @@ def test_parse_proxy_pool_deduplicates_and_ignores_empty():
 
 
 def test_instant_failover_logic_selects_unblocked_alternative():
-    """Simulate route failover: when active proxy hits 429, direct connection is selected instantly."""
+    """Simulate route failover: direct connection is primary for 10-30ms ping; on 429 it fails over to backup proxy."""
     route_cooldowns: dict[str, float] = {}
-    candidate_routes = ["http://proxy1:8080", None]  # proxy1 and direct
+    candidate_routes = [None, "http://proxy1:8080"]  # Direct is primary, proxy is backup
     now = time.monotonic()
 
-    # Initially, proxy1 is selected
+    # Initially, direct connection is selected for lowest ping
     available = [r for r in candidate_routes if route_cooldowns.get(r or "direct", 0.0) <= now]
-    assert available[0] == "http://proxy1:8080"
+    assert available[0] is None
 
-    # Simulate Discord 429 on proxy1 with 2854s cooldown
+    # Simulate Discord 429 on direct connection with 2854s cooldown
     penalty = 2854.0
-    route_cooldowns["http://proxy1:8080"] = now + penalty
+    route_cooldowns["direct"] = now + penalty
 
     # Check unblocked alternatives
     unblocked = [
         r for r in candidate_routes
-        if (r or "direct") != "http://proxy1:8080"
+        if (r or "direct") != "direct"
         and route_cooldowns.get(r or "direct", 0.0) <= now
     ]
-    # Direct connection is immediately available! No 2854s wait!
+    # Backup proxy is immediately available! No 2854s wait!
     assert len(unblocked) == 1
-    assert unblocked[0] is None
+    assert unblocked[0] == "http://proxy1:8080"
