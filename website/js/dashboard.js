@@ -520,8 +520,19 @@ function renderWorkspace(container, guild) {
           </button>
           ${iconHtml}
           <div class="guild-header-details">
-            <h3>${guildName}</h3>
-            <p>ID: ${guild ? guild.id : ''} • ${guild && guild.is_owner ? '👑 Server Owner' : '🛡️ Administrator'}</p>
+            <div style="display: flex; align-items: center; gap: 0.6rem; flex-wrap: wrap;">
+              <h3 style="margin: 0;">${guildName}</h3>
+              ${state.guilds && state.guilds.length > 1 ? `
+                <select id="header-guild-switcher" class="form-input" style="padding: 0.2rem 0.6rem; font-size: 0.78rem; height: auto; width: auto; border-radius: var(--radius-full); background: rgba(22, 11, 42, 0.85); border: 1px solid var(--border-active); color: var(--purple-pastel); cursor: pointer;" title="Quickly switch to another authorized Discord server">
+                  ${state.guilds.map(g => `
+                    <option value="${g.id}" ${g.id === (guild ? guild.id : '') ? 'selected' : ''}>
+                      ${g.name} ${g.bot_installed ? '✓' : '(Invite)'}
+                    </option>
+                  `).join('')}
+                </select>
+              ` : ''}
+            </div>
+            <p style="margin-top: 0.25rem;">ID: ${guild ? guild.id : ''} • ${guild && guild.is_owner ? '👑 Server Owner' : '🛡️ Administrator'}</p>
           </div>
         </div>
         <div style="display: flex; gap: 0.5rem; align-items: center; flex-wrap: wrap;">
@@ -535,6 +546,10 @@ function renderWorkspace(container, guild) {
               <span>Motion: ${isReducedMotion() ? 'OFF' : 'ON'}</span>
             </button>
           </div>
+          <button id="header-emergency-lockdown-btn" class="btn btn-outline btn-sm" style="border-color: rgba(239, 68, 68, 0.5); color: #F87171; display: inline-flex; align-items: center; gap: 0.35rem;" title="Toggle Emergency Server Panic Lockdown">
+            <span>🚨</span>
+            <span>Panic Lockdown</span>
+          </button>
           <button id="launch-wizard-header-btn" class="btn btn-outline btn-sm" style="border-color: var(--purple-primary); color: var(--purple-pastel);">
             ✨ Setup Wizard
           </button>
@@ -550,7 +565,11 @@ function renderWorkspace(container, guild) {
       <!-- Workspace Grid: 19 Tabs Sidebar + Main Content Area -->
       <div class="workspace-layout">
         <aside class="settings-tabs">
-          <div style="padding: 0.4rem 0.5rem 0.75rem;">
+          <div style="padding: 0.4rem 0.5rem 0.65rem;">
+            <div style="position: relative; margin-bottom: 0.5rem;">
+              <input type="text" id="tab-search-input" class="form-input" placeholder="🔍 Search 19 modules..." style="font-size: 0.8rem; padding: 0.4rem 1.6rem 0.4rem 0.65rem; background: rgba(10, 5, 22, 0.85); border: 1px solid var(--border-subtle); border-radius: var(--radius-sm); width: 100%; color: var(--text-main);" />
+              <button id="clear-tab-search-btn" style="position: absolute; right: 8px; top: 50%; transform: translateY(-50%); background: transparent; border: none; color: var(--text-dim); cursor: pointer; display: none; font-size: 0.75rem;" title="Clear Search">✕</button>
+            </div>
             <button id="sidebar-wizard-btn" class="btn btn-primary btn-sm" style="width: 100%; font-size: 0.8rem; background: linear-gradient(135deg, #7c3aed, #4c1d95); box-shadow: 0 0 12px rgba(124, 58, 237, 0.4);">
               ✨ Setup Wizard
             </button>
@@ -656,6 +675,96 @@ function renderWorkspace(container, guild) {
 
   document.getElementById('launch-wizard-header-btn')?.addEventListener('click', openWizardForCurrent);
   document.getElementById('sidebar-wizard-btn')?.addEventListener('click', openWizardForCurrent);
+
+  // Server Quick-Switcher Dropdown
+  document.getElementById('header-guild-switcher')?.addEventListener('change', async (e) => {
+    const targetGid = e.target.value;
+    if (targetGid && targetGid !== state.selectedGuildId) {
+      soundFX.playSound('click');
+      if (state.hasUnsavedChanges) {
+        if (!confirm('You have unsaved changes! Switch server without saving?')) {
+          e.target.value = state.selectedGuildId;
+          return;
+        }
+      }
+      await selectGuild(targetGid, container);
+    }
+  });
+
+  // Emergency Panic Lockdown Button
+  document.getElementById('header-emergency-lockdown-btn')?.addEventListener('click', async () => {
+    soundFX.playSound('click');
+    if (!state.currentSettings) return;
+    if (!state.currentSettings.security) state.currentSettings.security = {};
+    const isLocked = state.currentSettings.security.lockdown_enabled === true;
+    const confirmPrompt = isLocked
+      ? `🔓 UNLOCK SERVER: Are you sure you want to lift the emergency panic lockdown on ${guildName}?`
+      : `🚨 EMERGENCY SERVER PANIC LOCKDOWN\n\nAre you sure you want to arm panic lockdown on ${guildName}?\nThis revokes send message and connect permissions across public channels.`;
+
+    if (confirm(confirmPrompt)) {
+      state.currentSettings.security.lockdown_enabled = !isLocked;
+      markUnsaved();
+      soundFX.playSound('toggle');
+      showToast(
+        !isLocked
+          ? '🚨 Server Panic Lockdown ARMED! Click "Save Changes" to apply across Discord.'
+          : '✅ Panic Lockdown disarmed. Save changes to restore public channel access.',
+        !isLocked ? 'warning' : 'success'
+      );
+    }
+  });
+
+  // Tab Module Live Search Filter
+  const tabSearchInput = document.getElementById('tab-search-input');
+  const clearTabSearchBtn = document.getElementById('clear-tab-search-btn');
+  if (tabSearchInput) {
+    const tabButtons = container.querySelectorAll('.settings-tabs .tab-btn');
+    const categoryHeaders = container.querySelectorAll('.settings-tabs div[style*="uppercase"]');
+
+    const filterTabs = (query) => {
+      const q = (query || '').trim().toLowerCase();
+      if (clearTabSearchBtn) clearTabSearchBtn.style.display = q ? 'block' : 'none';
+      let matchCount = 0;
+      let firstMatchBtn = null;
+
+      tabButtons.forEach(btn => {
+        const text = btn.textContent.toLowerCase();
+        const tabKey = btn.getAttribute('data-tab') || '';
+        const matches = !q || text.includes(q) || tabKey.includes(q);
+        btn.style.display = matches ? 'flex' : 'none';
+        if (matches) {
+          matchCount++;
+          if (!firstMatchBtn) firstMatchBtn = btn;
+        }
+      });
+
+      categoryHeaders.forEach(hdr => {
+        hdr.style.display = q ? 'none' : 'block';
+      });
+
+      return { matchCount, firstMatchBtn };
+    };
+
+    tabSearchInput.addEventListener('input', (e) => filterTabs(e.target.value));
+    tabSearchInput.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') {
+        const { firstMatchBtn } = filterTabs(tabSearchInput.value);
+        if (firstMatchBtn) {
+          firstMatchBtn.click();
+          tabSearchInput.blur();
+        }
+      } else if (e.key === 'Escape') {
+        tabSearchInput.value = '';
+        filterTabs('');
+      }
+    });
+
+    clearTabSearchBtn?.addEventListener('click', () => {
+      tabSearchInput.value = '';
+      filterTabs('');
+      tabSearchInput.focus();
+    });
+  }
 
   // Sound FX and Reduced Motion Buttons
   const soundBtn = document.getElementById('toggle-sound-btn');
@@ -1499,7 +1608,12 @@ function renderWelcomeLeaveTab(panel, s) {
 
         <!-- Live Canvas Preview -->
         <div style="margin-top: 1.5rem;">
-          <label style="font-weight: 700; color: var(--purple-light); font-size: 0.85rem; text-transform: uppercase;">Live Graphic Card Preview (600x200)</label>
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem; flex-wrap: wrap; gap: 0.5rem;">
+            <label style="font-weight: 700; color: var(--purple-light); font-size: 0.85rem; text-transform: uppercase;">Live Graphic Card Preview (600x200)</label>
+            <button id="wl-download-card-btn" class="btn btn-outline btn-sm" style="font-size: 0.78rem; padding: 0.25rem 0.65rem;" title="Download Generated Welcome Card as PNG">
+              📥 Download Card (PNG)
+            </button>
+          </div>
           <div class="koya-canvas-wrapper">
             <canvas id="koya-welcome-canvas" width="600" height="200"></canvas>
           </div>
@@ -1507,6 +1621,17 @@ function renderWelcomeLeaveTab(panel, s) {
       `;
 
       drawWelcomeCanvas();
+
+      document.getElementById('wl-download-card-btn')?.addEventListener('click', () => {
+        soundFX.playSound('click');
+        const canvas = document.getElementById('koya-welcome-canvas');
+        if (!canvas) return;
+        const link = document.createElement('a');
+        link.download = `kyoka-welcome-card-${s.guild_id || 'server'}.png`;
+        link.href = canvas.toDataURL('image/png');
+        link.click();
+        showToast('Welcome card exported to PNG!', 'success');
+      });
 
       document.getElementById('wl-card-en')?.addEventListener('change', (e) => {
         wl.card_enabled = e.target.checked;

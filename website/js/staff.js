@@ -241,7 +241,21 @@ async function loadStaffRoster() {
 
   try {
     const res = await fetchStaffList();
-    const staff = res.staff || [];
+    let staff = res.staff || [];
+
+    // Merge with any locally saved staff cache
+    try {
+      const localStaff = JSON.parse(localStorage.getItem('kyoka_registered_staff') || '[]');
+      const map = new Map();
+      for (const s of staff) map.set(String(s.user_id), s);
+      for (const s of localStaff) {
+        if (s && s.user_id && !map.has(String(s.user_id))) {
+          map.set(String(s.user_id), s);
+        }
+      }
+      staff = Array.from(map.values());
+      localStorage.setItem('kyoka_registered_staff', JSON.stringify(staff));
+    } catch {}
 
     let html = `
       <table class="staff-table">
@@ -298,6 +312,12 @@ async function loadStaffRoster() {
           if (!confirm(`Are you sure you want to remove staff member ${uid}?`)) return;
           try {
             await manageStaff('remove', uid);
+            // Remove from local cache
+            try {
+              const localStaff = JSON.parse(localStorage.getItem('kyoka_registered_staff') || '[]');
+              const filtered = localStaff.filter(s => String(s.user_id) !== String(uid));
+              localStorage.setItem('kyoka_registered_staff', JSON.stringify(filtered));
+            } catch {}
             soundFX.playSound('click');
             showToast('Staff member removed successfully.', 'success');
             loadStaffRoster();
@@ -326,6 +346,20 @@ async function handleAddStaffSubmit(e) {
 
   try {
     await manageStaff('add', uid, name, role);
+
+    // Save to local cache
+    try {
+      const localStaff = JSON.parse(localStorage.getItem('kyoka_registered_staff') || '[]');
+      const existingIdx = localStaff.findIndex(s => String(s.user_id) === String(uid));
+      const entry = { user_id: uid, username: name, role_level: role, added_by: currentUser.user_id || 'Owner', added_at: new Date().toISOString() };
+      if (existingIdx >= 0) {
+        localStaff[existingIdx] = entry;
+      } else {
+        localStaff.push(entry);
+      }
+      localStorage.setItem('kyoka_registered_staff', JSON.stringify(localStaff));
+    } catch {}
+
     soundFX.playSound('success');
     showToast(`Added ${name} as ${role} staff!`, 'success');
     document.getElementById('add-staff-form')?.reset();

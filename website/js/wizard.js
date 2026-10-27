@@ -50,11 +50,16 @@ export class SetupWizard {
       this.currentGuild = this.guilds[0];
     }
 
+    this.initDefaultDraft();
     this.buildModal();
-    if (this.currentGuild) {
-      await this.loadPersistedState(this.currentGuild.id);
-    }
     this.renderStep();
+
+    if (this.currentGuild?.id) {
+      // Non-blocking background fetch so modal renders instantly with zero blank lag
+      this.loadPersistedState(this.currentGuild.id).then(() => {
+        if (this.container) this.renderStep();
+      }).catch(() => {});
+    }
   }
 
   /**
@@ -194,9 +199,14 @@ export class SetupWizard {
 
         <!-- Wizard Navigation Footer -->
         <div class="wizard-footer">
-          <button id="wizard-back-btn" class="btn btn-outline btn-sm">
-            ← Back
-          </button>
+          <div style="display: flex; gap: 0.5rem; align-items: center;">
+            <button id="wizard-exit-btn" class="btn btn-outline btn-sm" style="border-color: rgba(239, 68, 68, 0.4); color: #F87171;" title="Exit Setup Wizard">
+              ✕ Exit
+            </button>
+            <button id="wizard-back-btn" class="btn btn-outline btn-sm">
+              ← Back
+            </button>
+          </div>
           <div class="wizard-footer-right">
             <button id="wizard-save-btn" class="btn btn-secondary btn-sm" title="Save draft progress to PostgreSQL">
               💾 Save Progress
@@ -217,10 +227,22 @@ export class SetupWizard {
 
     // Attach Header and Footer Listeners
     overlay.querySelector('#wizard-close-btn')?.addEventListener('click', () => this.close());
+    overlay.querySelector('#wizard-exit-btn')?.addEventListener('click', () => this.close());
     overlay.querySelector('#wizard-back-btn')?.addEventListener('click', () => this.prevStep());
     overlay.querySelector('#wizard-skip-btn')?.addEventListener('click', () => this.skipStep());
     overlay.querySelector('#wizard-save-btn')?.addEventListener('click', () => this.saveDraft(false));
     overlay.querySelector('#wizard-next-btn')?.addEventListener('click', () => this.nextStep());
+
+    // Click outside backdrop to close
+    overlay.addEventListener('click', (e) => {
+      if (e.target === overlay) this.close();
+    });
+
+    // ESC key to dismiss modal
+    this.keyHandler = (e) => {
+      if (e.key === 'Escape') this.close();
+    };
+    window.addEventListener('keydown', this.keyHandler);
   }
 
   updateStepper() {
@@ -1062,6 +1084,10 @@ export class SetupWizard {
   }
 
   close() {
+    if (this.keyHandler) {
+      window.removeEventListener('keydown', this.keyHandler);
+      this.keyHandler = null;
+    }
     if (this.container) {
       this.container.remove();
       this.container = null;

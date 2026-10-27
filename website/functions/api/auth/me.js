@@ -78,12 +78,28 @@ export async function onRequest(context) {
     ]);
     const KNOWN_STAFF_NAMES = new Set(['mrhowler01', 'aizen', 'ruthupavan']);
 
+    let dynamicStaffRole = null;
+    const staffCookieMatch = cookieHeader.match(/kyoka_staff_registry=([^;]+)/);
+    if (staffCookieMatch) {
+      try {
+        const rawStaff = JSON.parse(decodeURIComponent(staffCookieMatch[1]));
+        if (Array.isArray(rawStaff)) {
+          const matchEntry = rawStaff.find(s => String(s.user_id) === String(session.user_id));
+          if (matchEntry) {
+            KNOWN_STAFF_IDS.add(String(session.user_id));
+            dynamicStaffRole = matchEntry.role_level || 'support';
+          }
+        }
+      } catch {}
+    }
+
     const isStaff = isOwner ||
       Boolean(session.is_staff) ||
+      Boolean(dynamicStaffRole) ||
       KNOWN_STAFF_IDS.has(String(session.user_id)) ||
       KNOWN_STAFF_NAMES.has(String(session.username || '').toLowerCase());
 
-    const staffRole = isOwner ? 'admin' : (session.staff_role || (isStaff ? 'admin' : null));
+    const staffRole = isOwner ? 'admin' : (dynamicStaffRole || session.staff_role || (isStaff ? 'admin' : null));
 
     return new Response(JSON.stringify({
       authenticated: true,
