@@ -415,6 +415,41 @@ class ServerConfig(commands.Cog):
             ephemeral=True,
         )
 
+    # ─── PREFIX COMMAND GROUP ────────────────────────────────────────────────
+
+    @commands.group(name="config", aliases=["cfg", "serverconfig"], invoke_without_command=True)
+    @commands.has_permissions(manage_guild=True)
+    async def prefix_config(self, ctx: commands.Context) -> None:
+        """KYOKA 3.0 Server and Giveaway Configuration Console via prefix."""
+        p = ctx.prefix
+        await ctx.send(
+            f"**Server Configuration Console**\n"
+            f"> `{p}config view` — Inspect current server giveaway and activity configurations\n"
+            f"> `{p}config channel <channel_type> <#channel>` — Bind channels (giveaway/announcement)\n"
+            f"> `{p}config roles <@role>` — Configure giveaway manager role\n"
+            f"> `{p}config reset [scope]` — Reset configurations to defaults"
+        )
+
+    @prefix_config.command(name="view")
+    @commands.has_permissions(manage_guild=True)
+    async def prefix_config_view(self, ctx: commands.Context) -> None:
+        gid = ctx.guild.id
+        row = await self.bot.db.fetch_one("SELECT * FROM server_giveaway_config WHERE guild_id = $1;", gid)
+        dot = self.bot.custom_emojis.get("heart_dot", "•")
+        container = KyokaContainer()
+        container.add_section(content=f"# **Server Configuration: {ctx.guild.name}**")
+        container.add_separator(divider=True)
+        gw_chan = f"<#{row['giveaway_channel_id']}>" if row and row.get("giveaway_channel_id") else "None"
+        mgr_role = f"<@&{row['manager_role_id']}>" if row and row.get("manager_role_id") else "Default (Staff)"
+        container.add_text(
+            f"**Giveaway Defaults**\n"
+            f"{dot} Default Channel: {gw_chan}\n"
+            f"{dot} Manager Role: {mgr_role}\n"
+        )
+        container.add_separator(divider=True)
+        container.add_text(f"-# {ctx.guild.name} Configuration")
+        await send_container_response(ctx, container)
+
 
 async def setup(bot: KyokaBot) -> None:
     await bot.add_cog(ServerConfig(bot))

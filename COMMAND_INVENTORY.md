@@ -1,68 +1,18 @@
 # KYŌKA 3.0 — COMMAND INVENTORY & SPECIFICATION
 
-## Official Documented Top-Level Slash Commands (Exactly 50)
+## Official Curated Top-Level Slash Commands (Exactly 60)
 
-KYOKA 3.0 exposes an official 50-command slash interface categorized into 4 command groups and 10 standalone commands:
+KYOKA 3.0 exposes an official, curated 60-command slash interface staying strictly under Discord's 100 global command limit, ensuring 100% reliable global command registration. **Every single command across the bot also supports standard prefix execution (`+`).**
 
-### 1. `/giveaway` Group (18 Subcommands)
-1. `/giveaway create` — Create and publish an interactive giveaway with rich options.
-2. `/giveaway quick` — Launch a giveaway with sensible default parameters.
-3. `/giveaway end` — Conclude an active giveaway early and pick winners now.
-4. `/giveaway cancel` — Cancel an active giveaway without drawing winners.
-5. `/giveaway pause` — Pause entries and freeze countdown for an active giveaway.
-6. `/giveaway resume` — Resume a paused giveaway with preserved duration.
-7. `/giveaway reroll` — Select replacement winners for unclaimed/ineligible prizes.
-8. `/giveaway edit` — Edit live giveaway settings (prize, winner count, description).
-9. `/giveaway list` — List active, scheduled, paused, and recent giveaways.
-10. `/giveaway info` — View detailed giveaway information and status.
-11. `/giveaway entries` — View participant count and authorized entry details.
-12. `/giveaway check` — Check a specific member's eligibility.
-13. `/giveaway exclude` — Administratively exclude a user with an audit reason.
-14. `/giveaway include` — Restore an excluded user to eligible status.
-15. `/giveaway remind` — Broadcast a reminder announcement for an ending giveaway.
-16. `/giveaway clone` — Clone an existing giveaway's configuration.
-17. `/giveaway export` — Export participant weights and entry breakdown to CSV.
-18. `/giveaway templates` — Save, load, list, or delete reusable giveaway templates.
+### Command Breakdown (60 Total):
+- **Core Groups (4)**: `/giveaway`, `/requirements`, `/config`, `/companion`
+- **System & Automation Groups (9)**: `/automod`, `/autorole`, `/boost`, `/embed`, `/leave`, `/purge`, `/sticky`, `/ticket`, `/welcome`
+- **Utility & Core Diagnostics (10)**: `/help`, `/ping`, `/botinfo`, `/serverinfo`, `/userinfo`, `/activity`, `/leaderboard`, `/auditlog`, `/diagnostics`, `/privacy`
+- **Moderation Essentials (14)**: `/ban`, `/unban`, `/kick`, `/warn`, `/warnings`, `/delwarn`, `/timeout`, `/unmute`, `/lock`, `/unlock`, `/slowmode`, `/modlog`, `/roleinfo`, `/channelinfo`
+- **Music Suite (10)**: `/play`, `/pause`, `/resume`, `/skip`, `/stop`, `/queue`, `/nowplaying`, `/volume`, `/join`, `/247`
+- **Community, Voice & Leveling (13)**: `/avatar`, `/banner`, `/membercount`, `/profile`, `/stats`, `/invite`, `/afk`, `/rank`, `/levels`, `/imagine`, `/aihelp`, `/invites`, `/j2c`
 
-### 2. `/requirements` Group (8 Subcommands)
-19. `/requirements add` — Attach eligibility requirements to a giveaway or server defaults.
-20. `/requirements remove` — Remove a configured eligibility requirement by ID.
-21. `/requirements list` — List all configured requirements for a giveaway or server.
-22. `/requirements test` — Test a member's eligibility against configured rules.
-23. `/requirements activity` — Configure daily or 7-day message volume requirements.
-24. `/requirements roles` — Configure required, permitted (any-of), or excluded roles.
-25. `/requirements tag` — Configure server clan tag verification (with capability check).
-26. `/requirements bonus` — Configure role-based bonus entries and multiplier stacking.
-
-### 3. `/config` Group (8 Subcommands)
-27. `/config view` — Inspect complete server giveaway and activity configurations.
-28. `/config channel` — Designate default giveaway and announcement channels.
-29. `/config roles` — Set custom giveaway manager role and staff exceptions.
-30. `/config permissions` — Configure management permissions and host access.
-31. `/config appearance` — Configure embed accent color, banner, and thumbnail.
-32. `/config notifications` — Configure winner DMs, claim deadlines, and reminder intervals.
-33. `/config activity` — Configure message tracking cooldowns and channel exclusions.
-34. `/config reset` — Reset selected server settings to defaults after confirmation.
-
-### 4. `/ai` Group (6 Subcommands)
-35. `/ai setup` — Configure AI personality, channel, tone, and rules for this server.
-36. `/ai personality` — Choose from 10 presets or configure a custom persona.
-37. `/ai test` — Preview AI conversational responses under current settings.
-38. `/ai reset` — Reset AI configuration to default after confirmation.
-39. `/ai enable` — Enable AI conversational responses in configured channels.
-40. `/ai disable` — Disable AI in specific channels or server-wide.
-
-### 5. Utility & Administration (10 Top-Level Commands)
-41. `/help` — Interactive command guide and category help.
-42. `/ping` — WebSocket latency, API heartbeat, and database query latency.
-43. `/botinfo` — Bot version, uptime, server count, and environment status.
-44. `/serverinfo` — Server statistics, owner, creation date, and feature toggles.
-45. `/userinfo` — Member details, join dates, roles, and avatar display.
-46. `/activity` — View requesting member's message statistics (today & 7 days).
-47. `/leaderboard` — Show server message activity leaderboard.
-48. `/auditlog` — View administrative giveaway and configuration audit trail.
-49. `/diagnostics` — System health: database pool, background workers, and gateway.
-50. `/privacy` — Privacy information, tracking opt-out, and right-to-be-forgotten erasure.
+All other commands across the bot (antinuke management, dev tools, deep music filters, custom branding, anime actions, translator, leveling admin, and server setup) operate smoothly as **prefix commands (`+`)**, providing over 360+ prefix commands with zero slash collision!
 
 ---
 
@@ -166,6 +116,32 @@ Legacy `+` prefix commands (`+gstart`, `+gend`, `+greroll`, `+glist`, `+ai`, `+p
 | `src/cogs/fun/ai_interactions.py` | `guesshostadd` | — | Owner-only: authorize a number-game host in this server. |
 | `src/cogs/fun/ai_interactions.py` | `guesshostremove` | — | Owner-only: remove a number-game host in this server. |
 | `src/cogs/fun/ai_interactions.py` | `guesshosts` | — | Owner-only: list authorized number-game hosts for this server. |
+| `src/cogs/fun/ai_voice.py` | `aivoice` | voiceai, aiv | Kyoka AI Voice Assistant Hub & Neural Voice Engine. |
+| `src/cogs/fun/ai_voice.py` | `talk` | converse, chatvc, livevc | Real-time 2-way human voice conversation in VC; AI listens and talks back like a real human. |
+| `src/cogs/fun/ai_voice.py` | `vibe` | persona, mood | Switch KYOKA's conversational personality and vibe in VC (Mastermind, Gamer, Chill, Tsundere, Cyber AI). |
+| `src/cogs/fun/ai_voice.py` | `sfx` | sound, soundboard | Trigger instant soundboard effects into your voice channel (boom, airhorn, levelup, laser, etc.). |
+| `src/cogs/fun/ai_voice.py` | `roast` | burn, diss | Deliver a savage, hilarious verbal roast in voice channel with dramatic bass drop. |
+| `src/cogs/fun/ai_voice.py` | `beatbox` | spitbars | KYOKA drops a sick vocal beatbox routine into the voice channel. |
+| `src/cogs/fun/ai_voice.py` | `trivia` | quiz | Host a live voice trivia challenge with countdown sound effects in VC. |
+| `src/cogs/fun/ai_voice.py` | `talkmode` | vcmode | Toggle between Open Mic (conversational) and Wake Word ('Kyoka'/'Aizen') mode. |
+| `src/cogs/fun/ai_voice.py` | `endtalk` | stoptalk, conclude | Conclude active voice conversation and generate dialogue log report. |
+| `src/cogs/fun/ai_voice.py` | `listen` | record, transcribe, meeting, startlisten | AI joins the voice channel, listens to conversation, and compiles live meeting notes. |
+| `src/cogs/fun/ai_voice.py` | `summary` | recap, summarize, notes | Conclude active voice session, call Gemini AI, and generate executive meeting summary & action items. |
+| `src/cogs/fun/ai_voice.py` | `stoplisten` | endlisten, cancelmeeting | Stop active listening session immediately. |
+| `src/cogs/fun/ai_voice.py` | `note` | addnote, task | Add a manual agenda note or action item to the live voice session. |
+| `src/cogs/fun/ai_voice.py` | `sessions` | history, pastsummaries | Browse historical voice meeting summaries for this server. |
+| `src/cogs/fun/ai_voice.py` | `session` | — | View a specific previous meeting summary by ID. |
+| `src/cogs/fun/ai_voice.py` | `vctalk` | talkvc, chatinvc, conversevc | Prefix shortcut to start real-time human voice conversation in user's VC. |
+| `src/cogs/fun/ai_voice.py` | `vcvibe` | voicevibe, moodvc, vibecheck | Prefix shortcut to switch conversational voice vibe. |
+| `src/cogs/fun/ai_voice.py` | `vcsfx` | soundboard, vcsound, playsfx | Prefix shortcut for voice soundboard effects. |
+| `src/cogs/fun/ai_voice.py` | `vcroast` | roastvc, vcburn | Prefix shortcut to deliver a savage verbal roast in voice channel. |
+| `src/cogs/fun/ai_voice.py` | `vcbeatbox` | beatboxvc, spitbarsvc | Prefix shortcut to drop a vocal beatbox routine in voice channel. |
+| `src/cogs/fun/ai_voice.py` | `vctrivia` | triviavc, quizvc | Prefix shortcut to host a live voice trivia challenge in voice channel. |
+| `src/cogs/fun/ai_voice.py` | `endvctalk` | stopvctalk, vctalkend | Prefix shortcut to end real-time voice conversation session. |
+| `src/cogs/fun/ai_voice.py` | `vclisten` | startlisten, recordvc | Prefix shortcut to start AI voice listening in the user's voice channel. |
+| `src/cogs/fun/ai_voice.py` | `vcsummary` | vcrecap, meetingsummary, vcnotes | Prefix shortcut to end voice listening and generate AI meeting report. |
+| `src/cogs/fun/ai_voice.py` | `vcnote` | vctask, meetingnote | Prefix shortcut to add a manual note to the active voice session. |
+| `src/cogs/fun/ai_voice.py` | `vcsessions` | vchistory | Prefix shortcut to view recent voice meeting summaries. |
 | `src/cogs/fun/fun.py` | `slap` | — | Aizen gives someone an anime-style slap. |
 | `src/cogs/fun/fun.py` | `hug` | — | Send someone a friendly anime hug. |
 | `src/cogs/fun/fun.py` | `pat` | — | Give someone a friendly head pat. |

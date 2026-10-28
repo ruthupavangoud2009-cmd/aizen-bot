@@ -75,7 +75,7 @@ class AntinukeWhitelistCog(commands.Cog):
         container.add_text(f"-# Requested by {ctx.author.display_name}")
         return container
 
-    @commands.hybrid_group(
+    @commands.group(
         name="whitelist",
         aliases=["wl"],
         description="Manage users or roles immune to antinuke triggers.",

@@ -114,7 +114,7 @@ class ListRoles(commands.Cog, name="Moderation-ListRoles"):
     def __init__(self, bot: KyokaBot) -> None:
         self.bot = bot
 
-    @commands.hybrid_command(
+    @commands.command(
         name="listroles",
         aliases=["roles", "rolelist"],
         description="Display all roles in this server sorted by hierarchy with member counts.",

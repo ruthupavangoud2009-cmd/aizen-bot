@@ -40,24 +40,24 @@ class AnalyticsAndDiagnostics(commands.Cog):
         self.bot = bot
 
     # 46. /activity
-    @app_commands.command(
+    @commands.hybrid_command(
         name="activity",
         description="View your or a member's message activity statistics in this server.",
     )
     @app_commands.describe(member="Member whose activity to inspect (defaults to yourself)")
     async def slash_activity(
         self,
-        interaction: discord.Interaction,
+        ctx: CustomContext,
         member: Optional[discord.Member] = None,
     ) -> None:
-        if not interaction.guild:
-            return await interaction.response.send_message("This command can only be used in a server.", ephemeral=True)
+        if not ctx.guild:
+            return await ctx.send("This command can only be used in a server.")
 
-        target = member or interaction.user
+        target = member or ctx.author
         if not isinstance(target, discord.Member):
-            return await interaction.response.send_message("Target must be a member in this server.", ephemeral=True)
+            return await ctx.send("Target must be a member in this server.")
 
-        stats = await self.bot.activity_mgr.get_user_activity(interaction.guild.id, target.id)
+        stats = await self.bot.activity_mgr.get_user_activity(ctx.guild.id, target.id)
         dot = self.bot.custom_emojis.get("heart_dot", "•")
 
         container = KyokaContainer()
@@ -68,7 +68,7 @@ class AnalyticsAndDiagnostics(commands.Cog):
             container.add_text(
                 f"🔒 **Privacy Opt-Out Active**\n"
                 f"> This member has opted out of activity tracking. No counts are tracked.\n"
-                f"-# Change privacy settings anytime using `/privacy`."
+                f"-# Change privacy settings anytime using `/privacy` or `+privacy`."
             )
         else:
             last_msg_str = (
@@ -87,12 +87,13 @@ class AnalyticsAndDiagnostics(commands.Cog):
 
         container.add_thumbnail(target.display_avatar.url)
         container.add_separator(divider=True)
-        container.add_text(f"-# {interaction.guild.name} • Message counts and timestamps only")
-        await send_container_response(interaction, container, ephemeral=True)
+        container.add_text(f"-# {ctx.guild.name} • Message counts and timestamps only")
+        await send_container_response(ctx, container, ephemeral=True)
 
     # 47. /leaderboard
-    @app_commands.command(
+    @commands.hybrid_command(
         name="leaderboard",
+        aliases=["activitylb", "actlb"],
         description="Show the server message activity leaderboard.",
     )
     @app_commands.describe(
@@ -108,20 +109,20 @@ class AnalyticsAndDiagnostics(commands.Cog):
     )
     async def slash_leaderboard(
         self,
-        interaction: discord.Interaction,
-        period: Optional[app_commands.Choice[str]] = None,
+        ctx: CustomContext,
+        period: Optional[str] = "weekly",
         limit: int = 10,
     ) -> None:
-        if not interaction.guild:
-            return await interaction.response.send_message("This command can only be used in a server.", ephemeral=True)
+        if not ctx.guild:
+            return await ctx.send("This command can only be used in a server.")
 
-        p_val = period.value if period else "weekly"
-        p_name = period.name if period else "Weekly (rolling 7 days)"
-        rows = await self.bot.activity_mgr.get_leaderboard(interaction.guild.id, period=p_val, limit=limit)
+        p_val = period if isinstance(period, str) else getattr(period, "value", "weekly")
+        p_name = "Today (calendar day)" if p_val == "today" else "Weekly (rolling 7 days)" if p_val == "weekly" else "All-Time Tracked"
+        rows = await self.bot.activity_mgr.get_leaderboard(ctx.guild.id, period=p_val, limit=limit)
         dot = self.bot.custom_emojis.get("heart_dot", "•")
 
         container = KyokaContainer()
-        container.add_section(content=f"# **Activity Leaderboard: {interaction.guild.name}**\n> Period: `{p_name}`")
+        container.add_section(content=f"# **Activity Leaderboard: {ctx.guild.name}**\n> Period: `{p_name}`")
         container.add_separator(divider=True)
 
         if not rows:
@@ -136,30 +137,30 @@ class AnalyticsAndDiagnostics(commands.Cog):
 
         container.add_separator(divider=True)
         container.add_text("-# Only qualifying messages are counted • Privacy opt-outs respected")
-        await send_container_response(interaction, container)
+        await send_container_response(ctx, container)
 
     # 48. /auditlog
-    @app_commands.command(
+    @commands.hybrid_command(
         name="auditlog",
         description="View authorized giveaway and configuration audit log events.",
     )
     @app_commands.describe(limit="Number of recent audit events to display (default: 15)")
     async def slash_auditlog(
         self,
-        interaction: discord.Interaction,
+        ctx: CustomContext,
         limit: int = 15,
     ) -> None:
-        if not interaction.guild:
-            return await interaction.response.send_message("This command can only be used in a server.", ephemeral=True)
+        if not ctx.guild:
+            return await ctx.send("This command can only be used in a server.")
 
-        if not await is_giveaway_authorized(self.bot, interaction.user, interaction.guild):
-            return await interaction.response.send_message("Not authorized to view administrative audit logs.", ephemeral=True)
+        if not await is_giveaway_authorized(self.bot, ctx.author, ctx.guild):
+            return await ctx.send("Not authorized to view administrative audit logs.")
 
-        logs = await self.bot.giveaway_mgr.get_audit_logs(interaction.guild.id, limit=limit)
+        logs = await self.bot.giveaway_mgr.get_audit_logs(ctx.guild.id, limit=limit)
         dot = self.bot.custom_emojis.get("heart_dot", "•")
 
         container = KyokaContainer()
-        container.add_section(content=f"# **Giveaway Audit Log: {interaction.guild.name}**")
+        container.add_section(content=f"# **Giveaway Audit Log: {ctx.guild.name}**")
         container.add_separator(divider=True)
 
         if not logs:
@@ -176,16 +177,18 @@ class AnalyticsAndDiagnostics(commands.Cog):
             container.add_text("\n\n".join(lines[:10]))
 
         container.add_separator(divider=True)
-        container.add_text(f"-# Restricted administrative audit records • {interaction.guild.name}")
-        await send_container_response(interaction, container, ephemeral=True)
+        container.add_text(f"-# Restricted administrative audit records • {ctx.guild.name}")
+        await send_container_response(ctx, container, ephemeral=True)
 
     # 49. /diagnostics
-    @app_commands.command(
+    @commands.hybrid_command(
         name="diagnostics",
+        aliases=["botdiagnostics"],
         description="Check KYOKA 3.0 database connectivity, background tasks, and health.",
     )
-    async def slash_diagnostics(self, interaction: discord.Interaction) -> None:
-        await interaction.response.defer(ephemeral=True)
+    async def slash_diagnostics(self, ctx: CustomContext) -> None:
+        if ctx.interaction:
+            await ctx.interaction.response.defer(ephemeral=True)
 
         # 1. Database Ping
         db_start = time.monotonic()
@@ -244,10 +247,10 @@ class AnalyticsAndDiagnostics(commands.Cog):
         )
         container.add_separator(divider=True)
         container.add_text("-# KYOKA 3.0 Production Diagnostics")
-        await send_container_response(interaction, container, ephemeral=True)
+        await send_container_response(ctx, container, ephemeral=True)
 
     # 50. /privacy
-    @app_commands.command(
+    @commands.hybrid_command(
         name="privacy",
         description="View message activity tracking policy, retention controls, or erase your data.",
     )
@@ -262,16 +265,16 @@ class AnalyticsAndDiagnostics(commands.Cog):
     )
     async def slash_privacy(
         self,
-        interaction: discord.Interaction,
-        action: Optional[app_commands.Choice[str]] = None,
+        ctx: CustomContext,
+        action: Optional[str] = "view",
     ) -> None:
-        act = action.value if action else "view"
-        uid = interaction.user.id
+        act = action if isinstance(action, str) else getattr(action, "value", "view")
+        uid = ctx.author.id
         dot = self.bot.custom_emojis.get("heart_dot", "•")
 
         if act == "opt_out":
             await self.bot.activity_mgr.set_opt_out(uid, True)
-            return await interaction.response.send_message(
+            return await ctx.send(
                 "🔒 **You have opted out of message activity tracking.**\n"
                 "> KYOKA will no longer count your messages for activity requirements or leaderboards.",
                 ephemeral=True,
@@ -279,7 +282,7 @@ class AnalyticsAndDiagnostics(commands.Cog):
 
         elif act == "opt_in":
             await self.bot.activity_mgr.set_opt_out(uid, False)
-            return await interaction.response.send_message(
+            return await ctx.send(
                 "✅ **You have opted in to message activity tracking.**\n"
                 "> Your future qualifying messages will be counted towards giveaway eligibility and leaderboards.",
                 ephemeral=True,
@@ -287,7 +290,7 @@ class AnalyticsAndDiagnostics(commands.Cog):
 
         elif act == "erase":
             await self.bot.activity_mgr.erase_user_data(uid)
-            return await interaction.response.send_message(
+            return await ctx.send(
                 "🗑️ **All your tracked message activity counts have been permanently deleted from KYOKA's database.**",
                 ephemeral=True,
             )
@@ -312,7 +315,7 @@ class AnalyticsAndDiagnostics(commands.Cog):
         )
         container.add_separator(divider=True)
         container.add_text(f"-# User ID: {uid} • Privacy Policy")
-        await send_container_response(interaction, container, ephemeral=True)
+        await send_container_response(ctx, container, ephemeral=True)
 
 
 async def setup(bot: KyokaBot) -> None:

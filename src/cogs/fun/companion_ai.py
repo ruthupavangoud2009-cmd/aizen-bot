@@ -961,9 +961,39 @@ class CompanionAI(commands.Cog):
         ctx = await self.bot.get_context(interaction)
         await self._handle_direct_response(ctx=ctx, persona_key="special", prompt=message)
 
-    @companion_group.command(name="clear", description="Clear your conversation memory.")
-    async def slash_companion_clear(self, interaction: discord.Interaction) -> None:
-        await self.slash_ai_reset(interaction)
+    # ─── PREFIX COMMAND GROUP ────────────────────────────────────────────────
+
+    @commands.group(name="companion", invoke_without_command=True)
+    async def prefix_companion(self, ctx: CustomContext) -> None:
+        """AI Companion System via prefix."""
+        p = ctx.prefix
+        await ctx.send(
+            f"**KYOKA AI Companions**\n"
+            f"> `{p}companion girlfriend <message>` — Chat with AI Girlfriend\n"
+            f"> `{p}companion baddie <message>` — Chat with AI Baddie\n"
+            f"> `{p}companion special <message>` — Chat with AI Special companion\n"
+            f"> `{p}companion clear` — Clear conversation memory"
+        )
+
+    @prefix_companion.command(name="girlfriend", aliases=["gf"])
+    async def prefix_gf(self, ctx: CustomContext, *, message: str) -> None:
+        await self._handle_direct_response(ctx=ctx, persona_key="girlfriend", prompt=message)
+
+    @prefix_companion.command(name="baddie")
+    async def prefix_baddie(self, ctx: CustomContext, *, message: str) -> None:
+        await self._handle_direct_response(ctx=ctx, persona_key="baddie", prompt=message)
+
+    @prefix_companion.command(name="special")
+    async def prefix_special(self, ctx: CustomContext, *, message: str) -> None:
+        authorized = await authorize_adult(ctx, action_name="aispecial")
+        if not authorized:
+            return
+        await self._handle_direct_response(ctx=ctx, persona_key="special", prompt=message)
+
+    @prefix_companion.command(name="clear", aliases=["reset"])
+    async def prefix_clear(self, ctx: CustomContext) -> None:
+        self.bot.ai_mgr.clear_user_history(ctx.author.id)
+        await ctx.send("🧹 Your conversation history with AI companions has been cleared.")
 
 
 async def setup(bot: KyokaBot) -> None:

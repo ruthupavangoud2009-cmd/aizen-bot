@@ -480,7 +480,7 @@ class ServerLogsCog(commands.Cog):
         container.add_text(f"-# Requested by {author_name}")
         return container
 
-    @commands.hybrid_group(
+    @commands.group(
         name="logs",
         aliases=["log", "serverlogs"],
         description="View and configure server audit logging channels.",

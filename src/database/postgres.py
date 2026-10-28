@@ -1304,6 +1304,25 @@ class PostgresDatabase(BaseDatabase):
                 created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
             );
             """,
+            """
+            CREATE TABLE IF NOT EXISTS guild_voice_summaries (
+                id SERIAL PRIMARY KEY,
+                guild_id BIGINT NOT NULL,
+                channel_id BIGINT NOT NULL,
+                channel_name TEXT,
+                started_by BIGINT NOT NULL,
+                started_by_name TEXT,
+                started_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
+                ended_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
+                duration_seconds INT DEFAULT 0,
+                speaker_count INT DEFAULT 0,
+                speakers JSONB DEFAULT '[]'::jsonb,
+                summary_text TEXT,
+                notes JSONB DEFAULT '[]'::jsonb,
+                created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
+            );
+            """,
+            "CREATE INDEX IF NOT EXISTS idx_voice_summaries_guild ON guild_voice_summaries(guild_id);",
             "CREATE INDEX IF NOT EXISTS idx_suggestions_guild ON guild_suggestions(guild_id);",
         ]
         if not self.pool or self.pool._closed:

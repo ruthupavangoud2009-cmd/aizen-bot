@@ -114,7 +114,7 @@ class Bots(commands.Cog, name="Moderation-Bots"):
     def __init__(self, bot: KyokaBot) -> None:
         self.bot = bot
 
-    @commands.hybrid_command(
+    @commands.command(
         name="bots",
         aliases=["botlist", "listbots"],
         description="Display all bot accounts integrated into this server.",

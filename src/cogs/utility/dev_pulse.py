@@ -908,16 +908,12 @@ class DevFeedCog(commands.Cog):
     # -------------------------------------------------------------------------
     # Single Unified Command: dev
     # -------------------------------------------------------------------------
-    @commands.hybrid_command(
+    @commands.command(
         name="dev",
         aliases=["devpulse", "opportunities", "bounties", "devjobs"],
         description="Autonomous Developer Opportunities & Career Dashboard.",
     )
     @commands.has_permissions(manage_guild=True)
-    @app_commands.default_permissions(manage_guild=True)
-    @app_commands.describe(
-        category="Optional category to fetch live right now (bounties, jobs, hackathons, perks, tools)"
-    )
     @commands.guild_only()
     async def dev(self, ctx: CustomContext, category: Optional[str] = None) -> None:
         """Unified Dev Dashboard: displays live controls, launches setup, or fetches live opportunities on demand."""

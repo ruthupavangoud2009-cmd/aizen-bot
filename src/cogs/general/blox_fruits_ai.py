@@ -311,12 +311,11 @@ class BloxFruitsAI(commands.Cog):
 
     # ─── 1. +bloxai <question> ───────────────────────────────────────────────
 
-    @commands.hybrid_command(
+    @commands.command(
         name="bloxai",
         aliases=["bfai", "askblox"],
         description="Ask the specialized Blox Fruits AI any question about the game.",
     )
-    @app_commands.describe(question="Your Blox Fruits question (fruits, awakenings, builds, sea events, etc.)")
     async def bloxai(self, ctx: commands.Context, *, question: str):
         """Ask the specialized Blox Fruits AI assistant any question."""
         rem = self._check_cooldown(ctx.author.id)
@@ -417,12 +416,11 @@ class BloxFruitsAI(commands.Cog):
 
     # ─── 2. +fruitinfo <fruit> ────────────────────────────────────────────────
 
-    @commands.hybrid_command(
+    @commands.command(
         name="fruitinfo",
         aliases=["finfo", "fruit"],
         description="View comprehensive statistics, moveset, and trade tier for any Blox Fruit.",
     )
-    @app_commands.describe(fruit="The name of the Blox Fruit (e.g. Kitsune, Dough, Buddha, Dragon)")
     async def fruitinfo(self, ctx: commands.Context, *, fruit: str):
         """Display detailed specifications and meta ratings for a Blox Fruit."""
         clean_name = fruit.lower().strip().replace("fruit", "").replace(" ", "").replace("-", "")
@@ -457,12 +455,11 @@ class BloxFruitsAI(commands.Cog):
 
     # ─── 3. +grindhelp <level> ───────────────────────────────────────────────
 
-    @commands.hybrid_command(
+    @commands.command(
         name="grindhelp",
         aliases=["levelhelp", "grindguide"],
         description="Find the optimal island, quest NPC, and strategy for your exact level (1 to 2600).",
     )
-    @app_commands.describe(level="Your current Blox Fruits level (e.g. 50, 750, 1600, 2400)")
     async def grindhelp(self, ctx: commands.Context, level: int):
         """Find the exact island, quest NPC, and advice for your current level."""
         if level < 1:
@@ -507,14 +504,10 @@ class BloxFruitsAI(commands.Cog):
 
     # ─── 4. +tradehelp <offer> for <target> ───────────────────────────────────
 
-    @commands.hybrid_command(
+    @commands.command(
         name="tradehelp",
         aliases=["tradecalc", "tradeeval"],
         description="Calculate trade fairness and profit between fruit offers (e.g. Kitsune for Dragon).",
-    )
-    @app_commands.describe(
-        offer="Fruits you are offering (e.g. 'Kitsune', 'Dough, Buddha')",
-        target="Fruits you are receiving (e.g. 'Dragon', 'Leopard, Mammoth')"
     )
     async def tradehelp(self, ctx: commands.Context, offer: str, target: str):
         """Evaluate a Blox Fruits trade offer (Win, Fair, or Lose)."""
@@ -589,12 +582,11 @@ class BloxFruitsAI(commands.Cog):
 
     # ─── 5. +buildhelp <goal> ────────────────────────────────────────────────
 
-    @commands.hybrid_command(
+    @commands.command(
         name="buildhelp",
         aliases=["bfbuild", "bestbuild"],
         description="Get optimal fruit, sword, gun, fighting style, race, and stats for your goal.",
     )
-    @app_commands.describe(goal="Your gameplay goal: 'pvp', 'grinding', or 'seabeast'")
     async def buildhelp(self, ctx: commands.Context, goal: str = "pvp"):
         """Display recommended meta builds for PvP, Grinding, or Sea Events."""
         g_clean = goal.lower().strip()

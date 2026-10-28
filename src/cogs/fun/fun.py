@@ -150,7 +150,7 @@ class Fun(commands.Cog):
         )
 
 
-    @commands.hybrid_command(
+    @commands.command(
         name="fuck",
         help="Playfully dominate someone in a suggestive anime couple interaction (consenting fictional roleplay, non-explicit).",
     )
@@ -892,40 +892,7 @@ class Fun(commands.Cog):
         dares = ["Describe your day using only three emojis.", "Give someone in the server a sincere compliment.", "Type your next message like a dramatic anime narrator.", "Share a song you never get tired of."]
         await ctx.send(f"🎭 **Dare:** {random.choice(dares)}")
 
-    @commands.hybrid_command(name="premium", help="View your personal and server premium subscription standing.")
-    async def premium(self, ctx: CustomContext):
-        prem_mgr = getattr(self.bot, "premium_mgr", None)
-        user_info = prem_mgr.get_user_info(ctx.author.id) if prem_mgr else {"is_premium": False, "tier": "Free", "remaining_str": "N/A"}
-        guild_info = prem_mgr.get_guild_info(ctx.guild.id) if prem_mgr and ctx.guild else {"is_premium": False, "tier": "Free", "remaining_str": "N/A"}
-
-        u_badge = "👑 Prime Active" if user_info.get("is_premium") else "Standard Free"
-        g_badge = "💎 Server Boosted" if guild_info.get("is_premium") else "Standard Free"
-
-        embed = discord.Embed(
-            title="💎 KYOKA 3.0 Prime & Premium Suite",
-            description="High-performance priority processing, unlimited AI presets, and premium canvas profiles.",
-            color=0x7C3AED,
-        )
-        embed.add_field(
-            name="Your Account Standing",
-            value=f"• Status: **{u_badge}**\n• Tier: `{user_info['tier']}`\n• Expiry: `{user_info['remaining_str']}`",
-            inline=False,
-        )
-        if ctx.guild:
-            embed.add_field(
-                name=f"Server Standing • {ctx.guild.name}",
-                value=f"• Status: **{g_badge}**\n• Tier: `{guild_info['tier']}`\n• Expiry: `{guild_info['remaining_str']}`",
-                inline=False,
-            )
-        embed.add_field(
-            name="Redeem License Key",
-            value=f"Have a key? Use `{ctx.prefix}redeem <key>` to activate instantly.",
-            inline=False,
-        )
-        embed.set_footer(text="KYOKA Studio • Powered by Aizen")
-        await ctx.send(embed=embed)
-
-    @commands.hybrid_command(name="redeem", help="Redeem a KYOKA license key for yourself or this server.")
+    @commands.command(name="redeem", help="Redeem a KYOKA license key for yourself or this server.")
     async def redeem(self, ctx: CustomContext, key: str, target: str = "guild"):
         prem_mgr = getattr(self.bot, "premium_mgr", None)
         if not prem_mgr:

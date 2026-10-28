@@ -202,21 +202,97 @@ class Sticky(commands.Cog):
 
         await interaction.response.send_message(embed=container.to_embed(), ephemeral=True)
 
-    @sticky_group.command(name="toggle", description="Pause or resume the sticky message in a channel")
-    @app_commands.describe(channel="The channel to toggle")
-    @app_commands.checks.has_permissions(manage_messages=True)
-    async def sticky_toggle(self, interaction: discord.Interaction, channel: discord.TextChannel) -> None:
-        """Pause or unpause sticky updates."""
-        if not self.bot.sticky_mgr.has_sticky(channel.id) and not self.bot.sticky_mgr.get_sticky(channel.id):
-            await interaction.response.send_message(f"No sticky message configured in {channel.mention}.", ephemeral=True)
-            return
+    # ─── PREFIX COMMAND GROUP ────────────────────────────────────────────────
 
+    @commands.group(name="sticky", invoke_without_command=True)
+    @commands.has_permissions(manage_messages=True)
+    async def prefix_sticky(self, ctx: commands.Context) -> None:
+        """Manage auto-pinned sticky messages in channels via prefix."""
+        prefix = ctx.prefix
+        await ctx.send(
+            f"**Sticky Message Manager**\n"
+            f"> `{prefix}sticky set <#channel> <message>` — Set a sticky notice\n"
+            f"> `{prefix}sticky remove <#channel>` — Remove sticky notice\n"
+            f"> `{prefix}sticky list` — List all server sticky notices\n"
+            f"> `{prefix}sticky toggle <#channel>` — Pause/resume sticky notice"
+        )
+
+    @prefix_sticky.command(name="set")
+    @commands.has_permissions(manage_messages=True)
+    async def prefix_sticky_set(
+        self,
+        ctx: commands.Context,
+        channel: discord.TextChannel,
+        *,
+        message: str,
+    ) -> None:
+        title = "📌 Pinned Notice"
+        perms = channel.permissions_for(ctx.guild.me)
+        if not perms.send_messages or not perms.embed_links:
+            return await ctx.send(f"I need `Send Messages` and `Embed Links` in {channel.mention}.")
+
+        await self.bot.sticky_mgr.set_sticky(
+            channel_id=channel.id,
+            guild_id=ctx.guild.id,
+            content=message.strip(),
+            embed_title=title,
+            created_by=ctx.author.id,
+        )
+
+        container = KyokaContainer(accent_color=None)
+        container.add_section(content=f"### {title}\n{message.strip()}")
+        try:
+            first_msg = await channel.send(embed=container.to_embed())
+            await self.bot.sticky_mgr.update_last_message_id(channel.id, first_msg.id)
+            self.bot.sticky_mgr.reset_debounce(channel.id)
+        except Exception:
+            pass
+
+        await ctx.send(f"✅ Sticky message set in {channel.mention}.")
+
+    @prefix_sticky.command(name="remove", aliases=["delete", "del"])
+    @commands.has_permissions(manage_messages=True)
+    async def prefix_sticky_remove(self, ctx: commands.Context, channel: discord.TextChannel) -> None:
+        sticky_data = self.bot.sticky_mgr.get_sticky(channel.id)
+        if not sticky_data:
+            return await ctx.send(f"No active sticky in {channel.mention}.")
+
+        old_msg_id = sticky_data.get("last_message_id")
+        if old_msg_id:
+            try:
+                old_msg = await channel.fetch_message(old_msg_id)
+                await old_msg.delete()
+            except Exception:
+                pass
+
+        await self.bot.sticky_mgr.remove_sticky(channel.id)
+        await ctx.send(f"✅ Sticky removed from {channel.mention}.")
+
+    @prefix_sticky.command(name="list")
+    @commands.has_permissions(manage_messages=True)
+    async def prefix_sticky_list(self, ctx: commands.Context) -> None:
+        stickies = self.bot.sticky_mgr.get_guild_stickies(ctx.guild.id)
+        if not stickies:
+            return await ctx.send("No active sticky messages in this server.")
+
+        container = KyokaContainer(accent_color=None)
+        container.add_section(content=f"### Active Server Sticky Notices ({len(stickies)})")
+        container.add_separator(divider=True)
+        for cid, data in stickies:
+            status = "Active" if data.get("is_enabled") else "Paused"
+            title = data.get("embed_title") or "Notice"
+            snippet = data["content"][:60] + "..." if len(data["content"]) > 60 else data["content"]
+            container.add_field(f"<#{cid}> • {title}", f"**Status**: {status}\n**Preview**: {snippet}", inline=False)
+        await ctx.send(embed=container.to_embed())
+
+    @prefix_sticky.command(name="toggle")
+    @commands.has_permissions(manage_messages=True)
+    async def prefix_sticky_toggle(self, ctx: commands.Context, channel: discord.TextChannel) -> None:
+        if not self.bot.sticky_mgr.has_sticky(channel.id) and not self.bot.sticky_mgr.get_sticky(channel.id):
+            return await ctx.send(f"No sticky message in {channel.mention}.")
         new_status = await self.bot.sticky_mgr.toggle_sticky(channel.id)
         status_word = "Resumed (Active)" if new_status else "Paused (Inactive)"
-        await interaction.response.send_message(
-            f"**Sticky Status**: Notice in {channel.mention} is now **{status_word}**.",
-            ephemeral=True,
-        )
+        await ctx.send(f"**Sticky Status**: Notice in {channel.mention} is now **{status_word}**.")
 
 
 async def setup(bot: KyokaBot) -> None:

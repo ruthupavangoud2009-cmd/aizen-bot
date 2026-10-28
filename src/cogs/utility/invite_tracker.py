@@ -385,7 +385,7 @@ class InviteTracker(commands.Cog):
         )
         await ctx.send(embed=embed)
 
-    @commands.hybrid_command(
+    @commands.command(
         name="inviteleaderboard",
         aliases=["invleaderboard", "invlb", "topinvites", "inviteslb"],
         description="View the competitive server invite leaderboard with interactive pagination.",
@@ -400,12 +400,11 @@ class InviteTracker(commands.Cog):
         embed = await view.build_embed()
         await ctx.send(embed=embed, view=view)
 
-    @commands.hybrid_command(
+    @commands.command(
         name="invitedlist",
         aliases=["invitelist", "whoinvited"],
         description="List members invited by you or another member.",
     )
-    @app_commands.describe(member="The member whose invited list you want to inspect.")
     async def invitedlist(self, ctx: CustomContext, member: discord.Member | None = None) -> None:
         """Display recent members invited by a user and their retention status."""
         if not ctx.guild:
@@ -442,13 +441,12 @@ class InviteTracker(commands.Cog):
     # ADMINISTRATIVE COMMANDS
     # ─────────────────────────────────────────────────────────────────────────────
 
-    @commands.hybrid_command(
+    @commands.command(
         name="addinvites",
         aliases=["bonusinvites"],
         description="Add bonus invites to a server member (Admin only).",
     )
     @commands.has_permissions(manage_guild=True)
-    @app_commands.describe(member="The member to reward bonus invites to.", amount="Number of bonus invites to grant.")
     async def addinvites(self, ctx: CustomContext, member: discord.Member, amount: int) -> None:
         """Grant bonus invites to a member."""
         if not ctx.guild:
@@ -470,13 +468,12 @@ class InviteTracker(commands.Cog):
         )
         await ctx.send(embed=embed)
 
-    @commands.hybrid_command(
+    @commands.command(
         name="removeinvites",
         aliases=["subinvites"],
         description="Remove bonus invites from a server member (Admin only).",
     )
     @commands.has_permissions(manage_guild=True)
-    @app_commands.describe(member="The member to deduct bonus invites from.", amount="Number of bonus invites to remove.")
     async def removeinvites(self, ctx: CustomContext, member: discord.Member, amount: int) -> None:
         """Deduct bonus invites from a member."""
         if not ctx.guild:
@@ -496,12 +493,11 @@ class InviteTracker(commands.Cog):
         )
         await ctx.send(embed=embed)
 
-    @commands.hybrid_command(
+    @commands.command(
         name="resetinvites",
         description="Reset invite statistics for a single member or the entire guild (Admin only).",
     )
     @commands.has_permissions(manage_guild=True)
-    @app_commands.describe(target="Specify '@member' to reset one user, or 'all' to reset all server invites.")
     async def resetinvites(self, ctx: CustomContext, target: str) -> None:
         """Reset invite stats for a member or clear the entire server invite registry."""
         if not ctx.guild:
@@ -555,13 +551,12 @@ class InviteTracker(commands.Cog):
             )
             await msg.edit(embed=cancel_embed, view=None)
 
-    @commands.hybrid_command(
+    @commands.command(
         name="setinvitechannel",
         aliases=["invitechannel", "invitelog"],
         description="Configure or disable the channel for real-time join/leave invite messages (Admin only).",
     )
     @commands.has_permissions(manage_guild=True)
-    @app_commands.describe(channel="The channel for invite join/leave logs, or leave empty to disable.")
     async def setinvitechannel(self, ctx: CustomContext, channel: discord.TextChannel | None = None) -> None:
         """Set or disable the channel where member join/leave invite messages are broadcast."""
         if not ctx.guild:
@@ -584,7 +579,7 @@ class InviteTracker(commands.Cog):
         )
         await ctx.send(embed=embed)
 
-    @commands.hybrid_command(
+    @commands.command(
         name="invitesettings",
         aliases=["invitetrackersettings"],
         description="View current invite tracer configuration for this server.",

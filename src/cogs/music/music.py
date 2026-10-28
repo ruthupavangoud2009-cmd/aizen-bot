@@ -538,12 +538,11 @@ class Music(commands.Cog):
                 pass
         await execute_play(self, ctx, query)
 
-    @commands.hybrid_command(
+    @commands.command(
         name="autoplay",
         aliases=["ap"],
         description="Toggle Smart Autoplay to play continuous radio based on played songs.",
     )
-    @app_commands.describe(state="Action: on, off, or toggle")
     async def autoplay(self, ctx: CustomContext, state: Optional[str] = "") -> None:
         """Toggle Autoplay mode."""
         await execute_autoplay(self, ctx, state or "")
@@ -738,7 +737,7 @@ class Music(commands.Cog):
             shuffle=False,
         )
 
-    @commands.hybrid_command(
+    @commands.command(
         name="likesongs",
         aliases=["favsongs", "likes", "favs", "favorites"],
         description="Play your saved Favorites playlist immediately into voice.",
@@ -975,7 +974,7 @@ class Music(commands.Cog):
                 logger.error(f"Error handling natural music query '{song_query}': {e}", exc_info=True)
 
 
-    @commands.hybrid_command(
+    @commands.command(
         name="musicdiag",
         aliases=["audiodiag", "mudiag"],
         description="Run real-time diagnostics on the music audio engine, Lavalink nodes, and voice gateway.",

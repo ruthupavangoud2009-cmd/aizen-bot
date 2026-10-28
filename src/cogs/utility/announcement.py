@@ -28,7 +28,7 @@ class Announcement(commands.Cog):
     def __init__(self, bot: KyokaBot) -> None:
         self.bot = bot
 
-    @commands.hybrid_command(
+    @commands.command(
         name="announce",
         description="Broadcast an announcement to a target channel.",
     )

@@ -52,7 +52,7 @@ class Prefix(commands.Cog, name="Admin-Prefix"):
             return False, "Prefix cannot contain mentions (@), channel tags (#), slash (/), backticks, or control characters."
         return True, ""
 
-    @commands.hybrid_command(
+    @commands.command(
         name="setprefix",
         description="Change the single active command prefix for this server.",
     )
@@ -111,7 +111,7 @@ class Prefix(commands.Cog, name="Admin-Prefix"):
             f"Guild {ctx.guild.id} prefix changed from '{old_prefix}' to '{clean_prefix}' by {ctx.author} ({ctx.author.id})"
         )
 
-    @commands.hybrid_command(
+    @commands.command(
         name="resetprefix",
         description="Reset this server's command prefix to default ('+').",
     )
@@ -151,7 +151,7 @@ class Prefix(commands.Cog, name="Admin-Prefix"):
         await ctx.send(embed=embed)
         logger.info(f"Guild {ctx.guild.id} prefix reset to '{default_p}' by {ctx.author} ({ctx.author.id})")
 
-    @commands.hybrid_command(
+    @commands.command(
         name="prefix",
         description="View the single active command prefix for this server.",
     )

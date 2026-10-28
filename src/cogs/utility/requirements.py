@@ -336,6 +336,56 @@ class Requirements(commands.Cog):
             ephemeral=True,
         )
 
+    # ─── PREFIX COMMAND GROUP ────────────────────────────────────────────────
+
+    @commands.group(name="requirements", aliases=["reqs", "requirement", "req"], invoke_without_command=True)
+    async def prefix_requirements(self, ctx: commands.Context) -> None:
+        """KYOKA 3.0 Giveaway Requirements & Bonus Multipliers via prefix."""
+        p = ctx.prefix
+        await ctx.send(
+            f"**Giveaway Requirements Console**\n"
+            f"> `{p}requirements list [giveaway_id]` — List configured requirements\n"
+            f"> `{p}requirements add <type> <value> [giveaway_id]` — Add a requirement\n"
+            f"> `{p}requirements remove <req_id>` — Delete requirement by ID\n"
+            f"> `{p}requirements test [@member] [giveaway_id]` — Test eligibility\n"
+            f"> `{p}requirements bonus <@role> <multiplier> [giveaway_id]` — Set role bonus"
+        )
+
+    @prefix_requirements.command(name="list")
+    async def prefix_req_list(self, ctx: commands.Context, giveaway_id: Optional[int] = None) -> None:
+        reqs = await self.bot.giveaway_mgr.get_requirements(ctx.guild.id, giveaway_id=giveaway_id)
+        if not reqs:
+            return await ctx.send("No requirements configured.")
+        lines = [f"`#{r['id']}` **{r['requirement_type']}**: `{r.get('requirement_value')}`" for r in reqs]
+        await ctx.send(f"**Configured Requirements:**\n" + "\n".join(lines))
+
+    @prefix_requirements.command(name="remove", aliases=["del", "rm"])
+    async def prefix_req_remove(self, ctx: commands.Context, req_id: int) -> None:
+        if not await is_giveaway_authorized(self.bot, ctx.author, ctx.guild):
+            return await ctx.send("Not authorized to manage requirements.")
+        ok = await self.bot.giveaway_mgr.remove_requirement(req_id, ctx.guild.id)
+        if ok:
+            await ctx.send(f"✅ Removed requirement `#{req_id}`.")
+        else:
+            await ctx.send(f"Requirement `#{req_id}` not found.")
+
+    @prefix_requirements.command(name="test")
+    async def prefix_req_test(self, ctx: commands.Context, member: Optional[discord.Member] = None, giveaway_id: Optional[int] = None) -> None:
+        target = member or ctx.author
+        eligible, reasons, weight = await self.bot.giveaway_mgr.evaluate_eligibility(target, giveaway_id=giveaway_id)
+        status = "Eligible ✅" if eligible else "Ineligible ❌"
+        msg = f"**Eligibility for {target.mention}:** {status} (Weight: `{weight}x`)"
+        if reasons:
+            msg += "\n" + "\n".join(f"> • {r}" for r in reasons)
+        await ctx.send(msg)
+
+    @prefix_requirements.command(name="bonus")
+    async def prefix_req_bonus(self, ctx: commands.Context, role: discord.Role, multiplier: float = 1.0, extra_entries: int = 0, giveaway_id: Optional[int] = None) -> None:
+        if not await is_giveaway_authorized(self.bot, ctx.author, ctx.guild):
+            return await ctx.send("Not authorized to configure bonus roles.")
+        bonus_id = await self.bot.giveaway_mgr.add_bonus_role(ctx.guild.id, role.id, multiplier=multiplier, extra_entries=extra_entries, giveaway_id=giveaway_id)
+        await ctx.send(f"✅ Configured bonus `#{bonus_id}`: {role.mention} -> `{multiplier:.1f}x` (+{extra_entries}).")
+
 
 async def setup(bot: KyokaBot) -> None:
     await bot.add_cog(Requirements(bot))

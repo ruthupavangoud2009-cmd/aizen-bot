@@ -67,62 +67,35 @@ class AnimeActions(commands.Cog):
             allowed_mentions=discord.AllowedMentions(users=targets, roles=False, everyone=False),
         )
 
-    # ─── SLASH INTERFACE FOR ANIME ACTIONS ───────────────────────────────────
+    # ─── PREFIX ANIME ACTIONS ────────────────────────────────────────────────
 
-    @app_commands.command(
-        name="act",
-        description="Perform an expressive anime reaction or action with high-quality GIFs.",
-    )
-    @app_commands.describe(
-        action="The anime action or reaction to perform",
-        member="Optional target member for the action",
-    )
-    @app_commands.choices(
-        action=[
-            app_commands.Choice(name="Punch 💥", value="punch"),
-            app_commands.Choice(name="Slap 🪭", value="slap"),
-            app_commands.Choice(name="Bonk 🔨", value="bonk"),
-            app_commands.Choice(name="Pat ✨", value="pat"),
-            app_commands.Choice(name="Poke 👉", value="poke"),
-            app_commands.Choice(name="Bite 🦷", value="bite"),
-            app_commands.Choice(name="Yeet 🚀", value="yeet"),
-            app_commands.Choice(name="Highfive 🙌", value="highfive"),
-            app_commands.Choice(name="Blast ⚡", value="blast"),
-            app_commands.Choice(name="Anime Kick 🥋", value="animekick"),
-            app_commands.Choice(name="Dance 💃", value="dance"),
-            app_commands.Choice(name="Cry 😭", value="cry"),
-            app_commands.Choice(name="Rage 💢", value="rage"),
-            app_commands.Choice(name="Stare 👁️", value="stare"),
-            app_commands.Choice(name="Wave 👋", value="wave"),
-            app_commands.Choice(name="Laugh 🤣", value="laugh"),
-            app_commands.Choice(name="Celebrate 🎉", value="celebrate"),
-            app_commands.Choice(name="Flex 💪", value="flex"),
-            app_commands.Choice(name="Vibe 🎧", value="vibe"),
-        ]
-    )
-    async def slash_act(
+    @commands.command(name="act", help="Perform an expressive anime reaction or action with high-quality GIFs. Usage: ?act <action> [@member]")
+    async def act(
         self,
-        interaction: discord.Interaction,
-        action: app_commands.Choice[str],
+        ctx: CustomContext,
+        action: str,
         member: Optional[discord.Member] = None,
     ) -> None:
-        """Slash command gateway to anime actions."""
-        action_val = action.value
+        """Prefix command gateway to anime actions."""
+        action_val = action.lower().strip()
         session = getattr(self.bot, "session", None)
         gif_url = await self.gif_mgr.get_action_gif(action_val, session=session)
 
         if member:
-            desc = f"✨ **{interaction.user.mention} performed {action.name} on {member.mention}!**"
+            desc = f"✨ **{ctx.author.mention} performed {action_val} on {member.mention}!**"
+            targets = [ctx.author, member]
         else:
-            desc = f"✨ **{interaction.user.mention} performed {action.name}!**"
+            desc = f"✨ **{ctx.author.mention} performed {action_val}!**"
+            targets = [ctx.author]
 
         embed = discord.Embed(description=desc, color=PURPLE)
         if gif_url:
             embed.set_image(url=gif_url)
 
-        await interaction.response.send_message(embed=embed)
-
-    # ─── PREFIX ANIME ACTIONS ────────────────────────────────────────────────
+        await ctx.send(
+            embed=embed,
+            allowed_mentions=discord.AllowedMentions(users=targets, roles=False, everyone=False),
+        )
 
     @commands.command(name="kill", help="Defeat someone in a fictional anime roleplay duel.")
     async def kill(self, ctx: CustomContext, member: discord.Member | None = None):

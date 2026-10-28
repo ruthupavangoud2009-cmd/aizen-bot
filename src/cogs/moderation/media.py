@@ -189,7 +189,7 @@ class MediaChannels(commands.Cog):
 
     # ─── COMMANDS ────────────────────────────────────────────────────────────
 
-    @commands.hybrid_group(
+    @commands.group(
         name="media",
         invoke_without_command=True,
         description="Configure and manage media-only channels in the server.",

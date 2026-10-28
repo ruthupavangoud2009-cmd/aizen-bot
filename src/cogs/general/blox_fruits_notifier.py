@@ -32,12 +32,11 @@ class BloxFruitsNotifier(commands.Cog, name="BloxFruitsNotifier"):
 
     # ─── REAL-TIME WEB VALUES COMMAND ──────────────────────────────────────────
 
-    @commands.hybrid_command(
+    @commands.command(
         name="fruitvalues",
         aliases=["fvalues", "fruitvalue", "fval", "tradevalues"],
         description="Fetch real-time web-backed Blox Fruits trading values, demand, and market trends.",
     )
-    @app_commands.describe(fruit="Name of the fruit to inspect (e.g. Kitsune, Dragon, Dough, Buddha, Portal)")
     async def fruitvalues(self, ctx: CustomContext, *, fruit: Optional[str] = None) -> None:
         """Inspect real-time trading values, demand score, and market trends."""
         prefix = self.bot.guild_mgr.get_prefix(ctx.guild.id if ctx.guild else None)

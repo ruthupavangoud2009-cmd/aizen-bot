@@ -33,7 +33,7 @@ class BotStaffCog(commands.Cog, name="Developer-BotStaff"):
     def __init__(self, bot: KyokaBot) -> None:
         self.bot = bot
 
-    @commands.hybrid_group(
+    @commands.group(
         name="botstaff",
         aliases=["bstaff", "staffbot"],
         invoke_without_command=True,

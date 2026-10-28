@@ -46,15 +46,6 @@ class Translator(commands.Cog):
 
     def __init__(self, bot: KyokaBot) -> None:
         self.bot = bot
-        # Context Menu Command registration
-        self.ctx_menu = app_commands.ContextMenu(
-            name="Translate Message",
-            callback=self._context_menu_translate,
-        )
-        self.bot.tree.add_command(self.ctx_menu)
-
-    async def cog_unload(self) -> None:
-        self.bot.tree.remove_command(self.ctx_menu.name, type=self.ctx_menu.type)
 
     # ─── REACTION LISTENER ───────────────────────────────────────────────────
 
@@ -164,39 +155,19 @@ class Translator(commands.Cog):
         view = ShareTranslationView(message.author, "English", translated_text)
         await interaction.followup.send(embed=container.to_embed(), view=view, ephemeral=True)
 
-    # ─── SLASH COMMANDS ───────────────────────────────────────────────────────
+    # ─── PREFIX COMMANDS ───────────────────────────────────────────────────────
 
-    @app_commands.command(name="translate", description="Translate any text into your chosen language")
-    @app_commands.describe(
-        text="The text or sentence you want to translate",
-        language="Target language to translate into",
-    )
-    @app_commands.choices(
-        language=[
-            app_commands.Choice(name="English", value="en"),
-            app_commands.Choice(name="Hindi", value="hi"),
-            app_commands.Choice(name="Spanish", value="es"),
-            app_commands.Choice(name="French", value="fr"),
-            app_commands.Choice(name="German", value="de"),
-            app_commands.Choice(name="Japanese", value="ja"),
-            app_commands.Choice(name="Russian", value="ru"),
-            app_commands.Choice(name="Chinese", value="zh-CN"),
-            app_commands.Choice(name="Arabic", value="ar"),
-            app_commands.Choice(name="Portuguese", value="pt"),
-            app_commands.Choice(name="Korean", value="ko"),
-        ]
-    )
+    @commands.command(name="translate", aliases=["tr"], help="Translate any text into your chosen language. Example: ?translate es Hello world")
     async def translate_command(
         self,
-        interaction: discord.Interaction,
+        ctx: commands.Context,
+        language: str,
+        *,
         text: str,
-        language: app_commands.Choice[str],
     ) -> None:
         """Translate text with rich KyokaContainer card."""
-        await interaction.response.defer()
-
-        target_code = language.value
-        target_name = language.name
+        target_code = language.lower().strip()
+        target_name = LANGUAGE_NAMES.get(target_code, target_code.upper())
 
         translated_text, detected_lang = await self.bot.translator_mgr.translate(text, target_code)
         detected_name = LANGUAGE_NAMES.get(detected_lang, detected_lang.upper())
@@ -210,48 +181,38 @@ class Translator(commands.Cog):
         )
         container.add_separator(divider=True)
         container.add_field("Original Language", detected_name, inline=True)
-        container.add_field("Requested By", interaction.user.mention, inline=True)
+        container.add_field("Requested By", ctx.author.mention, inline=True)
 
-        await interaction.followup.send(embed=container.to_embed())
+        await ctx.send(embed=container.to_embed())
 
-    @app_commands.command(name="translator-settings", description="Configure server translation settings")
-    @app_commands.describe(
-        enabled="Enable or disable the entire translation suite",
-        reactions="Enable or disable flag reaction translations",
-        delivery="How reaction translations are sent (ephemeral DM or public channel reply)",
-    )
-    @app_commands.choices(
-        delivery=[
-            app_commands.Choice(name="Private DM / Ephemeral", value="ephemeral"),
-            app_commands.Choice(name="Public Channel Reply", value="public"),
-        ]
-    )
-    @app_commands.checks.has_permissions(manage_guild=True)
+    @commands.command(name="translator-settings", aliases=["trsettings", "translatorsettings"], help="Configure server translation settings")
+    @commands.has_permissions(manage_guild=True)
     async def translator_settings(
         self,
-        interaction: discord.Interaction,
-        enabled: Optional[bool] = None,
-        reactions: Optional[bool] = None,
-        delivery: Optional[app_commands.Choice[str]] = None,
+        ctx: commands.Context,
+        setting: Optional[str] = None,
+        value: Optional[str] = None,
     ) -> None:
         """Admin configuration for server translation."""
-        if not interaction.guild:
+        if not ctx.guild:
             return
 
-        deliv_val = delivery.value if delivery else None
-        await self.bot.translator_mgr.update_settings(
-            guild_id=interaction.guild.id,
-            is_enabled=enabled,
-            reaction_enabled=reactions,
-            target_mode=deliv_val,
-        )
+        if setting and value:
+            s_low = setting.lower()
+            v_low = value.lower()
+            if s_low in ("enabled", "enable"):
+                await self.bot.translator_mgr.update_settings(guild_id=ctx.guild.id, is_enabled=(v_low in ("true", "1", "yes", "on")))
+            elif s_low in ("reactions", "reaction"):
+                await self.bot.translator_mgr.update_settings(guild_id=ctx.guild.id, reaction_enabled=(v_low in ("true", "1", "yes", "on")))
+            elif s_low in ("delivery", "mode"):
+                await self.bot.translator_mgr.update_settings(guild_id=ctx.guild.id, target_mode=v_low)
 
-        conf = self.bot.translator_mgr.get_settings(interaction.guild.id)
+        conf = self.bot.translator_mgr.get_settings(ctx.guild.id)
         container = KyokaContainer(accent_color=None)
         container.add_section(
             content=(
                 f"### Translator Settings Updated\n"
-                f"> Configuration for **{interaction.guild.name}** has been updated."
+                f"> Configuration for **{ctx.guild.name}**."
             )
         )
         container.add_separator(divider=True)
@@ -259,7 +220,7 @@ class Translator(commands.Cog):
         container.add_field("Flag Reactions", "Active" if conf["reaction_enabled"] else "Inactive", inline=True)
         container.add_field("Delivery Mode", conf["target_mode"].capitalize(), inline=True)
 
-        await interaction.response.send_message(embed=container.to_embed(), ephemeral=True)
+        await ctx.send(embed=container.to_embed())
 
 
 async def setup(bot: KyokaBot) -> None:

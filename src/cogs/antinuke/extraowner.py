@@ -37,7 +37,7 @@ class AntinukeExtraOwnerCog(commands.Cog):
         container.add_text(f"-# Requested by {ctx.author.display_name}")
         return container
 
-    @commands.hybrid_group(
+    @commands.group(
         name="extraowner",
         aliases=["eo"],
         description="Manage Extra Owners who can configure Antinuke and bypass triggers.",

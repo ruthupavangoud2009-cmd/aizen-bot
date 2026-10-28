@@ -66,7 +66,7 @@ class Branding(commands.Cog, name="Admin-Branding"):
             return True
         return False
 
-    @commands.hybrid_group(
+    @commands.group(
         name="setbot",
         aliases=["botedit", "botbrand", "serverbot"],
         invoke_without_command=True,

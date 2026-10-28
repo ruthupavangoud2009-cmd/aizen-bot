@@ -110,7 +110,7 @@ class ServerAvatar(commands.Cog, name="General-ServerAvatar"):
 
     # ── FREE TIER: SERVER ICON & BANNER VIEWERS ──
 
-    @commands.hybrid_group(
+    @commands.group(
         name="server",
         invoke_without_command=True,
         description="Display server media and branding assets.",

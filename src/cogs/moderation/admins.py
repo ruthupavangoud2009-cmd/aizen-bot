@@ -119,7 +119,7 @@ class Admins(commands.Cog, name="Moderation-Admins"):
     def __init__(self, bot: KyokaBot) -> None:
         self.bot = bot
 
-    @commands.hybrid_command(
+    @commands.command(
         name="admins",
         aliases=["adminroles", "listadmins", "adminlist"],
         description="Audit and list all members holding Administrator permissions.",

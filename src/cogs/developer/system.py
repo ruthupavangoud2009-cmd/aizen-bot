@@ -143,7 +143,7 @@ class SystemCog(commands.Cog, name="Developer-System"):
         container.add_text(f"-# pid {pid} • {t_dur:.2f}ms telemetry")
         await send_container_response(ctx, container)
 
-    @commands.command(name="diag", aliases=["diagnostics"])
+    @commands.command(name="diag", aliases=["sysdiag", "hostdiag"])
     @is_owner()
     async def diagnostics(self, ctx: CustomContext) -> None:
         """

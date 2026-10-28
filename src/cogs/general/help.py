@@ -1473,7 +1473,7 @@ class Help(commands.Cog):
         else:
             view.message = msg
 
-    @commands.hybrid_command(
+    @commands.command(
         name="premium",
         aliases=["plan", "tier", "subscription", "perks"],
         description="View this server's subscription plan, expiry, and Free vs Premium feature matrix.",
@@ -1760,7 +1760,7 @@ class Help(commands.Cog):
             )
         return self.build_hca_index_embed(ctx, all_categories)
 
-    @commands.hybrid_command(
+    @commands.command(
         name="hca",
         aliases=["archive", "allcommands", "directory", "cmds"],
         description="Public all-commands directory and architecture archive for Kyoka 3.0.",
@@ -1861,7 +1861,7 @@ class Help(commands.Cog):
         else:
             view.message = msg
 
-    @commands.hybrid_command(
+    @commands.command(
         name="helpdiag",
         aliases=["categorydiag", "cmdstatus"],
         description="Run comprehensive category classification & command tree diagnostics.",

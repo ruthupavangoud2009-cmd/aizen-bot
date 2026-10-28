@@ -117,7 +117,7 @@ class Mods(commands.Cog, name="Moderation-Mods"):
     def __init__(self, bot: KyokaBot) -> None:
         self.bot = bot
 
-    @commands.hybrid_command(
+    @commands.command(
         name="mods",
         aliases=["listmods", "staff", "modlist"],
         description="List all active staff and moderators possessing moderation privileges.",

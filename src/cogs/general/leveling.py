@@ -166,13 +166,12 @@ class Leveling(commands.Cog, name="General-Leveling"):
             container.add_text("-# Earn XP by actively chatting in server text channels")
         await send_container_response(ctx, container)
 
-    @commands.hybrid_command(
+    @commands.command(
         name="levelenable",
         aliases=["enableleveling", "enablelevels"],
         description="Enable automatic XP progression and leveling in this server (Admins only).",
     )
     @commands.has_permissions(manage_guild=True)
-    @app_commands.describe(announce="Whether to send congratulations messages when members level up (default: False)")
     async def level_enable(self, ctx: CustomContext, announce: bool = False) -> None:
         """Enable leveling for this server independently."""
         if not ctx.guild:
@@ -199,7 +198,7 @@ class Leveling(commands.Cog, name="General-Leveling"):
         container.add_text("-# Leveling settings are independent per server. Only this server was updated.")
         await send_container_response(ctx, container)
 
-    @commands.hybrid_command(
+    @commands.command(
         name="leveldisable",
         aliases=["disableleveling", "disablelevels"],
         description="Disable automatic XP progression and leveling in this server (Admins only).",
@@ -230,16 +229,12 @@ class Leveling(commands.Cog, name="General-Leveling"):
         container.add_text("-# Leveling settings are independent per server. Only this server was updated.")
         await send_container_response(ctx, container)
 
-    @commands.hybrid_command(
+    @commands.command(
         name="levelconfig",
         aliases=["leveling", "levelsconfig"],
         description="Configure XP progression settings for this server (Admins only).",
     )
     @commands.has_permissions(manage_guild=True)
-    @app_commands.describe(
-        enabled="Enable or disable XP progression in this server",
-        announce="Announce level up messages",
-    )
     async def level_config(
         self,
         ctx: CustomContext,

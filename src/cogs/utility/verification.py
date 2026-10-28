@@ -333,11 +333,11 @@ class Verification(commands.Cog):
 
     # ─── VERIFICATION COMMANDS (PREFIX + SLASH) ──────────────────────────────
 
-    @commands.hybrid_group(
+    @commands.group(
         name="verify",
         aliases=["verification"],
         description="Configure and manage the KYOKA Discord server verification system.",
-        fallback="hub",
+        invoke_without_command=True,
     )
     async def verify_group(self, ctx: CustomContext) -> None:
         """Display verification status and commands overview."""

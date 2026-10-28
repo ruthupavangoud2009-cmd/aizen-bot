@@ -377,7 +377,7 @@ class AntinukePanelCog(commands.Cog):
             return True
         raise commands.CheckFailure("Only the **Server Owner** or authorized **Extra Owners** can configure Antinuke.")
 
-    @commands.hybrid_group(
+    @commands.group(
         name="antinuke",
         aliases=["security", "an"],
         description="Open the Antinuke setup for your server.",

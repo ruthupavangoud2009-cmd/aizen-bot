@@ -1000,13 +1000,12 @@ class TechFeedCog(commands.Cog):
     # -------------------------------------------------------------------------
     # Unified Command: tech
     # -------------------------------------------------------------------------
-    @commands.hybrid_command(
+    @commands.command(
         name="tech",
         aliases=["technews", "techfeed"],
         description="Autonomous Tech Intelligence terminal & feed dashboard.",
     )
     @commands.has_permissions(manage_guild=True)
-    @app_commands.default_permissions(manage_guild=True)
     @commands.guild_only()
     async def tech(self, ctx: CustomContext) -> None:
         """Unified Tech Dashboard: displays live controls if configured, or launches setup if not set."""

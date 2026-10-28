@@ -527,7 +527,7 @@ class IdentityCog(commands.Cog, name="Developer-Identity"):
         """Shortcut command for ?botedit name"""
         await self.edit_name(ctx, new_name=new_name)
 
-    @commands.command(name="setstatus", aliases=["activity", "changestatus"], hidden=True)
+    @commands.command(name="setstatus", aliases=["botstatus", "changestatus"], hidden=True)
     @is_owner()
     async def set_status_cmd(self, ctx: CustomContext, *, new_status: str) -> None:
         """Shortcut command for ?botedit status"""
