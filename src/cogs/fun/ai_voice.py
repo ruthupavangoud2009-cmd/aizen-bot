@@ -10,6 +10,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import os
+import random
 import shutil
 import sys
 import io
@@ -1448,7 +1449,16 @@ class AIVoice(commands.Cog, name="AIVoice"):
             except Exception:
                 pass
 
-    # ─── STANDALONE PREFIX SHORTCUTS ─────────────────────────────────────────
+    # ─── THE ULTIMATE VOICE AGENT & PREFIX SHORTCUTS ─────────────────────────
+
+    @commands.command(
+        name="voiceagent",
+        aliases=["va", "talk", "agent", "call", "voicechat"],
+        help="The Ultimate AI Voice Agent: joins voice channel and converses in real-time like a human.",
+    )
+    async def cmd_voiceagent(self, ctx: CustomContext, vibe: str = "mastermind") -> None:
+        """Launch the Ultimate AI Voice Agent in your voice channel with real-time 2-way conversation."""
+        await self.voice_talk(ctx, mode=vibe)
 
     @commands.command(name="vctalk", aliases=["talkvc", "chatinvc", "conversevc"], help="AI joins voice channel to listen and converse in real-time like a human.")
     async def cmd_vctalk(self, ctx: CustomContext, mode: str = "open") -> None:
@@ -1457,6 +1467,29 @@ class AIVoice(commands.Cog, name="AIVoice"):
     @commands.command(name="endvctalk", aliases=["stopvctalk", "vctalkend"], help="End real-time voice conversation session.")
     async def cmd_endvctalk(self, ctx: CustomContext) -> None:
         await self.voice_endtalk(ctx)
+
+    @commands.command(
+        name="vcleave",
+        aliases=["leavevc", "vcdisconnect", "bye"],
+        help="Voice Agent says goodbye and disconnects from the voice channel.",
+    )
+    async def cmd_vcleave(self, ctx: CustomContext) -> None:
+        """Conclude voice session and leave channel with spoken farewell."""
+        if not ctx.guild:
+            return
+        if self.conv_mgr.is_active(ctx.guild.id):
+            await self.end_conversation_session(ctx.guild, ctx.channel, trigger_user=ctx.author, summarize=True)
+        else:
+            await self.voice_leave(ctx)
+
+    @commands.command(
+        name="vcask",
+        aliases=["askvc", "voiceask", "voicesearch"],
+        help="Ask the Voice Agent a question and hear the spoken answer in your voice channel.",
+    )
+    async def cmd_vcask(self, ctx: CustomContext, *, question: str) -> None:
+        """Ask question and have Voice Agent reply out loud in voice channel."""
+        await self.voice_ask(ctx, question=question)
 
     @commands.command(name="vcsfx", aliases=["soundboard", "vcsound", "playsfx"], help="Trigger soundboard effects into voice channel.")
     async def cmd_vcsfx(self, ctx: CustomContext, sound_name: Optional[str] = None) -> None:
@@ -1478,6 +1511,140 @@ class AIVoice(commands.Cog, name="AIVoice"):
     async def cmd_vctrivia(self, ctx: CustomContext) -> None:
         await self.voice_trivia(ctx)
 
+    @commands.command(
+        name="vc20q",
+        aliases=["20questions", "guesswho", "vcguess"],
+        help="The Voice Agent chooses a secret subject and plays 20 Questions aloud with the voice call.",
+    )
+    async def cmd_vc20q(self, ctx: CustomContext) -> None:
+        """Start a game of 20 Questions in the voice channel."""
+        if not ctx.guild:
+            return
+        vc = ctx.guild.voice_client
+        if not _is_vc_connected(vc):
+            return await ctx.send_error("KYOKA must be connected to voice first! Use `+talk` or `+aivoice join`.")
+
+        subjects = [
+            ("Goku from Dragon Ball", "anime character"),
+            ("Sosuke Aizen from Bleach", "anime villain"),
+            ("Steve from Minecraft", "video game character"),
+            ("Monkey D. Luffy from One Piece", "pirate anime character"),
+            ("Pikachu from Pokemon", "electric mouse Pokemon"),
+            ("Batman", "superhero from Gotham"),
+            ("Kitsune Fruit from Blox Fruits", "legendary mythical fruit"),
+            ("Johnny Silverhand from Cyberpunk", "rockerboy rebel"),
+            ("Albert Einstein", "historical physicist"),
+            ("A Golden Apple in Minecraft", "healing video game food"),
+        ]
+        target_name, category = random.choice(subjects)
+
+        spoken_announcement = (
+            f"Voice 20 Questions is now active! I have selected a secret {category}. "
+            f"Everyone in the voice channel, ask me yes or no questions on your mic or in chat to deduce my identity. You have 20 questions... begin!"
+        )
+
+        voice_id = self._get_voice_id(ctx.guild.id)
+        temp_fd, temp_path = tempfile.mkstemp(suffix=".mp3")
+        os.close(temp_fd)
+
+        async with ctx.typing():
+            success = await self._synthesize_audio(spoken_announcement, voice_id, temp_path)
+            if not success or not os.path.exists(temp_path):
+                return await ctx.send_error("Failed to synthesize voice game announcement.")
+
+        chime_sfx = self.conv_mgr.sfx_engine.get_sfx_path("chime")
+        lock = self._get_lock(ctx.guild.id)
+        async with lock:
+            try:
+                if chime_sfx:
+                    await self._play_audio_file(vc, chime_sfx)
+                await self._play_audio_file(vc, temp_path)
+            finally:
+                if os.path.exists(temp_path):
+                    try:
+                        os.remove(temp_path)
+                    except Exception:
+                        pass
+
+        embed = discord.Embed(
+            title="🎮 Voice 20 Questions • Game Active!",
+            description=(
+                f"> **Category:** `{category.title()}`\n"
+                f"> *Ask the voice agent yes/no questions aloud in VC or type them in text chat!*\n\n"
+                f"🤫 *(Secret Answer for Host / Spoilers: ||{target_name}||)*"
+            ),
+            color=0x9B59B6,
+        )
+        embed.set_footer(text="Ask yes/no questions on mic or in chat!")
+        await ctx.send(embed=embed)
+
+    @commands.command(
+        name="vcstory",
+        aliases=["storyvc", "voicestory", "dungeonmaster"],
+        help="Voice Agent narrates an interactive spoken adventure in the voice call.",
+    )
+    async def cmd_vcstory(self, ctx: CustomContext) -> None:
+        """Narrate a dynamic verbal adventure in voice channel."""
+        if not ctx.guild:
+            return
+        vc = ctx.guild.voice_client
+        if not _is_vc_connected(vc):
+            return await ctx.send_error("KYOKA must be connected to voice first! Use `+talk` or `+aivoice join`.")
+
+        scenarios = [
+            (
+                "You and your squad stand before the obsidian gates of Las Noches. "
+                "A hollow wind howls across the white desert sands. "
+                "To your left, a luminescent spiritual tear crackles with spiritual pressure. "
+                "To your right, a shadowed corridor descends into the labyrinth. Where do you lead your squad?",
+                "Bleach Espada Labyrinth",
+            ),
+            (
+                "Night City, 2077. Neon rain spatters against your trench coat outside the Afterlife. "
+                "A fixer slips you an encrypted shard detailing a high-stakes Arasaka cyberware heist. "
+                "You can either hack the perimeter security grid, or kick open the front blast doors with heavy artillery. What is your play?",
+                "Cyberpunk Night City Infiltration",
+            ),
+            (
+                "Deep in the Third Sea of Blox Fruits, your ship rocks violently against rogue waves near Haunted Castle. "
+                "The Soul Reaper's scythe glints through the spectral mist ahead, while a Mirage Island appears on the horizon. "
+                "Do you engage the Reaper in combat, or chart a course toward the Mirage Island?",
+                "Blox Fruits Sea Event Voyage",
+            ),
+        ]
+        story_prompt, title = random.choice(scenarios)
+
+        voice_id = self._get_voice_id(ctx.guild.id)
+        temp_fd, temp_path = tempfile.mkstemp(suffix=".mp3")
+        os.close(temp_fd)
+
+        async with ctx.typing():
+            success = await self._synthesize_audio(story_prompt, voice_id, temp_path)
+            if not success or not os.path.exists(temp_path):
+                return await ctx.send_error("Failed to synthesize story narration.")
+
+        drum_sfx = self.conv_mgr.sfx_engine.get_sfx_path("drumroll")
+        lock = self._get_lock(ctx.guild.id)
+        async with lock:
+            try:
+                if drum_sfx:
+                    await self._play_audio_file(vc, drum_sfx)
+                await self._play_audio_file(vc, temp_path)
+            finally:
+                if os.path.exists(temp_path):
+                    try:
+                        os.remove(temp_path)
+                    except Exception:
+                        pass
+
+        embed = discord.Embed(
+            title=f"📖 Interactive Voice Story • {title}",
+            description=f"> *\"{story_prompt}\"*\n\n🎙️ **Discuss with your voice channel and decide your team's choice!**",
+            color=0xE67E22,
+        )
+        embed.set_footer(text="Spoken aloud via neural voice • KYOKA Voice Agent")
+        await ctx.send(embed=embed)
+
     @commands.command(name="vclisten", aliases=["startlisten", "recordvc"], help="AI joins voice channel to listen and record meeting notes.")
     async def cmd_vclisten(self, ctx: CustomContext, duration: int = 30) -> None:
         await self.voice_listen(ctx, duration=duration)
@@ -1498,9 +1665,10 @@ class AIVoice(commands.Cog, name="AIVoice"):
 
     @commands.Cog.listener()
     async def on_message(self, message: discord.Message) -> None:
-        """Capture text messages sent in VC text channel during active listening or conversation sessions."""
+        """Capture text messages sent in VC text channel and speak replies aloud in voice call."""
         if message.author.bot or not message.guild:
             return
+
         session = self.summary_mgr.get_session(message.guild.id)
         if session and session.status == "listening":
             if message.channel.id in (session.channel_id, session.text_channel_id):
@@ -1509,11 +1677,78 @@ class AIVoice(commands.Cog, name="AIVoice"):
         conv_session = self.conv_mgr.get_session(message.guild.id)
         if conv_session and conv_session.active:
             if message.channel.id in (conv_session.channel_id, conv_session.text_channel_id):
-                conv_session.history.append({
-                    "speaker": message.author.display_name,
-                    "text": message.content,
-                    "reply": "(noted from chat)",
-                })
+                prefixes = ("+", "?", "!", "/", "$")
+                clean_content = message.content.strip()
+                if not clean_content or any(clean_content.startswith(p) for p in prefixes):
+                    return
+
+                author_vc = getattr(message.author.voice, "channel", None) if getattr(message.author, "voice", None) else None
+                in_same_vc = author_vc and author_vc.id == conv_session.channel_id
+                if in_same_vc or message.author.id == conv_session.started_by_id:
+                    async def _speak_chat_reply() -> None:
+                        reply = await self.conv_mgr.handle_text_utterance(
+                            conv_session, self, message.author, clean_content
+                        )
+                        if reply:
+                            try:
+                                await message.reply(f"🎙️ *\"{reply}\"*", mention_author=False)
+                            except Exception:
+                                pass
+
+                    asyncio.create_task(_speak_chat_reply())
+
+    @commands.Cog.listener()
+    async def on_voice_state_update(
+        self, member: discord.Member, before: discord.VoiceState, after: discord.VoiceState
+    ) -> None:
+        """Verbally greet members joining the call, and cleanly auto-disconnect when call is empty."""
+        if member.bot or not member.guild:
+            return
+
+        session = self.conv_mgr.get_session(member.guild.id)
+        if not session or not session.active:
+            return
+
+        vc = session.voice_client
+        if not vc or not hasattr(vc, "is_connected") or not vc.is_connected():
+            return
+
+        vc_channel = getattr(vc, "channel", None)
+        if not vc_channel:
+            return
+
+        # 1. Member joined the voice agent's channel
+        if after.channel and after.channel.id == vc_channel.id and (not before.channel or before.channel.id != vc_channel.id):
+            if not session.is_bot_speaking:
+                welcome_text = f"Welcome to the call, {member.display_name}!"
+                vibe_key = session.vibe
+                if vibe_key == "mastermind":
+                    welcome_text = f"Welcome, {member.display_name}. Your presence was anticipated."
+                elif vibe_key == "gamer":
+                    welcome_text = f"Yoooo {member.display_name} in the building! What's good bro!"
+                elif vibe_key == "tsundere":
+                    welcome_text = f"Oh, {member.display_name} showed up? I-it's not like I was waiting for you!"
+                elif vibe_key == "comedian":
+                    welcome_text = f"Look who finally decided to grace us with their presence, {member.display_name}!"
+
+                asyncio.create_task(
+                    self.conv_mgr.play_custom_announcement(session, self, welcome_text, session.get_voice_meta()["id"])
+                )
+
+        # 2. Member left - check if bot is now alone in voice channel
+        elif before.channel and before.channel.id == vc_channel.id and (not after.channel or after.channel.id != vc_channel.id):
+            human_members = [m for m in vc_channel.members if not m.bot]
+            if len(human_members) == 0:
+                logger.info(f"All members left voice channel {vc_channel.name} in guild {member.guild.id}. Auto-concluding session.")
+                text_channel = member.guild.get_channel(session.text_channel_id)
+                if text_channel:
+                    await self.end_conversation_session(member.guild, text_channel, trigger_user=None, summarize=True)
+                else:
+                    self.conv_mgr.stop_session(member.guild.id)
+                    try:
+                        await vc.disconnect(force=True)
+                    except Exception:
+                        pass
 
     async def cog_unload(self) -> None:
         """Clean up HTTP session and cancel active voice listening and conversation sessions."""

@@ -243,14 +243,17 @@ class SoundFXEngine:
         if name not in self.RECIPES:
             return None
 
-        cached = self._cached_paths.get(name)
-        if cached and os.path.exists(cached) and os.path.getsize(cached) > 0:
-            return cached
+        try:
+            cached = self._cached_paths.get(name)
+            if cached and os.path.exists(cached) and os.path.getsize(cached) > 0:
+                return cached
 
-        target_path = os.path.join(self.cache_dir, f"{name}.mp3")
-        if os.path.exists(target_path) and os.path.getsize(target_path) > 0:
-            self._cached_paths[name] = target_path
-            return target_path
+            target_path = os.path.join(self.cache_dir, f"{name}.mp3")
+            if os.path.exists(target_path) and os.path.getsize(target_path) > 0:
+                self._cached_paths[name] = target_path
+                return target_path
+        except (OSError, FileNotFoundError):
+            pass
 
         ffmpeg_bin = shutil.which("ffmpeg") or "ffmpeg"
         cmd = [ffmpeg_bin, "-y"] + self.RECIPES[name] + ["-b:a", "128k", target_path]
@@ -505,6 +508,36 @@ class SoundboardControlView(discord.ui.View):
         await self._play_sfx(interaction, "chime")
 
 
+class VoiceAgentSpeakModal(discord.ui.Modal, title="🎙️ Speak to Voice Agent"):
+    """Interactive modal allowing any user to type a message that the Voice Agent speaks out loud."""
+
+    prompt = discord.ui.TextInput(
+        label="Say something to the Voice Agent",
+        style=discord.TextStyle.paragraph,
+        placeholder="Type a question, comment, joke, or prompt... (e.g. 'What do you think of this call?', 'Roast me')",
+        max_length=300,
+        required=True,
+    )
+
+    def __init__(self, manager: VoiceConversationManager, session: VoiceConversationSession, cog: Any) -> None:
+        super().__init__()
+        self.manager = manager
+        self.session = session
+        self.cog = cog
+
+    async def on_submit(self, interaction: discord.Interaction) -> None:
+        user_text = str(self.prompt.value).strip()
+        if not user_text:
+            return await interaction.response.send_message("Please provide a prompt.", ephemeral=True)
+
+        await interaction.response.defer(ephemeral=True)
+        reply = await self.manager.handle_text_utterance(self.session, self.cog, interaction.user, user_text)
+        if reply:
+            await interaction.followup.send(f"🎙️ **Spoken in VC:** *\"{reply}\"*", ephemeral=True)
+        else:
+            await interaction.followup.send("Voice agent is currently speaking. Please try again in a moment.", ephemeral=True)
+
+
 class VoiceConversationControlView(discord.ui.View):
     """Interactive cyberpunk HUD control panel with live soundboard and vibe switcher."""
 
@@ -552,6 +585,12 @@ class VoiceConversationControlView(discord.ui.View):
     @discord.ui.button(label="Rimshot", style=discord.ButtonStyle.secondary, emoji="🥁", row=1, custom_id="kyoka:vctalk:sfx_rimshot")
     async def btn_sfx_rimshot(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
         await self._trigger_sfx(interaction, "badumtss")
+
+    @discord.ui.button(label="Speak", style=discord.ButtonStyle.success, emoji="💬", row=2, custom_id="kyoka:vctalk:speak_modal")
+    async def btn_speak_modal(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+        cog = self.bot.get_cog("AIVoice")
+        modal = VoiceAgentSpeakModal(self.manager, self.session, cog)
+        await interaction.response.send_modal(modal)
 
     @discord.ui.button(label="Mode: Open Talk", style=discord.ButtonStyle.secondary, emoji="🎙️", row=2, custom_id="kyoka:vctalk:mode")
     async def btn_toggle_mode(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
@@ -1022,6 +1061,149 @@ class VoiceConversationManager:
                 f"Good point, {user_name}. That makes total sense to me honestly.",
             ]
         return "Voice statement received", random.choice(replies)
+
+    async def handle_text_utterance(
+        self,
+        session: VoiceConversationSession,
+        cog: Any,
+        user: discord.User | discord.Member,
+        text: str,
+    ) -> Optional[str]:
+        """Handle user chat message during active voice session: process context, synthesize, and speak into VC."""
+        if not session.active or session.is_bot_speaking:
+            return None
+
+        clean_text = text.strip()
+        if not clean_text:
+            return None
+
+        user_name = user.display_name
+
+        # 1. Check for soundboard trigger words
+        detected_sfx = self.sfx_engine.detect_sfx_trigger(clean_text)
+        vc = session.voice_client
+        if detected_sfx and vc and hasattr(vc, "is_connected") and vc.is_connected():
+            sfx_file = self.sfx_engine.get_sfx_path(detected_sfx)
+            if sfx_file and os.path.exists(sfx_file):
+                session.total_sfx_played += 1
+                lock = cog._get_lock(session.guild_id)
+                async with lock:
+                    try:
+                        await cog._play_audio_file(vc, sfx_file)
+                    except Exception as e:
+                        logger.warning(f"Text-triggered SFX playback notice: {e}")
+                await asyncio.sleep(0.15)
+
+        # 2. Generate conversational reply
+        reply = await self._generate_text_reply(session, user_name, clean_text)
+        if not reply:
+            return None
+
+        session.is_bot_speaking = True
+        try:
+            # 3. Log transcript to session
+            session.add_transcript_entry(user_name, clean_text, reply)
+
+            # 4. Synthesize speech using active neural voice
+            voice_meta = session.get_voice_meta()
+            voice_id = voice_meta["id"]
+
+            temp_fd, reply_mp3 = tempfile.mkstemp(suffix=".mp3")
+            os.close(temp_fd)
+
+            synthesized = await cog._synthesize_audio(reply, voice_id, reply_mp3)
+            if synthesized and os.path.exists(reply_mp3) and vc and hasattr(vc, "is_connected") and vc.is_connected():
+                lock = cog._get_lock(session.guild_id)
+                async with lock:
+                    try:
+                        await cog._play_audio_file(vc, reply_mp3)
+                    finally:
+                        if os.path.exists(reply_mp3):
+                            try:
+                                os.remove(reply_mp3)
+                            except Exception:
+                                pass
+
+            # 5. Update session count and HUD
+            session.turn_count += 1
+            if session.panel_message:
+                try:
+                    updated_embed = self.render_voice_hud(session)
+                    await session.panel_message.edit(embed=updated_embed)
+                except Exception:
+                    pass
+
+            return reply
+        finally:
+            session.is_bot_speaking = False
+
+    async def _generate_text_reply(
+        self,
+        session: VoiceConversationSession,
+        user_name: str,
+        user_text: str,
+    ) -> str:
+        """Generate conversational reply for written prompt in VC chat using Gemini or intelligent local vibe engine."""
+        api_key = os.getenv("GEMINI_API_KEY", "").strip()
+        has_api_key = bool(api_key and not api_key.lower().startswith("replace_"))
+
+        vibe_meta = session.get_vibe_meta()
+        vibe_instruction = vibe_meta["prompt"]
+
+        history_lines = []
+        for turn in list(session.history)[-4:]:
+            history_lines.append(f"{turn['speaker']}: \"{turn['text']}\"")
+            history_lines.append(f"Kyoka: \"{turn['reply']}\"")
+        history_context = "\n".join(history_lines) if history_lines else "None (conversation just started)."
+
+        system_instruction = (
+            f"PERSONALITY & IDENTITY:\n{vibe_instruction}\n"
+            f"You are participating in a live Discord voice call. {user_name} just typed to you in voice chat: \"{user_text}\".\n\n"
+            "CRITICAL RULES FOR SPOKEN VOICE CONVERSATION:\n"
+            "1. KEEP IT PUNCHY: 1 to 2 sentences max (3 sentences max if answering a direct factual inquiry). Never give essays or long bullet lists.\n"
+            "2. LIVE CONVERSATION FLOW: Talk naturally in voice chat, matching your designated personality.\n"
+            "3. NO MARKDOWN: Never use asterisks (*laughs*), bullet points, emojis, or markdown formatting, as this will be read aloud through speech synthesis.\n"
+            "4. Output ONLY the spoken response, nothing else.\n\n"
+            f"Recent Dialogue:\n{history_context}\n"
+        )
+
+        if has_api_key:
+            try:
+                candidate_models = ["gemini-1.5-flash", "gemini-2.0-flash", "gemini-1.5-pro"]
+                body = {
+                    "contents": [{
+                        "parts": [{"text": system_instruction}]
+                    }],
+                    "generationConfig": {
+                        "temperature": 0.5,
+                        "maxOutputTokens": 200,
+                    },
+                }
+                timeout = aiohttp.ClientTimeout(total=12.0)
+                async with aiohttp.ClientSession() as session_http:
+                    for model in candidate_models:
+                        url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent?key={api_key}"
+                        try:
+                            async with session_http.post(url, json=body, timeout=timeout) as resp:
+                                if resp.status == 200:
+                                    data = await resp.json(content_type=None)
+                                    candidates = data.get("candidates", []) if isinstance(data, dict) else []
+                                    if candidates:
+                                        resp_parts = candidates[0].get("content", {}).get("parts", [])
+                                        text = "".join(p.get("text", "") for p in resp_parts if isinstance(p, dict)).strip()
+                                        if text:
+                                            text = re.sub(r"\*.*?\*", "", text)
+                                            return re.sub(r"[*_#`]", "", text).strip()
+                                elif resp.status == 429:
+                                    continue
+                        except Exception:
+                            continue
+            except Exception as e:
+                logger.debug(f"Gemini text reply notice: {e}")
+
+        # Fallback to intelligent local turn
+        _, fallback = self._generate_intelligent_local_turn(session, user_name)
+        return fallback
 
     def generate_conversation_summary(self, session: VoiceConversationSession) -> str:
         """Create a summary from all conversational turns."""
