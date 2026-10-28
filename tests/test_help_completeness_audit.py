@@ -56,7 +56,7 @@ def test_vouch_commands_categorized_in_vouches_and_reputation(mock_bot_with_cogs
 
     expected_vouch_commands = [
         "vouch", "vlb", "vouchinfo", "vouchhistory", "vouchimport",
-        "vouchremove", "heldvouches", "botstaff", "vouchchannel"
+        "vouchremove", "heldvouches", "repstaff", "vouchchannel"
     ]
 
     for cmd_name in expected_vouch_commands:

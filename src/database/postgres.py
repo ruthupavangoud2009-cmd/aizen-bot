@@ -240,6 +240,18 @@ class PostgresDatabase(BaseDatabase):
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             );
             """,
+            # Guild Custom Bot Avatars table (Premium Server Feature)
+            """
+            CREATE TABLE IF NOT EXISTS guild_custom_avatars (
+                guild_id BIGINT PRIMARY KEY,
+                avatar_url TEXT NOT NULL,
+                set_by BIGINT NOT NULL,
+                status VARCHAR(32) DEFAULT 'active',
+                applied_discord_api BOOLEAN DEFAULT FALSE,
+                updated_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
+                created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
+            );
+            """,
             # Active User/Personal Premium table
             """
             CREATE TABLE IF NOT EXISTS user_premium (

@@ -256,6 +256,8 @@ CATEGORY_SEARCH_ALIASES: dict[str, str] = {
     # Vouches
     "vouch": "vouches", "vouches": "vouches", "rep": "vouches", "reputation": "vouches", "trust": "vouches",
     "vlb": "vouches", "vouchinfo": "vouches", "vouchhistory": "vouches", "vouchimport": "vouches",
+    "repstaff": "vouches", "vouchstaff": "vouches", "vouchchannel": "vouches", "vouchremove": "vouches",
+    "heldvouches": "vouches", "vouchregister": "vouches",
     # Service Bills
     "bill": "service_bills", "bills": "service_bills", "invoice": "service_bills", "service": "service_bills", "billing": "service_bills",
     "top": "service_bills", "topai": "service_bills", "topmanager": "service_bills", "toptiers": "service_bills", "aihelp": "service_bills",
@@ -524,6 +526,7 @@ def resolve_command_category(cmd: Any) -> CategoryMeta:
         "vouch", "vouches", "vouchprofile", "vouchleaderboard", "vouchchannel",
         "heldvouches", "vouchremove", "repcheck", "vouchlb", "topvouches", "repleaderboard",
         "vlb", "vouchinfo", "vouchhistory", "vouchimport", "rep", "reputation", "botstaff",
+        "repstaff", "vouchstaff", "vouchregister", "vouchscan",
     ):
         return CATEGORY_BY_ID["vouches"]
 
@@ -590,7 +593,7 @@ def resolve_command_category(cmd: Any) -> CategoryMeta:
         return CATEGORY_BY_ID["leveling"]
 
     # Premium
-    if root_name in ("premium", "redeem", "tier", "license", "prime", "perks"):
+    if root_name in ("premium", "redeem", "tier", "license", "prime", "perks", "setbotavatar", "botavatar", "resetbotavatar", "imagine"):
         return CATEGORY_BY_ID["premium"]
 
     # Server Configuration

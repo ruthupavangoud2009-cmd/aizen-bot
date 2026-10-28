@@ -7,7 +7,7 @@ import time
 from pathlib import Path
 from typing import TYPE_CHECKING
 import discord
-from discord.ext import commands
+from discord.ext import commands, tasks
 from src.core.config import Config
 from src.security.owner import OWNER_ID, audit, authorize_owner, is_primary_owner
 from src.managers.premium_service import PremiumService, parse_duration
@@ -258,6 +258,70 @@ class OwnerSystem(commands.Cog):
             rows = await self.bot.db.fetch_all("SELECT guild_id,tier,expires_at,status FROM guild_premium ORDER BY created_at DESC LIMIT 50")
             await self._reply(ctx, "**Server premium (max 50)**\n" + ("\n".join(f"`{r['guild_id']}` — {r['tier']} / {r.get('status','active')} / `{r['expires_at'] or 'lifetime'}`" for r in rows) or "No server subscriptions."))
         except Exception: await self._reply(ctx, "Server premium list unavailable.")
+
+    # ── Top-Level Owner Shortcuts for Premium Management ──
+
+    @commands.command(name="grantpremium", aliases=["addpremium", "serverpremium"], hidden=True)
+    async def top_grant_premium(self, ctx, scope: str, target_id: str, duration: str = "30d", tier: str = "premium", *, note: str = ""):
+        """Owner command to quickly grant server or user premium: +grantpremium server <guild_id> [duration] [tier]"""
+        if not is_primary_owner(ctx.author.id):
+            return
+        await self.premium_grant(ctx, scope, target_id, tier, duration, note=note)
+
+    @commands.command(name="revokepremium", aliases=["removepremium"], hidden=True)
+    async def top_revoke_premium(self, ctx, scope: str, target_id: str, *, note: str = ""):
+        """Owner command to revoke premium: +revokepremium server <guild_id>"""
+        if not is_primary_owner(ctx.author.id):
+            return
+        await self.premium_revoke(ctx, scope, target_id, note=note)
+
+    @commands.command(name="checkpremium", aliases=["premiumcheck"], hidden=True)
+    async def top_check_premium(self, ctx, scope: str, target_id: str):
+        """Owner command to check premium status: +checkpremium server <guild_id>"""
+        if not is_primary_owner(ctx.author.id):
+            return
+        await self.premium_check(ctx, scope, target_id)
+
+    @commands.command(name="extendpremium", hidden=True)
+    async def top_extend_premium(self, ctx, scope: str, target_id: str, duration: str):
+        """Owner command to extend existing premium: +extendpremium server <guild_id> 30d"""
+        if not is_primary_owner(ctx.author.id):
+            return
+        await self.premium_extend(ctx, scope, target_id, duration)
+
+    # ── Automatic Expiration & Renewal Sweep Background Task ──
+
+    @tasks.loop(hours=1)
+    async def sweep_task(self):
+        """Periodically sweep expired subscriptions, revoke features, and send renewal reminders."""
+        try:
+            if hasattr(self.bot, "premium_mgr") and self.bot.premium_mgr:
+                expired_guilds = await self.bot.premium_mgr.sweep_expired_subscriptions()
+                if expired_guilds:
+                    for g_id in expired_guilds:
+                        # Clean up custom avatar for expired guild
+                        try:
+                            await self.bot.db.execute("DELETE FROM guild_custom_avatars WHERE guild_id = ?;", g_id)
+                        except Exception:
+                            pass
+                        log.info(f"Swept expired premium & revoked custom avatar for guild {g_id}.")
+                await self.bot.premium_mgr.send_renewal_reminders(self.bot)
+        except Exception as e:
+            log.warning(f"Error during subscription expiry sweep: {e}")
+
+    @sweep_task.before_loop
+    async def before_sweep(self):
+        try:
+            await self.bot.wait_until_ready()
+        except RuntimeError:
+            pass
+
+    async def cog_load(self):
+        self.sweep_task.start()
+
+    async def cog_unload(self):
+        self.sweep_task.cancel()
+
 
 async def setup(bot: KyokaBot):
     await bot.add_cog(OwnerSystem(bot))

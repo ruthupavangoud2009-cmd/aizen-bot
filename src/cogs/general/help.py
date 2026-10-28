@@ -738,8 +738,8 @@ class Help(commands.Cog):
             return " `[Mod]`"
         if resolved_cat == "⚙️・SERVER ADMINISTRATION" or name in ("prefix", "setprefix", "resetprefix", "setup"):
             return " `[Admin]`"
-        if resolved_cat == "💎・PREMIUM" or name in ("imagine", "tier", "license", "prime"):
-            return " `[Prime]`"
+        if resolved_cat == "💎・PREMIUM" or name in ("imagine", "tier", "license", "prime", "setbotavatar", "botavatar", "resetbotavatar", "247", "halloween", "premium", "plan"):
+            return " `[Premium]`"
         return ""
 
     def _get_base_categories(self) -> dict[str, list[commands.Command]]:
@@ -1077,11 +1077,19 @@ class Help(commands.Cog):
         ws_ping = self._get_latency_ms()
         total_commands = sum(len(cmds) for cmds in visible_categories.values())
 
+        is_prem = False
+        prem_badge = "Standard Free"
+        if guild and hasattr(self.bot, "premium_mgr") and self.bot.premium_mgr:
+            is_prem = self.bot.premium_mgr.is_guild_premium(guild.id)
+            if is_prem:
+                info = self.bot.premium_mgr.get_guild_info(guild.id)
+                prem_badge = f"💎 Kyoka Premium ({info.get('remaining_str', 'Active')})"
+
         embed = KyokaHelpEmbed(
             title="⛩️ KYOKA 3.0 — AIZEN EDITION COMMAND DIRECTORY",
             description=(
                 f"> *\"Since when were you under the impression that you were not in control?\"* — Sōsuke Aizen\n\n"
-                f"• **Prefix:** `{p}<command>` · **Slash Support:** `/<command>`\n"
+                f"• **Active Plan:** `{prem_badge}` · **Prefix:** `{p}<command>`\n"
                 f"• **Latency:** `{ws_ping}ms` · **Active Modules:** `{len(visible_categories)}` · **Commands Available:** `{total_commands}`\n"
                 f"• **Quick Manual:** Type `{p}help <command>` for deep inspect (syntax, aliases & permissions).\n"
                 f"• **Interactive Browser:** Select any category from the dropdown below to view complete commands with pagination."
@@ -1466,6 +1474,108 @@ class Help(commands.Cog):
                 pass
         else:
             view.message = msg
+
+    @commands.hybrid_command(
+        name="premium",
+        aliases=["plan", "tier", "subscription", "perks"],
+        description="View this server's subscription plan, expiry, and Free vs Premium feature matrix.",
+    )
+    async def view_plan(self, ctx: CustomContext) -> None:
+        """Display this server's current tier and the comprehensive Free vs Premium feature matrix."""
+        guild = ctx.guild
+        p = self.bot.guild_mgr.get_prefix(guild.id if guild else None)
+
+        is_prem = False
+        expiry_str = "N/A (Standard Free)"
+        tier_title = "Standard Free Tier"
+        if guild and hasattr(self.bot, "premium_mgr") and self.bot.premium_mgr:
+            is_prem = self.bot.premium_mgr.is_guild_premium(guild.id)
+            if is_prem:
+                info = self.bot.premium_mgr.get_guild_info(guild.id)
+                tier_title = f"💎 Kyoka {info.get('tier', 'Premium')}"
+                expiry_str = info.get("remaining_str", "Active")
+
+        embed = discord.Embed(
+            title="⛩️ KYOKA 3.0 • PLAN & FEATURE ACCESS MATRIX",
+            description=(
+                f"**Current Server:** `{guild.name if guild else 'Direct Message'}`\n"
+                f"**Active Entitlement:** `{tier_title}`\n"
+                f"**Status / Expiry:** `{expiry_str}`\n\n"
+                f"> Kyoka separates core server stability features (free to all servers) from advanced visual and enterprise customization (premium)."
+            ),
+            color=0x7C3AED,
+        )
+
+        embed.add_field(
+            name="🛡️ FREE TIER (Available to Every Server)",
+            value=(
+                "• **Core Moderation:** `ban`, `kick`, `timeout`, `warn`, `purge`, `lock`, `unlock`, `slowmode`\n"
+                "• **Utility & Info:** `calc`, `remind`, `avatar`, `banner`, `userinfo`, `serverinfo`, `ping`\n"
+                "• **Welcome & Departures:** Standard welcome cards, leave announcements, autoroles\n"
+                "• **Gatekeeper Security:** Button and captcha verification gate\n"
+                "• **Support Tickets:** Standard ticket panel, claims, and closures\n"
+                "• **Giveaways:** Timers, automatic roll, and winner rerolls\n"
+                "• **Audio Playback:** High-fidelity Lavalink v4 music player\n"
+                "• **Community & Fun:** AFK notices, anime actions, 8ball, trivia, truth-or-dare\n"
+                "• **Server Administration:** Isolated single prefix (`setprefix`, `resetprefix`)"
+            ),
+            inline=False,
+        )
+
+        embed.add_field(
+            name="💎 PREMIUM TIER (Requires Server Subscription)",
+            value=(
+                "• **Custom Bot Avatar:** Upload custom server-specific avatar (`setbotavatar`)\n"
+                "• **24/7 Music Radio:** Continuous voice stay mode that never disconnects (`247`, `halloween`)\n"
+                "• **Aizen Visual Palette:** Custom hex embed colors and server author icons\n"
+                "• **Animated Welcome Cards:** Cyber Sakura, Celestial Nebula & Hueco Mundo themes\n"
+                "• **Multi-Panel Tickets:** Multi-department routing and HTML transcripts\n"
+                "• **Role-Gated Giveaways:** Bonus entries, bypass roles, and multi-winner raffles\n"
+                "• **Priority Gemini AI:** ~600ms latency, all 10 AI personas simultaneously\n"
+                "• **Extended Leveling:** Custom rank card backgrounds and XP multipliers\n"
+                "• **Modular Logging:** Anti-ghostping tracking and dedicated channel routing"
+            ),
+            inline=False,
+        )
+
+        assets = getattr(Config, "ASSETS", None)
+        thumb = getattr(assets, "AIZEN_AVATAR_URL", "")
+        if thumb and thumb.strip():
+            embed.set_thumbnail(url=thumb.strip())
+
+        embed.set_footer(
+            text=f"Requested by {ctx.author.display_name} • KYOKA 3.0 — Aizen Edition",
+            icon_url=ctx.author.display_avatar.url if ctx.author.display_avatar else None,
+        )
+
+        view = discord.ui.View(timeout=180.0)
+        view.add_item(
+            discord.ui.Button(
+                label="Upgrade to Premium",
+                style=discord.ButtonStyle.link,
+                url="https://aizen-bot.pages.dev/premium",
+                emoji="💎",
+            )
+        )
+        if Config.SUPPORT_URL:
+            view.add_item(
+                discord.ui.Button(
+                    label="Join Support Server",
+                    style=discord.ButtonStyle.link,
+                    url=Config.SUPPORT_URL,
+                    emoji="💜",
+                )
+            )
+        view.add_item(
+            discord.ui.Button(
+                label="Web Dashboard",
+                style=discord.ButtonStyle.link,
+                url="https://aizen-bot.pages.dev/dashboard",
+                emoji="⚡",
+            )
+        )
+
+        await ctx.send(embed=embed, view=view)
 
     # ─── HELP COMMAND ARCHIVE (HCA) PUBLIC DIRECTORY ─────────────────────────
     def build_hca_index_embed(

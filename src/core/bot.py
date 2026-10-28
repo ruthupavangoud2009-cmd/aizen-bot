@@ -50,11 +50,9 @@ async def get_prefix(bot: KyokaBot, message: discord.Message) -> list[str]:
     guild_id = message.guild.id if message.guild else None
     guild_prefix = bot.guild_mgr.get_prefix(guild_id) if hasattr(bot, "guild_mgr") else Config.DEFAULT_PREFIX
 
-    # Collect all valid prefixes: guild-specific, default (+), and legacy (?)
-    prefixes: list[str] = []
-    for p in (guild_prefix, Config.DEFAULT_PREFIX, "+", "?"):
-        if p and p not in prefixes:
-            prefixes.append(p)
+    # Exactly ONE active prefix per server: the guild's explicitly configured prefix (or DEFAULT_PREFIX)
+    # Zero hidden fallback prefixes: old prefixes like '+' or '?' are NEVER accepted once customized
+    prefixes: list[str] = [guild_prefix]
 
     # Check if author has No-Prefix authorization or is Owner/Developer
     is_no_prefix = False

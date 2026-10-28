@@ -1,122 +1,196 @@
 """
-Kyoka Discord Bot - Prefix Management Command
-Allows server administrators to set or reset custom server prefixes.
-Uses sleek, compact Components V2 Container Cards with clean proportions.
+Kyoka Discord Bot - Prefix Management Cog
+Enforces exactly ONE active command prefix per server with zero-latency L1 memory caching,
+strict input validation, role permissions, and complete cross-server isolation.
 """
 
 from __future__ import annotations
 
+import logging
+from typing import TYPE_CHECKING
 import discord
 from discord.ext import commands
 
 from src.core.config import Config
 from src.core.context import CustomContext
-from src.utils.containers import KyokaContainer, send_container_response
+from src.security.owner import is_primary_owner, is_owner_or_staff
+
+if TYPE_CHECKING:
+    from src.core.bot import KyokaBot
+
+logger = logging.getLogger("Kyoka.Admin.Prefix")
 
 
-class Prefix(commands.Cog):
-    """Server administration and prefix configuration."""
-    category: str = "Moderation"
+class Prefix(commands.Cog, name="Admin-Prefix"):
+    """Server administration and isolated prefix configuration."""
+    category: str = "Configuration"
 
-    def __init__(self, bot: commands.Bot) -> None:
+    def __init__(self, bot: KyokaBot) -> None:
         self.bot = bot
+
+    def _can_manage_prefix(self, ctx: CustomContext) -> bool:
+        """Check if author has Manage Server permission or is Bot Primary Owner / Staff."""
+        if is_owner_or_staff(ctx.author.id):
+            return True
+        if ctx.guild and ctx.author.guild_permissions.manage_guild:
+            return True
+        if ctx.guild and ctx.author.id == ctx.guild.owner_id:
+            return True
+        return False
+
+    @staticmethod
+    def _validate_prefix(prefix: str) -> tuple[bool, str]:
+        """Validate candidate prefix. Returns (is_valid, error_message)."""
+        clean_prefix = prefix.strip()
+        if not clean_prefix:
+            return False, "Prefix cannot be empty or whitespace-only."
+        if len(clean_prefix) > 5:
+            return False, f"Prefix length cannot exceed 5 characters (received {len(clean_prefix)} characters)."
+        if " " in clean_prefix:
+            return False, "Prefix cannot contain internal whitespace or spaces."
+        if any(c in clean_prefix for c in ("@", "#", "/", "\\", "`", "\n", "\t")):
+            return False, "Prefix cannot contain mentions (@), channel tags (#), slash (/), backticks, or control characters."
+        return True, ""
 
     @commands.hybrid_command(
         name="setprefix",
-        description="Change the bot command prefix for this server.",
+        description="Change the single active command prefix for this server.",
     )
-    @commands.has_permissions(manage_guild=True)
     @commands.guild_only()
-    async def set_prefix(self, ctx: CustomContext, new_prefix: str) -> None:
-        """Set a new custom prefix for this server. Usage: ?setprefix !"""
-        e_reg = self.bot.custom_emojis
-        dot = e_reg.get("heart_dot", e_reg.get("icons_rightarrow", "-"))
-
-        if len(new_prefix) > 5:
-            container = KyokaContainer(accent_color=None)
-            container.add_section(
-                content=(
-                    "**Invalid Prefix**\n"
-                    "> Prefix length cannot exceed 5 characters."
-                )
-            )
-            container.add_separator(divider=True)
-            container.add_text(f"-# Requested by {ctx.author.display_name}")
-            await send_container_response(ctx, container)
+    @commands.cooldown(1, 5, commands.BucketType.guild)
+    async def set_prefix(self, ctx: CustomContext, *, new_prefix: str) -> None:
+        """
+        Configure a custom prefix for this server.
+        Usage: +setprefix ! or +setprefix k!
+        
+        Subsequent commands in this server must use the new prefix.
+        Old prefixes (such as +, ?, etc.) will no longer be accepted.
+        """
+        if not self._can_manage_prefix(ctx):
+            await ctx.send_warning("❌ You need **Manage Server** permission or Server Ownership to change the bot prefix.")
             return
 
-        await self.bot.guild_mgr.set_prefix(ctx.guild.id, new_prefix)
+        valid, err = self._validate_prefix(new_prefix)
+        if not valid:
+            await ctx.send_warning(f"❌ {err}")
+            return
 
-        container = KyokaContainer(accent_color=None)
-        container.add_section(
-            content=(
-                "**Prefix Updated**\n"
-                "> Server command prefix has been successfully configured."
-            )
+        clean_prefix = new_prefix.strip()
+
+        # 5. Persist prefix to L1 Microsecond Cache & Database
+        old_prefix = self.bot.guild_mgr.get_prefix(ctx.guild.id)
+        await self.bot.guild_mgr.set_prefix(ctx.guild.id, clean_prefix)
+
+        embed = discord.Embed(
+            title="⛩️ KYOKA 3.0 • PREFIX CONFIGURED",
+            description=(
+                f"✅ **Command prefix for `{ctx.guild.name}` has been successfully updated!**\n\n"
+                f"• **New Active Prefix:** `{clean_prefix}`\n"
+                f"• **Previous Prefix:** `{old_prefix}` *(No longer recognized)*\n"
+                f"• **Slash Commands:** `/` *(Always available)*\n\n"
+                f"⚠️ **Single Active Prefix Enforced:**\n"
+                f"> All subsequent text commands in this server must now begin with `{clean_prefix}`.\n"
+                f"> Try running: `{clean_prefix}help` or `{clean_prefix}prefix`."
+            ),
+            color=0x7C3AED,
+            timestamp=discord.utils.utcnow(),
         )
-        container.add_separator(divider=True)
-        container.add_text(
-            f"{dot} **New Prefix:** `{new_prefix}` | **Example:** `{new_prefix}help`"
+
+        assets = getattr(Config, "ASSETS", None)
+        thumb = getattr(assets, "AIZEN_AVATAR_URL", "")
+        if thumb and thumb.strip():
+            embed.set_thumbnail(url=thumb.strip())
+
+        embed.set_footer(
+            text=f"Configured by {ctx.author.display_name} • Single Prefix System Active",
+            icon_url=ctx.author.display_avatar.url if ctx.author.display_avatar else None,
         )
-        container.add_separator(divider=True)
-        container.add_text(f"-# Requested by {ctx.author.display_name}")
-        await send_container_response(ctx, container)
+
+        await ctx.send(embed=embed)
+        logger.info(
+            f"Guild {ctx.guild.id} prefix changed from '{old_prefix}' to '{clean_prefix}' by {ctx.author} ({ctx.author.id})"
+        )
 
     @commands.hybrid_command(
         name="resetprefix",
-        description="Reset the bot command prefix to default '?' for this server.",
+        description="Reset this server's command prefix to default ('+').",
     )
-    @commands.has_permissions(manage_guild=True)
     @commands.guild_only()
+    @commands.cooldown(1, 5, commands.BucketType.guild)
     async def reset_prefix(self, ctx: CustomContext) -> None:
-        """Reset custom prefix back to default '?'."""
-        e_reg = self.bot.custom_emojis
-        dot = e_reg.get("heart_dot", e_reg.get("icons_rightarrow", "-"))
+        """
+        Reset this server's custom prefix back to default '+'.
+        Usage: +resetprefix or !resetprefix
+        """
+        if not self._can_manage_prefix(ctx):
+            await ctx.send_warning("❌ You need **Manage Server** permission or Server Ownership to reset the bot prefix.")
+            return
+
+        old_prefix = self.bot.guild_mgr.get_prefix(ctx.guild.id)
+        default_p = Config.DEFAULT_PREFIX
+
+        if old_prefix == default_p:
+            await ctx.send_info(f"ℹ️ This server is already using the default prefix (`{default_p}`).")
+            return
 
         await self.bot.guild_mgr.reset_prefix(ctx.guild.id)
 
-        container = KyokaContainer(accent_color=None)
-        container.add_section(
-            content=(
-                "**Prefix Reset**\n"
-                "> Server command prefix has been restored to default."
-            )
+        embed = discord.Embed(
+            title="⛩️ KYOKA 3.0 • PREFIX RESTORED",
+            description=(
+                f"✅ **Command prefix for `{ctx.guild.name}` has been reset to default.**\n\n"
+                f"• **Active Prefix:** `{default_p}`\n"
+                f"• **Previous Prefix:** `{old_prefix}` *(Revoked)*\n"
+                f"• **Example Command:** `{default_p}help`\n\n"
+                f"> Use `{default_p}setprefix <new_prefix>` anytime to customize it again."
+            ),
+            color=0x7C3AED,
+            timestamp=discord.utils.utcnow(),
         )
-        container.add_separator(divider=True)
-        container.add_text(
-            f"{dot} **Default Prefix:** `{Config.DEFAULT_PREFIX}` | **Example:** `{Config.DEFAULT_PREFIX}help`"
-        )
-        container.add_separator(divider=True)
-        container.add_text(f"-# Requested by {ctx.author.display_name}")
-        await send_container_response(ctx, container)
+        embed.set_footer(text=f"Reset by {ctx.author.display_name} • KYOKA 3.0")
+        await ctx.send(embed=embed)
+        logger.info(f"Guild {ctx.guild.id} prefix reset to '{default_p}' by {ctx.author} ({ctx.author.id})")
 
     @commands.hybrid_command(
         name="prefix",
-        description="View the bot command prefix for this server.",
+        description="View the single active command prefix for this server.",
     )
     @commands.guild_only()
     async def view_prefix(self, ctx: CustomContext) -> None:
-        """View the current command prefix for this server."""
-        current_prefix = self.bot.guild_mgr.get_prefix(ctx.guild.id)
-        e_reg = self.bot.custom_emojis
-        dot = e_reg.get("heart_dot", e_reg.get("icons_rightarrow", "-"))
+        """
+        Display the current active command prefix for this server.
+        Usage: +prefix or !prefix
+        """
+        current_p = self.bot.guild_mgr.get_prefix(ctx.guild.id)
+        default_p = Config.DEFAULT_PREFIX
+        is_custom = current_p != default_p
 
-        container = KyokaContainer(accent_color=None)
-        container.add_section(
-            content=(
-                "**Server Command Prefix**\n"
-                f"> Current command prefix for **{ctx.guild.name}** is `{current_prefix}`"
-            )
+        embed = discord.Embed(
+            title=f"⛩️ Command Prefix • {ctx.guild.name}",
+            description=(
+                f"• **Active Text Prefix:** `{current_p}`\n"
+                f"• **Prefix Status:** `{'Custom Guild Prefix' if is_custom else 'Default Global Prefix'}`\n"
+                f"• **Slash Commands:** `/<command>` *(Prefix-independent)*\n"
+                f"• **Mention Invocation:** `<@{self.bot.user.id}> <command>`\n\n"
+                f"**Quick Usage Examples:**\n"
+                f"• `{current_p}help` — Browse all accessible commands\n"
+                f"• `{current_p}setprefix <symbol>` — (Admin) Set a custom prefix\n"
+                f"• `{current_p}resetprefix` — (Admin) Reset to default `{default_p}`"
+            ),
+            color=0x7C3AED,
         )
-        container.add_separator(divider=True)
-        container.add_text(
-            f"{dot} **Prefix:** `{current_prefix}` | **Slash Commands:** `/`\n"
-            f"{dot} **Change Prefix:** `{current_prefix}setprefix <new_prefix>`"
+
+        assets = getattr(Config, "ASSETS", None)
+        thumb = getattr(assets, "AIZEN_AVATAR_URL", "")
+        if thumb and thumb.strip():
+            embed.set_thumbnail(url=thumb.strip())
+
+        embed.set_footer(
+            text=f"Requested by {ctx.author.display_name} • Single Active Prefix Enforced",
+            icon_url=ctx.author.display_avatar.url if ctx.author.display_avatar else None,
         )
-        container.add_separator(divider=True)
-        container.add_text(f"-# Requested by {ctx.author.display_name}")
-        await send_container_response(ctx, container)
+        await ctx.send(embed=embed)
 
 
-async def setup(bot: commands.Bot) -> None:
+async def setup(bot: KyokaBot) -> None:
     await bot.add_cog(Prefix(bot))

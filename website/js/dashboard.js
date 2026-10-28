@@ -3393,6 +3393,42 @@ function renderPremiumTab(panel, s) {
       </div>
     </div>
 
+    <!-- Premium Custom Bot Avatar Subsystem -->
+    <div style="background: var(--bg-card); border: 1px solid var(--border-subtle); border-radius: var(--radius-md); padding: 1.5rem; margin-bottom: 1.5rem;">
+      <div style="display: flex; justify-content: space-between; align-items: flex-start; flex-wrap: wrap; gap: 1rem; margin-bottom: 1rem;">
+        <div>
+          <h5 style="color: var(--purple-white); font-weight: 700; margin-bottom: 0.25rem;">
+            🖼️ Custom Server Bot Avatar <span class="badge" style="background: rgba(124, 58, 237, 0.2); border: 1px solid var(--purple-primary); color: var(--purple-pastel); font-size: 0.72rem; padding: 2px 8px; border-radius: 4px; margin-left: 6px;">PREMIUM</span>
+          </h5>
+          <p style="color: var(--text-dim); font-size: 0.85rem;">
+            Upload a custom avatar for Kyoka exclusively in this server. Preserved persistently across bot restarts.
+          </p>
+        </div>
+        ${isPrem ? '<span class="status-indicator status-online" style="font-size: 0.8rem;">Unlocked</span>' : '<span class="status-indicator status-offline" style="font-size: 0.8rem;">Premium Locked</span>'}
+      </div>
+
+      <div style="display: flex; gap: 1.5rem; align-items: center; flex-wrap: wrap;">
+        <div style="position: relative; width: 84px; height: 84px; border-radius: 50%; overflow: hidden; border: 2px solid var(--purple-primary); flex-shrink: 0; box-shadow: 0 0 15px rgba(124, 58, 237, 0.3);">
+          <img id="dashboard-avatar-preview" src="https://cdn.discordapp.com/attachments/1562020726670753854/1562693591900495872/07991C9B-39EC-4343-BF54-0E74C6819B78.gif" alt="Server Bot Avatar" style="width: 100%; height: 100%; object-fit: cover;" />
+        </div>
+        <div style="flex-grow: 1; min-width: 260px;">
+          ${isPrem ? `
+            <div style="display: flex; gap: 0.5rem; flex-wrap: wrap; margin-bottom: 0.75rem;">
+              <input type="text" id="custom-avatar-url-input" class="form-input" placeholder="Paste direct image URL (PNG/JPEG/GIF)..." style="flex-grow: 1; min-width: 200px;" />
+              <button id="apply-custom-avatar-btn" class="btn btn-primary" style="white-space: nowrap;">Apply Avatar</button>
+              <button id="reset-custom-avatar-btn" class="btn btn-outline" style="white-space: nowrap;">Reset to Default</button>
+            </div>
+            <span style="font-size: 0.78rem; color: var(--text-muted);">Supports PNG, JPEG, WebP, and GIF up to 10MB. Or run <code style="color: var(--purple-light);">+setbotavatar</code> in Discord.</span>
+          ` : `
+            <p style="color: var(--text-muted); font-size: 0.85rem; margin-bottom: 0.75rem;">
+              This server is currently on the <strong>Standard Free plan</strong>. Upgrade to Kyoka Premium to unlock custom server avatars, 24/7 radio stay mode, and priority AI.
+            </p>
+            <a href="/premium" class="btn btn-primary btn-sm">💎 Upgrade to Unlock Custom Avatar</a>
+          `}
+        </div>
+      </div>
+    </div>
+
     <!-- License Key Redemption Box -->
     <div style="background: var(--bg-card); border: 1px solid var(--border-subtle); border-radius: var(--radius-md); padding: 1.5rem; margin-bottom: 1.5rem;">
       <h5 style="color: var(--purple-white); font-weight: 700; margin-bottom: 0.5rem;">🔑 Redeem License Key</h5>
@@ -3419,6 +3455,12 @@ function renderPremiumTab(panel, s) {
             </tr>
           </thead>
           <tbody>
+            <tr>
+              <td>Custom Server Bot Avatar</td>
+              <td style="color: #f87171;">✕ Global Aizen Default</td>
+              <td style="color: var(--emerald-accent);">✓ Custom Server Avatar</td>
+              <td style="color: var(--emerald-accent);">✓ Custom Avatar &amp; Visual Palette</td>
+            </tr>
             <tr>
               <td>24/7 Voice Playback &amp; Stay Mode</td>
               <td style="color: #f87171;">✕ Disconnects on empty</td>
@@ -3454,6 +3496,69 @@ function renderPremiumTab(panel, s) {
       </div>
     </div>
   `;
+
+  // Fetch current avatar preview if available
+  fetch(`/api/guilds/${state.selectedGuildId}/avatar`)
+    .then(r => r.json())
+    .then(data => {
+      const img = document.getElementById('dashboard-avatar-preview');
+      if (img && data.custom_avatar_url) {
+        img.src = data.custom_avatar_url;
+      }
+    })
+    .catch(() => {});
+
+  // Apply custom avatar listener
+  document.getElementById('apply-custom-avatar-btn')?.addEventListener('click', async () => {
+    const url = document.getElementById('custom-avatar-url-input')?.value.trim();
+    if (!url) {
+      showToast('Please enter an image URL.', 'warning');
+      return;
+    }
+    const btn = document.getElementById('apply-custom-avatar-btn');
+    if (btn) { btn.disabled = true; btn.textContent = 'Applying...'; }
+    try {
+      soundFX.playSound('click');
+      const res = await fetch(`/api/guilds/${state.selectedGuildId}/avatar`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ avatar_url: url })
+      });
+      const data = await res.json();
+      if (!res.ok || !data.success) throw new Error(data.error || 'Failed to update avatar.');
+      soundFX.playSound('success');
+      showToast(data.message || 'Custom bot avatar updated!', 'success');
+      const img = document.getElementById('dashboard-avatar-preview');
+      if (img) img.src = url;
+    } catch (err) {
+      soundFX.playSound('warning');
+      showToast(err.message, 'error');
+    } finally {
+      if (btn) { btn.disabled = false; btn.textContent = 'Apply Avatar'; }
+    }
+  });
+
+  // Reset custom avatar listener
+  document.getElementById('reset-custom-avatar-btn')?.addEventListener('click', async () => {
+    if (!confirm('Are you sure you want to restore the default global Aizen avatar for this server?')) return;
+    const btn = document.getElementById('reset-custom-avatar-btn');
+    if (btn) { btn.disabled = true; btn.textContent = 'Resetting...'; }
+    try {
+      soundFX.playSound('click');
+      const res = await fetch(`/api/guilds/${state.selectedGuildId}/avatar`, { method: 'DELETE' });
+      const data = await res.json();
+      if (!res.ok || !data.success) throw new Error(data.error || 'Failed to reset avatar.');
+      soundFX.playSound('success');
+      showToast('Custom avatar reset. Default Aizen branding restored!', 'success');
+      const img = document.getElementById('dashboard-avatar-preview');
+      if (img && data.default_avatar_url) img.src = data.default_avatar_url;
+    } catch (err) {
+      soundFX.playSound('warning');
+      showToast(err.message, 'error');
+    } finally {
+      if (btn) { btn.disabled = false; btn.textContent = 'Reset to Default'; }
+    }
+  });
 
   document.getElementById('redeem-key-btn')?.addEventListener('click', async () => {
     const key = document.getElementById('license-key-input')?.value.trim();

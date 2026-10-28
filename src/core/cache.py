@@ -83,7 +83,7 @@ class MicrosecondCache:
 
     # --- Specialized Hot Paths (Sub-0.01ms / 10 Microseconds) ---
 
-    def get_prefix(self, guild_id: Optional[int], default_prefix: str = "?") -> str:
+    def get_prefix(self, guild_id: Optional[int], default_prefix: str = "+") -> str:
         """Retrieve guild command prefix in sub-0.01ms."""
         if not guild_id:
             return default_prefix

@@ -955,6 +955,187 @@ async def handle_automod_test(request: web.Request) -> web.Response:
     })
 
 
+# ── Custom Bot Avatar Dashboard Handlers ──
+
+async def handle_get_guild_avatar(request: web.Request) -> web.Response:
+    """Retrieve custom server bot avatar settings and premium status."""
+    try:
+        guild_id = int(request.match_info["guild_id"])
+    except (ValueError, KeyError):
+        raise web.HTTPBadRequest(reason="Invalid guild ID specified.")
+
+    await verify_guild_access(request, guild_id)
+    bot = request.app.get("bot") or (request.app["bot_getter"]() if "bot_getter" in request.app else None)
+    db = request.app["db"]
+
+    is_premium = False
+    if bot and hasattr(bot, "premium_mgr"):
+        is_premium = bot.premium_mgr.is_guild_premium(guild_id)
+
+    row = None
+    try:
+        if hasattr(db, "fetch_one"):
+            row = await db.fetch_one(
+                "SELECT avatar_url, status, applied_discord_api, updated_at FROM guild_custom_avatars WHERE guild_id = ?;",
+                guild_id,
+            )
+    except Exception as e:
+        logger.debug(f"Notice fetching custom avatar: {e}")
+
+    default_avatar = "https://cdn.discordapp.com/attachments/1562020726670753854/1562693591900495872/07991C9B-39EC-4343-BF54-0E74C6819B78.gif"
+    if bot and bot.user:
+        default_avatar = str(bot.user.display_avatar.url)
+
+    custom_url = row["avatar_url"] if (row and row.get("status") == "active" and is_premium) else None
+
+    return web.json_response({
+        "success": True,
+        "guild_id": str(guild_id),
+        "is_premium": is_premium,
+        "custom_avatar_url": custom_url,
+        "applied_discord_api": bool(row.get("applied_discord_api")) if row else False,
+        "default_avatar_url": default_avatar,
+    })
+
+
+async def handle_set_guild_avatar(request: web.Request) -> web.Response:
+    """Upload or set custom server bot avatar. Strictly requires Server Premium."""
+    try:
+        guild_id = int(request.match_info["guild_id"])
+    except (ValueError, KeyError):
+        raise web.HTTPBadRequest(reason="Invalid guild ID specified.")
+
+    session_data = await verify_guild_access(request, guild_id)
+    bot = request.app.get("bot") or (request.app["bot_getter"]() if "bot_getter" in request.app else None)
+    db = request.app["db"]
+    user_id = int(session_data.get("id") or 0)
+
+    # 1. Enforce Premium Subscription Check
+    is_premium = False
+    if bot and hasattr(bot, "premium_mgr"):
+        is_premium = bot.premium_mgr.is_guild_premium(guild_id)
+
+    from src.security.owner import is_primary_owner
+    if not is_premium and not is_primary_owner(user_id):
+        return web.json_response({
+            "success": False,
+            "error": "Custom bot avatar is an exclusive Kyoka Premium feature. Upgrade your server to unlock custom server avatars.",
+            "premium_required": True,
+        }, status=403)
+
+    # 2. Extract image URL or multipart payload
+    target_url = None
+    avatar_bytes = None
+
+    content_type = request.content_type.lower()
+    if "multipart" in content_type:
+        reader = await request.multipart()
+        field = await reader.next()
+        if field and field.name in ("avatar", "file", "image"):
+            avatar_bytes = await field.read()
+    else:
+        try:
+            body = await request.json()
+            target_url = str(body.get("avatar_url", "") or body.get("image_url", "")).strip()
+        except Exception:
+            return web.json_response({"success": False, "error": "Invalid request body."}, status=400)
+
+    if not avatar_bytes and target_url:
+        # Download image from URL
+        try:
+            http_session = request.app["http_session"]
+            async with http_session.get(target_url, timeout=10) as resp:
+                if resp.status != 200:
+                    return web.json_response({"success": False, "error": "Failed to download image from the provided URL."}, status=400)
+                avatar_bytes = await resp.read()
+        except Exception as e:
+            return web.json_response({"success": False, "error": f"Could not retrieve image URL: {e}"}, status=400)
+
+    if not avatar_bytes:
+        return web.json_response({"success": False, "error": "No avatar file or valid image URL provided."}, status=400)
+
+    if len(avatar_bytes) > 10 * 1024 * 1024:
+        return web.json_response({"success": False, "error": "Image file exceeds Discord's 10MB limit."}, status=400)
+
+    # 3. Apply to Discord Member Avatar if bot is in guild
+    applied_discord_api = False
+    if bot:
+        guild = bot.get_guild(guild_id)
+        if guild and guild.me:
+            try:
+                await guild.me.edit(avatar=avatar_bytes, reason=f"Dashboard avatar upload by user {user_id}")
+                applied_discord_api = True
+            except Exception as e:
+                logger.info(f"Dashboard member avatar Discord API notice: {e}")
+                applied_discord_api = False
+
+    # 4. Save to PostgreSQL database
+    final_url = target_url or f"https://cdn.discordapp.com/avatars/{bot.user.id if bot and bot.user else 0}/custom_{guild_id}.png"
+    try:
+        if hasattr(db, "execute"):
+            await db.execute(
+                """
+                INSERT INTO guild_custom_avatars (guild_id, avatar_url, set_by, status, applied_discord_api, updated_at)
+                VALUES (?, ?, ?, 'active', ?, CURRENT_TIMESTAMP)
+                ON CONFLICT (guild_id) DO UPDATE SET
+                    avatar_url = excluded.avatar_url,
+                    set_by = excluded.set_by,
+                    status = 'active',
+                    applied_discord_api = excluded.applied_discord_api,
+                    updated_at = CURRENT_TIMESTAMP;
+                """,
+                guild_id,
+                final_url,
+                user_id,
+                applied_discord_api,
+            )
+    except Exception as dbe:
+        logger.error(f"Failed to persist avatar to DB: {dbe}")
+
+    return web.json_response({
+        "success": True,
+        "avatar_url": final_url,
+        "applied_discord_api": applied_discord_api,
+        "message": "Custom bot avatar updated successfully!" if applied_discord_api else "Custom avatar saved! Kyoka Visual Branding is now active for this server.",
+    })
+
+
+async def handle_reset_guild_avatar(request: web.Request) -> web.Response:
+    """Reset custom server bot avatar back to default global Aizen branding."""
+    try:
+        guild_id = int(request.match_info["guild_id"])
+    except (ValueError, KeyError):
+        raise web.HTTPBadRequest(reason="Invalid guild ID specified.")
+
+    await verify_guild_access(request, guild_id)
+    bot = request.app.get("bot") or (request.app["bot_getter"]() if "bot_getter" in request.app else None)
+    db = request.app["db"]
+
+    if bot:
+        guild = bot.get_guild(guild_id)
+        if guild and guild.me:
+            try:
+                await guild.me.edit(avatar=None, reason="Dashboard avatar reset")
+            except Exception:
+                pass
+
+    try:
+        if hasattr(db, "execute"):
+            await db.execute("DELETE FROM guild_custom_avatars WHERE guild_id = ?;", guild_id)
+    except Exception as dbe:
+        logger.error(f"Failed to delete custom avatar from DB: {dbe}")
+
+    default_avatar = "https://cdn.discordapp.com/attachments/1562020726670753854/1562693591900495872/07991C9B-39EC-4343-BF54-0E74C6819B78.gif"
+    if bot and bot.user:
+        default_avatar = str(bot.user.display_avatar.url)
+
+    return web.json_response({
+        "success": True,
+        "default_avatar_url": default_avatar,
+        "message": "Custom avatar reset. Default Aizen branding restored.",
+    })
+
+
 def register_guild_routes(app: web.Application) -> None:
     app.router.add_get("/api/guilds", handle_list_guilds)
     app.router.add_get("/api/guilds/{guild_id}/settings", handle_get_settings)
@@ -966,3 +1147,6 @@ def register_guild_routes(app: web.Application) -> None:
     app.router.add_post("/api/guilds/{guild_id}/wizard/apply", handle_apply_wizard)
     app.router.add_get("/api/guilds/{guild_id}/premium", handle_get_guild_premium)
     app.router.add_post("/api/guilds/{guild_id}/premium/redeem", handle_redeem_premium)
+    app.router.add_get("/api/guilds/{guild_id}/avatar", handle_get_guild_avatar)
+    app.router.add_post("/api/guilds/{guild_id}/avatar", handle_set_guild_avatar)
+    app.router.add_delete("/api/guilds/{guild_id}/avatar", handle_reset_guild_avatar)

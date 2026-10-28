@@ -78,6 +78,9 @@ class ErrorHandler(commands.Cog, name="ErrorHandler"):
                 )
             )
 
+        elif type(error).__name__ == "PremiumRequiredError":
+            return
+
         elif isinstance(error, (commands.NotOwner, commands.CheckFailure)):
             container.add_section(
                 content=(
