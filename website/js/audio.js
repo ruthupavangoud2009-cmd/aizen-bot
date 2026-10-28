@@ -66,6 +66,10 @@ class AizenAtmosphericAudio {
           </button>
           <input type="range" id="audio-volume-slider" class="audio-slider" min="0" max="100" value="${Math.round(this.volume * 100)}" aria-label="Soundtrack Volume" title="Volume Slider" />
         </div>
+
+        <button id="audio-minimize-btn" class="audio-ctrl-btn audio-min-btn" aria-label="Minimize or Expand Player" title="Minimize Soundtrack Dock" style="width: 26px; height: 26px; font-size: 0.7rem; background: rgba(255,255,255,0.06); border: 1px solid rgba(168,85,247,0.25); margin-left: 0.2rem;">
+          <span id="audio-min-icon">▾</span>
+        </button>
       </div>
     `;
 
@@ -76,6 +80,17 @@ class AizenAtmosphericAudio {
     const playBtn = document.getElementById('audio-play-btn');
     const muteBtn = document.getElementById('audio-mute-btn');
     const slider = document.getElementById('audio-volume-slider');
+    const minBtn = document.getElementById('audio-minimize-btn');
+    const dock = document.getElementById('aizen-audio-dock');
+
+    minBtn?.addEventListener('click', (e) => {
+      e.stopPropagation();
+      dock?.classList.toggle('minimized');
+      const icon = document.getElementById('audio-min-icon');
+      if (icon) {
+        icon.textContent = dock?.classList.contains('minimized') ? '🎵' : '▾';
+      }
+    });
 
     playBtn?.addEventListener('click', () => {
       this.userHasEngaged = true;

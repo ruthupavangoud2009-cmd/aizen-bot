@@ -864,6 +864,58 @@ nav, header, main, footer, .dashboard-wrapper, .section {
   accent-color: var(--purple-glow);
 }
 
+.aizen-audio-dock.minimized .audio-meta,
+.aizen-audio-dock.minimized .audio-volume-group {
+  display: none !important;
+}
+
+.aizen-audio-dock.minimized .audio-pill {
+  padding: 0.35rem 0.55rem;
+  border-radius: var(--radius-full);
+  gap: 0.35rem;
+  width: auto;
+}
+
+.dashboard-wrapper,
+.owner-main-wrapper,
+.staff-wrapper,
+.shop-wrapper {
+  padding-bottom: 5.5rem !important;
+}
+
+@media (max-width: 768px) {
+  .nav-actions {
+    gap: 0.4rem;
+  }
+  .nav-auth-cluster {
+    display: flex;
+    align-items: center;
+    gap: 0.35rem;
+  }
+  .desktop-text {
+    display: none !important;
+  }
+  .mobile-text {
+    display: inline !important;
+  }
+  .user-name-label {
+    display: none !important;
+  }
+  .user-profile-btn {
+    padding: 0.25rem;
+  }
+  .logout-nav-btn {
+    padding: 0.3rem 0.5rem;
+    font-size: 0.75rem;
+  }
+}
+
+@media (min-width: 769px) {
+  .mobile-text {
+    display: none !important;
+  }
+}
+
 @media (max-width: 640px) {
   .aizen-audio-dock {
     bottom: 0.75rem;

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import logging
 import random
 import time
@@ -233,6 +234,7 @@ async def execute_stay(cog: Music, ctx: commands.Context) -> None:
     player.is_247 = not getattr(player, "is_247", False)
 
     if player.is_247:
+        player.autoplay = True
         if hasattr(cog.controller, "_247_cache"):
             cog.controller._247_cache.add(ctx.guild.id)
         player.cancel_empty_vc_timer(auto_resume=False)
@@ -242,6 +244,14 @@ async def execute_stay(cog: Music, ctx: commands.Context) -> None:
                 await player.connect_voice(ctx.author.voice.channel)
             except Exception:
                 pass
+
+        # If not actively playing and queue is empty, auto-start 24/7 continuous music
+        if not player.is_playing and not player.queue:
+            try:
+                from src.cogs.music._commands.play import execute_play
+                asyncio.create_task(execute_play(cog, ctx, "lofi hip hop radio beats to relax study to"))
+            except Exception as e:
+                logger.warning(f"Could not auto-start 24/7 music: {e}")
     else:
         if hasattr(cog.controller, "_247_cache"):
             cog.controller._247_cache.discard(ctx.guild.id)
@@ -267,8 +277,8 @@ async def execute_stay(cog: Music, ctx: commands.Context) -> None:
     container = KyokaContainer(accent_color=None)
     container.add_section(
         content=(
-            f"**24/7 Voice Mode: {state_str}**\n"
-            f"> Kyoka will {'remain connected in voice indefinitely even when empty' if player.is_247 else 'automatically disconnect when the voice channel is empty'}."
+            f"**24/7 Voice & Music Mode: {state_str}**\n"
+            f"> Kyoka will {'remain in voice 24/7 playing continuous music with Autoplay active' if player.is_247 else 'automatically disconnect when the voice channel is empty'}."
         )
     )
     container.add_separator(divider=True)

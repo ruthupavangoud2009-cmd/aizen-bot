@@ -125,25 +125,6 @@ const KDC_PRODUCTS = [
     ],
   },
   {
-    id: 'nitro_3m',
-    category: 'nitro',
-    name: '3 Months Nitro Promo Link',
-    icon: '💎',
-    badge: 'TRIAL PROMO',
-    badgeClass: '',
-    desc: '3-Month Discord Nitro Promo Activation for fresh/qualifying Discord accounts.',
-    price_inr: 350,
-    price_usd: 3.5,
-    stock: 60,
-    is_auto_deliver: false,
-    features: [
-      '90 Days of full Discord Nitro perks',
-      '2 Boosts included per month',
-      'Official Discord partnership promo link',
-      'Instant automated delivery link',
-    ],
-  },
-  {
     id: 'nitro_1y',
     category: 'nitro',
     name: '1 Year Nitro Full ID',
@@ -339,7 +320,7 @@ function openCheckoutModal(item) {
   document.getElementById('modal-item-icon').textContent = item.icon;
   document.getElementById('modal-item-title').textContent = item.name;
   document.getElementById('modal-bill-id').textContent = randomId;
-  document.getElementById('modal-total-price').innerHTML = `₹${item.price_inr} <span style="font-size: 0.8rem; color: #FCA5A5; text-decoration: line-through; margin-left: 0.4rem; font-weight: 600;">$${item.price_usd.toFixed(2)} USD</span> <span style="font-size: 0.7rem; color: #EF4444; font-weight: 800; background: rgba(239, 68, 68, 0.18); padding: 0.1rem 0.4rem; border-radius: 4px;">USD Unavailable</span>`;
+  document.getElementById('modal-total-price').innerHTML = `₹${item.price_inr} <span style="font-size: 0.8rem; color: #10B981; margin-left: 0.4rem; font-weight: 700;">or 🍎 Blox Fruits</span> <span style="font-size: 0.7rem; color: #EF4444; font-weight: 800; background: rgba(239, 68, 68, 0.18); padding: 0.1rem 0.4rem; border-radius: 4px;">USD Unavailable</span>`;
   document.getElementById('modal-fulfillment').textContent = item.is_auto_deliver ? '⚡ Instant Zip Auto-Delivery' : '🚀 Server Invite / Staff Delivery';
   
   const qrImg = document.getElementById('modal-qr-img');
@@ -351,6 +332,24 @@ function openCheckoutModal(item) {
   const usdNotice = document.getElementById('modal-usd-notice');
   if (usdNotice) {
     usdNotice.style.display = 'block';
+  }
+
+  // Set default active tab based on current currency
+  const tabUpi = document.getElementById('modal-tab-upi');
+  const tabFruit = document.getElementById('modal-tab-fruit');
+  const upiSec = document.getElementById('modal-upi-section');
+  const fruitSec = document.getElementById('modal-fruit-section');
+
+  if (currentCurrency === 'FRUIT') {
+    tabFruit?.classList.add('active');
+    tabUpi?.classList.remove('active');
+    if (fruitSec) fruitSec.style.display = 'block';
+    if (upiSec) upiSec.style.display = 'none';
+  } else {
+    tabUpi?.classList.add('active');
+    tabFruit?.classList.remove('active');
+    if (upiSec) upiSec.style.display = 'block';
+    if (fruitSec) fruitSec.style.display = 'none';
   }
 
   modal.style.display = 'flex';
@@ -379,22 +378,57 @@ document.addEventListener('DOMContentLoaded', () => {
   // Currency Switcher
   const inrBtn = document.getElementById('curr-inr-btn');
   const usdBtn = document.getElementById('curr-usd-btn');
+  const fruitBtn = document.getElementById('curr-fruit-btn');
 
   inrBtn?.addEventListener('click', () => {
     soundFX.playSound('click');
     currentCurrency = 'INR';
     inrBtn.classList.add('active');
+    fruitBtn?.classList.remove('active');
     usdBtn?.classList.remove('active');
+    renderCatalog();
+  });
+
+  fruitBtn?.addEventListener('click', () => {
+    soundFX.playSound('click');
+    currentCurrency = 'FRUIT';
+    fruitBtn.classList.add('active');
+    inrBtn?.classList.remove('active');
+    usdBtn?.classList.remove('active');
+    showToast('🍎 Blox Fruits Payment Selected: You can pay with in-game fruits (Kitsune, Leopard, Dough, Buddha, etc.)!', 'success');
     renderCatalog();
   });
 
   usdBtn?.addEventListener('click', () => {
     soundFX.playSound('click');
-    showToast('❌ USD payments are currently unavailable. Please pay in ₹ INR using the official scanner.', 'error');
+    showToast('❌ USD payments are currently unavailable. Please pay in ₹ INR or 🍎 Blox Fruits.', 'error');
     currentCurrency = 'INR';
     inrBtn?.classList.add('active');
+    fruitBtn?.classList.remove('active');
     usdBtn?.classList.remove('active');
     renderCatalog();
+  });
+
+  // Modal Payment Method Tabs
+  const modalTabUpi = document.getElementById('modal-tab-upi');
+  const modalTabFruit = document.getElementById('modal-tab-fruit');
+  const modalUpiSec = document.getElementById('modal-upi-section');
+  const modalFruitSec = document.getElementById('modal-fruit-section');
+
+  modalTabUpi?.addEventListener('click', () => {
+    soundFX.playSound('click');
+    modalTabUpi.classList.add('active');
+    modalTabFruit?.classList.remove('active');
+    if (modalUpiSec) modalUpiSec.style.display = 'block';
+    if (modalFruitSec) modalFruitSec.style.display = 'none';
+  });
+
+  modalTabFruit?.addEventListener('click', () => {
+    soundFX.playSound('click');
+    modalTabFruit.classList.add('active');
+    modalTabUpi?.classList.remove('active');
+    if (modalFruitSec) modalFruitSec.style.display = 'block';
+    if (modalUpiSec) modalUpiSec.style.display = 'none';
   });
 
   // Modal Close Listeners
@@ -409,6 +443,12 @@ document.addEventListener('DOMContentLoaded', () => {
   document.getElementById('modal-claim-btn')?.addEventListener('click', () => {
     soundFX.playSound('success');
     if (!activeModalItem) return;
+    const isFruit = modalFruitSec && modalFruitSec.style.display !== 'none';
+    if (isFruit) {
+      const robloxUser = document.getElementById('modal-roblox-user')?.value.trim() || 'Roblox Trader';
+      showToast(`🍎 Blox Fruits Order for "${robloxUser}"! Join Discord with your Invoice ID to complete trade with staff.`, 'success');
+      return;
+    }
     if (activeModalItem.is_auto_deliver) {
       showToast(`⚡ Bot Auto-Delivery: Open Discord and type "stock" or verify Transaction ID for ${activeModalItem.name}!`, 'success');
     } else {

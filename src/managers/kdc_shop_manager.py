@@ -173,23 +173,6 @@ DEFAULT_ITEMS: list[ShopItem] = [
         ],
     ),
     ShopItem(
-        id="nitro_3m",
-        category="nitro",
-        name="3 Months Nitro Promo Link",
-        description="3-Month Discord Nitro Promo Activation for fresh/qualifying Discord IDs.",
-        price_inr=350.0,
-        price_usd=3.5,
-        stock_qty=60,
-        is_auto_deliver=False,
-        badge="TRIAL PROMO",
-        features=[
-            "90 Days of full Discord Nitro perks",
-            "2 Boosts included per month",
-            "Official Discord partnership promo link",
-            "Instant automated delivery",
-        ],
-    ),
-    ShopItem(
         id="nitro_1y",
         category="nitro",
         name="1 Year Nitro Full ID",

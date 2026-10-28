@@ -30,9 +30,9 @@ class PermissionManager:
         logger.info("Loaded single primary owner authorization policy.")
 
     def is_developer_sync(self, user_id: int) -> bool:
-        """Fast, synchronous in-memory developer check (0ns latency, zero API calls)."""
-        from src.security.owner import is_primary_owner
-        return is_primary_owner(user_id)
+        """Fast, synchronous in-memory developer/staff check (0ns latency, zero API calls)."""
+        from src.security.owner import is_owner_or_staff
+        return is_owner_or_staff(user_id)
 
     async def is_owner(self, user_id: int) -> bool:
         """Only the configured primary owner ID is an owner."""
@@ -40,7 +40,7 @@ class PermissionManager:
         return is_primary_owner(user_id)
 
     async def is_developer(self, user_id: int) -> bool:
-        """Only the single configured primary owner is a developer."""
+        """Primary owner and authorized bot staff have developer bot privileges."""
         return self.is_developer_sync(user_id)
 
     async def add_developer(self, user_id: int, added_by: int) -> None:

@@ -318,19 +318,22 @@ class KDCShopView(View):
                 "• **14 Boosts** — `₹1,150` *(~$11.50 USD - Unavailable)*\n\n"
                 "**💎 DISCORD NITRO SUBSCRIPTIONS**\n"
                 "• **1 Month Nitro ID + 2 Boosts** — `₹250` *(~$2.50 USD - Unavailable)*\n"
-                "• **3 Months Nitro Promo Link** — `₹350` *(~$3.50 USD - Unavailable)*\n"
                 "• **1 Year Nitro Full ID** — `₹2,200` *(~$22.00 USD - Unavailable)*\n\n"
                 "**🤖 PRE-BUILT AUTO-DELIVERY BOTS (Source Code Included)**\n"
                 "• **Basic Music Bot** — `₹50` ⚡ *Instant Zip*\n"
                 "• **Auto Chat AI Bot** — `₹50` ⚡ *Instant Zip*\n"
                 "• **Ticket Support Bot** — `₹120` ⚡ *Instant Zip*\n"
                 "• **Anti-Nuke Security Bot** — `₹150` ⚡ *Instant Zip*\n"
-                "• **All-In-One Ultimate Bot** — `₹300` ⚡ *Flagship Suite*"
+                "• **All-In-One Ultimate Bot** — `₹300` ⚡ *Flagship Suite*\n\n"
+                "**🍎 ACCEPTED PAYMENT METHODS**\n"
+                "• **₹ INR UPI QR Scanner** (GPay, PhonePe, Paytm, BHIM, FamPay)\n"
+                "• **🍎 Blox Fruits In-Game Trade** (Kitsune, Dragon, Leopard, Dough, T-Rex, Buddha, etc.)\n"
+                "• *❌ USD payments are currently unavailable.*"
             ),
             color=0x7C3AED,
             timestamp=discord.utils.utcnow(),
         )
-        embed.set_footer(text="KDC Shop • Type 'stock' or 'scanner' anytime • USD Unavailable (INR UPI Only)")
+        embed.set_footer(text="KDC Shop • Type 'stock' or 'scanner' anytime • UPI & Blox Fruits Accepted")
         embed.set_thumbnail(url="https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?w=400&q=80")
         return embed
 
@@ -367,20 +370,9 @@ class KDCShopView(View):
     async def make_bill_inr(self, interaction: discord.Interaction, button: Button):
         await self._handle_make_bill(interaction, "INR")
 
-    @discord.ui.button(label="🧾 Make Bill (USD)", style=discord.ButtonStyle.secondary, emoji="💵", row=1)
-    async def make_bill_usd(self, interaction: discord.Interaction, button: Button):
-        embed = discord.Embed(
-            title="❌ USD PAYMENTS TEMPORARILY UNAVAILABLE",
-            description=(
-                "**USD Payments (PayPal / Stripe) are currently unavailable.**\n\n"
-                "Please click **'🧾 Make Bill (INR)'** to pay in Indian Rupees (**₹ INR**) using the official UPI payment scanner.\n\n"
-                "If you are an international buyer without UPI access, please contact staff or open a support ticket."
-            ),
-            color=0xEF4444,
-            timestamp=discord.utils.utcnow(),
-        )
-        embed.set_footer(text="KDC Shop • USD Unavailable • Please pay in INR")
-        await interaction.response.send_message(embed=embed, ephemeral=True)
+    @discord.ui.button(label="🍎 Pay with Fruits", style=discord.ButtonStyle.secondary, emoji="🍎", row=1)
+    async def make_bill_fruit(self, interaction: discord.Interaction, button: Button):
+        await self._handle_make_bill(interaction, "FRUIT")
 
     @discord.ui.button(label="💳 Payment Scanner", style=discord.ButtonStyle.success, emoji="💳", row=1)
     async def show_payment_scanner(self, interaction: discord.Interaction, button: Button):
@@ -389,6 +381,7 @@ class KDCShopView(View):
             description=(
                 "> **Scan the QR code below with any UPI App (GPay, PhonePe, Paytm, BHIM, FamPay) to pay.**\n\n"
                 "• **Payment Method:** `₹ INR (UPI Scanner Only)`\n"
+                "• **Blox Fruits:** Click **'🍎 Pay with Fruits'** to pay in-game via trade!\n"
                 "• **USD / International:** `❌ Temporarily Unavailable`\n\n"
                 "**Payment & Auto-Delivery Steps:**\n"
                 "1. Click **'🧾 Make Bill (INR)'** on your selected item to generate your Invoice ID.\n"
@@ -420,7 +413,7 @@ class KDCShopView(View):
             any_bills = self.shop_mgr.list_bills(customer_id=interaction.user.id, limit=1)
             if not any_bills:
                 return await interaction.response.send_message(
-                    "❌ You do not have an active invoice. Please click **'🧾 Make Bill (INR)'** on a product first!",
+                    "❌ You do not have an active invoice. Please click **'🧾 Make Bill (INR)'** or **'🍎 Pay with Fruits'** on a product first!",
                     ephemeral=True,
                 )
             target_bill = any_bills[0]
@@ -460,13 +453,13 @@ class KDCShopView(View):
                 title="❌ USD PAYMENTS TEMPORARILY UNAVAILABLE",
                 description=(
                     "**USD Payments are currently unavailable.**\n\n"
-                    "Please select **'🧾 Make Bill (INR)'** to generate an invoice and pay via the official UPI scanner.\n\n"
+                    "Please select **'🧾 Make Bill (INR)'** to pay via UPI QR, or **'🍎 Pay with Fruits'** to pay using in-game Blox Fruits.\n\n"
                     "For manual international payments, contact staff."
                 ),
                 color=0xEF4444,
                 timestamp=discord.utils.utcnow(),
             )
-            embed.set_footer(text="KDC Shop • USD Unavailable • Please pay in INR")
+            embed.set_footer(text="KDC Shop • USD Unavailable • Please pay in INR or Blox Fruits")
             return await interaction.response.send_message(embed=embed, ephemeral=True)
 
         item_id = self.selected_item_id or (self.items[0].id if self.items else "boost_2")
@@ -475,6 +468,37 @@ class KDCShopView(View):
             return await interaction.response.send_message("❌ Product not found.", ephemeral=True)
 
         guild_id = interaction.guild_id or 0
+
+        if currency.upper() == "FRUIT":
+            bill = self.shop_mgr.create_bill(
+                guild_id=guild_id,
+                customer_id=interaction.user.id,
+                customer_name=str(interaction.user),
+                item_id=item.id,
+                currency="FRUIT",
+                quantity=1,
+            )
+            bill_embed = discord.Embed(
+                title=f"🍎 KDC SHOP BLOX FRUITS INVOICE • `{bill.id}`",
+                description=(
+                    f"**Customer:** {interaction.user.mention} (`{interaction.user.name}`)\n"
+                    f"**Product:** `{bill.item_name}`\n"
+                    f"**Payment Method:** `🍎 Blox Fruits In-Game Trade`\n"
+                    f"**Invoice Status:** `🟡 AWAITING IN-GAME TRADE`\n\n"
+                    f"**🍎 Accepted Fruits:**\n"
+                    f"• **Mythical:** Kitsune, Dragon, Leopard, Dough, T-Rex, Spirit, Venom, Mammoth\n"
+                    f"• **Legendary:** Buddha, Portal, Blizzard, Sound, Rumble\n\n"
+                    f"**Trade & Delivery Steps:**\n"
+                    f"1. Open a support ticket or ping Bot Staff with your Invoice ID: **`{bill.id}`**.\n"
+                    f"2. Join the staff member's VIP / Private Server to complete the Roblox fruit trade.\n"
+                    f"3. Staff will mark your invoice as verified and your bot/boost is delivered immediately!"
+                ),
+                color=0x10B981,
+                timestamp=discord.utils.utcnow(),
+            )
+            bill_embed.set_footer(text=f"Invoice ID: {bill.id} • KDC Shop • Blox Fruits Trade")
+            return await interaction.response.send_message(embed=bill_embed, ephemeral=True)
+
         bill = self.shop_mgr.create_bill(
             guild_id=guild_id,
             customer_id=interaction.user.id,
@@ -492,7 +516,7 @@ class KDCShopView(View):
                 f"**Product:** `{bill.item_name}`\n"
                 f"**Quantity:** `1`\n"
                 f"**Total Due:** `₹ {amount_str} INR`\n"
-                f"**USD Status:** `❌ USD Payments Unavailable (Pay via INR)`\n"
+                f"**USD Status:** `❌ USD Payments Unavailable (Pay via INR or Blox Fruits)`\n"
                 f"**Invoice Status:** `🟡 PENDING PAYMENT`\n\n"
                 f"**How to Pay:**\n"
                 f"• Scan the official **UPI QR code** below using GPay, PhonePe, Paytm, BHIM, or FamPay.\n\n"
@@ -535,12 +559,19 @@ class KDCShop(commands.Cog, name="KDCShop"):
         # Trigger on exact keywords: "stock", "kdc stock", "kdc shop", "kdc"
         if clean in ("stock", "kdc stock", "kdc shop", "kdc"):
             ctx = await self.bot.get_context(message)
+            if ctx.valid and ctx.command is not None:
+                # Bot command dispatcher will invoke this command; don't execute twice!
+                return
             await self.open_shop(ctx)
         elif clean in ("scanner", "qr", "kdc scanner", "kdc qr", "upi scanner", "payqr"):
             ctx = await self.bot.get_context(message)
+            if ctx.valid and ctx.command is not None:
+                return
             await self.send_scanner_embed(ctx)
         elif clean in ("review", "reviews", "kdc review", "kdc reviews"):
             ctx = await self.bot.get_context(message)
+            if ctx.valid and ctx.command is not None:
+                return
             embed = self.generate_reviews_embed()
             view = ReviewsView(self.shop_mgr, self)
             await ctx.send(embed=embed, view=view)

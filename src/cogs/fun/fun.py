@@ -653,25 +653,34 @@ class Fun(commands.Cog):
 
     @commands.command(
         name="spam",
-        help="Owner-only: repeat a message up to 2,000 times; explicit @user mentions are pinged.",
+        help="Owner-only: repeat a message up to 10,000 times; explicit @user mentions are pinged.",
     )
     async def spam(self, ctx: CustomContext, count: int, *, message: str):
+        # Auto-delete the invoking command message immediately (e.g. "spam 10 hi")
+        mentioned_users = list({user.id: user for user in ctx.message.mentions}.values()) if hasattr(ctx, "message") and ctx.message and hasattr(ctx.message, "mentions") else []
+        if hasattr(ctx, "message") and ctx.message:
+            try:
+                await ctx.message.delete()
+            except Exception:
+                pass
+
         # Enforce authorization before validating arguments or starting any output job.
         author_id = getattr(ctx.author, "id", None)
         if not is_primary_owner(author_id):
-            return await ctx.send("⛔ Only the primary bot owner can use this command.")
-        if not 1 <= count <= 2000:
-            return await ctx.send("Choose a count from **1 to 2,000**.")
+            return await ctx.send("⛔ Only the primary bot owner can use this command.", delete_after=6)
+        if not 1 <= count <= 10000:
+            return await ctx.send("Choose a count from **1 to 10,000**.", delete_after=6)
         message = message.strip()
         if not message:
             return await ctx.send(
-                f"Usage: `{ctx.prefix}spam 5 @user Hello there!`"
+                f"Usage: `{ctx.prefix}spam 5 @user Hello there!`",
+                delete_after=6,
             )
         if len(message) > 1800:
-            return await ctx.send("Keep the repeated message under 1,800 characters.")
+            return await ctx.send("Keep the repeated message under 1,800 characters.", delete_after=6)
         lowered = message.lower()
         if "@everyone" in lowered or "@here" in lowered:
-            return await ctx.send("Mass mentions are blocked in this command.")
+            return await ctx.send("Mass mentions are blocked in this command.", delete_after=6)
 
         task_mgr = self._get_task_manager()
 
@@ -684,12 +693,12 @@ class Fun(commands.Cog):
 
         if channel_task_running:
             return await ctx.send(
-                f"A repeat-message task is already running in this channel. Use `{ctx.prefix}spamcancel` to stop it."
+                f"A repeat-message task is already running in this channel. Use `{ctx.prefix}spamcancel` to stop it.",
+                delete_after=6,
             )
 
         # Only user mentions explicitly included in the command invocation can ping.
         # Roles, @everyone, @here, and reply-author pings remain disabled.
-        mentioned_users = list({user.id: user for user in ctx.message.mentions}.values()) if hasattr(ctx, "message") and ctx.message and hasattr(ctx.message, "mentions") else []
         allowed_mentions = discord.AllowedMentions(
             everyone=False,
             users=mentioned_users,

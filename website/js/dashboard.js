@@ -190,17 +190,17 @@ function updateNavUser(user) {
   if (!slot) return;
 
   const ownerBtn = user.is_owner
-    ? `<a href="/owner" class="btn btn-outline btn-sm" style="border-color: var(--purple-vibrant); color: var(--purple-pastel); font-size: 0.8rem; padding: 0.35rem 0.65rem;" title="Aizen Owner Control Center">👑 Owner Suite</a>`
+    ? `<a href="/owner" class="btn btn-outline btn-sm" style="border-color: var(--purple-vibrant); color: var(--purple-pastel); font-size: 0.8rem; padding: 0.35rem 0.65rem;" title="Aizen Owner Control Center"><span class="desktop-text">👑 Owner Suite</span><span class="mobile-text">👑 Suite</span></a>`
     : '';
 
   slot.innerHTML = `
-    <div style="display: flex; align-items: center; gap: 0.75rem;">
+    <div class="nav-auth-cluster">
       ${ownerBtn}
       <div class="user-profile-btn" style="cursor: default;">
         <img src="${user.avatar_url}" alt="${user.username}" class="user-avatar" />
-        <span style="font-weight: 600; font-size: 0.9rem;">${user.username}</span>
+        <span class="user-name-label" style="font-weight: 600; font-size: 0.9rem;">${user.username}</span>
       </div>
-      <button id="logout-btn" class="btn btn-outline btn-sm" title="Log out">
+      <button id="logout-btn" class="btn btn-outline btn-sm logout-nav-btn" title="Log out">
         Logout
       </button>
     </div>
@@ -562,9 +562,44 @@ function renderWorkspace(container, guild) {
       <!-- Backdrop for Mobile Off-Canvas Drawer -->
       <div id="sidebar-backdrop" class="sidebar-backdrop"></div>
 
+      <!-- Mobile Quick Module Navigation Ribbon -->
+      <div class="mobile-modules-ribbon" id="mobile-modules-ribbon">
+        <button class="mobile-drawer-toggle-btn" id="mobile-open-drawer-btn" title="Open Full Module Drawer">
+          <span>☰</span>
+          <span>Modules</span>
+        </button>
+        <div class="mobile-tabs-scroll" id="mobile-tabs-scroll">
+          <button class="mobile-tab-chip active" data-tab="overview"><span>📊</span> Overview</button>
+          <button class="mobile-tab-chip" data-tab="welcome_leave"><span>👋</span> Welcome</button>
+          <button class="mobile-tab-chip" data-tab="verification"><span>🛡️</span> Verify</button>
+          <button class="mobile-tab-chip" data-tab="moderation"><span>🔨</span> Mod</button>
+          <button class="mobile-tab-chip" data-tab="antinuke"><span>🛡️</span> Anti-Nuke</button>
+          <button class="mobile-tab-chip" data-tab="logs"><span>📜</span> Logs</button>
+          <button class="mobile-tab-chip" data-tab="tickets"><span>🎫</span> Tickets</button>
+          <button class="mobile-tab-chip" data-tab="leveling"><span>📈</span> Levels</button>
+          <button class="mobile-tab-chip" data-tab="giveaways"><span>🎁</span> Giveaways</button>
+          <button class="mobile-tab-chip" data-tab="reaction_roles"><span>🎭</span> Reaction</button>
+          <button class="mobile-tab-chip" data-tab="music_studio"><span>🎧</span> Studio</button>
+          <button class="mobile-tab-chip" data-tab="music"><span>🎵</span> Music</button>
+          <button class="mobile-tab-chip" data-tab="ai"><span>🧠</span> AI</button>
+          <button class="mobile-tab-chip" data-tab="prefix_commands"><span>⚡</span> Prefix</button>
+          <button class="mobile-tab-chip" data-tab="utilities"><span>📌</span> Utilities</button>
+          <button class="mobile-tab-chip" data-tab="premium"><span>👑</span> Premium</button>
+          <button class="mobile-tab-chip" data-tab="embeds"><span>🎨</span> Embeds</button>
+          <button class="mobile-tab-chip" data-tab="roles_channels"><span>⚙️</span> Roles</button>
+          <button class="mobile-tab-chip" data-tab="diagnostics"><span>🩺</span> Health</button>
+        </div>
+      </div>
+
       <!-- Workspace Grid: 19 Tabs Sidebar + Main Content Area -->
       <div class="workspace-layout">
         <aside class="settings-tabs">
+          <div class="mobile-drawer-header" style="display: flex; align-items: center; justify-content: space-between; padding: 0.75rem 1rem; border-bottom: 1px solid var(--border-subtle);">
+            <div style="font-weight: 800; color: var(--purple-white); font-size: 0.95rem; display: flex; align-items: center; gap: 0.5rem;">
+              <span>⚡</span> 19 Kyoka Modules
+            </div>
+            <button id="close-sidebar-drawer-btn" style="background: rgba(255,255,255,0.08); border: 1px solid var(--border-subtle); border-radius: var(--radius-sm); color: var(--text-dim); padding: 0.25rem 0.6rem; cursor: pointer; font-size: 0.85rem;" title="Close Drawer">✕ Close</button>
+          </div>
           <div style="padding: 0.4rem 0.5rem 0.65rem;">
             <div style="position: relative; margin-bottom: 0.5rem;">
               <input type="text" id="tab-search-input" class="form-input" placeholder="🔍 Search 19 modules..." style="font-size: 0.8rem; padding: 0.4rem 1.6rem 0.4rem 0.65rem; background: rgba(10, 5, 22, 0.85); border: 1px solid var(--border-subtle); border-radius: var(--radius-sm); width: 100%; color: var(--text-main);" />
@@ -838,6 +873,32 @@ function renderWorkspace(container, guild) {
     });
   });
 
+  // Mobile Ribbon Tab Chips listeners
+  container.querySelectorAll('.mobile-tab-chip').forEach(chip => {
+    chip.addEventListener('click', () => {
+      const tab = chip.getAttribute('data-tab');
+      switchTab(tab);
+    });
+  });
+
+  // Mobile Drawer Toggle Button & Backdrop handlers
+  const sidebarEl = container.querySelector('.settings-tabs');
+  const backdropEl = document.getElementById('sidebar-backdrop');
+  document.getElementById('mobile-open-drawer-btn')?.addEventListener('click', () => {
+    if (sidebarEl) sidebarEl.classList.add('sidebar-open');
+    if (backdropEl) backdropEl.classList.add('active');
+  });
+
+  document.getElementById('close-sidebar-drawer-btn')?.addEventListener('click', () => {
+    if (sidebarEl) sidebarEl.classList.remove('sidebar-open');
+    if (backdropEl) backdropEl.classList.remove('active');
+  });
+
+  backdropEl?.addEventListener('click', () => {
+    if (sidebarEl) sidebarEl.classList.remove('sidebar-open');
+    if (backdropEl) backdropEl.classList.remove('active');
+  });
+
   // Quick Guide listeners
   container.querySelectorAll('.quick-guide-step-pill').forEach(pill => {
     pill.addEventListener('click', () => {
@@ -869,10 +930,17 @@ function switchTab(tabKey) {
   if (!container) return;
 
   container.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+  container.querySelectorAll('.mobile-tab-chip').forEach(b => b.classList.remove('active'));
   container.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
 
   const activeBtn = container.querySelector(`.tab-btn[data-tab="${tabKey}"]`);
   if (activeBtn) activeBtn.classList.add('active');
+
+  const activeChip = container.querySelector(`.mobile-tab-chip[data-tab="${tabKey}"]`);
+  if (activeChip) {
+    activeChip.classList.add('active');
+    activeChip.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'center' });
+  }
 
   const activePanel = document.getElementById(`tab-${tabKey}`);
   if (activePanel) {

@@ -174,7 +174,6 @@ async function renderStaffDashboard(container) {
                 <option value="boost_10" data-inr="850" data-usd="8.5">10 Server Boosts (₹850 / $8.50)</option>
                 <option value="boost_14" data-inr="1150" data-usd="11.5">14 Server Boosts (Level 3 - ₹1,150 / $11.50)</option>
                 <option value="nitro_1m_2b" data-inr="250" data-usd="2.5">1 Month Nitro ID + 2 Boosts (₹250 / $2.50)</option>
-                <option value="nitro_3m" data-inr="350" data-usd="3.5">3 Months Nitro Promo Link (₹350 / $3.50)</option>
                 <option value="nitro_1y" data-inr="2200" data-usd="22.0">1 Year Nitro Full ID (₹2,200 / $22.00)</option>
                 <option value="bot_music" data-inr="50" data-usd="0.5">Basic Music Bot (₹50 / $0.50)</option>
                 <option value="bot_chat" data-inr="50" data-usd="0.5">Auto Chat AI Bot (₹50 / $0.50)</option>

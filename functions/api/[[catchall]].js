@@ -67,6 +67,19 @@ export async function onRequest(context) {
         }
       }
 
+      const contentType = response.headers.get('content-type') || '';
+      if (response.status >= 500 && !contentType.includes('application/json')) {
+        responseHeaders.set('Content-Type', 'application/json');
+        return new Response(JSON.stringify({
+          success: false,
+          error: 'Bot backend is currently starting up. Please retry in a few seconds.',
+          status: response.status
+        }), {
+          status: 503,
+          headers: responseHeaders,
+        });
+      }
+
       return new Response(response.body, {
         status: response.status,
         statusText: response.statusText,
@@ -74,6 +87,19 @@ export async function onRequest(context) {
       });
     } catch (err) {
       console.warn('Backend proxy fetch failed:', err);
+      const fallbackHeaders = new Headers({
+        'Access-Control-Allow-Origin': url.origin,
+        'Access-Control-Allow-Credentials': 'true',
+        'Content-Type': 'application/json',
+      });
+      return new Response(JSON.stringify({
+        success: false,
+        error: 'Unable to reach bot backend service. Please wait a few seconds and retry.',
+        status: 503,
+      }), {
+        status: 503,
+        headers: fallbackHeaders,
+      });
     }
   }
 

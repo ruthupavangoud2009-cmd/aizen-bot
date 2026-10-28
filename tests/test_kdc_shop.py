@@ -60,9 +60,7 @@ def test_kdc_shop_exact_pricing_seed(temp_shop: KDCShopManager):
     assert item_map["nitro_1m_2b"].price_inr == 250.0
     assert item_map["nitro_1m_2b"].price_usd == 2.5
 
-    assert "nitro_3m" in item_map
-    assert item_map["nitro_3m"].price_inr == 350.0
-    assert item_map["nitro_3m"].price_usd == 3.5
+    assert "nitro_3m" not in item_map
 
     assert "nitro_1y" in item_map
     assert item_map["nitro_1y"].price_inr == 2200.0

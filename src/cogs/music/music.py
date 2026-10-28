@@ -689,15 +689,95 @@ class Music(commands.Cog):
         """Skip directly to a track in queue."""
         await execute_jump(self, ctx, index)
 
-    @commands.command(
+    async def play_favorites_playlist(self, ctx: CustomContext) -> None:
+        """Play the user's personal Favorites playlist immediately into voice."""
+        if not ctx.guild:
+            return
+        if not getattr(ctx.author, "voice", None) or not getattr(ctx.author.voice, "channel", None):
+            container = KyokaContainer(accent_color=None)
+            container.add_text("⚠️ **Join a voice channel first, then try again.**")
+            await send_container_response(ctx, container)
+            return
+
+        db = ctx.bot.db
+        user_id = ctx.author.id
+
+        pl_row = await db.fetch_one(
+            "SELECT id, playlist_name FROM user_playlists WHERE user_id = $1 AND LOWER(playlist_name) = 'favorites';",
+            user_id,
+        )
+        if not pl_row:
+            container = KyokaContainer(accent_color=None)
+            container.add_text(
+                "💖 **You don't have any Favorites yet!**\n> Use `+like` while any song is playing to add it to your favorites."
+            )
+            await send_container_response(ctx, container)
+            return
+
+        tracks = await db.fetch_all(
+            "SELECT title, author, duration, url FROM user_playlist_tracks WHERE playlist_id = $1 ORDER BY id ASC;",
+            pl_row["id"],
+        )
+        if not tracks:
+            container = KyokaContainer(accent_color=None)
+            container.add_text(
+                "💖 **Your Favorites playlist is empty!**\n> Use `+like` while any song is playing to add songs to your favorites."
+            )
+            await send_container_response(ctx, container)
+            return
+
+        from src.cogs.music._playlist_views import execute_saved_playlist_playback
+        await execute_saved_playlist_playback(
+            bot=ctx.bot,
+            cog=self,
+            guild=ctx.guild,
+            user=ctx.author,
+            channel=ctx.channel,
+            pl_row=pl_row,
+            tracks=tracks,
+            shuffle=False,
+        )
+
+    @commands.hybrid_command(
+        name="likesongs",
+        aliases=["favsongs", "likes", "favs", "favorites"],
+        description="Play your saved Favorites playlist immediately into voice.",
+    )
+    async def likesongs(self, ctx: CustomContext) -> None:
+        """Play your saved Favorites playlist."""
+        await self.play_favorites_playlist(ctx)
+
+    @commands.hybrid_command(
         name="247",
         aliases=["stay"],
-        description="Toggle 24/7 mode to keep Kyoka connected in voice even when empty.",
+        description="Toggle 24/7 mode to keep Kyoka connected in voice and playing music continuously.",
     )
-    @commands.has_permissions(manage_guild=True)
     async def stay_247(self, ctx: CustomContext) -> None:
-        """Toggle 24/7 voice stay mode."""
+        """Toggle 24/7 voice stay & music mode."""
+        from src.security.owner import is_owner_or_staff
+        has_perm = is_owner_or_staff(ctx.author.id) or (ctx.guild and ctx.author.guild_permissions.manage_guild)
+        if not has_perm:
+            return await ctx.send("⛔ You need `Manage Server` permission (or Bot Staff) to toggle 24/7 mode.", delete_after=6)
         await execute_stay(self, ctx)
+
+    @commands.Cog.listener("on_message")
+    async def on_music_message_triggers(self, message: discord.Message) -> None:
+        if message.author.bot or not message.guild:
+            return
+        content = message.content.strip().lower()
+        if content in ("like songs", "fav songs", "likesongs", "favsongs", "play favorites", "my favorites", "my favorite songs"):
+            ctx = await self.bot.get_context(message)
+            if ctx.valid and ctx.command is not None:
+                return
+            await self.play_favorites_playlist(ctx)
+        elif content in ("247", "24/7", "stay 247"):
+            from src.security.owner import is_owner_or_staff
+            is_allowed = is_owner_or_staff(message.author.id) or (getattr(message.author, "guild_permissions", None) and message.author.guild_permissions.manage_guild)
+            if is_allowed:
+                ctx = await self.bot.get_context(message)
+                if ctx.valid and ctx.command is not None:
+                    return
+                await execute_stay(self, ctx)
 
     @commands.hybrid_command(
         name="musicdiag",

@@ -1792,10 +1792,95 @@ html.reduce-motion *::after {
     justify-content: center;
   }
 
+/* Mobile Quick Module Navigation Ribbon */
+.mobile-modules-ribbon {
+  display: none;
+}
+
+@media (max-width: 900px) {
+  .mobile-modules-ribbon {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    margin-bottom: 1.25rem;
+    background: rgba(18, 9, 34, 0.92);
+    border: 1px solid var(--border-active);
+    border-radius: var(--radius-md);
+    padding: 0.45rem 0.65rem;
+    backdrop-filter: blur(16px);
+    position: sticky;
+    top: 4.2rem;
+    z-index: 100;
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.5);
+  }
+
+  .mobile-drawer-toggle-btn {
+    background: linear-gradient(135deg, var(--purple-primary), var(--purple-dark));
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--radius-sm);
+    color: #fff;
+    padding: 0.4rem 0.65rem;
+    font-size: 0.78rem;
+    font-weight: 700;
+    display: flex;
+    align-items: center;
+    gap: 0.35rem;
+    cursor: pointer;
+    white-space: nowrap;
+    flex-shrink: 0;
+  }
+
+  .mobile-tabs-scroll {
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+    flex-grow: 1;
+  }
+
+  .mobile-tabs-scroll::-webkit-scrollbar {
+    display: none;
+  }
+
+  .mobile-tab-chip {
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid rgba(168, 85, 247, 0.2);
+    border-radius: var(--radius-full);
+    color: var(--text-muted);
+    font-size: 0.78rem;
+    font-weight: 600;
+    padding: 0.35rem 0.75rem;
+    display: flex;
+    align-items: center;
+    gap: 0.35rem;
+    cursor: pointer;
+    white-space: nowrap;
+    flex-shrink: 0;
+    transition: var(--transition);
+  }
+
+  .mobile-tab-chip:hover {
+    background: rgba(147, 51, 234, 0.2);
+    color: var(--purple-pastel);
+  }
+
+  .mobile-tab-chip.active {
+    background: linear-gradient(135deg, var(--purple-primary), var(--purple-vibrant));
+    color: #fff;
+    border-color: var(--purple-glow);
+    box-shadow: 0 0 10px rgba(124, 58, 237, 0.4);
+  }
+
+  .settings-content {
+    padding: 1.25rem 0.85rem;
+  }
+
   /* Sticky Mobile Unsaved Changes Bar */
   .unsaved-bar {
     position: fixed;
-    bottom: max(1rem, env(safe-area-inset-bottom));
+    bottom: max(4.8rem, env(safe-area-inset-bottom));
     left: 1rem;
     right: 1rem;
     z-index: 990;

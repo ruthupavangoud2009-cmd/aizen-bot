@@ -278,6 +278,7 @@
 
       <div class="currency-switcher-dock">
         <button id="curr-inr-btn" class="curr-btn active" title="Pay with Official UPI QR Scanner (₹ INR)">₹ INR (Scan to Pay)</button>
+        <button id="curr-fruit-btn" class="curr-btn" title="Pay with In-Game Blox Fruits Trade">🍎 Blox Fruits (Trade)</button>
         <button id="curr-usd-btn" class="curr-btn disabled-btn" title="USD Payments Temporarily Unavailable" style="opacity: 0.7; cursor: not-allowed; border-color: rgba(239, 68, 68, 0.4); color: #FCA5A5;">❌ $ USD (Unavailable)</button>
       </div>
     </div>
@@ -332,9 +333,19 @@
         </div>
       </div>
 
+      <!-- Payment Method Selector Tabs -->
+      <div style="display: flex; gap: 0.5rem; margin-bottom: 1rem;">
+        <button id="modal-tab-upi" class="btn btn-sm btn-outline active" style="flex: 1; border-color: var(--purple-primary); font-weight: 700;">
+          ₹ UPI Scanner
+        </button>
+        <button id="modal-tab-fruit" class="btn btn-sm btn-outline" style="flex: 1; border-color: rgba(168, 85, 247, 0.35); font-weight: 700;">
+          🍎 Blox Fruits Trade
+        </button>
+      </div>
+
       <!-- USD Unavailable Notice -->
       <div id="modal-usd-notice" style="background: rgba(239, 68, 68, 0.15); border: 1px solid rgba(239, 68, 68, 0.4); border-radius: var(--radius-md); padding: 0.65rem 1rem; margin-bottom: 1rem; color: #FCA5A5; font-size: 0.85rem; text-align: center;">
-        ⚠️ <strong>USD Payments Unavailable:</strong> International USD checkout is currently disabled. Please pay in <strong>₹ INR</strong> using the official UPI scanner below.
+        ⚠️ <strong>USD Payments Unavailable:</strong> International USD checkout is currently disabled. Please pay in <strong>₹ INR</strong> or <strong>🍎 Blox Fruits</strong>.
       </div>
 
       <div style="background: rgba(10, 5, 20, 0.7); border: 1px solid var(--border-active); border-radius: var(--radius-md); padding: 1.25rem; margin-bottom: 1.25rem;">
@@ -343,7 +354,7 @@
           <code id="modal-bill-id" style="color: var(--purple-pastel); font-weight: 800;">KDC-XXXXXX</code>
         </div>
         <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem;">
-          <span style="color: var(--text-dim); font-size: 0.85rem;">Total Amount:</span>
+          <span style="color: var(--text-dim); font-size: 0.85rem;">Price / Trade Value:</span>
           <span id="modal-total-price" style="font-size: 1.35rem; font-weight: 900; color: #10B981;">₹200</span>
         </div>
         <div style="display: flex; justify-content: space-between; align-items: center;">
@@ -352,8 +363,8 @@
         </div>
       </div>
 
-      <!-- Payment Instructions & QR Scanner -->
-      <div style="text-align: center; margin-bottom: 1.5rem;">
+      <!-- Payment Section 1: UPI QR Scanner -->
+      <div id="modal-upi-section" style="text-align: center; margin-bottom: 1.5rem;">
         <p style="color: var(--text-main); font-size: 0.88rem; margin-bottom: 0.75rem;">
           Scan with <strong>GPay, PhonePe, Paytm, FamPay or BHIM UPI</strong> to complete payment:
         </p>
@@ -364,6 +375,35 @@
           <span>📸</span>
           <span>Scan QR scanner with any UPI app to pay</span>
         </div>
+      </div>
+
+      <!-- Payment Section 2: Blox Fruits In-Game Trade -->
+      <div id="modal-fruit-section" style="display: none; background: rgba(16, 185, 129, 0.08); border: 1px solid rgba(16, 185, 129, 0.3); border-radius: var(--radius-md); padding: 1.25rem; margin-bottom: 1.5rem; text-align: left;">
+        <div style="display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.75rem;">
+          <span style="font-size: 1.4rem;">🍎</span>
+          <h4 style="color: #10B981; font-size: 1.05rem; font-weight: 800; margin: 0;">Blox Fruits In-Game Trade Payment</h4>
+        </div>
+        <p style="color: var(--text-muted); font-size: 0.85rem; line-height: 1.5; margin-bottom: 1rem;">
+          We accept in-game Blox Fruits! Choose your fruit and enter your Roblox username to trade with staff in our private VIP server:
+        </p>
+        <label style="display: block; font-size: 0.8rem; font-weight: 700; color: var(--purple-pastel); margin-bottom: 0.35rem;">
+          Choose Your Payment Fruit / Combo:
+        </label>
+        <select id="modal-fruit-select" class="form-input" style="width: 100%; margin-bottom: 0.85rem; font-size: 0.85rem; background: rgba(12, 6, 24, 0.9);">
+          <option value="kitsune">🦊 Kitsune Fruit (Eligible for Any 2 Bots / 14 Server Boosts)</option>
+          <option value="dragon">🐉 Dragon Fruit (Eligible for Any Flagship Bot / 10 Server Boosts)</option>
+          <option value="leopard">🐆 Leopard Fruit (Eligible for 1 Month Nitro / Auto-Bot / 8 Boosts)</option>
+          <option value="dough">🍩 Dough Fruit (Eligible for Basic Bot / 4 Server Boosts)</option>
+          <option value="trex">🦖 T-Rex Fruit (Eligible for Basic Bot / 4 Server Boosts)</option>
+          <option value="mammoth">🦣 Mammoth Fruit (Eligible for Basic Bot / 4 Server Boosts)</option>
+          <option value="spirit">👻 Spirit / Venom / Shadow (Eligible for Basic Bot / 4 Boosts)</option>
+          <option value="buddha">✨ Buddha Fruit + Adds (Eligible for 2 Server Boosts / Basic Bot)</option>
+          <option value="portal">🌀 Portal Fruit + Adds (Eligible for 2 Server Boosts)</option>
+        </select>
+        <label style="display: block; font-size: 0.8rem; font-weight: 700; color: var(--purple-pastel); margin-bottom: 0.35rem;">
+          Your Roblox Username:
+        </label>
+        <input type="text" id="modal-roblox-user" class="form-input" placeholder="e.g. GamerPro_123" style="width: 100%; font-size: 0.85rem; background: rgba(12, 6, 24, 0.9);" />
       </div>
 
       <!-- Actions -->

@@ -111,7 +111,10 @@ export async function apiFetch(endpoint, options = {}, isRetry = false) {
     try {
       data = JSON.parse(text);
     } catch {
-      throw new Error(`API returned non-JSON response (HTTP ${res.status}).`);
+      if (res.status >= 500) {
+        throw new Error('Bot backend is currently waking up. Please wait 10 seconds and try again.');
+      }
+      throw new Error(`Server returned unexpected response (${res.status}).`);
     }
 
     if (!res.ok) {
