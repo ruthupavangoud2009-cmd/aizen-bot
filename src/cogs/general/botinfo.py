@@ -80,6 +80,18 @@ def build_botinfo_container(bot: KyokaBot, guild_id: int | None = None) -> Kyoka
 
     guild_manager = getattr(bot, "guild_mgr", None)
     prefix = guild_manager.get_prefix(guild_id) if guild_manager else Config.DEFAULT_PREFIX
+
+    # Server-specific branding integration with strict isolation & fallback
+    branding = None
+    if hasattr(bot, "branding_mgr"):
+        if guild_id:
+            branding = bot.branding_mgr._cache.get(guild_id)
+        if not branding:
+            branding = bot.branding_mgr.get_default_branding()
+    if branding:
+        bot_name = branding.get("display_name") or bot_name
+        avatar_url = branding.get("avatar_url") or avatar_url
+
     premium_manager = getattr(bot, "premium_mgr", None)
     premium_info = premium_manager.get_guild_info(guild_id) if premium_manager and guild_id else None
     premium_status = (
@@ -89,11 +101,13 @@ def build_botinfo_container(bot: KyokaBot, guild_id: int | None = None) -> Kyoka
     )
 
     container = KyokaContainer()
+    bio_text = branding.get("bio") if branding else "Power isn't given. It's taken. — Sosuke Aizen"
+    bio_line = f"\n> **Bio:** {bio_text}" if bio_text else ""
     container.add_text(
         f"### {bot_name} Information\n"
         f"> **Creator:** Aizen\n"
         f"> **Owner ID:** `{OWNER_ID}`\n"
-        f"> **Bot ID:** `{bot_id if bot_id is not None else 'Unavailable'}`"
+        f"> **Bot ID:** `{bot_id if bot_id is not None else 'Unavailable'}`{bio_line}"
     )
     if avatar_url:
         container.add_media(avatar_url)
@@ -130,6 +144,8 @@ class BotInfo(commands.Cog):
     )
     async def botinfo(self, ctx: CustomContext) -> None:
         guild_id = ctx.guild.id if ctx.guild else None
+        if hasattr(self.bot, "branding_mgr") and guild_id:
+            await self.bot.branding_mgr.get_branding(guild_id)
         invite_url = Config.INVITE_URL
         if not invite_url:
             invite_url = discord.utils.oauth_url(self.bot.application_id) if self.bot.application_id else None

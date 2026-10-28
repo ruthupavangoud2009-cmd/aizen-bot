@@ -252,6 +252,58 @@ class PostgresDatabase(BaseDatabase):
                 created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
             );
             """,
+            # Guild-Scoped Bot Branding Table (Server-Specific Identity)
+            """
+            CREATE TABLE IF NOT EXISTS guild_branding (
+                guild_id BIGINT PRIMARY KEY,
+                display_name VARCHAR(100),
+                bio TEXT,
+                avatar_url TEXT,
+                banner_url TEXT,
+                set_by BIGINT,
+                applied_nickname BOOLEAN DEFAULT FALSE,
+                applied_discord_avatar BOOLEAN DEFAULT FALSE,
+                updated_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
+                created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
+            );
+            """,
+            # Guild Invite Tracker: Member attribution and invite statistics
+            """
+            CREATE TABLE IF NOT EXISTS guild_invites_stats (
+                guild_id BIGINT NOT NULL,
+                user_id BIGINT NOT NULL,
+                regular INT DEFAULT 0,
+                left_count INT DEFAULT 0,
+                fake INT DEFAULT 0,
+                bonus INT DEFAULT 0,
+                updated_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
+                PRIMARY KEY (guild_id, user_id)
+            );
+            """,
+            """
+            CREATE TABLE IF NOT EXISTS guild_member_invites (
+                guild_id BIGINT NOT NULL,
+                user_id BIGINT NOT NULL,
+                inviter_id BIGINT,
+                invite_code VARCHAR(64),
+                is_fake BOOLEAN DEFAULT FALSE,
+                has_left BOOLEAN DEFAULT FALSE,
+                joined_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
+                PRIMARY KEY (guild_id, user_id)
+            );
+            """,
+            """
+            CREATE TABLE IF NOT EXISTS guild_invite_settings (
+                guild_id BIGINT PRIMARY KEY,
+                log_channel_id BIGINT,
+                fake_threshold_days INT DEFAULT 7,
+                is_enabled BOOLEAN DEFAULT TRUE,
+                updated_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
+            );
+            """,
+            """
+            CREATE INDEX IF NOT EXISTS idx_member_invites_inviter ON guild_member_invites(guild_id, inviter_id);
+            """,
             # Active User/Personal Premium table
             """
             CREATE TABLE IF NOT EXISTS user_premium (

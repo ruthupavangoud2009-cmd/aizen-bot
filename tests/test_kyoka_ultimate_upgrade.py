@@ -74,29 +74,29 @@ def test_help_category_pagination_max_15_commands():
     ctx.author.display_name = "Aizen"
     ctx.author.display_avatar.url = "https://cdn.discord.com/avatars/1/avatar.png"
 
-    # Category with 35 commands -> should produce 3 pages (15, 15, 5)
+    # Category with 35 commands -> should produce 4 pages (10, 10, 10, 5)
     commands_list = [MagicMock(qualified_name=f"cmd_{i:02d}", hidden=False) for i in range(35)]
     visible_categories = {"🛡️・MODERATION": commands_list}
 
-    # Page 1: exactly 15 commands (cmd_00 to cmd_14)
+    # Page 1: exactly 10 commands (cmd_00 to cmd_09)
     embed_p1 = cog.build_category_embed(ctx, "🛡️・MODERATION", commands_list, visible_categories, page=1)
-    assert "Page 1/3" in embed_p1.description
+    assert "Page 1/4" in embed_p1.description
     assert "`cmd_00`" in embed_p1.description
-    assert "`cmd_14`" in embed_p1.description
-    assert "`cmd_15`" not in embed_p1.description
+    assert "`cmd_09`" in embed_p1.description
+    assert "`cmd_10`" not in embed_p1.description
 
-    # Page 2: next 15 commands (cmd_15 to cmd_29)
+    # Page 2: next 10 commands (cmd_10 to cmd_19)
     embed_p2 = cog.build_category_embed(ctx, "🛡️・MODERATION", commands_list, visible_categories, page=2)
-    assert "Page 2/3" in embed_p2.description
-    assert "`cmd_15`" in embed_p2.description
-    assert "`cmd_29`" in embed_p2.description
-    assert "`cmd_30`" not in embed_p2.description
+    assert "Page 2/4" in embed_p2.description
+    assert "`cmd_10`" in embed_p2.description
+    assert "`cmd_19`" in embed_p2.description
+    assert "`cmd_20`" not in embed_p2.description
 
-    # Page 3: remaining 5 commands (cmd_30 to cmd_34)
-    embed_p3 = cog.build_category_embed(ctx, "🛡️・MODERATION", commands_list, visible_categories, page=3)
-    assert "Page 3/3" in embed_p3.description
-    assert "`cmd_30`" in embed_p3.description
-    assert "`cmd_34`" in embed_p3.description
+    # Page 4: remaining 5 commands (cmd_30 to cmd_34)
+    embed_p4 = cog.build_category_embed(ctx, "🛡️・MODERATION", commands_list, visible_categories, page=4)
+    assert "Page 4/4" in embed_p4.description
+    assert "`cmd_30`" in embed_p4.description
+    assert "`cmd_34`" in embed_p4.description
 
 
 def test_help_category_select_options_matching_screenshots():
@@ -371,11 +371,11 @@ async def test_owner_spam_authorization_and_2000_limit():
     msg = ctx_unauth.send.call_args[0][0]
     assert "Only the primary bot owner" in msg
 
-    # 2. Reject count > 2000 even for owner
+    # 2. Reject count > 10000 even for owner
     ctx_owner = MagicMock()
     ctx_owner.author.id = OWNER_ID
     ctx_owner.send = AsyncMock()
 
-    await cog.spam.callback(cog, ctx_owner, count=2001, message="Hello")
+    await cog.spam.callback(cog, ctx_owner, count=10001, message="Hello")
     msg2 = ctx_owner.send.call_args[0][0]
-    assert "1 to 2,000" in msg2
+    assert "1 to 10,000" in msg2

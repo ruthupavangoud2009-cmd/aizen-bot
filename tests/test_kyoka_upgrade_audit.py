@@ -43,7 +43,7 @@ async def test_spam_unauthorized_user_rejected():
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("invalid_count", [0, -1, -500, 2001, 5000, 100000])
+@pytest.mark.parametrize("invalid_count", [0, -1, -500, 10001, 50000, 100000])
 async def test_spam_invalid_counts_rejected(invalid_count):
     bot = MagicMock()
     cog = Fun(bot)
@@ -57,7 +57,7 @@ async def test_spam_invalid_counts_rejected(invalid_count):
     ctx.send.assert_called_once()
     args, kwargs = ctx.send.call_args
     sent_text = args[0] if args else kwargs.get("content", "")
-    assert "1 to 2,000" in sent_text
+    assert "1 to 10,000" in sent_text
 
 
 @pytest.mark.asyncio
@@ -137,11 +137,10 @@ async def test_help_compact_embed_structure():
     assert "Kyoka 3.0" in embed.title
     assert embed.color.value == 0x2B0938  # Dark violet aesthetic
     # Verify embed length is strictly safe under 6,000 chars (prevents 6,939 HTTP 400 error)
-    assert len(embed) < 6000
-    # Verify fields contain system status and key features
-    field_names = [f.name for f in embed.fields]
-    assert "📊 System Status" in field_names
-    assert "✨ Key Features" in field_names
+    assert len(embed) < 1500
+    # Verify compact description contains categories and essential commands
+    assert "Moderation" in embed.description or "MODERATION" in embed.description
+    assert "!help" in embed.description
 
 
 # ─────────────────────────────────────────────────────────────────────────────

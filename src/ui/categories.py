@@ -275,7 +275,7 @@ CATEGORY_SEARCH_ALIASES: dict[str, str] = {
     # Premium
     "premium": "premium", "prime": "premium", "tier": "premium", "license": "premium",
     # Server Config
-    "config": "config", "setup": "config", "settings": "config", "prefix": "config", "logs": "config", "admin": "config", "administration": "config",
+    "config": "config", "setup": "config", "settings": "config", "prefix": "config", "logs": "config", "admin": "config", "administration": "config", "setbot": "config", "branding": "config", "brand": "config",
     # Social & Fun
     "social": "social", "fun": "social", "games": "social", "romance": "social", "anime": "social",
     # KDC Shop & Stock & Reviews
@@ -337,6 +337,12 @@ COG_MAPPINGS: dict[str, str] = {
     "serverconfig": "config",
     "prefix": "config",
     "serverlogscog": "config",
+    "addinvites": "config",
+    "removeinvites": "config",
+    "resetinvites": "config",
+    "setinvitechannel": "config",
+    "invitesettings": "config",
+    "invitetracker": "config",
 
     # Automod & Antinuke
     "antiautomodcog": "automod",
@@ -413,6 +419,9 @@ COG_MAPPINGS: dict[str, str] = {
     "analyticsanddiagnostics": "utility",
     "utility-snipe": "utility",
     "utility-snipeall": "utility",
+    "invites": "utility",
+    "inviteleaderboard": "utility",
+    "invitedlist": "utility",
 
     # General & Getting Started
     "ping": "general",
@@ -457,7 +466,7 @@ def resolve_command_category(cmd: Any) -> CategoryMeta:
             return CATEGORY_BY_ID["blox_fruits"]
         if parent_name in ("music", "queue", "player"):
             return CATEGORY_BY_ID["music"]
-        if parent_name in ("config", "setup", "serverconfig"):
+        if parent_name in ("config", "setup", "serverconfig", "setbot", "botbrand"):
             return CATEGORY_BY_ID["config"]
         if parent_name in ("rr", "reactionrole"):
             return CATEGORY_BY_ID["reaction_roles"]

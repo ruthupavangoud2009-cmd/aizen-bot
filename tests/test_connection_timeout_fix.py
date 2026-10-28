@@ -96,8 +96,15 @@ async def test_transient_timeout_retried_with_backoff():
     fake_bot.__aenter__ = AsyncMock(return_value=fake_bot)
     fake_bot.__aexit__ = AsyncMock(return_value=False)
 
+    curr_time = 1000.0
+    def fake_monotonic():
+        nonlocal curr_time
+        curr_time += 70.0
+        return curr_time
+
     with patch.object(main_module, 'KyokaBot', return_value=fake_bot), \
          patch.object(main_module, '_jittered_backoff', return_value=0.001), \
+         patch('time.monotonic', side_effect=fake_monotonic), \
          patch('asyncio.sleep', new_callable=AsyncMock), \
          patch.object(main_module.logger, 'warning') as mock_warn, \
          patch.object(main_module.logger, 'critical') as mock_crit:
@@ -151,8 +158,15 @@ async def test_string_pattern_fallback_catches_connection_timeout():
     fake_bot.__aenter__ = AsyncMock(return_value=fake_bot)
     fake_bot.__aexit__ = AsyncMock(return_value=False)
 
+    curr_time = 1000.0
+    def fake_monotonic():
+        nonlocal curr_time
+        curr_time += 70.0
+        return curr_time
+
     with patch.object(main_module, 'KyokaBot', return_value=fake_bot), \
          patch.object(main_module, '_jittered_backoff', return_value=0.001), \
+         patch('time.monotonic', side_effect=fake_monotonic), \
          patch('asyncio.sleep', new_callable=AsyncMock), \
          patch.object(main_module.logger, 'warning') as mock_warn, \
          patch.object(main_module.logger, 'error') as mock_err:
@@ -186,8 +200,15 @@ async def test_backoff_attempt_increments_and_caps():
     fake_bot.__aenter__ = AsyncMock(return_value=fake_bot)
     fake_bot.__aexit__ = AsyncMock(return_value=False)
 
+    curr_time = 1000.0
+    def fake_monotonic():
+        nonlocal curr_time
+        curr_time += 70.0
+        return curr_time
+
     with patch.object(main_module, 'KyokaBot', return_value=fake_bot), \
          patch.object(main_module, '_jittered_backoff', side_effect=record_jitter), \
+         patch('time.monotonic', side_effect=fake_monotonic), \
          patch('asyncio.sleep', new_callable=AsyncMock), \
          patch.object(main_module.logger, 'warning'):
         await main_module.run_bot_loop()
@@ -217,8 +238,15 @@ async def test_no_duplicate_bot_instance_on_retry():
         bots_created.append(bot)
         return bot
 
+    curr_time = 1000.0
+    def fake_monotonic():
+        nonlocal curr_time
+        curr_time += 70.0
+        return curr_time
+
     with patch.object(main_module, 'KyokaBot', side_effect=make_bot), \
          patch.object(main_module, '_jittered_backoff', return_value=0.001), \
+         patch('time.monotonic', side_effect=fake_monotonic), \
          patch('asyncio.sleep', new_callable=AsyncMock), \
          patch.object(main_module.logger, 'warning'):
         await main_module.run_bot_loop()

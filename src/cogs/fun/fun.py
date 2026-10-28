@@ -653,7 +653,7 @@ class Fun(commands.Cog):
 
     @commands.command(
         name="spam",
-        help="Owner-only: repeat a message up to 10,000 times; explicit @user mentions are pinged.",
+        help="Owner & Bot Staff: repeat a message (Owner limit: 10,000, Staff limit: 20; interval: 0.4s). Supports roles, @everyone, and @here.",
     )
     async def spam(self, ctx: CustomContext, count: int, *, message: str):
         # Auto-delete the invoking command message immediately (e.g. "spam 10 hi")
@@ -664,12 +664,21 @@ class Fun(commands.Cog):
             except Exception:
                 pass
 
-        # Enforce authorization before validating arguments or starting any output job.
+        # Enforce authorization: Primary Owner or Bot Staff
         author_id = getattr(ctx.author, "id", None)
-        if not is_primary_owner(author_id):
-            return await ctx.send("⛔ Only the primary bot owner can use this command.", delete_after=6)
-        if not 1 <= count <= 10000:
-            return await ctx.send("Choose a count from **1 to 10,000**.", delete_after=6)
+        from src.security.owner import is_primary_owner, is_owner_or_staff, OWNER_ID
+
+        if not is_owner_or_staff(author_id):
+            return await ctx.send("⛔ Only the primary bot owner or bot staff can use this command.", delete_after=6)
+
+        is_owner = is_primary_owner(author_id)
+        max_limit = 10000 if is_owner else 20
+
+        if not 1 <= count <= max_limit:
+            if is_owner:
+                return await ctx.send("Choose a count from **1 to 10,000**.", delete_after=6)
+            return await ctx.send("Choose a count from **1 to 20** (Bot Staff limit: 20; Primary Owner limit: 10,000).", delete_after=6)
+
         message = message.strip()
         if not message:
             return await ctx.send(
@@ -678,9 +687,22 @@ class Fun(commands.Cog):
             )
         if len(message) > 1800:
             return await ctx.send("Keep the repeated message under 1,800 characters.", delete_after=6)
-        lowered = message.lower()
-        if "@everyone" in lowered or "@here" in lowered:
-            return await ctx.send("Mass mentions are blocked in this command.", delete_after=6)
+
+        # Protection: Spam command cannot target or ping the bot owner when used by bot staff
+        if not is_owner:
+            # 1. Block if owner is in message mentions
+            mentioned_user_ids = {u.id for u in ctx.message.mentions} if hasattr(ctx, "message") and ctx.message and hasattr(ctx.message, "mentions") else set()
+            if OWNER_ID in mentioned_user_ids:
+                return await ctx.send("⛔ You cannot target or ping the bot owner with the spam command.", delete_after=6)
+
+            # 2. Block if raw message contains owner mention or ID
+            if str(OWNER_ID) in message or f"<@{OWNER_ID}>" in message or f"<@!{OWNER_ID}>" in message:
+                return await ctx.send("⛔ You cannot target or ping the bot owner with the spam command.", delete_after=6)
+
+            # 3. Block if executed in owner's DM channel
+            channel_recipient = getattr(ctx.channel, "recipient", None)
+            if channel_recipient and getattr(channel_recipient, "id", None) == OWNER_ID:
+                return await ctx.send("⛔ You cannot use the spam command on the bot owner.", delete_after=6)
 
         task_mgr = self._get_task_manager()
 
@@ -697,12 +719,11 @@ class Fun(commands.Cog):
                 delete_after=6,
             )
 
-        # Only user mentions explicitly included in the command invocation can ping.
-        # Roles, @everyone, @here, and reply-author pings remain disabled.
+        # Allow spamming roles, @everyone, @here, and users
         allowed_mentions = discord.AllowedMentions(
-            everyone=False,
-            users=mentioned_users,
-            roles=False,
+            everyone=True,
+            roles=True,
+            users=True,
             replied_user=False,
         )
 
@@ -711,8 +732,8 @@ class Fun(commands.Cog):
         view = SpamControlView(task_id, task_mgr, ctx.author.id) if task_mgr else None
 
         await ctx.send(
-            f"⚡ Starting **{count}** messages (Task: `{task_id}`, interval: 0.8s). "
-            f"Explicit user mentions: **{'enabled' if mentioned_users else 'none'}**. "
+            f"⚡ Starting **{count}** messages (Task: `{task_id}`, interval: 0.4s). "
+            f"Mentions (roles, everyone, users): **enabled**. "
             f"Use `{ctx.prefix}spamcancel` to halt.",
             view=view,
             delete_after=6,
@@ -734,16 +755,16 @@ class Fun(commands.Cog):
                             task_info_ref[0].sent_count += 1
                     except discord.HTTPException as http_err:
                         if getattr(http_err, "status", None) == 429:
-                            logger.warning(f"Owner spam task {task_id} paused due to rate-limit (429), terminating task safely.")
+                            logger.warning(f"Spam task {task_id} paused due to rate-limit (429), terminating task safely.")
                         else:
-                            logger.warning(f"Owner spam task {task_id} encountered HTTPException: {http_err}")
+                            logger.warning(f"Spam task {task_id} encountered HTTPException: {http_err}")
                         break
-                    await asyncio.sleep(0.8)
+                    await asyncio.sleep(0.4)
             except asyncio.CancelledError:
-                logger.info(f"Owner spam task {task_id} was cancelled.")
+                logger.info(f"Spam task {task_id} was cancelled.")
                 raise
             except Exception as e:
-                logger.warning(f"Owner spam task {task_id} stopped unexpectedly: {e}")
+                logger.warning(f"Spam task {task_id} stopped unexpectedly: {e}")
             finally:
                 if task_mgr:
                     task_mgr.unregister_task(task_id)
@@ -774,17 +795,20 @@ class Fun(commands.Cog):
     @commands.command(
         name="spamcancel",
         aliases=["spamstop"],
-        help="Owner-only: cancel running repeat-message tasks. Use '?spamcancel all' for emergency global stop.",
+        help="Owner & Bot Staff: cancel running repeat-message tasks. Use '?spamcancel all' for emergency global stop.",
     )
     async def spamcancel(self, ctx: CustomContext, target: str | None = None):
         author_id = getattr(ctx.author, "id", None)
-        if not is_primary_owner(author_id):
-            return await ctx.send("⛔ Only the primary bot owner can use this command.")
+        from src.security.owner import is_primary_owner, is_owner_or_staff
+        if not is_owner_or_staff(author_id):
+            return await ctx.send("⛔ Only the primary bot owner or bot staff can use this command.")
 
         task_mgr = self._get_task_manager()
 
-        # Global emergency cancel: ?spamcancel all / ?spamstop all
+        # Global emergency cancel: ?spamcancel all / ?spamstop all (Primary Owner only)
         if target and target.lower() in ("all", "global", "stop"):
+            if not is_primary_owner(author_id):
+                return await ctx.send("⛔ Only the primary bot owner can execute an emergency stop across all channels.")
             cancelled = 0
             if task_mgr:
                 cancelled += task_mgr.cancel_all(reason="emergency_stop_command")
@@ -867,6 +891,39 @@ class Fun(commands.Cog):
     async def dare(self, ctx: CustomContext):
         dares = ["Describe your day using only three emojis.", "Give someone in the server a sincere compliment.", "Type your next message like a dramatic anime narrator.", "Share a song you never get tired of."]
         await ctx.send(f"🎭 **Dare:** {random.choice(dares)}")
+
+    @commands.hybrid_command(name="premium", help="View your personal and server premium subscription standing.")
+    async def premium(self, ctx: CustomContext):
+        prem_mgr = getattr(self.bot, "premium_mgr", None)
+        user_info = prem_mgr.get_user_info(ctx.author.id) if prem_mgr else {"is_premium": False, "tier": "Free", "remaining_str": "N/A"}
+        guild_info = prem_mgr.get_guild_info(ctx.guild.id) if prem_mgr and ctx.guild else {"is_premium": False, "tier": "Free", "remaining_str": "N/A"}
+
+        u_badge = "👑 Prime Active" if user_info.get("is_premium") else "Standard Free"
+        g_badge = "💎 Server Boosted" if guild_info.get("is_premium") else "Standard Free"
+
+        embed = discord.Embed(
+            title="💎 KYOKA 3.0 Prime & Premium Suite",
+            description="High-performance priority processing, unlimited AI presets, and premium canvas profiles.",
+            color=0x7C3AED,
+        )
+        embed.add_field(
+            name="Your Account Standing",
+            value=f"• Status: **{u_badge}**\n• Tier: `{user_info['tier']}`\n• Expiry: `{user_info['remaining_str']}`",
+            inline=False,
+        )
+        if ctx.guild:
+            embed.add_field(
+                name=f"Server Standing • {ctx.guild.name}",
+                value=f"• Status: **{g_badge}**\n• Tier: `{guild_info['tier']}`\n• Expiry: `{guild_info['remaining_str']}`",
+                inline=False,
+            )
+        embed.add_field(
+            name="Redeem License Key",
+            value=f"Have a key? Use `{ctx.prefix}redeem <key>` to activate instantly.",
+            inline=False,
+        )
+        embed.set_footer(text="KYOKA Studio • Powered by Aizen")
+        await ctx.send(embed=embed)
 
     @commands.hybrid_command(name="redeem", help="Redeem a KYOKA license key for yourself or this server.")
     async def redeem(self, ctx: CustomContext, key: str, target: str = "guild"):

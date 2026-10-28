@@ -329,13 +329,13 @@ class IdentityCog(commands.Cog, name="Developer-Identity"):
         self.bot = bot
 
     @commands.group(
-        name="botedit",
-        aliases=["setbot", "identity", "botset"],
+        name="globalbotedit",
+        aliases=["botglobal", "devbotedit", "globalidentity"],
         invoke_without_command=True,
-        description="Interactive Bot Identity & Persona console with Embed prompts.",
+        description="Interactive Global Bot Identity & Persona console (Owner-only).",
     )
     @is_owner()
-    async def botedit(self, ctx: CustomContext) -> None:
+    async def globalbotedit(self, ctx: CustomContext) -> None:
         """Overview and interactive control panel for bot persona."""
         bot_user = self.bot.user
         avatar_url = bot_user.display_avatar.url if bot_user else None
@@ -360,14 +360,14 @@ class IdentityCog(commands.Cog, name="Developer-Identity"):
         container.add_separator(divider=True)
         container.add_text(
             f"> Use buttons below or CLI shortcuts:\n"
-            f"> `?botedit avatar <url>` • `?botedit banner <url>` • `?botedit name <name>` • `?botedit status <text>`\n\n"
-            f"-# Root Identity Customization • Instant Live Effect"
+            f"> `?globalbotedit avatar <url>` • `?globalbotedit banner <url>` • `?globalbotedit name <name>` • `?globalbotedit status <text>`\n\n"
+            f"-# Global Root Identity Customization • Instant Live Effect"
         )
 
         view = BotEditView(self.bot, ctx.author.id, ctx.channel.id)
         await send_container_response(ctx, container, view=view)
 
-    @botedit.command(name="avatar")
+    @globalbotedit.command(name="avatar")
     @is_owner()
     async def edit_avatar(self, ctx: CustomContext, url: Optional[str] = None) -> None:
         """Update bot avatar via direct URL or attached image."""
@@ -379,7 +379,7 @@ class IdentityCog(commands.Cog, name="Developer-Identity"):
 
         if not img_url:
             container = KyokaContainer(accent_color=None)
-            container.add_text("**Error:** Provide an image URL or attach an image to your message.\n> Example: `?botedit avatar <url>`")
+            container.add_text("**Error:** Provide an image URL or attach an image to your message.\n> Example: `?globalbotedit avatar <url>`")
             await send_container_response(ctx, container)
             return
 
@@ -411,7 +411,7 @@ class IdentityCog(commands.Cog, name="Developer-Identity"):
             )
             await send_container_response(ctx, container)
 
-    @botedit.command(name="banner")
+    @globalbotedit.command(name="banner")
     @is_owner()
     async def edit_banner(self, ctx: CustomContext, url: Optional[str] = None) -> None:
         """Update bot banner via direct URL or attached image."""
@@ -423,7 +423,7 @@ class IdentityCog(commands.Cog, name="Developer-Identity"):
 
         if not img_url:
             container = KyokaContainer(accent_color=None)
-            container.add_text("**Error:** Provide an image URL or attach a banner image to your message.\n> Example: `?botedit banner <url>`")
+            container.add_text("**Error:** Provide an image URL or attach a banner image to your message.\n> Example: `?globalbotedit banner <url>`")
             await send_container_response(ctx, container)
             return
 
@@ -451,7 +451,7 @@ class IdentityCog(commands.Cog, name="Developer-Identity"):
             container.add_text(f"**Failed to update banner:** `{e}`")
             await send_container_response(ctx, container)
 
-    @botedit.command(name="name")
+    @globalbotedit.command(name="name")
     @is_owner()
     async def edit_name(self, ctx: CustomContext, *, new_name: str) -> None:
         """Update bot username."""
@@ -475,7 +475,7 @@ class IdentityCog(commands.Cog, name="Developer-Identity"):
             )
             await send_container_response(ctx, container)
 
-    @botedit.command(name="status")
+    @globalbotedit.command(name="status")
     @is_owner()
     async def edit_status(self, ctx: CustomContext, *, new_status: str) -> None:
         """Update bot presence status text."""

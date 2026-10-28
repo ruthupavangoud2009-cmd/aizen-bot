@@ -162,6 +162,10 @@ class KyokaBot(commands.Bot):
         self.reaction_role_mgr: ReactionRoleManager = ReactionRoleManager(self.db)
         from src.managers.custom_help_manager import CustomHelpManager
         self.custom_help_mgr: CustomHelpManager = CustomHelpManager(self.db)
+        from src.managers.branding_manager import BrandingManager
+        self.branding_mgr: BrandingManager = BrandingManager(self.db)
+        from src.managers.invite_tracker_manager import InviteTrackerManager
+        self.invite_tracker_mgr: InviteTrackerManager = InviteTrackerManager(self.db, bot=self)
         from src.managers.voice_welcome_manager import VoiceWelcomeManager
         self.voice_welcome_mgr: VoiceWelcomeManager = VoiceWelcomeManager(self, self.db)
         from src.managers.automod_manager import AutoModManager

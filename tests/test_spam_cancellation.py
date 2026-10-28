@@ -304,5 +304,5 @@ async def test_authoritative_owner_id_enforced(mock_bot):
 
     await cog.spam.callback(cog, ctx, count=10, message="Hello")
 
-    assert "Only the primary bot owner can use this command" in ctx.send.call_args[0][0]
+    assert "Only the primary bot owner or bot staff can use this command" in ctx.send.call_args[0][0]
     assert len(cog._spam_tasks) == 0

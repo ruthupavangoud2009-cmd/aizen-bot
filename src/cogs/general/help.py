@@ -41,7 +41,7 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger("Kyoka.Help")
 
-HELP_COMMANDS_PER_PAGE: int = 15
+HELP_COMMANDS_PER_PAGE: int = 10
 
 UNICODE_CATEGORY_EMOJIS: dict[str, str] = {
     "home": "🏠",
@@ -642,27 +642,18 @@ class Help(commands.Cog):
 
     CATEGORY_ORDER = [
         "🏠・GETTING STARTED",
-        "🔧・UTILITIES",
-        "🛡️・MODERATION",
-        "🔒・AUTOMOD & SECURITY",
-        "👋・WELCOME & AUTOMOD",
-        "👋・WELCOME & GOODBYE",
-        "🛡️・VERIFICATION",
-        "🎫・TICKETS & SUPPORT",
-        "🎭・REACTION ROLES",
-        "🎉・GIVEAWAYS & EVENTS",
-        "🎵・MUSIC",
-        "💤・AFK",
-        "⭐・VOUCHES & REPUTATION",
-        "🧾・BLOX FRUITS SERVICE BILLS",
-        "🍎・BLOX FRUITS AI",
         "🤖・ARTIFICIAL INTELLIGENCE",
+        "🛡️・MODERATION",
+        "👋・WELCOME & AUTOMOD",
+        "🎫・TICKETS & SUPPORT",
+        "🎉・GIVEAWAYS & EVENTS",
         "⭐・LEVELS & COMMUNITY",
         "🖼️・IMAGES & AVATARS",
+        "🎵・MUSIC",
         "💬・SOCIAL & FUN",
         "💎・PREMIUM",
         "⚙️・SERVER ADMINISTRATION",
-        "📝・STAFF APPLICATIONS",
+        "🔧・UTILITIES",
         "👑・OWNER & DEVELOPER",
     ]
     ALL_CATEGORY_TAGS = [c.tag for c in CATEGORIES]
@@ -1070,74 +1061,66 @@ class Help(commands.Cog):
         ctx: CustomContext,
         visible_categories: dict[str, list[commands.Command]],
     ) -> discord.Embed:
-        """Construct the Signature Nyxium-inspired Kyoka 3.0 Help Console Embed."""
+        """Construct compact, clean Default Help Embed (fits on one small Discord embed)."""
         guild = ctx.guild
         author = ctx.author
         p = self.bot.guild_mgr.get_prefix(guild.id if guild else None)
-        ws_ping = self._get_latency_ms()
-        total_commands = sum(len(cmds) for cmds in visible_categories.values())
 
-        is_prem = False
-        prem_badge = "Standard Free"
-        if guild and hasattr(self.bot, "premium_mgr") and self.bot.premium_mgr:
-            is_prem = self.bot.premium_mgr.is_guild_premium(guild.id)
-            if is_prem:
-                info = self.bot.premium_mgr.get_guild_info(guild.id)
-                prem_badge = f"💎 Kyoka Premium ({info.get('remaining_str', 'Active')})"
+        branding = None
+        if hasattr(self.bot, "branding_mgr"):
+            mgr = getattr(self.bot, "branding_mgr", None)
+            if hasattr(mgr, "_cache") and isinstance(mgr._cache, dict):
+                branding = mgr._cache.get(guild.id if guild else None)
+            if not isinstance(branding, dict) and hasattr(mgr, "get_default_branding") and callable(mgr.get_default_branding):
+                branding = mgr.get_default_branding()
+        if not isinstance(branding, dict):
+            assets = getattr(Config, "ASSETS", None)
+            branding = {
+                "display_name": "Kyoka 3.0",
+                "bio": "Built for our community — keeping your server safe, active, and connected.",
+                "avatar_url": getattr(assets, "AIZEN_AVATAR_URL", "") or (self.bot.user.display_avatar.url if getattr(self.bot, "user", None) else ""),
+                "banner_url": "",
+            }
 
-        embed = KyokaHelpEmbed(
-            title="⛩️ KYOKA 3.0 — AIZEN EDITION COMMAND DIRECTORY",
-            description=(
-                f"> *\"Since when were you under the impression that you were not in control?\"* — Sōsuke Aizen\n\n"
-                f"• **Active Plan:** `{prem_badge}` · **Prefix:** `{p}<command>`\n"
-                f"• **Latency:** `{ws_ping}ms` · **Active Modules:** `{len(visible_categories)}` · **Commands Available:** `{total_commands}`\n"
-                f"• **Quick Manual:** Type `{p}help <command>` for deep inspect (syntax, aliases & permissions).\n"
-                f"• **Interactive Browser:** Select any category from the dropdown below to view complete commands with pagination."
-            ),
-            color=0x7C3AED,
+        raw_display = branding.get("display_name") if isinstance(branding, dict) else None
+        display_name = raw_display if isinstance(raw_display, str) and raw_display.strip() else "Kyoka 3.0"
+        raw_bio = branding.get("bio") if isinstance(branding, dict) else None
+        bio = raw_bio if isinstance(raw_bio, str) and raw_bio.strip() else "Built for our community — keeping your server safe, active, and connected."
+
+        # Compact category list
+        cat_labels = []
+        for cat_name in visible_categories.keys():
+            clean = cat_name.split("・", 1)[-1].strip().title() if "・" in cat_name else cat_name.strip().title()
+            cat_labels.append(f"`{clean}`")
+        categories_line = " · ".join(cat_labels)
+
+        desc = (
+            f"> *{bio}*\n\n"
+            f"{categories_line}\n\n"
+            f"Choose a category below to view its commands.\n\n"
+            f"⚡ **Essential Commands:**\n"
+            f"`{p}help` · `{p}play` · `{p}ai` · `{p}ticket` · `{p}setbot`"
         )
 
-        # Build Nyxium-style categorized modules with actual registered command names
-        for cat_name, cmds in list(visible_categories.items())[:24]:
-            clean_title = cat_name.split("・", 1)[1] if "・" in cat_name else cat_name
-            cat_icon = self._get_category_emoji(cat_name)
-            
-            # Extract unique command names
-            seen = set()
-            unique_names = []
-            for c in cmds:
-                if c.name not in seen:
-                    seen.add(c.name)
-                    unique_names.append(c.name)
-            unique_names.sort()
+        embed = KyokaHelpEmbed(
+            title=f"⛩️ {display_name} — KYOKA HELP",
+            description=desc,
+            color=0x2B0938,
+        )
 
-            # Limit preview count on main home overview to keep embed clean and well within Discord limits
-            preview_limit = 14
-            preview_names = [f"`{name}`" for name in unique_names[:preview_limit]]
-            preview_str = ", ".join(preview_names)
-            if len(unique_names) > preview_limit:
-                preview_str += f", +{len(unique_names) - preview_limit} more"
+        avatar_url = branding.get("avatar_url")
+        if not avatar_url and hasattr(self.bot, "user") and self.bot.user:
+            avatar_url = self.bot.user.display_avatar.url
+        if avatar_url:
+            embed.set_thumbnail(url=avatar_url)
 
-            embed.add_field(
-                name=f"{cat_icon} {clean_title} ({len(unique_names)})",
-                value=preview_str or "*No commands available*",
-                inline=False,
-            )
-
-        assets = getattr(Config, "ASSETS", None)
-        thumb = getattr(assets, "AIZEN_AVATAR_URL", "") or getattr(assets, "DEFAULT_THUMBNAIL_URL", "")
-        if not thumb and hasattr(self.bot, "user") and self.bot.user:
-            thumb = self.bot.user.display_avatar.url
-        if thumb and thumb.strip():
-            embed.set_thumbnail(url=thumb.strip())
-
-        help_img = getattr(assets, "HELP_BANNER_URL", "") or getattr(assets, "HELP_GIF_URL", "")
-        if help_img and help_img.strip():
-            embed.set_image(url=help_img.strip())
+        banner_url = branding.get("banner_url")
+        if banner_url and str(banner_url).strip():
+            embed.set_image(url=str(banner_url).strip())
 
         embed.set_footer(
-            text=f"Requested by {author.display_name} • KYOKA 3.0 — Aizen Edition • Use dropdown below to navigate",
-            icon_url=author.display_avatar.url if author.display_avatar else None,
+            text=f"Requested by {author.display_name} • {p}help <command> — View details for one command.",
+            icon_url=author.display_avatar.url if author and author.display_avatar else None,
         )
         embed.banner_file = None
         return embed
@@ -1214,12 +1197,20 @@ class Help(commands.Cog):
         visible_categories: dict[str, list[commands.Command]],
         page: int = 1,
     ) -> discord.Embed:
-        """Construct a formatted Discord Embed for a specific command category with distinct artwork."""
-        p = self.bot.guild_mgr.get_prefix(ctx.guild.id if ctx.guild else None)
+        """Construct compact, clean category embed (10 commands per page, single line descriptions)."""
+        guild = ctx.guild
+        p = self.bot.guild_mgr.get_prefix(guild.id if guild else None)
 
         clean_cat_title = cat_name.split("・", 1)[1] if "・" in cat_name else cat_name
         cat_desc = CATEGORY_DESCRIPTIONS.get(cat_name, f"Accessible commands for {clean_cat_title}.")
-        cat_meta = CATEGORY_BY_TAG.get(cat_name) or get_category_by_query(clean_cat_title)
+
+        # Retrieve guild branding for avatar
+        branding = None
+        if hasattr(self.bot, "branding_mgr"):
+            branding = self.bot.branding_mgr._cache.get(guild.id if guild else None)
+        avatar_url = branding.get("avatar_url") if branding else None
+        if not avatar_url and hasattr(self.bot, "user") and self.bot.user:
+            avatar_url = self.bot.user.display_avatar.url
 
         # Collect unique command names
         seen: set[str] = set()
@@ -1230,24 +1221,22 @@ class Help(commands.Cog):
                 unique_cmds.append(c)
         unique_cmds.sort(key=lambda c: c.qualified_name)
 
-        per_page = 15
+        per_page = 10
         total_pages = max(1, math.ceil(len(unique_cmds) / per_page))
         safe_page = max(1, min(page, total_pages))
         start_idx = (safe_page - 1) * per_page
         page_cmds = unique_cmds[start_idx : start_idx + per_page]
 
         desc_lines = [
-            f"> {cat_desc}\n",
-            f"**Page {safe_page}/{total_pages}** • **{len(unique_cmds)}** accessible command(s)\n",
+            f"> *{cat_desc}*\n",
+            f"**Page {safe_page}/{total_pages}** • **{len(unique_cmds)}** commands\n",
         ]
         for c in page_cmds:
-            badge = self._get_badge(c) or " `[Public]`"
-            is_slash = getattr(c, "app_command", None) is not None or hasattr(c, "app_command")
-            type_tag = "`[+ /]`" if is_slash else "`[+]`"
-            desc_text = (c.description or getattr(c, "help", None) or "No detailed description provided.").strip().split("\n")[0][:80]
-            alias_str = f" · *Aliases:* {', '.join(f'`{a}`' for a in c.aliases[:3])}" if c.aliases else ""
-            desc_lines.append(f"• **`{c.qualified_name}`** (`{p}{c.qualified_name}`) {type_tag}{badge} — *{desc_text}*{alias_str}")
-        desc_lines.append(f"\n*Use ◀️ / ▶️ buttons to paginate • Type `{p}help <command>` for full manual.*")
+            desc_text = (c.description or getattr(c, "help", None) or "No description provided.").strip().split("\n")[0][:90]
+            c_name = c.qualified_name if isinstance(getattr(c, "qualified_name", None), str) else (c.name if isinstance(getattr(c, "name", None), str) else str(c))
+            desc_lines.append(f"• **`{c_name}`** — {desc_text}")
+
+        desc_lines.append(f"\n`{p}help <command>` — View details for one command.")
 
         embed = KyokaHelpEmbed(
             title=f"{self._get_category_emoji(cat_name)} {cat_name}",
@@ -1257,19 +1246,17 @@ class Help(commands.Cog):
 
         embed.banner_file = None
 
-        assets = getattr(Config, "ASSETS", None)
-        thumb = getattr(assets, "AIZEN_AVATAR_URL", "") or getattr(assets, "DEFAULT_THUMBNAIL_URL", "")
-        if thumb and thumb.strip():
-            embed.set_thumbnail(url=thumb.strip())
+        if avatar_url:
+            embed.set_thumbnail(url=avatar_url)
 
         embed.set_footer(
-            text=f"Page {safe_page}/{total_pages} • {len(unique_cmds)} Commands • Requested by {ctx.author.display_name} • KYOKA 3.0",
-            icon_url=ctx.author.display_avatar.url if ctx.author.display_avatar else None,
+            text=f"Page {safe_page}/{total_pages} • Requested by {ctx.author.display_name}",
+            icon_url=ctx.author.display_avatar.url if ctx.author and ctx.author.display_avatar else None,
         )
         return embed
 
     def build_command_embed(self, ctx: CustomContext, cmd: commands.Command) -> discord.Embed:
-        """Construct detailed single-command manual embed matching Nyxium reference specifications."""
+        """Construct compact, clean single-command manual embed."""
         guild = ctx.guild
         p = self.bot.guild_mgr.get_prefix(guild.id if guild else None)
         cat = self._resolve_category(cmd)
@@ -1281,36 +1268,33 @@ class Help(commands.Cog):
         example = f"`{p}{cmd.qualified_name}`"
 
         badge = self._get_badge(cmd)
-        status_str = badge.strip(" `[]") if badge else "Public (Everyone)"
+        status_str = badge.strip(" `[]") if badge else "Public"
 
         is_hybrid = isinstance(cmd, commands.HybridCommand) or getattr(cmd, "app_command", None) is not None
-        availability = "Prefix & Slash (`+` and `/`)" if is_hybrid else "Prefix Only (`+`)"
         slash_syntax = f"`/{cmd.qualified_name}`" if is_hybrid else "N/A"
 
         embed = discord.Embed(
             title=f"{cat_icon} Command: `{cmd.qualified_name}`",
             description=f"> {desc}",
-            color=0x7C3AED,
+            color=0x2B0938,
         )
 
         embed.add_field(
-            name="📋 Command Details",
+            name="📝 Usage & Example",
             value=(
-                f"• **Command:** `{cmd.name}`\n"
-                f"• **Category:** `{cat}`\n"
-                f"• **Aliases:** {aliases}\n"
-                f"• **Availability:** {availability}\n"
-                f"• **Permissions:** `{status_str}`"
+                f"• **Usage:** {usage}\n"
+                f"• **Prefix Example:** {example}\n"
+                + (f"• **Slash Example:** {slash_syntax}\n" if is_hybrid else "")
             ),
             inline=False,
         )
 
         embed.add_field(
-            name="📌 Syntax & Examples",
+            name="📋 Command Details",
             value=(
-                f"• **Usage:** {usage}\n"
-                f"• **Prefix Example:** `{p}{cmd.qualified_name}`\n"
-                + (f"• **Slash Example:** {slash_syntax}\n" if is_hybrid else "")
+                f"• **Category:** `{cat}`\n"
+                f"• **Aliases:** {aliases}\n"
+                f"• **Required Permissions:** `{status_str}`"
             ),
             inline=False,
         )
@@ -1323,14 +1307,18 @@ class Help(commands.Cog):
                 inline=False,
             )
 
-        assets = getattr(Config, "ASSETS", None)
-        thumb = getattr(assets, "AIZEN_AVATAR_URL", "") or getattr(assets, "DEFAULT_THUMBNAIL_URL", "")
-        if thumb and thumb.strip():
-            embed.set_thumbnail(url=thumb.strip())
+        branding = None
+        if hasattr(self.bot, "branding_mgr"):
+            branding = self.bot.branding_mgr._cache.get(guild.id if guild else None)
+        avatar_url = branding.get("avatar_url") if branding else None
+        if not avatar_url and hasattr(self.bot, "user") and self.bot.user:
+            avatar_url = self.bot.user.display_avatar.url
+        if avatar_url:
+            embed.set_thumbnail(url=avatar_url)
 
         embed.set_footer(
-            text=f"Requested by {ctx.author.display_name} • KYOKA 3.0 — Aizen Edition",
-            icon_url=ctx.author.display_avatar.url if ctx.author.display_avatar else None,
+            text=f"Requested by {ctx.author.display_name} • Type {p}help to return",
+            icon_url=ctx.author.display_avatar.url if ctx.author and ctx.author.display_avatar else None,
         )
         return embed
 
@@ -1361,9 +1349,9 @@ class Help(commands.Cog):
     )
     async def help_command(self, ctx: CustomContext, *, command_or_module: str | None = None) -> None:
         """Interactive help menu filtered by user permissions and organized into categories."""
-        t_start = time.perf_counter()
+        if hasattr(self.bot, "branding_mgr"):
+            await self.bot.branding_mgr.get_branding(ctx.guild.id if ctx.guild else None)
         visible_categories = await self._get_visible_categories(ctx)
-        t_categories = time.perf_counter()
 
         # Direct command or module lookup
         if command_or_module:

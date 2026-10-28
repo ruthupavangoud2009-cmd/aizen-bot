@@ -140,6 +140,17 @@ class UserInfoView(discord.ui.View):
             accent = getattr(full_user, "accent_color", None)
             accent_str = f"#{accent.value:06X}" if accent else "None"
 
+            bio_line = ""
+            bot_user = getattr(self.ctx.bot, "user", None)
+            if bot_user and target.id == bot_user.id:
+                branding = None
+                if hasattr(self.ctx.bot, "branding_mgr"):
+                    gid = self.ctx.guild.id if self.ctx.guild else None
+                    branding = self.ctx.bot.branding_mgr._cache.get(gid) or self.ctx.bot.branding_mgr.get_default_branding()
+                bio_text = branding.get("bio") if branding else "Power isn't given. It's taken. — Sosuke Aizen"
+                if bio_text:
+                    bio_line = f"\nBio: `{bio_text}`"
+
             container.add_section(
                 content=(
                     f"### {target.name}\n"
@@ -151,7 +162,7 @@ class UserInfoView(discord.ui.View):
                     f"Created: <t:{created_ts}:F> (<t:{created_ts}:R>)\n"
                     f"Type: `{account_type}`\n"
                     f"Badges: `{badges_str}`\n"
-                    f"Accent Color: `{accent_str}`"
+                    f"Accent Color: `{accent_str}`{bio_line}"
                 )
             )
 
