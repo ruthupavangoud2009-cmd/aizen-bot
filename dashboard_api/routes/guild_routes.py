@@ -425,6 +425,16 @@ async def handle_update_settings(request: web.Request) -> web.Response:
                 validated_wl["leave_message"] = str(wl["leave_message"])[:1000]
             if "dm_enabled" in wl:
                 validated_wl["dm_enabled"] = bool(wl["dm_enabled"])
+            if "card_enabled" in wl:
+                validated_wl["card_enabled"] = bool(wl["card_enabled"])
+            if "card_theme" in wl:
+                validated_wl["card_theme"] = str(wl["card_theme"])[:50]
+            if "embed_color" in wl:
+                validated_wl["embed_color"] = str(wl["embed_color"])[:16]
+            if "next_step" in wl:
+                validated_wl["next_step"] = str(wl["next_step"])[:150]
+            if "auto_role_id" in wl:
+                validated_wl["auto_role_id"] = _clean_snowflake(wl["auto_role_id"])
             validated_updates["welcome_leave"] = validated_wl
 
     # 9b. AutoMod & Moderation Validation

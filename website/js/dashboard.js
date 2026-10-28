@@ -1246,9 +1246,80 @@ function renderWelcomeLeaveTab(panel, s) {
   if (!s.welcome_leave) s.welcome_leave = {};
   const wl = s.welcome_leave;
   if (!wl.embed_color) wl.embed_color = '#7C3AED';
-  if (!wl.card_theme) wl.card_theme = 'nebula';
+  if (!wl.card_theme) wl.card_theme = 'aizen_throne';
+  if (!wl.next_step) wl.next_step = 'Read #rules & complete verification to begin';
+
+  const WELCOME_THEMES = {
+    aizen_throne: {
+      id: 'aizen_throne',
+      name: 'Aizen Sovereign Throne',
+      badge: 'SUPREME',
+      desc: 'Dark Reiatsu, blood crescent moon & Kyōka Suigetsu mirrors',
+      file: '/assets/welcome/welcome_aizen_throne.png',
+      border: '#9333ea',
+      neon: '#ff0080',
+      accent: '#a855f7',
+      kanji: '鏡花水月',
+      headline: 'NEW ALLIANCE FORMED',
+      tagline: '“Since when were you under the impression that you were not already one of us?”',
+    },
+    cyber_sakura: {
+      id: 'cyber_sakura',
+      name: 'Cyber Sakura Neo-Tokyo',
+      badge: 'CYBERPUNK',
+      desc: 'Neo-Tokyo skyline, falling digital sakura & holographic rain',
+      file: '/assets/welcome/welcome_cyber_sakura.png',
+      border: '#ff33aa',
+      neon: '#00f0ff',
+      accent: '#ff5db1',
+      kanji: '新東京',
+      headline: 'CYBER DOMAIN ENTERED',
+      tagline: '“Welcome to the neon realm. Sync your neural link and claim your seat.”',
+    },
+    celestial_nebula: {
+      id: 'celestial_nebula',
+      name: 'Celestial Nebula Realm',
+      badge: 'COSMIC',
+      desc: 'Deep cosmic galaxy rings, star dust & celestial vortex',
+      file: '/assets/welcome/welcome_celestial_nebula.png',
+      border: '#38bdf8',
+      neon: '#a855f7',
+      accent: '#38bdf8',
+      kanji: '天河星界',
+      headline: 'CELESTIAL ARRIVAL',
+      tagline: '“Amongst ten billion stars, your presence illuminates our sovereign skies.”',
+    },
+    hueco_las_noches: {
+      id: 'hueco_las_noches',
+      name: 'Hueco Mundo Las Noches',
+      badge: 'ESPADA',
+      desc: 'White obsidian sands, eternal moonlight & grand fortress pillars',
+      file: '/assets/welcome/welcome_hueco_las_noches.png',
+      border: '#cbd5e1',
+      neon: '#9333ea',
+      accent: '#c084fc',
+      kanji: '虚夜宮',
+      headline: 'PALACE GATES UNSEALED',
+      tagline: '“Step across the obsidian sands and enter the throne of supreme power.”',
+    },
+    random: {
+      id: 'random',
+      name: 'Dynamic Rotation (Random)',
+      badge: 'ALL 4 THEMES',
+      desc: 'Cycles dynamically through all 4 themes on each member join',
+      file: '/assets/welcome/welcome_aizen_throne.png',
+      border: '#a855f7',
+      neon: '#00f0ff',
+      accent: '#c084fc',
+      kanji: '百花繚乱',
+      headline: 'DYNAMIC ROTATION ACTIVE',
+      tagline: '“Rotating dynamically across all 4 masterpiece themes on every member join.”',
+    },
+  };
 
   let currentSubTab = 'welcome'; // 'welcome' | 'leave' | 'dm' | 'card'
+
+  const imgCache = window.__welcomeImgCache || (window.__welcomeImgCache = {});
 
   function drawWelcomeCanvas() {
     try {
@@ -1259,96 +1330,191 @@ function renderWelcomeLeaveTab(panel, s) {
       const w = canvas.width;
       const h = canvas.height;
 
-      // Background gradient based on theme
-      const theme = wl.card_theme || 'nebula';
-      const bgGrad = ctx.createLinearGradient(0, 0, w, h);
-      if (theme === 'cyan') {
-        bgGrad.addColorStop(0, '#041724');
-        bgGrad.addColorStop(0.5, '#083344');
-        bgGrad.addColorStop(1, '#0e4a5e');
-      } else if (theme === 'sunset') {
-        bgGrad.addColorStop(0, '#1c1007');
-        bgGrad.addColorStop(0.5, '#451a03');
-        bgGrad.addColorStop(1, '#78350f');
-      } else if (theme === 'midnight') {
-        bgGrad.addColorStop(0, '#090a0f');
-        bgGrad.addColorStop(0.5, '#13141f');
-        bgGrad.addColorStop(1, '#1e2030');
-      } else { // nebula
-        bgGrad.addColorStop(0, '#0d0714');
-        bgGrad.addColorStop(0.5, '#1a0b2e');
-        bgGrad.addColorStop(1, '#2e1065');
-      }
-      ctx.fillStyle = bgGrad;
-      ctx.fillRect(0, 0, w, h);
+      const themeId = wl.card_theme || 'aizen_throne';
+      const theme = WELCOME_THEMES[themeId] || WELCOME_THEMES['aizen_throne'];
+      const accent = wl.embed_color || theme.accent;
 
-      // Decorative grid dots
-      ctx.fillStyle = 'rgba(255, 255, 255, 0.04)';
-      for (let x = 20; x < w; x += 30) {
-        for (let y = 20; y < h; y += 30) {
-          ctx.beginPath();
-          ctx.arc(x, y, 1.5, 0, Math.PI * 2);
-          ctx.fill();
+      // 1. Draw Background Image or Fallback Gradient
+      let drawnImg = false;
+      if (theme.file) {
+        let img = imgCache[theme.file];
+        if (!img) {
+          img = new Image();
+          img.src = theme.file;
+          img.onload = () => {
+            imgCache[theme.file] = img;
+            drawWelcomeCanvas();
+          };
+          imgCache[theme.file] = img;
+        } else if (img.complete && img.naturalWidth > 0) {
+          ctx.drawImage(img, 0, 0, w, h);
+          drawnImg = true;
         }
       }
 
-      // Glowing accent circle behind avatar
-      const accentColor = wl.embed_color || '#7C3AED';
-      const glowGrad = ctx.createRadialGradient(100, 100, 10, 100, 100, 80);
-      glowGrad.addColorStop(0, accentColor);
-      glowGrad.addColorStop(1, 'transparent');
-      ctx.fillStyle = glowGrad;
-      ctx.beginPath();
-      ctx.arc(100, 100, 80, 0, Math.PI * 2);
-      ctx.fill();
+      if (!drawnImg) {
+        // Procedural atmospheric deep violet gradient fallback
+        const bgGrad = ctx.createLinearGradient(0, 0, w, h);
+        bgGrad.addColorStop(0, '#09040f');
+        bgGrad.addColorStop(0.5, '#150826');
+        bgGrad.addColorStop(1, '#2b0942');
+        ctx.fillStyle = bgGrad;
+        ctx.fillRect(0, 0, w, h);
+      }
 
-      // Avatar ring
-      ctx.strokeStyle = accentColor;
-      ctx.lineWidth = 4;
+      // 2. Dynamic horizontal glass mask (dark glass on left, fading to transparent on right)
+      const maskGrad = ctx.createLinearGradient(0, 0, w, 0);
+      maskGrad.addColorStop(0, 'rgba(8, 4, 18, 0.72)');
+      maskGrad.addColorStop(0.42, 'rgba(8, 4, 18, 0.68)');
+      maskGrad.addColorStop(0.72, 'rgba(8, 4, 18, 0.22)');
+      maskGrad.addColorStop(1, 'rgba(8, 4, 18, 0.15)');
+      ctx.fillStyle = maskGrad;
+      ctx.fillRect(0, 0, w, h);
+
+      // 3. Cybernetic Neon Corner Brackets
+      const cLen = 28;
+      ctx.strokeStyle = theme.neon;
+      ctx.lineWidth = 3;
+      // Top-Left
+      ctx.beginPath(); ctx.moveTo(6, 6 + cLen); ctx.lineTo(6, 6); ctx.lineTo(6 + cLen, 6); ctx.stroke();
+      // Top-Right
+      ctx.beginPath(); ctx.moveTo(w - 6 - cLen, 6); ctx.lineTo(w - 6, 6); ctx.lineTo(w - 6, 6 + cLen); ctx.stroke();
+      // Bottom-Left
+      ctx.beginPath(); ctx.moveTo(6, h - 6 - cLen); ctx.lineTo(6, h - 6); ctx.lineTo(6 + cLen, h - 6); ctx.stroke();
+      // Bottom-Right
+      ctx.beginPath(); ctx.moveTo(w - 6 - cLen, h - 6); ctx.lineTo(w - 6, h - 6); ctx.lineTo(w - 6, h - 6 - cLen); ctx.stroke();
+
+      // Outer frame border
+      ctx.strokeStyle = 'rgba(168, 85, 247, 0.4)';
+      ctx.lineWidth = 1.5;
+      ctx.strokeRect(6, 6, w - 12, h - 12);
+
+      // 4. Subtle Kanji Watermark on right
+      ctx.fillStyle = 'rgba(168, 85, 247, 0.16)';
+      ctx.font = 'bold 58px "Segoe UI", sans-serif';
+      ctx.textAlign = 'right';
+      ctx.fillText(theme.kanji, w - 40, 70);
+
+      // 5. Glowing Avatar Ring with Multi-Aura
+      const avX = 110, avY = h / 2, avR = 56;
+      for (let r = 16; r >= 4; r -= 4) {
+        const alpha = 0.25 * (1 - r / 20);
+        ctx.strokeStyle = accent;
+        ctx.globalAlpha = alpha;
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.arc(avX, avY, avR + r, 0, Math.PI * 2);
+        ctx.stroke();
+      }
+      ctx.globalAlpha = 1.0;
+
+      // Avatar circle
+      ctx.fillStyle = '#160a26';
       ctx.beginPath();
-      ctx.arc(100, 100, 52, 0, Math.PI * 2);
+      ctx.arc(avX, avY, avR, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.strokeStyle = theme.neon;
+      ctx.lineWidth = 3;
       ctx.stroke();
 
-      // Avatar circle fill
-      ctx.fillStyle = '#1e1f22';
+      // HUD crosshairs
+      ctx.strokeStyle = theme.neon;
+      ctx.lineWidth = 2;
       ctx.beginPath();
-      ctx.arc(100, 100, 48, 0, Math.PI * 2);
-      ctx.fill();
+      ctx.moveTo(avX, avY - avR - 6); ctx.lineTo(avX, avY - avR + 2);
+      ctx.moveTo(avX, avY + avR - 2); ctx.lineTo(avX, avY + avR + 6);
+      ctx.moveTo(avX - avR - 6, avY); ctx.lineTo(avX - avR + 2, avY);
+      ctx.moveTo(avX + avR - 2, avY); ctx.lineTo(avX + avR + 6, avY);
+      ctx.stroke();
 
-      // Default Avatar letter / placeholder
+      // Avatar user icon placeholder
       ctx.fillStyle = '#ffffff';
-      ctx.font = 'bold 36px sans-serif';
+      ctx.font = 'bold 36px "Segoe UI", sans-serif';
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
-      ctx.fillText('👤', 100, 100);
+      ctx.fillText('👤', avX, avY);
 
-      // Header Text: "WELCOME TO THE SERVER"
-      const serverName = (state.selectedGuildObj?.name || 'THIS SERVER').toUpperCase();
+      // 6. Server Realm Pill Badge
+      const textX = 200;
+      const serverName = (state.selectedGuildObj?.name || 'THIS SERVER').toUpperCase().slice(0, 26);
+      const realmText = `⛩️ WELCOME TO ${serverName}`;
+      ctx.font = 'bold 12px "Segoe UI", sans-serif';
       ctx.textAlign = 'left';
-      ctx.textBaseline = 'alphabetic';
-      ctx.fillStyle = accentColor;
-      ctx.font = 'bold 14px sans-serif';
-      ctx.letterSpacing = '2px';
-      ctx.fillText(`WELCOME TO ${serverName}`, 180, 75);
+      ctx.textBaseline = 'middle';
+      const realmWidth = ctx.measureText(realmText).width + 24;
 
-      // Username Hero
-      ctx.fillStyle = '#ffffff';
-      ctx.font = 'bold 28px sans-serif';
-      ctx.fillText('NewMember#0001', 180, 115);
-
-      // Member count pill
-      ctx.fillStyle = 'rgba(255, 255, 255, 0.12)';
+      ctx.fillStyle = 'rgba(25, 12, 45, 0.85)';
+      ctx.strokeStyle = 'rgba(168, 85, 247, 0.6)';
+      ctx.lineWidth = 1;
       ctx.beginPath();
       if (typeof ctx.roundRect === 'function') {
-        ctx.roundRect(180, 130, 220, 28, 6);
+        ctx.roundRect(textX, 36, realmWidth, 24, 12);
       } else {
-        ctx.rect(180, 130, 220, 28);
+        ctx.rect(textX, 36, realmWidth, 24);
       }
       ctx.fill();
+      ctx.stroke();
 
-      ctx.fillStyle = '#cbd5e1';
-      ctx.font = '13px sans-serif';
-      ctx.fillText('🎉 You are member #1,582', 192, 149);
+      ctx.fillStyle = '#e9d5ff';
+      ctx.fillText(realmText, textX + 12, 48);
+
+      // 7. Theme Headline
+      ctx.font = '900 24px "Segoe UI", sans-serif';
+      ctx.fillStyle = '#ffffff';
+      ctx.shadowColor = 'rgba(0, 0, 0, 0.8)';
+      ctx.shadowBlur = 6;
+      ctx.fillText(theme.headline, textX, 86);
+      ctx.shadowBlur = 0;
+
+      // 8. Username Tag
+      ctx.font = 'bold 20px "Segoe UI", sans-serif';
+      ctx.fillStyle = accent;
+      ctx.fillText('@NewMember#0001', textX, 116);
+
+      // 9. Member Count & Status Pills
+      const memberCountText = '👥 MEMBER #1,582';
+      const accessText = '⚡ ACCESS GRANTED';
+      ctx.font = 'bold 11px "Segoe UI", sans-serif';
+      const mWidth = ctx.measureText(memberCountText).width + 20;
+      const aWidth = ctx.measureText(accessText).width + 20;
+
+      // Member count pill (Golden)
+      ctx.fillStyle = 'rgba(50, 38, 12, 0.85)';
+      ctx.strokeStyle = '#eab308';
+      ctx.beginPath();
+      if (typeof ctx.roundRect === 'function') {
+        ctx.roundRect(textX, 134, mWidth, 22, 11);
+      } else {
+        ctx.rect(textX, 134, mWidth, 22);
+      }
+      ctx.fill(); ctx.stroke();
+      ctx.fillStyle = '#fde047';
+      ctx.fillText(memberCountText, textX + 10, 145);
+
+      // Access pill (Emerald)
+      const aX = textX + mWidth + 10;
+      ctx.fillStyle = 'rgba(12, 45, 26, 0.85)';
+      ctx.strokeStyle = '#22c55e';
+      ctx.beginPath();
+      if (typeof ctx.roundRect === 'function') {
+        ctx.roundRect(aX, 134, aWidth, 22, 11);
+      } else {
+        ctx.rect(aX, 134, aWidth, 22);
+      }
+      ctx.fill(); ctx.stroke();
+      ctx.fillStyle = '#86efac';
+      ctx.fillText(accessText, aX + 10, 145);
+
+      // 10. Next Step Instruction & Tagline
+      const nextStep = wl.next_step || 'Read #rules & complete verification to begin';
+      ctx.fillStyle = 'rgba(216, 180, 254, 0.9)';
+      ctx.font = '12px "Segoe UI", sans-serif';
+      ctx.fillText(`Next Step: ${nextStep}`, textX, 172);
+
+      ctx.fillStyle = 'rgba(168, 140, 210, 0.7)';
+      ctx.font = 'italic 11px "Segoe UI", sans-serif';
+      ctx.fillText(theme.tagline, textX, 192);
+
     } catch (err) {
       console.warn('Canvas rendering notice:', err);
     }
@@ -1690,8 +1856,8 @@ function renderWelcomeLeaveTab(panel, s) {
       contentMount.innerHTML = `
         <div class="setting-row">
           <div class="setting-info">
-            <label>Graphic Welcome Card Banner</label>
-            <p>Generate high-resolution graphical welcome cards (Koya-style) sent with join announcements.</p>
+            <label>Graphic Welcome Card Compositor</label>
+            <p>Generate ultra-high-resolution 1000x360 cinematic anime welcome banners rendered on join.</p>
           </div>
           <div class="setting-control">
             <label class="switch">
@@ -1701,30 +1867,45 @@ function renderWelcomeLeaveTab(panel, s) {
           </div>
         </div>
 
-        <div class="setting-row">
-          <div class="setting-info">
-            <label>Card Visual Theme</label>
-            <p>Choose aesthetic gradient atmosphere for the welcome graphic.</p>
+        <div class="setting-row" style="flex-direction: column; align-items: flex-start; gap: 0.5rem;">
+          <div class="setting-info" style="margin-bottom: 0.25rem;">
+            <label>Masterpiece Welcome Themes</label>
+            <p>Click a theme below to select an anime aesthetic or activate dynamic rotation.</p>
           </div>
-          <div class="setting-control">
-            <select id="wl-card-theme" class="form-input">
-              <option value="nebula" ${wl.card_theme === 'nebula' ? 'selected' : ''}>🌌 Nebula Violet</option>
-              <option value="cyan" ${wl.card_theme === 'cyan' ? 'selected' : ''}>⚡ Cyber Cyan</option>
-              <option value="sunset" ${wl.card_theme === 'sunset' ? 'selected' : ''}>🌅 Sunset Gold</option>
-              <option value="midnight" ${wl.card_theme === 'midnight' ? 'selected' : ''}>🌑 Midnight Stealth</option>
-            </select>
+          <div class="theme-presets-grid" style="width: 100%;">
+            ${Object.values(WELCOME_THEMES).map(t => `
+              <div class="theme-preset-card ${wl.card_theme === t.id ? 'active' : ''}" data-theme="${t.id}">
+                <span class="theme-preset-badge">${t.badge}</span>
+                <img class="theme-preset-thumb" src="${t.file}" alt="${t.name}" loading="lazy" />
+                <div class="theme-preset-info">
+                  <div class="theme-preset-title">${t.name}</div>
+                  <div class="theme-preset-desc">${t.desc}</div>
+                </div>
+              </div>
+            `).join('')}
           </div>
         </div>
 
         <div class="setting-row">
           <div class="setting-info">
-            <label>Accent Ring & Glow Color</label>
-            <p>Select primary accent color for the avatar halo and highlights.</p>
+            <label>Next Step Card Instruction</label>
+            <p>Custom guidance text badge rendered near the bottom of the welcome card.</p>
+          </div>
+          <div class="setting-control" style="width: 100%;">
+            <input type="text" id="wl-card-step" class="form-input" value="${escapeHtml(wl.next_step || 'Read #rules & complete verification to begin')}" placeholder="e.g. Read #rules & complete verification to begin" maxlength="70" />
+          </div>
+        </div>
+
+        <div class="setting-row">
+          <div class="setting-info">
+            <label>Avatar Halo & Highlight Glow</label>
+            <p>Select primary electric aura accent for the avatar rings and badges.</p>
           </div>
           <div class="setting-control">
             <div class="swatch-group">
               <button class="swatch-btn ${wl.embed_color === '#7C3AED' ? 'active' : ''}" data-color="#7C3AED" style="background: #7C3AED;" title="Aizen Violet"></button>
               <button class="swatch-btn ${wl.embed_color === '#06B6D4' ? 'active' : ''}" data-color="#06B6D4" style="background: #06B6D4;" title="Cyber Cyan"></button>
+              <button class="swatch-btn ${wl.embed_color === '#FF007F' ? 'active' : ''}" data-color="#FF007F" style="background: #FF007F;" title="Neon Sakura"></button>
               <button class="swatch-btn ${wl.embed_color === '#10B981' ? 'active' : ''}" data-color="#10B981" style="background: #10B981;" title="Emerald"></button>
               <button class="swatch-btn ${wl.embed_color === '#F59E0B' ? 'active' : ''}" data-color="#F59E0B" style="background: #F59E0B;" title="Amber Gold"></button>
               <button class="swatch-btn ${wl.embed_color === '#EF4444' ? 'active' : ''}" data-color="#EF4444" style="background: #EF4444;" title="Crimson"></button>
@@ -1736,39 +1917,54 @@ function renderWelcomeLeaveTab(panel, s) {
         <!-- Live Canvas Preview -->
         <div style="margin-top: 1.5rem;">
           <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem; flex-wrap: wrap; gap: 0.5rem;">
-            <label style="font-weight: 700; color: var(--purple-light); font-size: 0.85rem; text-transform: uppercase;">Live Graphic Card Preview (600x200)</label>
-            <button id="wl-download-card-btn" class="btn btn-outline btn-sm" style="font-size: 0.78rem; padding: 0.25rem 0.65rem;" title="Download Generated Welcome Card as PNG">
-              📥 Download Card (PNG)
+            <label style="font-weight: 700; color: var(--purple-light); font-size: 0.85rem; text-transform: uppercase;">Live Studio Graphic Card Preview (1000x360)</label>
+            <button id="wl-download-card-btn" class="btn btn-outline btn-sm" style="font-size: 0.78rem; padding: 0.25rem 0.65rem;" title="Download High-Resolution Welcome Card as PNG">
+              📥 Download Card (1000x360 PNG)
             </button>
           </div>
           <div class="koya-canvas-wrapper">
-            <canvas id="koya-welcome-canvas" width="600" height="200"></canvas>
+            <canvas id="koya-welcome-canvas" width="1000" height="360"></canvas>
           </div>
         </div>
       `;
 
       drawWelcomeCanvas();
 
+      // Theme Preset Card Selection
+      contentMount.querySelectorAll('.theme-preset-card').forEach(card => {
+        card.addEventListener('click', () => {
+          soundFX.playSound('click');
+          const tId = card.getAttribute('data-theme');
+          if (!tId) return;
+          wl.card_theme = tId;
+          markChanged();
+          contentMount.querySelectorAll('.theme-preset-card').forEach(c => c.classList.remove('active'));
+          card.classList.add('active');
+          drawWelcomeCanvas();
+        });
+      });
+
+      // Next Step Input
+      document.getElementById('wl-card-step')?.addEventListener('input', (e) => {
+        wl.next_step = e.target.value;
+        markChanged();
+        drawWelcomeCanvas();
+      });
+
       document.getElementById('wl-download-card-btn')?.addEventListener('click', () => {
         soundFX.playSound('click');
         const canvas = document.getElementById('koya-welcome-canvas');
         if (!canvas) return;
         const link = document.createElement('a');
-        link.download = `kyoka-welcome-card-${s.guild_id || 'server'}.png`;
+        link.download = `kyoka-welcome-card-${s.guild_id || 'server'}-${wl.card_theme || 'aizen'}.png`;
         link.href = canvas.toDataURL('image/png');
         link.click();
-        showToast('Welcome card exported to PNG!', 'success');
+        showToast('High-resolution welcome card exported to PNG!', 'success');
       });
 
       document.getElementById('wl-card-en')?.addEventListener('change', (e) => {
         wl.card_enabled = e.target.checked;
         markChanged();
-      });
-
-      document.getElementById('wl-card-theme')?.addEventListener('change', (e) => {
-        wl.card_theme = e.target.value;
-        markChanged();
-        drawWelcomeCanvas();
       });
 
       contentMount.querySelectorAll('.swatch-btn').forEach(btn => {

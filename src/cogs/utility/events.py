@@ -61,9 +61,10 @@ class AutoEvents(commands.Cog):
         member: discord.Member | discord.User,
         extra: dict[str, Any] | None = None,
         test_channel: discord.TextChannel | discord.Thread | None = None,
+        test_config_override: dict[str, Any] | None = None,
     ) -> tuple[bool, str | None]:
         """Helper to render and dispatch an event container card + outer message."""
-        config = await self.bot.event_mgr.get_event_config(guild.id, event_type)
+        config = test_config_override or await self.bot.event_mgr.get_event_config(guild.id, event_type)
         if not config and not test_channel:
             logger.warning(f"No config found for {event_type} in {guild.name}")
             return False, "No event configuration found. Use `set` command first."
@@ -131,11 +132,13 @@ class AutoEvents(commands.Cog):
                 logger.warning(f"Template loading error for '{embed_name}' in guild {guild.id}: {e}. Using native fallback card.")
 
         welcome_file: Optional[discord.File] = None
+        leave_file: Optional[discord.File] = None
         if event_type == "welcome":
             try:
                 av_url = str(member.display_avatar.url) if hasattr(member, "display_avatar") and member.display_avatar else None
                 cfg_step = (config.get("next_step") if config else None) or "Read #rules & complete verification to begin"
                 cfg_bg = config.get("custom_background") if config else None
+                cfg_theme = (config.get("card_theme") if config else None) or (config.get("theme") if config else None) or "random"
                 m_count = getattr(guild, "member_count", 1) or 1
 
                 buf = await render_welcome_card_async(
@@ -145,11 +148,19 @@ class AutoEvents(commands.Cog):
                     avatar_url=av_url,
                     next_step=cfg_step,
                     custom_bg_path=cfg_bg,
+                    theme=cfg_theme,
                 )
                 welcome_file = discord.File(buf, filename="kyoka_welcome.png")
             except Exception as e:
                 logger.error(f"Failed to generate custom Aizen welcome card: {e}")
                 welcome_file = None
+        elif event_type == "leave":
+            goodbye_path = BASE_DIR / "assets" / "kyoka" / "features" / "goodbye_banner.png"
+            if goodbye_path.is_file():
+                try:
+                    leave_file = discord.File(str(goodbye_path), filename="kyoka_goodbye.png")
+                except Exception as e:
+                    logger.debug(f"Failed to load goodbye banner file: {e}")
 
         if not container:
             container = KyokaContainer(accent_color=None)
@@ -177,6 +188,8 @@ class AutoEvents(commands.Cog):
                         f"> We now have **{guild.member_count:,}** members."
                     )
                 container.add_section(content=card_body)
+                if leave_file:
+                    container.add_image("attachment://kyoka_goodbye.png")
             elif event_type == "boost":
                 container.add_section(
                     content=(
@@ -196,13 +209,14 @@ class AutoEvents(commands.Cog):
             if not perms.manage_webhooks:
                 can_webhook = False
 
+        active_file = welcome_file or leave_file
         if can_webhook:
             try:
                 target_msg = await send_container_response(
                     channel,
                     container,
                     content=outer_content,
-                    file=welcome_file,
+                    file=active_file,
                     allowed_mentions=discord.AllowedMentions(users=True, roles=False, everyone=False),
                 )
             except Exception as wh_err:
@@ -243,6 +257,8 @@ class AutoEvents(commands.Cog):
                 except Exception:
                     pass
                 fb_embed.set_image(url="attachment://kyoka_welcome.png")
+            elif leave_file:
+                fb_embed.set_image(url="attachment://kyoka_goodbye.png")
 
             fb_embed.set_footer(
                 text=f"{guild.name} • Kyoka 3.0 — Aizen Edition",
@@ -252,7 +268,7 @@ class AutoEvents(commands.Cog):
                 target_msg = await channel.send(
                     content=outer_content,
                     embed=fb_embed,
-                    file=welcome_file,
+                    file=active_file,
                     allowed_mentions=discord.AllowedMentions(users=True, roles=False, everyone=False),
                 )
             except Exception as send_err:
@@ -803,30 +819,36 @@ class AutoEvents(commands.Cog):
 
     @welcome_group.command(
         name="test",
-        description="Test the current welcome message and embed live in channel.",
+        description="Test the current welcome message and high-res card live in channel.",
     )
     @commands.has_permissions(manage_guild=True)
-    async def welcome_test(self, ctx: CustomContext) -> None:
-        """Send a test welcome card."""
+    async def welcome_test(self, ctx: CustomContext, theme: Optional[str] = None) -> None:
+        """Send a test welcome card with optional theme."""
         config = await self.bot.event_mgr.get_event_config(ctx.guild.id, "welcome")
-        prefix = self.bot.guild_mgr.get_prefix(ctx.guild.id)
-        if not config or not config.get("channel_id"):
-            await ctx.send_warning(f"Welcome is not configured yet! Use `{prefix}welcome set #channel {{user}} <embed_name>`.")
-            return
-
-        ch_id = config["channel_id"]
-        target_ch = ctx.guild.get_channel(ch_id) or self.bot.get_channel(ch_id)
-        if not target_ch:
-            try:
-                target_ch = await self.bot.fetch_channel(ch_id)
-            except Exception:
-                target_ch = None
+        target_ch = None
+        if config and config.get("channel_id"):
+            ch_id = config["channel_id"]
+            target_ch = ctx.guild.get_channel(ch_id) or self.bot.get_channel(ch_id)
+            if not target_ch:
+                try:
+                    target_ch = await self.bot.fetch_channel(ch_id)
+                except Exception:
+                    target_ch = None
 
         if not target_ch or not isinstance(target_ch, (discord.TextChannel, discord.Thread)):
-            await ctx.send_error(f"Configured welcome channel not found. Please set a new channel with `{prefix}welcome set`.")
-            return
+            target_ch = ctx.channel
 
-        success, err = await self._send_event_card("welcome", ctx.guild, ctx.author, test_channel=target_ch)
+        cfg_override = dict(config) if config else {}
+        if theme:
+            cfg_override["card_theme"] = theme
+
+        success, err = await self._send_event_card(
+            "welcome",
+            ctx.guild,
+            ctx.author,
+            test_channel=target_ch,
+            test_config_override=cfg_override,
+        )
         if success:
             resp = KyokaContainer(accent_color=0x00FF66)
             resp.add_section(
@@ -836,7 +858,7 @@ class AutoEvents(commands.Cog):
                 )
             )
             resp.add_separator(divider=True)
-            resp.add_text(f"-# Requested by {ctx.author.display_name}")
+            resp.add_text(f"-# Theme: {cfg_override.get('card_theme', 'aizen_throne')} • Requested by {ctx.author.display_name}")
             await send_container_response(ctx, resp)
         else:
             resp = KyokaContainer(accent_color=0xFF0033)
@@ -849,6 +871,16 @@ class AutoEvents(commands.Cog):
             resp.add_separator(divider=True)
             resp.add_text(f"-# Requested by {ctx.author.display_name}")
             await send_container_response(ctx, resp)
+
+    @commands.command(
+        name="welcometest",
+        aliases=["testwelcome"],
+        description="Immediately test the ultra-op anime welcome card live in this channel.",
+    )
+    @commands.has_permissions(manage_guild=True)
+    async def standalone_welcome_test(self, ctx: CustomContext, theme: Optional[str] = None) -> None:
+        """Send a test welcome card directly into the current channel."""
+        await self.welcome_test(ctx, theme=theme)
 
     @welcome_group.command(
         name="toggle",

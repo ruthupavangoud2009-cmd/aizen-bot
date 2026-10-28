@@ -103,3 +103,22 @@ async def test_fetch_avatar_bytes_timeout_or_error_returns_none():
     with patch("aiohttp.ClientSession.get", side_effect=Exception("Connection timeout")):
         result = await fetch_avatar_bytes("https://invalid.example.com/avatar.png")
         assert result is None
+
+
+def test_generate_aizen_welcome_card_all_themes():
+    """Verify all 4 anime masterpiece themes render valid 1000x360 cards."""
+    for theme in ["aizen_throne", "cyber_sakura", "celestial_nebula", "hueco_las_noches", "random"]:
+        buf = generate_aizen_welcome_card(
+            username="MasterAizen",
+            guild_name="Gotei 13 High Citadel",
+            member_count=5000,
+            avatar_bytes=_create_sample_avatar_bytes(),
+            next_step="Verify in #rules",
+            theme=theme,
+        )
+        assert isinstance(buf, io.BytesIO)
+        buf.seek(0)
+        img = Image.open(buf)
+        assert img.size == (1000, 360)
+        assert img.format == "PNG"
+

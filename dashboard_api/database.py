@@ -439,6 +439,10 @@ class PostgresDatabaseAdapter(BaseDatabaseAdapter):
                     "leave_message": le_row["message_content"] if (le_row and le_row["message_content"]) else "{user} has departed from {server}. We are down to {member_count} members.",
                     "dm_enabled": we_row["dm_enabled"] if we_row else False,
                     "embed_enabled": True,
+                    "card_enabled": True,
+                    "card_theme": "aizen_throne",
+                    "embed_color": "#7C3AED",
+                    "next_step": "Read #rules & complete verification to begin",
                 }
 
                 # 4. Moderation & AutoMod (guild_automod)
