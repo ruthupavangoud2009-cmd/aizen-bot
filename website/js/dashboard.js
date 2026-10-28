@@ -37,7 +37,15 @@ const state = {
 };
 
 document.addEventListener('DOMContentLoaded', async () => {
-  await initDashboard();
+  try {
+    await initDashboard();
+  } catch (err) {
+    console.error('Fatal initDashboard error:', err);
+    const container = document.getElementById('dashboard-app');
+    if (container) {
+      renderLoggedOutView(container, 'Connecting to dashboard timed out or encountered an issue. Please click below to login or refresh.');
+    }
+  }
 });
 
 function ensureSettingsDefaults(s) {
@@ -882,19 +890,12 @@ function renderWorkspace(container, guild) {
   });
 
   // Mobile Drawer Toggle Button & Backdrop handlers
-  const sidebarEl = container.querySelector('.settings-tabs');
-  const backdropEl = document.getElementById('sidebar-backdrop');
   document.getElementById('mobile-open-drawer-btn')?.addEventListener('click', () => {
     if (sidebarEl) sidebarEl.classList.add('sidebar-open');
     if (backdropEl) backdropEl.classList.add('active');
   });
 
   document.getElementById('close-sidebar-drawer-btn')?.addEventListener('click', () => {
-    if (sidebarEl) sidebarEl.classList.remove('sidebar-open');
-    if (backdropEl) backdropEl.classList.remove('active');
-  });
-
-  backdropEl?.addEventListener('click', () => {
     if (sidebarEl) sidebarEl.classList.remove('sidebar-open');
     if (backdropEl) backdropEl.classList.remove('active');
   });

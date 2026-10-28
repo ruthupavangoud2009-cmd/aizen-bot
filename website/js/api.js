@@ -69,7 +69,7 @@ export async function apiFetch(endpoint, options = {}, isRetry = false) {
     options.body = JSON.stringify(options.body);
   }
 
-  // Fast edge request timeout (3.5s max to eliminate LTE stalls)
+  // Edge request timeout (12s max to accommodate mobile latency and backend spin-up)
   let controller = null;
   let signal = options.signal;
   if (!signal && typeof AbortController !== 'undefined') {
@@ -77,7 +77,7 @@ export async function apiFetch(endpoint, options = {}, isRetry = false) {
     signal = controller.signal;
     setTimeout(() => {
       try { controller.abort(); } catch {}
-    }, options.timeout || 3500);
+    }, options.timeout || 12000);
   }
 
   const fetchOptions = {
