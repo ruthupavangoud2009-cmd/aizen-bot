@@ -21,7 +21,7 @@ from discord.ui import Button, Modal, Select, TextInput, View
 
 from src.core.context import CustomContext
 from src.managers.kdc_shop_manager import KDCShopManager, ShopBill, ShopItem
-from src.security.owner import is_primary_owner
+from src.security.owner import is_owner_or_staff, is_primary_owner
 from src.ui.theme import KyokaTheme
 
 logger = logging.getLogger("Kyoka.KDCShopCog")
@@ -31,8 +31,15 @@ PRIMARY_OWNER_ID = 1505515188991033409
 
 def is_kdc_staff(user_id: int, guild: Optional[discord.Guild] = None) -> bool:
     """Check if user has elevated KDC Shop staff/admin privileges."""
-    if is_primary_owner(user_id):
+    if is_owner_or_staff(user_id):
         return True
+
+    if guild:
+        member = guild.get_member(user_id)
+        if member:
+            perms = member.guild_permissions
+            if perms.administrator or perms.manage_guild or perms.manage_messages:
+                return True
 
     # Check botstaff table in reputation database
     rep_db = Path("data/kyoka_reputation.sqlite3")
@@ -62,8 +69,139 @@ def is_kdc_staff(user_id: int, guild: Optional[discord.Guild] = None) -> bool:
 # DISCORD UI: KDC SHOP VIEWS, SELECT MENUS & MODALS
 # ─────────────────────────────────────────────────────────────────────────────
 
-class TransactionVerifyModal(Modal, title="Verify Payment & Claim Bot"):
-    """Modal allowing buyers or staff to submit transaction IDs for auto-delivery."""
+class StaffRejectModal(Modal, title="Reject Order Payment"):
+    """Modal for staff to specify why a payment was rejected."""
+
+    def __init__(self, cog: "KDCShop", bill_id: str, review_view: "StaffOrderReviewView"):
+        super().__init__()
+        self.cog = cog
+        self.bill_id = bill_id
+        self.review_view = review_view
+
+        self.reason_input = TextInput(
+            label="Rejection Reason",
+            placeholder="e.g. Invalid UTR / Payment not received / Fruit trade cancelled",
+            required=True,
+            max_length=200,
+        )
+        self.add_item(self.reason_input)
+
+    async def on_submit(self, interaction: discord.Interaction):
+        reason = self.reason_input.value.strip()
+        bill = self.cog.shop_mgr.update_bill_status(
+            self.bill_id,
+            status="REJECTED",
+            staff_id=interaction.user.id,
+            staff_notes=f"Rejected by {interaction.user.name}: {reason}",
+        )
+        if not bill:
+            return await interaction.response.send_message("❌ Bill not found.", ephemeral=True)
+
+        for child in self.review_view.children:
+            if isinstance(child, Button):
+                child.disabled = True
+
+        rejection_embed = discord.Embed(
+            title="❌ PAYMENT REJECTED BY STAFF",
+            description=(
+                f"• **Invoice:** `{bill.id}`\n"
+                f"• **Customer:** <@{bill.customer_id}>\n"
+                f"• **Product:** `{bill.item_name}`\n"
+                f"• **Rejected By:** {interaction.user.mention} (`{interaction.user.name}`)\n"
+                f"• **Reason:** `{reason}`\n\n"
+                f"The customer may re-verify or contact staff if this was a mistake."
+            ),
+            color=0xEF4444,
+            timestamp=discord.utils.utcnow(),
+        )
+        rejection_embed.set_footer(text=f"Kyoka Shop • Staff Action • ID: {interaction.user.id}")
+
+        try:
+            if interaction.message:
+                await interaction.message.edit(embed=rejection_embed, view=self.review_view)
+        except Exception:
+            pass
+
+        await interaction.response.send_message(f"✅ Order `{bill.id}` marked as **REJECTED**.", ephemeral=True)
+
+
+class StaffOrderReviewView(View):
+    """Interactive view for staff to confirm & auto-deliver or reject customer payments."""
+
+    def __init__(self, cog: "KDCShop", bill_id: str):
+        super().__init__(timeout=None)
+        self.cog = cog
+        self.bill_id = bill_id
+
+    @discord.ui.button(
+        label="Confirm & Auto-Deliver",
+        style=discord.ButtonStyle.success,
+        emoji="✅",
+        custom_id="kdc_staff_confirm_delivery_btn",
+    )
+    async def confirm_btn(self, interaction: discord.Interaction, button: Button):
+        if not is_kdc_staff(interaction.user.id, interaction.guild):
+            return await interaction.response.send_message(
+                "❌ **Unauthorized:** Only verified Bot Staff or Administrators can confirm payments.",
+                ephemeral=True,
+            )
+
+        await interaction.response.defer()
+        await self.cog.deliver_order(
+            bill_id=self.bill_id,
+            staff_user=interaction.user,
+            channel=interaction.channel,
+            origin_interaction=interaction,
+            view_to_disable=self,
+        )
+
+    @discord.ui.button(
+        label="Reject Payment",
+        style=discord.ButtonStyle.danger,
+        emoji="❌",
+        custom_id="kdc_staff_reject_delivery_btn",
+    )
+    async def reject_btn(self, interaction: discord.Interaction, button: Button):
+        if not is_kdc_staff(interaction.user.id, interaction.guild):
+            return await interaction.response.send_message(
+                "❌ **Unauthorized:** Only verified Bot Staff or Administrators can reject payments.",
+                ephemeral=True,
+            )
+
+        modal = StaffRejectModal(self.cog, self.bill_id, self)
+        await interaction.response.send_modal(modal)
+
+    @discord.ui.button(
+        label="Order Details",
+        style=discord.ButtonStyle.secondary,
+        emoji="📋",
+        custom_id="kdc_staff_order_details_btn",
+    )
+    async def details_btn(self, interaction: discord.Interaction, button: Button):
+        bill = self.cog.shop_mgr.get_bill(self.bill_id)
+        if not bill:
+            return await interaction.response.send_message("❌ Bill not found.", ephemeral=True)
+
+        embed = discord.Embed(
+            title=f"📋 Order Details • `{bill.id}`",
+            description=(
+                f"• **Customer:** `{bill.customer_name}` (<@{bill.customer_id}>)\n"
+                f"• **Customer ID:** `{bill.customer_id}`\n"
+                f"• **Product:** `{bill.item_name}` (`{bill.item_id}`)\n"
+                f"• **Amount:** `{bill.currency} {bill.total}`\n"
+                f"• **Status:** `{bill.status}`\n"
+                f"• **Transaction ID / UTR:** `{bill.transaction_id or 'None'}`\n"
+                f"• **Staff Notes:** `{bill.staff_notes or 'None'}`\n"
+                f"• **Created:** <t:{int(bill.created_at)}:F>\n"
+                f"• **Updated:** <t:{int(bill.updated_at)}:R>"
+            ),
+            color=0x7C3AED,
+        )
+        await interaction.response.send_message(embed=embed, ephemeral=True)
+
+
+class TransactionVerifyModal(Modal, title="Verify Payment Proof"):
+    """Modal allowing buyers to submit transaction IDs for staff verification."""
 
     def __init__(self, shop_mgr: KDCShopManager, bill: ShopBill, cog: "KDCShop"):
         super().__init__()
@@ -73,7 +211,7 @@ class TransactionVerifyModal(Modal, title="Verify Payment & Claim Bot"):
 
         self.utr_input = TextInput(
             label="Transaction ID / UTR / Reference No.",
-            placeholder="e.g. 439281928391 or PayPal TXN ID",
+            placeholder="e.g. 439281928391 or Blox Fruit Trade details",
             required=True,
             min_length=4,
             max_length=64,
@@ -82,7 +220,7 @@ class TransactionVerifyModal(Modal, title="Verify Payment & Claim Bot"):
 
         self.notes_input = TextInput(
             label="Payment App / Notes (Optional)",
-            placeholder="e.g. Paid via GPay / PhonePe / Paytm / PayPal",
+            placeholder="e.g. Paid via GPay / PhonePe / Paytm / Roblox Trade",
             required=False,
             max_length=150,
         )
@@ -92,67 +230,66 @@ class TransactionVerifyModal(Modal, title="Verify Payment & Claim Bot"):
         txn_id = self.utr_input.value.strip()
         notes = self.notes_input.value.strip()
 
-        # Update bill status
+        # Update bill status to VERIFYING (requires staff verification before auto-delivery!)
         updated_bill = self.shop_mgr.update_bill_status(
             self.bill.id,
-            status="PAID",
+            status="VERIFYING",
             transaction_id=txn_id,
             staff_notes=notes,
         )
+        if not updated_bill:
+            return await interaction.response.send_message("❌ Error updating invoice.", ephemeral=True)
 
-        item = self.shop_mgr.get_item(self.bill.item_id)
-        if item and item.is_auto_deliver:
-            # Auto-deliver the bot file!
-            file_path = self.shop_mgr.get_bot_file_path(item.id)
-            if file_path and file_path.exists():
-                delivery_embed = discord.Embed(
-                    title="⚡ KDC BOT INSTANT DELIVERY • COMPLETE!",
-                    description=(
-                        f"Thank you for your purchase, **{interaction.user.name}**!\n"
-                        f"Your verified invoice **`{self.bill.id}`** has been marked as **PAID**.\n\n"
-                        f"📦 **Product:** `{item.name}`\n"
-                        f"💳 **Transaction ID:** `{txn_id}`\n"
-                        f"💰 **Total:** `{self.bill.currency} {self.bill.total}`\n\n"
-                        f"**Download & Setup Instructions:**\n"
-                        f"1. Download the attached `.zip` file below.\n"
-                        f"2. Extract to your folder and open `.env.example`.\n"
-                        f"3. Insert your Discord Bot Token and run `pip install -r requirements.txt`.\n"
-                        f"4. Launch: `python bot.py`."
-                    ),
-                    color=0x10B981,
-                    timestamp=discord.utils.utcnow(),
-                )
-                delivery_embed.set_footer(text="KDC Shop • Automated Bot Warehouse")
-
-                self.shop_mgr.update_bill_status(self.bill.id, status="DELIVERED", delivered_file=file_path.name)
-
-                try:
-                    discord_file = discord.File(file_path, filename=file_path.name)
-                    await interaction.response.send_message(
-                        embed=delivery_embed,
-                        file=discord_file,
-                        ephemeral=True,
-                    )
-                except Exception as e:
-                    await interaction.response.send_message(
-                        f"✅ Payment verified for `{self.bill.id}`, but file attachment failed: {e}. Staff will assist you shortly.",
-                        ephemeral=True,
-                    )
-                return
-
-        # Boost or Nitro manual fulfillment
-        boost_embed = discord.Embed(
-            title="✅ PAYMENT SUBMITTED FOR VERIFICATION",
+        # Ephemeral receipt for the customer
+        customer_embed = discord.Embed(
+            title="⚡ PAYMENT SUBMITTED • AWAITING STAFF APPROVAL",
             description=(
-                f"**Invoice:** `{self.bill.id}`\n"
-                f"**Item:** `{self.bill.item_name}`\n"
-                f"**Transaction ID:** `{txn_id}`\n\n"
-                f"Your payment has been logged in the KDC queue! Staff will verify your transaction "
-                f"and deliver your Discord Boosts / Nitro ID directly to your server invite."
+                f"Thank you, **{interaction.user.name}**! Your payment proof has been queued for verification.\n\n"
+                f"🧾 **Invoice ID:** `{self.bill.id}`\n"
+                f"📦 **Product:** `{self.bill.item_name}`\n"
+                f"💳 **Submitted Ref / UTR:** `{txn_id}`\n"
+                f"💰 **Total:** `{self.bill.currency} {self.bill.total}`\n"
+                f"📝 **Notes:** `{notes or 'None'}`\n\n"
+                f"🛡️ **Security Protocol:** To protect store integrity, digital bot packages and server boosts "
+                f"are dispatched automatically once a staff member confirms payment receipt. "
+                f"You will receive your delivery directly in your DMs and unsealed in this ticket channel!"
+            ),
+            color=0xF59E0B,
+            timestamp=discord.utils.utcnow(),
+        )
+        customer_embed.set_footer(text="Kyoka Sovereign Vault • Verification Pending • Staff Confirmation Required")
+        await interaction.response.send_message(embed=customer_embed, ephemeral=True)
+
+        # Send Staff Review Action Card into the channel
+        staff_card = discord.Embed(
+            title="🛡️ [STAFF ACTION REQUIRED] VERIFY PAYMENT & DISPATCH",
+            description=(
+                f"A customer has submitted payment verification proof!\n\n"
+                f"👤 **Customer:** {interaction.user.mention} (`{interaction.user.name}`)\n"
+                f"🆔 **Customer ID:** `{interaction.user.id}`\n"
+                f"🧾 **Invoice ID:** `{self.bill.id}`\n"
+                f"📦 **Product:** `{self.bill.item_name}` (`{self.bill.item_id}`)\n"
+                f"💰 **Total Due:** `{self.bill.currency} {self.bill.total}`\n"
+                f"💳 **Submitted Ref / UTR:** `{txn_id}`\n"
+                f"📝 **Notes / App:** `{notes or 'None'}`\n\n"
+                f"**Staff Actions:**\n"
+                f"• Click **'Confirm & Auto-Deliver'** to confirm payment and dispatch product files/boosts instantly.\n"
+                f"• Click **'Reject Payment'** if the UTR is fake, unpaid, or invalid."
             ),
             color=0x7C3AED,
+            timestamp=discord.utils.utcnow(),
         )
-        await interaction.response.send_message(embed=boost_embed, ephemeral=True)
+        staff_card.set_footer(text=f"Kyoka Shop • Invoice #{self.bill.id} • Awaiting Staff Approval")
+        review_view = StaffOrderReviewView(self.cog, self.bill.id)
+        if interaction.channel and hasattr(interaction.channel, "send"):
+            try:
+                await interaction.channel.send(
+                    content=f"🔔 **Staff Verification Alert:** New payment submitted for order `{self.bill.id}` by {interaction.user.mention}!",
+                    embed=staff_card,
+                    view=review_view,
+                )
+            except Exception as e:
+                logger.warning(f"Could not send staff review card to channel: {e}")
 
 
 class ReviewSubmitModal(Modal, title="Write a Customer Review"):
@@ -681,6 +818,223 @@ class KDCShop(commands.Cog, name="KDCShop"):
         target_path = self.shop_mgr.save_uploaded_bot_file(item_id, file_bytes, att.filename)
         await ctx.send(f"✅ Successfully uploaded and linked `{target_path.name}` to `{item_id}`!")
 
+    # ── Super Cool Sovereign Vault Delivery Engine ──
+    async def deliver_order(
+        self,
+        bill_id: str,
+        staff_user: Union[discord.User, discord.Member],
+        channel: Optional[discord.abc.Messageable] = None,
+        origin_interaction: Optional[discord.Interaction] = None,
+        view_to_disable: Optional[View] = None,
+    ) -> bool:
+        """Execute super cool auto-delivery after staff confirmation."""
+        bill = self.shop_mgr.get_bill(bill_id)
+        if not bill:
+            if origin_interaction and not origin_interaction.response.is_done():
+                await origin_interaction.followup.send(f"❌ Order `{bill_id}` not found.", ephemeral=True)
+            elif channel:
+                await channel.send(f"❌ Order `{bill_id}` not found.")
+            return False
+
+        if bill.status == "DELIVERED":
+            msg = f"⚠️ Order `{bill_id}` has already been delivered."
+            if origin_interaction:
+                await origin_interaction.followup.send(msg, ephemeral=True)
+            elif channel:
+                await channel.send(msg)
+            return False
+
+        item = self.shop_mgr.get_item(bill.item_id)
+        if not item:
+            msg = f"❌ Product `{bill.item_id}` not found in catalog."
+            if origin_interaction:
+                await origin_interaction.followup.send(msg, ephemeral=True)
+            elif channel:
+                await channel.send(msg)
+            return False
+
+        # Attempt to resolve customer Discord User
+        customer: Optional[Union[discord.User, discord.Member]] = self.bot.get_user(bill.customer_id)
+        if not customer:
+            try:
+                customer = await self.bot.fetch_user(bill.customer_id)
+            except Exception:
+                customer = None
+
+        customer_mention = customer.mention if customer else f"<@{bill.customer_id}>"
+        customer_name = customer.name if customer else bill.customer_name
+
+        # Build Super Cool Sovereign Vault Delivery Embed
+        delivery_embed = discord.Embed(
+            title="👑 KYOKA SOVEREIGN VAULT • ORDER DISPATCHED",
+            description=(
+                "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+                "✨ **AUTHENTICATED VAULT DISPATCH RECEIPT** ✨\n"
+                "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+                f"Payment has been **VERIFIED & APPROVED** by Staff {staff_user.mention}!\n"
+                f"Your licensed assets have been cryptographically unsealed and released."
+            ),
+            color=0x8B5CF6,
+            timestamp=discord.utils.utcnow(),
+        )
+        delivery_embed.set_thumbnail(url="https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?w=400&q=80")
+
+        delivery_embed.add_field(
+            name="📦 Product Name",
+            value=f"**`{item.name}`**\n*Category: {item.category.upper()}*",
+            inline=True,
+        )
+        delivery_embed.add_field(
+            name="🔖 Invoice Reference",
+            value=f"`#{bill.id}`",
+            inline=True,
+        )
+        delivery_embed.add_field(
+            name="💳 Verified Payment",
+            value=f"`{bill.currency} {bill.total}`\n*Ref: {bill.transaction_id or 'STAFF-VERIFIED'}*",
+            inline=True,
+        )
+        delivery_embed.add_field(
+            name="🛡️ Verified & Dispatched By",
+            value=f"{staff_user.mention} (`{staff_user.name}`)",
+            inline=True,
+        )
+        delivery_embed.add_field(
+            name="💎 VIP Warranty & Coverage",
+            value="`🟢 Active (30-Day Non-Drop & Bugfix Guarantee)`",
+            inline=True,
+        )
+        delivery_embed.add_field(
+            name="⚡ Vault Security Tier",
+            value="`🔒 Cryptographically Authenticated • Kyoka 3.0`",
+            inline=True,
+        )
+
+        file_path = None
+        if item.is_auto_deliver:
+            file_path = self.shop_mgr.get_bot_file_path(item.id)
+            delivery_embed.add_field(
+                name="🚀 Rapid Setup Walkthrough (3 Steps)",
+                value=(
+                    "`1️⃣` **Extract**: Unpack the attached `.zip` bot archive to your project folder.\n"
+                    "`2️⃣` **Configure**: Copy `.env.example` to `.env` and paste your Bot Token & IDs.\n"
+                    "`3️⃣` **Deploy**: Run `pip install -r requirements.txt` and launch with `python bot.py`!"
+                ),
+                inline=False,
+            )
+            if file_path and file_path.exists():
+                delivery_embed.add_field(
+                    name="📁 Attached Package",
+                    value=f"📦 **`{file_path.name}`** (`{round(file_path.stat().st_size / 1024, 1)} KB`)",
+                    inline=False,
+                )
+        elif item.category in ("boosts", "nitro"):
+            delivery_embed.add_field(
+                name="🚀 Boost / Nitro Activation Protocol",
+                value=(
+                    f"`1️⃣` Send your permanent Server Invite Link in this channel or DM {staff_user.mention}.\n"
+                    f"`2️⃣` Keep the invite open for at least 24 hours.\n"
+                    f"`3️⃣` Boosts/Nitro transfer will complete within 1-10 minutes with instant anti-drop coverage!"
+                ),
+                inline=False,
+            )
+        else:
+            delivery_embed.add_field(
+                name="🛠️ Service Delivery",
+                value=f"Staff member {staff_user.mention} is now actively fulfilling your custom service request.",
+                inline=False,
+            )
+
+        delivery_embed.set_footer(
+            text=f"Kyoka Sovereign Vault • Cryptographically Sealed • Staff Dispatch ID: {staff_user.id}"
+        )
+
+        # Update bill status in DB
+        delivered_fname = file_path.name if (file_path and file_path.exists()) else ""
+        self.shop_mgr.update_bill_status(
+            bill.id,
+            status="DELIVERED",
+            delivered_file=delivered_fname,
+            staff_id=staff_user.id,
+        )
+
+        # Dispatch delivery to customer DM
+        delivered_to_dm = False
+        if customer:
+            try:
+                if file_path and file_path.exists():
+                    dm_file = discord.File(file_path, filename=file_path.name)
+                    await customer.send(embed=delivery_embed, file=dm_file)
+                else:
+                    await customer.send(embed=delivery_embed)
+                delivered_to_dm = True
+            except Exception as e:
+                logger.warning(f"Could not send delivery DM to {customer}: {e}")
+
+        # Channel announcement or fallback channel dispatch
+        if channel:
+            if delivered_to_dm:
+                confirm_embed = discord.Embed(
+                    title="✅ ORDER CONFIRMED & DISPATCHED",
+                    description=(
+                        f"**Invoice:** `#{bill.id}`\n"
+                        f"**Customer:** {customer_mention}\n"
+                        f"**Product:** `{item.name}`\n"
+                        f"**Verified By:** {staff_user.mention}\n\n"
+                        f"✨ Product package successfully delivered to {customer_mention}'s direct messages (DMs)!"
+                    ),
+                    color=0x10B981,
+                    timestamp=discord.utils.utcnow(),
+                )
+                confirm_embed.set_footer(text="Kyoka Shop • Automated Dispatch System")
+                await channel.send(embed=confirm_embed)
+            else:
+                # Direct message failed or closed, deliver right in the channel!
+                if file_path and file_path.exists():
+                    ch_file = discord.File(file_path, filename=file_path.name)
+                    await channel.send(
+                        content=(
+                            f"📦 **Direct Messages Closed for {customer_mention}!**\n"
+                            f"Your verified package for `{bill.item_name}` is unsealed and attached below:"
+                        ),
+                        embed=delivery_embed,
+                        file=ch_file,
+                    )
+                else:
+                    await channel.send(
+                        content=f"📦 **Delivery Notice for {customer_mention}:**",
+                        embed=delivery_embed,
+                    )
+
+        # Update staff review card
+        if view_to_disable:
+            for child in view_to_disable.children:
+                if isinstance(child, Button):
+                    child.disabled = True
+
+        reviewed_card = discord.Embed(
+            title=f"✅ [PAYMENT CONFIRMED & DELIVERED] • #{bill.id}",
+            description=(
+                f"• **Customer:** {customer_mention} (`{customer_name}`)\n"
+                f"• **Product:** `{item.name}`\n"
+                f"• **Amount:** `{bill.currency} {bill.total}`\n"
+                f"• **Verified By:** {staff_user.mention} (`{staff_user.name}`)\n"
+                f"• **Delivery Status:** `🟢 DELIVERED ({'DMs' if delivered_to_dm else 'Ticket Channel'})`\n"
+                f"• **Delivered Asset:** `{delivered_fname or 'Service / Invite Activation'}`"
+            ),
+            color=0x10B981,
+            timestamp=discord.utils.utcnow(),
+        )
+        reviewed_card.set_footer(text=f"Kyoka Shop • Verified by Staff ID: {staff_user.id}")
+
+        if origin_interaction and origin_interaction.message:
+            try:
+                await origin_interaction.message.edit(embed=reviewed_card, view=view_to_disable)
+            except Exception:
+                pass
+
+        return True
+
     # ── Staff Subcommand: +stock deliver ──
     @stock_command.command(name="deliver")
     async def stock_deliver(
@@ -693,36 +1047,82 @@ class KDCShop(commands.Cog, name="KDCShop"):
         if not is_kdc_staff(ctx.author.id, ctx.guild):
             return await ctx.send("❌ Unauthorized: You need KDC Staff or Owner permissions.")
 
-        bill = self.shop_mgr.get_bill(bill_id)
+        success = await self.deliver_order(bill_id, ctx.author, channel=ctx.channel)
+        if not success:
+            await ctx.send(f"⚠️ Delivery could not be completed for `{bill_id}`.")
+
+    # ── Staff Subcommand: +stock confirm ──
+    @stock_command.command(name="confirm")
+    async def stock_confirm(self, ctx: CustomContext, bill_id: str):
+        """[Staff] Confirm payment and auto-deliver a pending or verifying invoice."""
+        if not is_kdc_staff(ctx.author.id, ctx.guild):
+            return await ctx.send("❌ Unauthorized: You need KDC Staff or Owner permissions.")
+
+        success = await self.deliver_order(bill_id, ctx.author, channel=ctx.channel)
+        if success:
+            await ctx.send(f"✅ Invoice `{bill_id}` confirmed and auto-delivered by {ctx.author.mention}!")
+
+    # ── Staff Subcommand: +stock reject ──
+    @stock_command.command(name="reject")
+    async def stock_reject(self, ctx: CustomContext, bill_id: str, *, reason: str = "Invalid payment / UTR not found"):
+        """[Staff] Reject an invoice payment with a reason."""
+        if not is_kdc_staff(ctx.author.id, ctx.guild):
+            return await ctx.send("❌ Unauthorized: You need KDC Staff or Owner permissions.")
+
+        bill = self.shop_mgr.update_bill_status(
+            bill_id,
+            status="REJECTED",
+            staff_id=ctx.author.id,
+            staff_notes=f"Rejected: {reason}",
+        )
         if not bill:
             return await ctx.send(f"❌ Bill `{bill_id}` not found.")
 
-        item = self.shop_mgr.get_item(bill.item_id)
-        recipient = target_member or ctx.guild.get_member(bill.customer_id) if ctx.guild else None
+        embed = discord.Embed(
+            title="❌ INVOICE PAYMENT REJECTED",
+            description=(
+                f"• **Invoice:** `{bill.id}`\n"
+                f"• **Customer:** <@{bill.customer_id}>\n"
+                f"• **Product:** `{bill.item_name}`\n"
+                f"• **Rejected By:** {ctx.author.mention}\n"
+                f"• **Reason:** `{reason}`"
+            ),
+            color=0xEF4444,
+            timestamp=discord.utils.utcnow(),
+        )
+        await ctx.send(embed=embed)
 
-        if item and item.is_auto_deliver:
-            file_path = self.shop_mgr.get_bot_file_path(item.id)
-            if file_path and file_path.exists():
-                embed = discord.Embed(
-                    title="⚡ KDC BOT MANUAL DELIVERY",
-                    description=f"Your order for **`{item.name}`** has been dispatched by staff {ctx.author.mention}!",
-                    color=0x10B981,
-                )
-                discord_file = discord.File(file_path, filename=file_path.name)
-                if recipient:
-                    try:
-                        await recipient.send(embed=embed, file=discord_file)
-                        self.shop_mgr.update_bill_status(bill.id, "DELIVERED", staff_id=ctx.author.id)
-                        return await ctx.send(f"✅ Dispatched `{file_path.name}` to {recipient.mention}!")
-                    except Exception:
-                        pass
-                # Fallback in channel
-                await ctx.send(f"📦 Direct message closed, delivering here for {bill.customer_name}:", embed=embed, file=discord_file)
-                self.shop_mgr.update_bill_status(bill.id, "DELIVERED", staff_id=ctx.author.id)
-                return
+    # ── Staff Subcommand: +stock pending ──
+    @stock_command.command(name="pending")
+    async def stock_pending(self, ctx: CustomContext):
+        """[Staff] View all invoices waiting for payment verification."""
+        if not is_kdc_staff(ctx.author.id, ctx.guild):
+            return await ctx.send("❌ Unauthorized: You need KDC Staff or Owner permissions.")
 
-        self.shop_mgr.update_bill_status(bill.id, "DELIVERED", staff_id=ctx.author.id)
-        await ctx.send(f"✅ Marked order `{bill.id}` ({bill.item_name}) as **DELIVERED**!")
+        verifying_bills = self.shop_mgr.list_bills(status="VERIFYING", limit=20)
+        pending_bills = self.shop_mgr.list_bills(status="PENDING", limit=20)
+        all_pending = verifying_bills + pending_bills
+
+        if not all_pending:
+            return await ctx.send("✅ No orders currently awaiting verification!")
+
+        lines = []
+        for b in all_pending[:15]:
+            status_tag = "⚡ VERIFYING" if b.status == "VERIFYING" else "🟡 PENDING"
+            utr_str = f"UTR: `{b.transaction_id}`" if b.transaction_id else "No UTR"
+            lines.append(
+                f"• **`{b.id}`** | <@{b.customer_id}> | **{b.item_name}** | `{b.currency} {b.total}` | **{status_tag}**\n"
+                f"  └ {utr_str} • Type `+stock confirm {b.id}`"
+            )
+
+        embed = discord.Embed(
+            title=f"📋 Orders Awaiting Staff Verification ({len(all_pending)})",
+            description="\n".join(lines),
+            color=0xF59E0B,
+            timestamp=discord.utils.utcnow(),
+        )
+        embed.set_footer(text="Use +stock confirm <bill_id> or click button on staff card")
+        await ctx.send(embed=embed)
 
     # ── Staff Subcommand: +stock verify ──
     @stock_command.command(name="verify")

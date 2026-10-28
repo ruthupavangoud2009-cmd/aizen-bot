@@ -173,6 +173,9 @@ async def test_kdc_shop_cog_registration():
     assert "deliver" in subcmds
     assert "verify" in subcmds
     assert "bills" in subcmds
+    assert "confirm" in subcmds
+    assert "reject" in subcmds
+    assert "pending" in subcmds
 
     # Verify review commands
     review_cmd = bot.get_command("review")
@@ -269,5 +272,55 @@ def test_kdc_shop_view_embed_labels_usd_unavailable(temp_shop: KDCShopManager):
     pricing_field = [f for f in item_embed.fields if f.name == "💵 Pricing"][0]
     assert "Unavailable" in pricing_field.value
     assert "Scan to Pay" in pricing_field.value
+
+
+def test_staff_payment_confirmation_workflow(temp_shop: KDCShopManager):
+    """Verify that orders transition to VERIFYING upon UTR submit and only DELIVERED upon staff confirmation."""
+    bill = temp_shop.create_bill(
+        guild_id=123,
+        customer_id=987654321,
+        customer_name="BuyerBob",
+        item_id="bot_allinone",
+        currency="INR",
+        quantity=1,
+    )
+    assert bill.status == "PENDING"
+
+    # 1. Customer submits UTR proof -> becomes VERIFYING, NOT DELIVERED!
+    verifying_bill = temp_shop.update_bill_status(
+        bill.id,
+        status="VERIFYING",
+        transaction_id="UPI-UTR-998877",
+        staff_notes="Submitted via GPay",
+    )
+    assert verifying_bill is not None
+    assert verifying_bill.status == "VERIFYING"
+    assert verifying_bill.transaction_id == "UPI-UTR-998877"
+    assert verifying_bill.delivered_file == ""
+
+    # 2. Staff confirms payment -> becomes DELIVERED
+    delivered_bill = temp_shop.update_bill_status(
+        bill.id,
+        status="DELIVERED",
+        delivered_file="kyoka_allinone_bot_v1.zip",
+        staff_id=PRIMARY_OWNER_ID,
+    )
+    assert delivered_bill is not None
+    assert delivered_bill.status == "DELIVERED"
+    assert delivered_bill.delivered_file == "kyoka_allinone_bot_v1.zip"
+    assert delivered_bill.staff_id == PRIMARY_OWNER_ID
+
+
+def test_is_kdc_staff_recognizes_bot_staff():
+    """Verify bot staff registered in bot_staff.json are recognized by is_kdc_staff."""
+    from src.security.owner import add_bot_staff, remove_bot_staff
+    test_staff_id = 777666555444
+    try:
+        add_bot_staff(test_staff_id)
+        assert is_kdc_staff(test_staff_id) is True
+    finally:
+        remove_bot_staff(test_staff_id)
+        assert is_kdc_staff(test_staff_id) is False
+
 
 

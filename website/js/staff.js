@@ -267,10 +267,10 @@ async function loadStaffInvoices() {
   if (!slot) return;
 
   const sampleInvoices = [
-    { id: 'KDC-8F3A12', item: '2 Server Boosts', customer: 'NexusGamer#1234', price: '₹200', status: 'PAID' },
-    { id: 'KDC-91BA04', item: 'Basic Music Bot (Source)', customer: 'AstroDev#9999', price: '₹50', status: 'DELIVERED' },
-    { id: 'KDC-14E290', item: '1 Month Nitro ID + 2 Boosts', customer: 'Vortex#4444', price: '₹250', status: 'PENDING' },
-    { id: 'KDC-7C18D1', item: 'All-in-One Ultimate Bot', customer: 'ShadowLord#0001', price: '₹300', status: 'PAID' },
+    { id: 'KDC-8F3A12', item: 'All-in-One Ultimate Bot', customer: 'ShadowLord#0001', price: '₹300', status: 'VERIFYING', utr: '439281928391' },
+    { id: 'KDC-14E290', item: '1 Month Nitro ID + 2 Boosts', customer: 'Vortex#4444', price: '₹250', status: 'VERIFYING', utr: 'PAYTM_992182' },
+    { id: 'KDC-91BA04', item: 'Basic Music Bot (Source)', customer: 'AstroDev#9999', price: '₹50', status: 'DELIVERED', utr: 'UPI_0019283' },
+    { id: 'KDC-7C18D1', item: '4 Server Boosts', customer: 'NexusGamer#1234', price: '₹380', status: 'DELIVERED', utr: 'GPAY_883192' },
   ];
 
   slot.innerHTML = `
@@ -282,35 +282,88 @@ async function loadStaffInvoices() {
           <th>Customer</th>
           <th>Total</th>
           <th>Status</th>
-          <th style="text-align: right;">Action</th>
+          <th style="text-align: right;">Staff Verification Action</th>
         </tr>
       </thead>
       <tbody>
-        ${sampleInvoices.map(inv => `
-          <tr>
+        ${sampleInvoices.map(inv => {
+          let badgeClass = 'badge-invite';
+          let statusLabel = inv.status;
+          if (inv.status === 'DELIVERED') {
+            badgeClass = 'badge-installed';
+            statusLabel = 'DELIVERED ✓';
+          } else if (inv.status === 'VERIFYING') {
+            badgeClass = 'badge-warning';
+            statusLabel = '⚡ VERIFYING';
+          }
+
+          return `
+          <tr id="inv-row-${inv.id}">
             <td><code style="color: var(--purple-pastel); font-weight: 800;">${inv.id}</code></td>
             <td><strong>${inv.item}</strong></td>
-            <td>${inv.customer}</td>
+            <td>${inv.customer}<br><small style="color: var(--text-dim); font-size: 0.72rem;">UTR: <code>${inv.utr}</code></small></td>
             <td style="color: #10B981; font-weight: 700;">${inv.price}</td>
-            <td><span class="badge ${inv.status === 'PAID' ? 'badge-installed' : (inv.status === 'DELIVERED' ? 'badge-installed' : 'badge-invite')}">${inv.status}</span></td>
+            <td><span class="badge ${badgeClass} inv-status-badge">${statusLabel}</span></td>
             <td style="text-align: right;">
-              <button class="btn btn-outline btn-xs btn-verify-inv" data-id="${inv.id}" style="padding: 0.2rem 0.5rem;">
-                ${inv.status === 'PENDING' ? 'Verify Payment' : 'View Delivery'}
-              </button>
+              ${inv.status === 'VERIFYING' ? `
+                <div style="display: inline-flex; gap: 0.35rem; justify-content: flex-end;">
+                  <button class="btn btn-primary btn-xs btn-confirm-inv" data-id="${inv.id}" data-item="${inv.item}" style="padding: 0.25rem 0.6rem; font-size: 0.75rem; background: linear-gradient(135deg, #10B981, #059669);">
+                    ✅ Confirm & Deliver
+                  </button>
+                  <button class="btn btn-outline btn-xs btn-reject-inv" data-id="${inv.id}" style="padding: 0.25rem 0.5rem; font-size: 0.75rem; border-color: #EF4444; color: #EF4444;">
+                    ❌ Reject
+                  </button>
+                </div>
+              ` : `
+                <span style="color: #10B981; font-size: 0.78rem; font-weight: 700;">Dispatched to Vault ✓</span>
+              `}
             </td>
           </tr>
-        `).join('')}
+          `;
+        }).join('')}
       </tbody>
     </table>
   `;
 
-  slot.querySelectorAll('.btn-verify-inv').forEach(btn => {
+  slot.querySelectorAll('.btn-confirm-inv').forEach(btn => {
+    btn.addEventListener('click', () => {
+      soundFX.playSound('success');
+      const invId = btn.getAttribute('data-id');
+      const itemName = btn.getAttribute('data-item') || 'Product';
+      const row = document.getElementById(`inv-row-${invId}`);
+      if (row) {
+        const badge = row.querySelector('.inv-status-badge');
+        if (badge) {
+          badge.className = 'badge badge-installed inv-status-badge';
+          badge.textContent = 'DELIVERED ✓';
+        }
+        const actionTd = row.querySelector('td:last-child');
+        if (actionTd) {
+          actionTd.innerHTML = '<span style="color: #10B981; font-size: 0.78rem; font-weight: 700;">Dispatched to Vault ✓</span>';
+        }
+      }
+      showToast(`👑 Vault Dispatched: Payment for ${invId} (${itemName}) confirmed! Bot zip / boosts delivered to customer.`, 'success');
+    });
+  });
+
+  slot.querySelectorAll('.btn-reject-inv').forEach(btn => {
     btn.addEventListener('click', () => {
       soundFX.playSound('click');
       const invId = btn.getAttribute('data-id');
-      showToast(`Invoice ${invId} marked as verified and auto-dispatched!`, 'success');
-      btn.textContent = 'Dispatched ✓';
-      btn.disabled = true;
+      const row = document.getElementById(`inv-row-${invId}`);
+      if (row) {
+        const badge = row.querySelector('.inv-status-badge');
+        if (badge) {
+          badge.className = 'badge badge-danger inv-status-badge';
+          badge.style.background = '#EF4444';
+          badge.textContent = 'REJECTED ✗';
+        }
+        const actionTd = row.querySelector('td:last-child');
+        if (actionTd) {
+          actionTd.innerHTML = '<span style="color: #EF4444; font-size: 0.78rem; font-weight: 700;">Payment Rejected ✗</span>';
+        }
+      }
+      showToast(`Order ${invId} rejected. Customer will be notified to supply valid payment proof.`, 'info');
     });
   });
 }

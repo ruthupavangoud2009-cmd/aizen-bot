@@ -446,13 +446,13 @@ document.addEventListener('DOMContentLoaded', () => {
     const isFruit = modalFruitSec && modalFruitSec.style.display !== 'none';
     if (isFruit) {
       const robloxUser = document.getElementById('modal-roblox-user')?.value.trim() || 'Roblox Trader';
-      showToast(`🍎 Blox Fruits Order for "${robloxUser}"! Join Discord with your Invoice ID to complete trade with staff.`, 'success');
+      showToast(`🍎 Blox Fruits Order for "${robloxUser}" submitted! Staff will confirm trade and auto-deliver your package.`, 'success');
       return;
     }
     if (activeModalItem.is_auto_deliver) {
-      showToast(`⚡ Bot Auto-Delivery: Open Discord and type "stock" or verify Transaction ID for ${activeModalItem.name}!`, 'success');
+      showToast(`⚡ Bot Auto-Delivery: Submit your UTR in Discord! Once staff confirms payment, your bot zip is unsealed and delivered!`, 'success');
     } else {
-      showToast(`🚀 Boost / Nitro Order: Open Discord and send your server invite link with invoice ID!`, 'info');
+      showToast(`🚀 Boost / Nitro Order: Submit your payment proof in Discord! Staff will verify and activate perks on your invite.`, 'info');
     }
   });
 
