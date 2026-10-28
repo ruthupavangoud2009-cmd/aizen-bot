@@ -354,15 +354,16 @@
 }
 
 .tab-panel.active {
-  display: flex;
+  display: flex !important;
   flex-direction: column;
   gap: 2rem;
-  opacity: 1;
-  animation: fadeIn 0.2s ease forwards;
+  opacity: 1 !important;
+  transform: none !important;
+  animation: none !important;
 }
 
 @keyframes fadeIn {
-  from { opacity: 0.2; }
+  from { opacity: 1; }
   to { opacity: 1; }
 }
 
@@ -370,12 +371,14 @@
   .tab-panel.active {
     animation: none !important;
     opacity: 1 !important;
+    transform: none !important;
   }
 }
 
 .reduce-motion .tab-panel.active {
   animation: none !important;
   opacity: 1 !important;
+  transform: none !important;
 }
 
 .panel-header {
@@ -837,16 +840,17 @@ input:checked + .slider:before {
   max-width: 900px;
   width: 100%;
   max-height: 90vh;
-  display: flex;
+  display: flex !important;
   flex-direction: column;
   overflow: hidden;
-  opacity: 1;
-  animation: wizardFadeIn 0.25s ease-out forwards;
+  opacity: 1 !important;
+  transform: none !important;
+  animation: none !important;
 }
 
 @keyframes wizardFadeIn {
-  from { opacity: 0; transform: scale(0.97) translateY(10px); }
-  to { opacity: 1; transform: scale(1) translateY(0); }
+  from { opacity: 1; transform: none; }
+  to { opacity: 1; transform: none; }
 }
 
 @media (prefers-reduced-motion: reduce) {

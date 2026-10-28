@@ -184,7 +184,11 @@ function renderOwnerWorkspace(container) {
   container.querySelectorAll('.owner-tab-btn').forEach(btn => {
     btn.addEventListener('click', async () => {
       container.querySelectorAll('.owner-tab-btn').forEach(b => b.classList.remove('active'));
-      container.querySelectorAll('.owner-section').forEach(s => s.classList.remove('active'));
+      container.querySelectorAll('.owner-section').forEach(s => {
+        s.classList.remove('active');
+        s.style.display = 'none';
+        s.style.opacity = '0';
+      });
 
       btn.classList.add('active');
       const section = btn.getAttribute('data-section');
@@ -193,14 +197,18 @@ function renderOwnerWorkspace(container) {
       const target = document.getElementById(`section-${section}`);
       if (target) {
         target.classList.add('active');
+        target.style.display = 'flex';
+        target.style.opacity = '1';
         await loadSectionData(section, target);
       }
     });
   });
 
-  // Load default overview section
+  // Load default overview section with guaranteed visibility
   const overviewTarget = document.getElementById('section-overview');
   if (overviewTarget) {
+    overviewTarget.style.display = 'flex';
+    overviewTarget.style.opacity = '1';
     loadSectionData('overview', overviewTarget);
   }
 }

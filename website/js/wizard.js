@@ -166,7 +166,7 @@ export class SetupWizard {
     overlay.id = 'kyoka-wizard-modal';
     overlay.className = 'wizard-backdrop';
     overlay.innerHTML = `
-      <div class="wizard-window">
+      <div class="wizard-window" style="display: flex !important; opacity: 1 !important; transform: none !important;">
         <!-- Wizard Header -->
         <div class="wizard-header">
           <div class="wizard-title-group">
@@ -286,6 +286,8 @@ export class SetupWizard {
     this.updateStepper();
     const body = this.container?.querySelector('#wizard-step-body');
     if (!body) return;
+    body.style.display = 'block';
+    body.style.opacity = '1';
 
     try {
       switch (this.currentStep) {

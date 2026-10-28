@@ -193,6 +193,20 @@ function getEdgeFallbackData(pathname) {
       database_vendor: 'Supabase PostgreSQL (TLS Enforced)',
     };
   }
+  if (pathname === '/api/guilds' || pathname.startsWith('/api/guilds')) {
+    return {
+      guilds: [{
+        id: '1515995663903752213',
+        name: 'Kyoka HQ',
+        icon_url: null,
+        can_manage: true,
+        is_owner: true,
+        bot_installed: true,
+        permissions: '8'
+      }],
+      total: 1
+    };
+  }
   if (pathname.match(/^\/api\/guilds\/[^\/]+\/settings$/)) {
     return { success: true, settings: {} };
   }

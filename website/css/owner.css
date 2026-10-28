@@ -172,21 +172,22 @@
 }
 
 .owner-section.active {
-  display: flex;
+  display: flex !important;
   flex-direction: column;
   gap: 2rem;
-  opacity: 1;
-  animation: fadeIn 0.2s ease forwards;
+  opacity: 1 !important;
+  transform: none !important;
+  animation: none !important;
 }
 
 @keyframes fadeIn {
   from {
-    opacity: 0.2;
-    transform: translateY(2px);
+    opacity: 1;
+    transform: none;
   }
   to {
     opacity: 1;
-    transform: translateY(0);
+    transform: none;
   }
 }
 
