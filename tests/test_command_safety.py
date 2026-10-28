@@ -48,7 +48,7 @@ def test_guess_range_rejects_invalid_bounds(value):
 
 def test_owner_premium_management_does_not_collide_with_public_premium():
     assert OwnerSystem.owner_premium.name == "owner-premium"
-    assert Fun.premium.name == "premium"
+    assert Help.view_plan.name == "premium"
 
 
 @pytest.mark.parametrize("category", ["Owner", "Developer"])

@@ -27,6 +27,13 @@ class EmojiRegistry:
     async def load(self) -> None:
         """Fetch all application emojis from Discord API and cache them."""
         try:
+            # Guard: ensure HTTP client is initialized and logged in
+            if not hasattr(self.bot, "http") or not getattr(self.bot.http, "token", None):
+                return
+            global_over = getattr(self.bot.http, "_global_over", None)
+            if global_over is None or not hasattr(global_over, "is_set"):
+                return
+
             if not self.bot.application_id:
                 try:
                     app_info = await self.bot.application_info()

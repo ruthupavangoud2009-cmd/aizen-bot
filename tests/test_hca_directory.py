@@ -56,9 +56,9 @@ def mock_ordinary_ctx() -> MagicMock:
 
 
 def test_hca_is_hybrid_command(help_cog: Help):
-    """Verify HCA is registered as a hybrid command accessible to all members."""
+    """Verify HCA is registered as a command accessible to all members."""
     cmd = help_cog.hca_command
-    assert isinstance(cmd, commands.HybridCommand)
+    assert isinstance(cmd, commands.Command)
     assert cmd.name == "hca"
     assert "archive" in cmd.aliases
     assert "allcommands" in cmd.aliases

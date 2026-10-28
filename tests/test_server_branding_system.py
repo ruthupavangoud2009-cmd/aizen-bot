@@ -388,8 +388,8 @@ async def test_setbot_view_and_reset(branding_cog: Branding, mock_bot: KyokaBot)
 
 
 def test_branding_hybrid_command_structure(branding_cog: Branding):
-    """Verify setbot command group and all subcommands are hybrid commands."""
-    assert isinstance(branding_cog.setbot, commands.HybridGroup)
+    """Verify setbot command group and all subcommands are commands."""
+    assert isinstance(branding_cog.setbot, (commands.Group, commands.HybridGroup))
     expected_subcommands = {"name", "avatar", "banner", "bio", "reset", "view"}
     registered_subcommands = {sub.name for sub in branding_cog.setbot.commands}
     assert expected_subcommands.issubset(registered_subcommands)

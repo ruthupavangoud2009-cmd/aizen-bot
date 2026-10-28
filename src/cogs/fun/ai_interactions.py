@@ -221,7 +221,9 @@ class AIInteractions(commands.Cog):
 
     # ─── SLASH COMMAND GROUP (6 SUBCOMMANDS) ────────────────────────────────
 
-    # ─── PREFIX COMMAND GROUP ────────────────────────────────────────────────
+    @property
+    def ai_group(self):
+        return self.ai_prefix_group
 
     @commands.group(name="aipanel", invoke_without_command=True, help="AI configuration and interaction commands.")
     @commands.guild_only()

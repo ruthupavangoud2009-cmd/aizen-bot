@@ -50,9 +50,11 @@ async def get_prefix(bot: KyokaBot, message: discord.Message) -> list[str]:
     guild_id = message.guild.id if message.guild else None
     guild_prefix = bot.guild_mgr.get_prefix(guild_id) if hasattr(bot, "guild_mgr") else Config.DEFAULT_PREFIX
 
-    # Exactly ONE active prefix per server: the guild's explicitly configured prefix (or DEFAULT_PREFIX)
-    # Zero hidden fallback prefixes: old prefixes like '+' or '?' are NEVER accepted once customized
     prefixes: list[str] = [guild_prefix]
+    if "+" not in prefixes:
+        prefixes.append("+")
+    if "?" not in prefixes:
+        prefixes.append("?")
 
     # Check if author has No-Prefix authorization or is Owner/Developer
     is_no_prefix = False
@@ -574,6 +576,13 @@ class KyokaBot(commands.Bot):
         if not self._rotate_presence.is_running():
             self._rotate_presence.start()
 
+        # Refresh custom application emojis once Discord gateway connection is established
+        if not self.custom_emojis._emojis:
+            try:
+                await self.custom_emojis.load()
+            except Exception as e:
+                logger.debug(f"Notice loading application emojis in on_ready: {e}")
+
         # Startup Diagnostics Log
         prefix_count = len(self.commands)
         slash_count = len(self.tree.get_commands())
@@ -629,6 +638,19 @@ class KyokaBot(commands.Bot):
             await self.update_dynamic_presence()
         except Exception as e:
             logger.debug(f"Notice updating presence on guild remove: {e}")
+
+    async def close(self) -> None:
+        """Gracefully close background presence loops, HTTP sessions, and database connections."""
+        if hasattr(self, "_rotate_presence") and self._rotate_presence.is_running():
+            self._rotate_presence.cancel()
+        if self.session and not self.session.closed:
+            await self.session.close()
+        if hasattr(self, "db") and hasattr(self.db, "close"):
+            try:
+                await self.db.close()
+            except Exception:
+                pass
+        await super().close()
 
 
 # Backward Compatibility Alias

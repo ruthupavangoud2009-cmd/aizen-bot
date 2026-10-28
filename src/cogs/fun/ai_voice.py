@@ -585,7 +585,7 @@ class AIVoice(commands.Cog, name="AIVoice"):
         )
 
         embed.add_field(
-            name="🎵 Audio Binaries & Packages",
+            name="🎵 Audio Binaries",
             value=(
                 f"• **FFmpeg:** `{'✅ Found' if ffmpeg_bin else '❌ Missing'}` ({ffmpeg_bin or 'None'})\n"
                 f"• **Opus:** `{'✅ Loaded' if opus_loaded else '❌ Not Loaded'}`\n"
