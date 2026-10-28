@@ -134,13 +134,14 @@ async def test_help_compact_embed_structure():
 
     embed = cog.build_home_embed(ctx, categories)
 
-    assert "Kyoka 3.0" in embed.title
+    assert "Hey, I'm" in embed.title
     assert embed.color.value == 0x2B0938  # Dark violet aesthetic
     # Verify embed length is strictly safe under 6,000 chars (prevents 6,939 HTTP 400 error)
     assert len(embed) < 1500
-    # Verify compact description contains categories and essential commands
-    assert "Moderation" in embed.description or "MODERATION" in embed.description
-    assert "!help" in embed.description
+    # Verify clean Kyro description format
+    assert "Latency:" in embed.description
+    assert "Available Commands:" in embed.description
+    assert "Prefix:" in embed.description
 
 
 # ─────────────────────────────────────────────────────────────────────────────

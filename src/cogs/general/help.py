@@ -147,8 +147,18 @@ class HelpCategorySelect(discord.ui.Select):
                 )
             )
 
+        selected_label = "🏠 Home"
+        if current_selection.lower() != "home":
+            for cat_name in visible_categories.keys():
+                if cat_name.lower() == current_selection.lower():
+                    raw_title = cat_name.split("・", 1)[1] if "・" in cat_name else cat_name
+                    clean_title = raw_title.title() if raw_title.isupper() else raw_title
+                    emoji_str = UNICODE_CATEGORY_EMOJIS.get(cat_name, "📁")
+                    selected_label = f"{emoji_str} {clean_title}"
+                    break
+
         super().__init__(
-            placeholder="Select a module to view commands...",
+            placeholder=selected_label,
             min_values=1,
             max_values=1,
             options=options[:25],
@@ -209,7 +219,7 @@ class HelpView(discord.ui.View):
         self._build_components()
 
     def _build_components(self) -> None:
-        """Construct the view buttons and select menu."""
+        """Construct the view buttons and select menu matching Kyro clean layout."""
         self.clear_items()
 
         # Row 0: Dropdown
@@ -221,80 +231,90 @@ class HelpView(discord.ui.View):
             )
         )
 
-        # Row 1: Back, Home, Next, Search, Close
-        btn_back = discord.ui.Button(
-            label="Back",
-            emoji="◀️",
-            style=discord.ButtonStyle.secondary,
-            row=1,
-        )
-        btn_back.callback = self.btn_back_callback
-        self.add_item(btn_back)
-
-        btn_home = discord.ui.Button(
-            label="Home",
-            emoji="🏠",
-            style=discord.ButtonStyle.primary,
-            row=1,
-        )
-        btn_home.callback = self.btn_home_callback
-        self.add_item(btn_home)
-
-        btn_next = discord.ui.Button(
-            label="Next",
-            emoji="▶️",
-            style=discord.ButtonStyle.secondary,
-            row=1,
-        )
-        btn_next.callback = self.btn_next_callback
-        self.add_item(btn_next)
-
-        btn_search = discord.ui.Button(
-            label="Search",
-            emoji="🔍",
-            style=discord.ButtonStyle.secondary,
-            row=1,
-        )
-        btn_search.callback = self.btn_search_callback
-        self.add_item(btn_search)
-
-        btn_close = discord.ui.Button(
-            label="Close",
-            emoji="🗑️",
-            style=discord.ButtonStyle.danger,
-            row=1,
-        )
-        btn_close.callback = self.btn_close_callback
-        self.add_item(btn_close)
-
-        # Row 2: Link Buttons matching Screenshot 1
         bot_name = "Kyoka"
-        if Config.INVITE_URL:
+        branding = None
+        if hasattr(self.cog.bot, "branding_mgr"):
+            mgr = getattr(self.cog.bot, "branding_mgr", None)
+            if hasattr(mgr, "_cache") and isinstance(mgr._cache, dict):
+                branding = mgr._cache.get(self.ctx.guild.id if self.ctx.guild else None)
+        raw_display = branding.get("display_name") if isinstance(branding, dict) else None
+        if isinstance(raw_display, str) and raw_display.strip():
+            bot_name = raw_display.strip()
+
+        invite_url = (
+            Config.INVITE_URL
+            or (
+                f"https://discord.com/oauth2/authorize?client_id={self.cog.bot.application_id or self.cog.bot.user.id}&permissions=8&scope=bot%20applications.commands"
+                if (hasattr(self.cog.bot, "user") and self.cog.bot.user)
+                else "https://discord.com"
+            )
+        )
+        support_url = Config.SUPPORT_URL or "https://discord.gg/7q4tn6dA6V"
+
+        if self.current_category == "home":
+            # On Home: ONLY Dropdown + Link Buttons (clean, minimal like Kyro in Image 1)
             self.add_item(
                 discord.ui.Button(
                     label=f"Invite {bot_name}",
-                    url=Config.INVITE_URL,
+                    url=invite_url,
                     style=discord.ButtonStyle.link,
-                    row=2,
+                    row=1,
                 )
             )
-        if Config.SUPPORT_URL:
             self.add_item(
                 discord.ui.Button(
-                    label="Join Support Server",
-                    url=Config.SUPPORT_URL,
+                    label="Support Server",
+                    url=support_url,
+                    style=discord.ButtonStyle.link,
+                    row=1,
+                )
+            )
+        else:
+            # On Category: Clean Navigation Buttons + Link Buttons
+            btn_back = discord.ui.Button(
+                label="Back",
+                emoji="◀️",
+                style=discord.ButtonStyle.secondary,
+                disabled=(self.current_page <= 1),
+                row=1,
+            )
+            btn_back.callback = self.btn_back_callback
+            self.add_item(btn_back)
+
+            btn_home = discord.ui.Button(
+                label="Home",
+                emoji="🏠",
+                style=discord.ButtonStyle.primary,
+                row=1,
+            )
+            btn_home.callback = self.btn_home_callback
+            self.add_item(btn_home)
+
+            btn_next = discord.ui.Button(
+                label="Next",
+                emoji="▶️",
+                style=discord.ButtonStyle.secondary,
+                row=1,
+            )
+            btn_next.callback = self.btn_next_callback
+            self.add_item(btn_next)
+
+            self.add_item(
+                discord.ui.Button(
+                    label=f"Invite {bot_name}",
+                    url=invite_url,
                     style=discord.ButtonStyle.link,
                     row=2,
                 )
             )
-        self.add_item(
-            discord.ui.Button(
-                label="Official Website",
-                url="https://aizen-bot.pages.dev/",
-                style=discord.ButtonStyle.link,
-                row=2,
+            self.add_item(
+                discord.ui.Button(
+                    label="Support Server",
+                    url=support_url,
+                    style=discord.ButtonStyle.link,
+                    row=2,
+                )
             )
-        )
 
     async def interaction_check(self, interaction: discord.Interaction) -> bool:
         """Ensure only the command requester can control this session."""
@@ -1061,10 +1081,12 @@ class Help(commands.Cog):
         ctx: CustomContext,
         visible_categories: dict[str, list[commands.Command]],
     ) -> discord.Embed:
-        """Construct compact, clean Default Help Embed (fits on one small Discord embed)."""
+        """Construct compact, clean Default Help Embed matching Kyro specification."""
         guild = ctx.guild
         author = ctx.author
         p = self.bot.guild_mgr.get_prefix(guild.id if guild else None)
+        ws_ping = self._get_latency_ms()
+        total_commands = sum(len(cmds) for cmds in visible_categories.values())
 
         branding = None
         if hasattr(self.bot, "branding_mgr"):
@@ -1077,7 +1099,7 @@ class Help(commands.Cog):
             assets = getattr(Config, "ASSETS", None)
             branding = {
                 "display_name": "Kyoka 3.0",
-                "bio": "Built for our community — keeping your server safe, active, and connected.",
+                "bio": "Built for our community — keeping your server safe, active, and effortlessly connected.",
                 "avatar_url": getattr(assets, "AIZEN_AVATAR_URL", "") or (self.bot.user.display_avatar.url if getattr(self.bot, "user", None) else ""),
                 "banner_url": "",
             }
@@ -1085,41 +1107,27 @@ class Help(commands.Cog):
         raw_display = branding.get("display_name") if isinstance(branding, dict) else None
         display_name = raw_display if isinstance(raw_display, str) and raw_display.strip() else "Kyoka 3.0"
         raw_bio = branding.get("bio") if isinstance(branding, dict) else None
-        bio = raw_bio if isinstance(raw_bio, str) and raw_bio.strip() else "Built for our community — keeping your server safe, active, and connected."
-
-        # Compact category list
-        cat_labels = []
-        for cat_name in visible_categories.keys():
-            clean = cat_name.split("・", 1)[-1].strip().title() if "・" in cat_name else cat_name.strip().title()
-            cat_labels.append(f"`{clean}`")
-        categories_line = " · ".join(cat_labels)
+        bio = raw_bio if isinstance(raw_bio, str) and raw_bio.strip() else "Built for our community — keeping your server safe, active, and effortlessly connected."
 
         desc = (
-            f"> *{bio}*\n\n"
-            f"{categories_line}\n\n"
-            f"Choose a category below to view its commands.\n\n"
-            f"⚡ **Essential Commands:**\n"
-            f"`{p}help` · `{p}play` · `{p}ai` · `{p}ticket` · `{p}setbot`"
+            f"> {bio}\n\n"
+            f"• **Latency:** `{ws_ping}ms`\n"
+            f"• **Prefix:** `{p}` | **Slash:** `/`\n"
+            f"• **Available Commands:** `{total_commands}`"
         )
 
         embed = KyokaHelpEmbed(
-            title=f"⛩️ {display_name} — KYOKA HELP",
+            title=f"Hey, I'm {display_name}",
             description=desc,
             color=0x2B0938,
         )
 
-        avatar_url = branding.get("avatar_url")
-        if not avatar_url and hasattr(self.bot, "user") and self.bot.user:
-            avatar_url = self.bot.user.display_avatar.url
-        if avatar_url:
-            embed.set_thumbnail(url=avatar_url)
-
-        banner_url = branding.get("banner_url")
-        if banner_url and str(banner_url).strip():
-            embed.set_image(url=str(banner_url).strip())
+        avatar_url = branding.get("avatar_url") if isinstance(branding, dict) else None
+        if avatar_url and str(avatar_url).strip():
+            embed.set_thumbnail(url=str(avatar_url).strip())
 
         embed.set_footer(
-            text=f"Requested by {author.display_name} • {p}help <command> — View details for one command.",
+            text=f"Requested by {author.display_name}",
             icon_url=author.display_avatar.url if author and author.display_avatar else None,
         )
         embed.banner_file = None
@@ -1349,9 +1357,11 @@ class Help(commands.Cog):
     )
     async def help_command(self, ctx: CustomContext, *, command_or_module: str | None = None) -> None:
         """Interactive help menu filtered by user permissions and organized into categories."""
+        t_start = time.perf_counter()
         if hasattr(self.bot, "branding_mgr"):
             await self.bot.branding_mgr.get_branding(ctx.guild.id if ctx.guild else None)
         visible_categories = await self._get_visible_categories(ctx)
+        t_categories = time.perf_counter()
 
         # Direct command or module lookup
         if command_or_module:

@@ -311,7 +311,7 @@ async def test_discord_api_nickname_success_and_forbidden_handling(branding_cog:
     await branding_cog.setbot_name.callback(branding_cog, ctx, name="Kyoka Sovereign")
     assert ctx.send.called
     embed2 = ctx.send.call_args[1]["embed"]
-    assert "Discord Nickname Limitation" in embed2.description
+    assert "Preserved (Embeds Only)" in embed2.description
     # Visual branding is still saved in DB
     brand = await mock_bot.branding_mgr.get_branding(6006)
     assert brand["display_name"] == "Kyoka Sovereign"
@@ -344,9 +344,8 @@ async def test_discord_api_avatar_nitro_restriction_handling(branding_cog: Brand
 
     assert ctx.send.called
     embed = ctx.send.call_args[1]["embed"]
-    assert "Discord API Limitation Notice" in embed.description
-    assert "Discord restricts native per-server bot profile avatars" in embed.description
-    assert "KYOKA Visual Branding Engine Active" in embed.description
+    assert "Strict Server Isolation" in embed.description
+    assert "successfully updated" in embed.description
 
     # Ensure branding is stored in DB and cached
     brand = await mock_bot.branding_mgr.get_branding(7007)

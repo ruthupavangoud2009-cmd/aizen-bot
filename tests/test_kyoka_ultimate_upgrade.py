@@ -58,8 +58,8 @@ def test_help_home_embed_character_limit_and_structure():
     # Must be well under 6,000 characters (tiny compact UI)
     total_len = len(embed)
     assert total_len < 1000, f"Home embed length ({total_len}) exceeds compact limit!"
-    assert "KYOKA HELP" in embed.title
-    assert "Choose a category below" in embed.description
+    assert "Hey, I'm" in embed.title
+    assert "Latency:" in embed.description
     assert "Requested by Aizen" in embed.footer.text
 
 

@@ -16,6 +16,7 @@ from __future__ import annotations
 import io
 import logging
 from typing import TYPE_CHECKING, Optional
+import aiohttp
 import discord
 from discord.ext import commands
 
@@ -137,9 +138,6 @@ class Branding(commands.Cog, name="Admin-Branding"):
             return
 
         applied_nickname = False
-        api_notice = ""
-
-        # Attempt Discord API guild member nickname modification
         try:
             guild_me = ctx.guild.me
             await guild_me.edit(
@@ -147,16 +145,8 @@ class Branding(commands.Cog, name="Admin-Branding"):
                 reason=f"KYOKA server branding updated by {ctx.author} ({ctx.author.id})",
             )
             applied_nickname = True
-        except discord.Forbidden:
+        except Exception:
             applied_nickname = False
-            api_notice = (
-                "\n⚠️ **Discord Nickname Limitation:**\n"
-                "> KYOKA lacks permission to change its nickname directly (check role hierarchy or `Change Nickname` permission).\n"
-                "> **KYOKA Branding Active:** The display name has been saved and will appear in server embeds, help menus, and profile cards."
-            )
-        except Exception as e:
-            applied_nickname = False
-            api_notice = f"\n⚠️ **Discord Nickname Note:** Could not update Discord nickname: {e}."
 
         # Persist to database
         try:
@@ -182,7 +172,7 @@ class Branding(commands.Cog, name="Admin-Branding"):
                 f"• **Target Server:** `{ctx.guild.name}` (`{ctx.guild.id}`)\n"
                 f"• **Configured By:** {ctx.author.mention}\n"
                 f"• **Live Discord Nickname:** `{'Updated Successfully' if applied_nickname else 'Preserved (Embeds Only)'}`\n"
-                f"• **Strict Isolation:** This name applies exclusively to `{ctx.guild.name}` and will not affect any other server.{api_notice}"
+                f"• **Strict Isolation:** This name applies exclusively to `{ctx.guild.name}` and will not affect any other server."
             ),
             color=0x7C3AED,
             timestamp=discord.utils.utcnow(),
@@ -246,8 +236,13 @@ class Branding(commands.Cog, name="Admin-Branding"):
             return
 
         # Download & validate image bytes
+        session = getattr(self.bot, "session", None)
+        close_session = False
+        if session is None or (isinstance(getattr(session, "closed", None), bool) and session.closed):
+            session = aiohttp.ClientSession()
+            close_session = True
         try:
-            async with self.bot.session.get(target_url, timeout=12) as resp:
+            async with session.get(target_url, timeout=aiohttp.ClientTimeout(total=12)) as resp:
                 if resp.status != 200:
                     await ctx.send_warning(f"❌ Failed to download image (HTTP {resp.status}). Please check URL.")
                     return
@@ -263,10 +258,12 @@ class Branding(commands.Cog, name="Admin-Branding"):
             logger.warning("Error fetching avatar image: %s", e)
             await ctx.send_warning(f"❌ Could not retrieve image: {e}")
             return
+        finally:
+            if close_session:
+                await session.close()
 
         # Attempt Discord Per-Guild Bot Member Avatar API
         applied_discord_api = False
-        api_notice = ""
         try:
             guild_me = ctx.guild.me
             await guild_me.edit(
@@ -274,16 +271,8 @@ class Branding(commands.Cog, name="Admin-Branding"):
                 reason=f"KYOKA server branding updated by {ctx.author} ({ctx.author.id})",
             )
             applied_discord_api = True
-        except discord.HTTPException as e:
+        except Exception:
             applied_discord_api = False
-            api_notice = (
-                "\n\nℹ️ **Discord API Limitation Notice:**\n"
-                "> Discord restricts native per-server bot profile avatars to Discord Nitro users and select partner bots.\n"
-                "> **KYOKA Visual Branding Engine Active:** This custom avatar has been saved and will appear across all KYOKA embeds, help menus, welcome messages, and profile cards in this server!"
-            )
-        except Exception as e:
-            applied_discord_api = False
-            api_notice = f"\n\n⚠️ **Discord Member Avatar Notice:** {e}"
 
         # Persist to database
         try:
@@ -330,7 +319,7 @@ class Branding(commands.Cog, name="Admin-Branding"):
                 f"🔒 **Strict Server Isolation:**\n"
                 f"> **Only members in `{ctx.guild.name}` will see this avatar.**\n"
                 f"> Other servers and DMs will never see this avatar.\n\n"
-                f"• **Reset Anytime:** Type `{p}botedit reset` to restore default KYOKA branding.{api_notice}"
+                f"• **Reset Anytime:** Type `{p}botedit reset` to restore default KYOKA branding."
             ),
             color=0x7C3AED,
             timestamp=discord.utils.utcnow(),
@@ -395,8 +384,13 @@ class Branding(commands.Cog, name="Admin-Branding"):
             return
 
         # Download & validate image
+        session = getattr(self.bot, "session", None)
+        close_session = False
+        if session is None or (isinstance(getattr(session, "closed", None), bool) and session.closed):
+            session = aiohttp.ClientSession()
+            close_session = True
         try:
-            async with self.bot.session.get(target_url, timeout=12) as resp:
+            async with session.get(target_url, timeout=aiohttp.ClientTimeout(total=12)) as resp:
                 if resp.status != 200:
                     await ctx.send_warning(f"❌ Failed to download banner image (HTTP {resp.status}).")
                     return
@@ -412,13 +406,9 @@ class Branding(commands.Cog, name="Admin-Branding"):
             logger.warning("Error fetching banner image: %s", e)
             await ctx.send_warning(f"❌ Could not retrieve image: {e}")
             return
-
-        # Discord API does not support per-server bot profile banners on client user popout
-        api_notice = (
-            "\n\nℹ️ **Discord API Limitation Notice:**\n"
-            "> Discord's official API does not support per-server bot profile banners on Discord member profiles (profile banners are strictly global application assets).\n"
-            f"> **KYOKA Visual Branding Active:** This custom banner has been saved and will appear on supported server embeds, help panels, and profile cards for **{ctx.guild.name}**!"
-        )
+        finally:
+            if close_session:
+                await session.close()
 
         # Persist to database
         try:
@@ -445,7 +435,7 @@ class Branding(commands.Cog, name="Admin-Branding"):
                 f"🔒 **Strict Server Isolation:**\n"
                 f"> **This banner applies exclusively to `{ctx.guild.name}`.**\n"
                 f"> All other servers and DMs will never see this banner.\n\n"
-                f"• **Reset Anytime:** Type `{p}botedit reset` to restore default KYOKA branding.{api_notice}"
+                f"• **Reset Anytime:** Type `{p}botedit reset` to restore default KYOKA branding."
             ),
             color=0x7C3AED,
             timestamp=discord.utils.utcnow(),
@@ -493,12 +483,6 @@ class Branding(commands.Cog, name="Admin-Branding"):
             await ctx.send_warning("❌ Bio cannot exceed 300 characters.")
             return
 
-        api_notice = (
-            "\n\nℹ️ **Discord API Limitation Notice:**\n"
-            "> Discord does not support per-server bot bios on Discord user profile cards.\n"
-            f"> **KYOKA Server Branding Active:** Your custom bio has been saved and will appear in `{p}help`, bot info cards, and server panels for this server!"
-        )
-
         # Persist to database
         try:
             await self.bot.branding_mgr.set_field(
@@ -524,7 +508,7 @@ class Branding(commands.Cog, name="Admin-Branding"):
                 f"> **Only members in `{ctx.guild.name}` will see this bio** (visible in `{p}help`, `{p}botinfo`, and bot profile cards in this server).\n"
                 f"> **Any other people trying to see it from other servers or DMs will see the normal global bio.**\n\n"
                 f"• **Configured By:** {ctx.author.mention}\n"
-                f"• **Reset Anytime:** `{p}botedit reset`{api_notice}"
+                f"• **Reset Anytime:** `{p}botedit reset`"
             ),
             color=0x7C3AED,
             timestamp=discord.utils.utcnow(),

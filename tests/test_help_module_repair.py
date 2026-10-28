@@ -92,11 +92,11 @@ def test_help_home_embed_content(help_cog: Help, mock_ctx: MagicMock):
         "🛡️・MODERATION": [MagicMock(qualified_name="kick"), MagicMock(qualified_name="ban")],
     }
     embed = help_cog.build_home_embed(mock_ctx, visible)
-    assert embed.title is not None and "KYOKA HELP" in embed.title
+    assert embed.title is not None and "Hey, I'm" in embed.title
     assert embed.color.value == 0x2B0938
 
     desc = embed.description
-    assert "Choose a category below" in desc
+    assert "Latency:" in desc
 
 
 def test_help_category_embed_content(help_cog: Help, mock_ctx: MagicMock):
@@ -137,22 +137,26 @@ def test_help_command_manual_embed(help_cog: Help, mock_ctx: MagicMock):
 
 
 def test_help_view_components_and_author_lock(help_cog: Help, mock_ctx: MagicMock):
-    """Verify HelpView adds select menu, 4 navigation buttons, and enforces author lock."""
+    """Verify HelpView adds select menu, navigation buttons on category, and enforces author lock."""
     visible = {"🏠・GETTING STARTED": [MagicMock(qualified_name="start")]}
     view = HelpView(help_cog, mock_ctx, visible, current_category="home")
 
     # Has select menu on row 0
     selects = [i for i in view.children if isinstance(i, discord.ui.Select)]
     assert len(selects) == 1
-    assert selects[0].placeholder in ("Select a module to view commands...", "Select a category to view commands...")
+    assert "Home" in selects[0].placeholder
 
-    # Has buttons on row 1: Back, Home, Next, Close
-    buttons = [i for i in view.children if isinstance(i, discord.ui.Button) and i.style != discord.ButtonStyle.link]
-    labels = [b.label for b in buttons]
+    # On Home: Clean layout with link buttons
+    link_buttons = [i for i in view.children if isinstance(i, discord.ui.Button) and i.style == discord.ButtonStyle.link]
+    assert len(link_buttons) >= 2
+
+    # On Category: Has Back, Home, Next navigation buttons
+    cat_view = HelpView(help_cog, mock_ctx, visible, current_category="🏠・GETTING STARTED")
+    nav_buttons = [i for i in cat_view.children if isinstance(i, discord.ui.Button) and i.style != discord.ButtonStyle.link]
+    labels = [b.label for b in nav_buttons]
     assert "Back" in labels
     assert "Home" in labels
     assert "Next" in labels
-    assert "Close" in labels
 
     # Author check
     mock_author_interaction = MagicMock(user=mock_ctx.author)
