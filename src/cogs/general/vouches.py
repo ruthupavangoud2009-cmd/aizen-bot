@@ -875,23 +875,23 @@ class Vouches(commands.Cog, name="Vouches"):
         banner_file = AssetManager.attach_feature_banner(e, "vouches")
         await ctx.reply(embed=e, file=banner_file, mention_author=False)
 
-    # ── 8. BOT STAFF MANAGEMENT ───────────────────────────────────────────────
-    @commands.command(name='botstaff')
+    # ── 8. VOUCH / REPUTATION STAFF MANAGEMENT ────────────────────────────────
+    @commands.command(name='repstaff', aliases=['vouchstaff'])
     @commands.guild_only()
-    async def botstaff(self, ctx, action: str, member: discord.Member):
+    async def repstaff(self, ctx, action: str, member: discord.Member):
         """Add or remove a staff member with vouch moderation privileges."""
         if ctx.author.id != 1505515188991033409 and not ctx.author.guild_permissions.administrator:
-            return await ctx.reply('Only the bot owner or server administrators can manage botstaff.', mention_author=False)
+            return await ctx.reply('Only the bot owner or server administrators can manage vouch staff.', mention_author=False)
         with conn() as c:
             act = action.lower().strip()
             if act == 'add':
                 c.execute('INSERT OR IGNORE INTO botstaff VALUES(?,?)', (ctx.guild.id, member.id))
-                msg = f'✅ {member.mention} added to reputation botstaff.'
+                msg = f'✅ {member.mention} added to reputation staff.'
             elif act == 'remove':
                 c.execute('DELETE FROM botstaff WHERE guild_id=? AND user_id=?', (ctx.guild.id, member.id))
-                msg = f'✅ {member.mention} removed from reputation botstaff.'
+                msg = f'✅ {member.mention} removed from reputation staff.'
             else:
-                return await ctx.reply('Use `+botstaff add @user` or `+botstaff remove @user`.', mention_author=False)
+                return await ctx.reply('Use `+repstaff add @user` or `+repstaff remove @user`.', mention_author=False)
         await ctx.reply(msg, mention_author=False)
 
     # ── 9. SHOWCASE CHANNEL CONFIGURATION ─────────────────────────────────────

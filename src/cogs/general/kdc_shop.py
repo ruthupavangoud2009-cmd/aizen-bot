@@ -1261,8 +1261,40 @@ class KDCShop(commands.Cog, name="KDCShop"):
         view = ReviewsView(self.shop_mgr, self)
         await ctx.send(embed=embed, view=view)
 
+    # ── Staff Contact View Helper ──
+    def get_staff_contact_view(self) -> discord.ui.View:
+        """Construct interactive view with direct DM buttons for all bot staff."""
+        view = discord.ui.View()
+        view.add_item(
+            discord.ui.Button(
+                label="Direct DM Ruthupavan (Owner)",
+                url=f"https://discord.com/users/{PRIMARY_OWNER_ID}",
+                style=discord.ButtonStyle.link,
+                emoji="💬",
+            )
+        )
+        from src.security.owner import get_all_bot_staff
+        for staff_id in get_all_bot_staff():
+            if staff_id != PRIMARY_OWNER_ID:
+                view.add_item(
+                    discord.ui.Button(
+                        label=f"Direct DM Staff ({staff_id})",
+                        url=f"https://discord.com/users/{staff_id}",
+                        style=discord.ButtonStyle.link,
+                        emoji="🛡️",
+                    )
+                )
+        return view
+
     # ── Standalone Scanner Helper & Command ──
-    async def send_scanner_embed(self, ctx: Union[CustomContext, commands.Context]):
+    async def send_scanner_embed(self, ctx: Union[CustomContext, commands.Context, discord.Interaction]):
+        from src.security.owner import get_all_bot_staff
+        staff_ids = [PRIMARY_OWNER_ID] + [s for s in get_all_bot_staff() if s != PRIMARY_OWNER_ID]
+        staff_lines = []
+        for sid in staff_ids:
+            role_label = "Owner / Sovereign" if sid == PRIMARY_OWNER_ID else "Authorized Bot Staff"
+            staff_lines.append(f"• **{role_label}:** <@{sid}> (`ID: {sid}`) — [Direct DM User](https://discord.com/users/{sid})")
+
         scanner_embed = discord.Embed(
             title="💳 KDC SHOP • OFFICIAL UPI PAYMENT SCANNER",
             description=(
@@ -1272,28 +1304,48 @@ class KDCShop(commands.Cog, name="KDCShop"):
                 "**How to Order & Claim:**\n"
                 "1. Type `stock` to view products and select **'🧾 Make Bill (INR)'**.\n"
                 "2. Scan this QR code and complete your payment in ₹ INR.\n"
-                "3. Type `+stock verify <InvoiceID> <UTR>` or click **'⚡ Verify Payment & Claim Bot'**.\n"
-                "4. For pre-built bots, your `.zip` archive is dispatched **instantly**!"
+                "3. Type `+stock verify <InvoiceID> <UTR>` or click **'⚡ Verify Payment & Claim Bot'**.\n\n"
+                "**🛡️ Contact Bot Staff to Confirm Purchase:**\n"
+                "> Once you buy, please **contact bot staff directly** to verify payment & claim:\n"
+                + "\n".join(staff_lines)
             ),
             color=0x10B981,
             timestamp=discord.utils.utcnow(),
         )
-        scanner_embed.set_footer(text="KDC Shop • UPI Scanner • USD Unavailable • Please pay in INR")
+        scanner_embed.set_footer(text="KDC Shop • UPI Scanner • Click Direct DM button below to contact staff!")
+
+        view = self.get_staff_contact_view()
 
         qr_file_path = Path("assets/kdc_payment_qr.png")
         if qr_file_path.exists():
             file = discord.File(qr_file_path, filename="kdc_payment_qr.png")
             scanner_embed.set_image(url="attachment://kdc_payment_qr.png")
-            await ctx.send(embed=scanner_embed, file=file)
+            if isinstance(ctx, discord.Interaction):
+                await ctx.response.send_message(embed=scanner_embed, file=file, view=view)
+            else:
+                await ctx.send(embed=scanner_embed, file=file, view=view)
         else:
             qr_url = f"https://api.qrserver.com/v1/create-qr-code/?size=250x250&data=upi://pay?pa={self.shop_mgr.upi_id}%26pn=KDC_Shop%26cu=INR"
             scanner_embed.set_image(url=qr_url)
-            await ctx.send(embed=scanner_embed)
+            if isinstance(ctx, discord.Interaction):
+                await ctx.response.send_message(embed=scanner_embed, view=view)
+            else:
+                await ctx.send(embed=scanner_embed, view=view)
 
-    @commands.command(name="scanner", aliases=["qr", "kdcqr", "kdcscanner", "upiscanner"])
-    async def scanner_command(self, ctx: CustomContext):
-        """View the official KDC Shop UPI payment QR scanner (INR)."""
+    @commands.command(name="pay", aliases=["payscanner", "sendscanner", "qrpay", "scanner", "qr", "kdcqr", "kdcscanner", "upiscanner"])
+    async def pay_command(self, ctx: CustomContext):
+        """Send the official KDC Shop UPI payment QR scanner with bot staff direct DM options."""
         await self.send_scanner_embed(ctx)
+
+    @commands.Cog.listener("on_message")
+    async def on_pay_message(self, message: discord.Message) -> None:
+        """Trigger scanner automatically when a user simply says 'pay'."""
+        if message.author.bot:
+            return
+        content = message.content.strip().lower()
+        if content in ("pay", "pay scanner", "send scanner", "give scanner", "show scanner", "upi pay"):
+            ctx = await self.bot.get_context(message)
+            await self.send_scanner_embed(ctx)
 
     # ── Standalone Bill Creation Command ──
     @commands.command(name="makebill", aliases=["buyitem", "shoporder", "orderitem"])
@@ -1328,6 +1380,14 @@ class KDCShop(commands.Cog, name="KDCShop"):
         )
 
         amount_str = f"₹{int(bill.total)}"
+
+        from src.security.owner import get_all_bot_staff
+        staff_ids = [PRIMARY_OWNER_ID] + [s for s in get_all_bot_staff() if s != PRIMARY_OWNER_ID]
+        staff_lines = []
+        for sid in staff_ids:
+            role_label = "Owner / Sovereign" if sid == PRIMARY_OWNER_ID else "Authorized Bot Staff"
+            staff_lines.append(f"• **{role_label}:** <@{sid}> (`ID: {sid}`) — [Direct DM User](https://discord.com/users/{sid})")
+
         bill_embed = discord.Embed(
             title=f"🧾 KDC SHOP INVOICE • `{bill.id}`",
             description=(
@@ -1339,22 +1399,26 @@ class KDCShop(commands.Cog, name="KDCShop"):
                 f"**Invoice Status:** `🟡 PENDING PAYMENT`\n\n"
                 f"**How to Pay:**\n"
                 f"• Scan the official **UPI QR code** below using GPay, PhonePe, Paytm, BHIM, or FamPay.\n"
-                f"• Once paid, type `+stock verify {bill.id} <UTR>` or click '⚡ Verify Payment & Claim Bot'."
+                f"• Once paid, type `+stock verify {bill.id} <UTR>` or click '⚡ Verify Payment & Claim Bot'.\n\n"
+                f"**🛡️ Once You Pay, Contact Bot Staff:**\n"
+                + "\n".join(staff_lines)
             ),
             color=0xF59E0B,
             timestamp=discord.utils.utcnow(),
         )
         bill_embed.set_footer(text=f"Invoice ID: {bill.id} • KDC Shop • UPI Scanner")
 
+        view = self.get_staff_contact_view()
+
         qr_file_path = Path("assets/kdc_payment_qr.png")
         if qr_file_path.exists():
             file = discord.File(qr_file_path, filename="kdc_payment_qr.png")
             bill_embed.set_image(url="attachment://kdc_payment_qr.png")
-            await ctx.send(embed=bill_embed, file=file)
+            await ctx.send(embed=bill_embed, file=file, view=view)
         else:
             qr_url = f"https://api.qrserver.com/v1/create-qr-code/?size=250x250&data=upi://pay?pa={self.shop_mgr.upi_id}%26pn=KDC_Shop%26am={bill.total}%26cu=INR%26tn={bill.id}"
             bill_embed.set_image(url=qr_url)
-            await ctx.send(embed=bill_embed)
+            await ctx.send(embed=bill_embed, view=view)
 
 
 async def setup(bot: commands.Bot) -> None:

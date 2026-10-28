@@ -1215,3 +1215,59 @@ nav, header, main, footer, .dashboard-wrapper, .section {
   font-weight: 600;
 }
 
+/* Global Robust Toggle Switch Components */
+.switch,
+.toggle-switch {
+  position: relative !important;
+  display: inline-block !important;
+  width: 50px !important;
+  height: 28px !important;
+  flex-shrink: 0 !important;
+  vertical-align: middle !important;
+}
+
+.switch input,
+.toggle-switch input {
+  opacity: 0;
+  width: 0;
+  height: 0;
+}
+
+.slider {
+  position: absolute !important;
+  cursor: pointer;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: #271442;
+  border: 1px solid var(--border-subtle);
+  transition: var(--transition);
+  border-radius: 34px !important;
+  width: 50px !important;
+  height: 28px !important;
+}
+
+.slider:before {
+  position: absolute !important;
+  content: "" !important;
+  height: 20px !important;
+  width: 20px !important;
+  left: 3px !important;
+  bottom: 3px !important;
+  background-color: #FAF5FF !important;
+  transition: var(--transition);
+  border-radius: 50% !important;
+}
+
+input:checked + .slider {
+  background-color: var(--purple-primary) !important;
+  border-color: var(--purple-glow) !important;
+  box-shadow: 0 0 12px rgba(124, 58, 237, 0.5) !important;
+}
+
+input:checked + .slider:before {
+  transform: translateX(22px) !important;
+}
+
+

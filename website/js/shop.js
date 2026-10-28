@@ -352,6 +352,11 @@ function openCheckoutModal(item) {
     if (fruitSec) fruitSec.style.display = 'none';
   }
 
+  const qrContainer = document.getElementById('modal-qr-container');
+  const toggleQrBtn = document.getElementById('toggle-shop-qr-btn');
+  if (qrContainer) qrContainer.style.display = 'none';
+  if (toggleQrBtn) toggleQrBtn.textContent = '💳 Click to Show Payment Scanner';
+
   modal.style.display = 'flex';
 }
 
@@ -435,6 +440,18 @@ document.addEventListener('DOMContentLoaded', () => {
   document.getElementById('modal-close-btn')?.addEventListener('click', closeCheckoutModal);
   document.getElementById('shop-checkout-modal')?.addEventListener('click', (e) => {
     if (e.target.id === 'shop-checkout-modal') closeCheckoutModal();
+  });
+
+  // Toggle QR Scanner Reveal
+  document.getElementById('toggle-shop-qr-btn')?.addEventListener('click', () => {
+    soundFX.playSound('click');
+    const qrContainer = document.getElementById('modal-qr-container');
+    const toggleBtn = document.getElementById('toggle-shop-qr-btn');
+    if (qrContainer && toggleBtn) {
+      const isHidden = qrContainer.style.display === 'none';
+      qrContainer.style.display = isHidden ? 'block' : 'none';
+      toggleBtn.textContent = isHidden ? '✕ Hide Payment Scanner' : '💳 Click to Show Payment Scanner';
+    }
   });
 
 

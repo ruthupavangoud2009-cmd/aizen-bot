@@ -642,18 +642,27 @@ class Help(commands.Cog):
 
     CATEGORY_ORDER = [
         "🏠・GETTING STARTED",
-        "🤖・ARTIFICIAL INTELLIGENCE",
+        "🔧・UTILITIES",
         "🛡️・MODERATION",
+        "🔒・AUTOMOD & SECURITY",
         "👋・WELCOME & AUTOMOD",
+        "👋・WELCOME & GOODBYE",
+        "🛡️・VERIFICATION",
         "🎫・TICKETS & SUPPORT",
+        "🎭・REACTION ROLES",
         "🎉・GIVEAWAYS & EVENTS",
+        "🎵・MUSIC",
+        "💤・AFK",
+        "⭐・VOUCHES & REPUTATION",
+        "🧾・BLOX FRUITS SERVICE BILLS",
+        "🍎・BLOX FRUITS AI",
+        "🤖・ARTIFICIAL INTELLIGENCE",
         "⭐・LEVELS & COMMUNITY",
         "🖼️・IMAGES & AVATARS",
-        "🎵・MUSIC",
         "💬・SOCIAL & FUN",
         "💎・PREMIUM",
         "⚙️・SERVER ADMINISTRATION",
-        "🔧・UTILITIES",
+        "📝・STAFF APPLICATIONS",
         "👑・OWNER & DEVELOPER",
     ]
     ALL_CATEGORY_TAGS = [c.tag for c in CATEGORIES]
@@ -1061,7 +1070,7 @@ class Help(commands.Cog):
         ctx: CustomContext,
         visible_categories: dict[str, list[commands.Command]],
     ) -> discord.Embed:
-        """Construct the tiny, ultra-fast Kyoka Help Console Embed matching Aizen reference."""
+        """Construct the Signature Nyxium-inspired Kyoka 3.0 Help Console Embed."""
         guild = ctx.guild
         author = ctx.author
         p = self.bot.guild_mgr.get_prefix(guild.id if guild else None)
@@ -1069,39 +1078,57 @@ class Help(commands.Cog):
         total_commands = sum(len(cmds) for cmds in visible_categories.values())
 
         embed = KyokaHelpEmbed(
-            title="⛩️ KYOKA HELP — Kyoka 3.0",
+            title="⛩️ KYOKA 3.0 — AIZEN EDITION COMMAND DIRECTORY",
             description=(
-                f"**Hey, I'm Kyoka 3.0**\n"
-                f"> Built for our community — keeping your server safe, active, and effortlessly connected.\n\n"
-                f"> *\"Power isn't given. It's taken.\"* — Aizen\n"
-                f"> Choose a category below to explore commands.\n\n"
-                f"• **Latency:** `{ws_ping}ms`\n"
-                f"• **Prefix:** `{p}` | **Slash:** `/`\n"
-                f"• **Available Commands:** `{total_commands}`"
+                f"> *\"Since when were you under the impression that you were not in control?\"* — Sōsuke Aizen\n\n"
+                f"• **Prefix:** `{p}<command>` · **Slash Support:** `/<command>`\n"
+                f"• **Latency:** `{ws_ping}ms` · **Active Modules:** `{len(visible_categories)}` · **Commands Available:** `{total_commands}`\n"
+                f"• **Quick Manual:** Type `{p}help <command>` for deep inspect (syntax, aliases & permissions).\n"
+                f"• **Interactive Browser:** Select any category from the dropdown below to view complete commands with pagination."
             ),
-            color=0x2B0938,
+            color=0x7C3AED,
         )
 
-        embed.add_field(
-            name="📊 System Status",
-            value=f"• **Latency:** `{ws_ping}ms` • **Prefix:** `{p}` • **Commands:** `{total_commands}`",
-            inline=True,
-        )
-        embed.add_field(
-            name="✨ Key Features",
-            value=f"• Select a module from the dropdown below\n• Type `{p}help <command>` for detailed manual\n• Type `{p}aihelp` for Blox Fruits AI assistance",
-            inline=True,
-        )
+        # Build Nyxium-style categorized modules with actual registered command names
+        for cat_name, cmds in list(visible_categories.items())[:24]:
+            clean_title = cat_name.split("・", 1)[1] if "・" in cat_name else cat_name
+            cat_icon = self._get_category_emoji(cat_name)
+            
+            # Extract unique command names
+            seen = set()
+            unique_names = []
+            for c in cmds:
+                if c.name not in seen:
+                    seen.add(c.name)
+                    unique_names.append(c.name)
+            unique_names.sort()
+
+            # Limit preview count on main home overview to keep embed clean and well within Discord limits
+            preview_limit = 14
+            preview_names = [f"`{name}`" for name in unique_names[:preview_limit]]
+            preview_str = ", ".join(preview_names)
+            if len(unique_names) > preview_limit:
+                preview_str += f", +{len(unique_names) - preview_limit} more"
+
+            embed.add_field(
+                name=f"{cat_icon} {clean_title} ({len(unique_names)})",
+                value=preview_str or "*No commands available*",
+                inline=False,
+            )
 
         assets = getattr(Config, "ASSETS", None)
-        thumbnail_url = getattr(assets, "AIZEN_AVATAR_URL", "") or getattr(assets, "DEFAULT_THUMBNAIL_URL", "")
-        if not thumbnail_url and hasattr(self.bot, "user") and self.bot.user:
-            thumbnail_url = self.bot.user.display_avatar.url
-        if thumbnail_url and thumbnail_url.strip():
-            embed.set_thumbnail(url=thumbnail_url.strip())
+        thumb = getattr(assets, "AIZEN_AVATAR_URL", "") or getattr(assets, "DEFAULT_THUMBNAIL_URL", "")
+        if not thumb and hasattr(self.bot, "user") and self.bot.user:
+            thumb = self.bot.user.display_avatar.url
+        if thumb and thumb.strip():
+            embed.set_thumbnail(url=thumb.strip())
+
+        help_img = getattr(assets, "HELP_BANNER_URL", "") or getattr(assets, "HELP_GIF_URL", "")
+        if help_img and help_img.strip():
+            embed.set_image(url=help_img.strip())
 
         embed.set_footer(
-            text=f"Requested by {author.display_name} • Kyoka 3.0",
+            text=f"Requested by {author.display_name} • KYOKA 3.0 — Aizen Edition • Use dropdown below to navigate",
             icon_url=author.display_avatar.url if author.display_avatar else None,
         )
         embed.banner_file = None
@@ -1234,46 +1261,48 @@ class Help(commands.Cog):
         return embed
 
     def build_command_embed(self, ctx: CustomContext, cmd: commands.Command) -> discord.Embed:
-        """Construct detailed single-command manual embed."""
+        """Construct detailed single-command manual embed matching Nyxium reference specifications."""
         guild = ctx.guild
         p = self.bot.guild_mgr.get_prefix(guild.id if guild else None)
         cat = self._resolve_category(cmd)
         cat_icon = self._get_category_emoji(cat)
-        desc = cmd.description or cmd.help or "No detailed description provided."
+        desc = (cmd.description or cmd.help or "No detailed description provided.").strip()
         aliases = ", ".join([f"`{a}`" for a in cmd.aliases]) if cmd.aliases else "`None`"
         sig = f" {cmd.signature}" if cmd.signature else ""
         usage = f"`{p}{cmd.qualified_name}{sig}`"
         example = f"`{p}{cmd.qualified_name}`"
 
         badge = self._get_badge(cmd)
-        status_str = badge.strip(" `[]") if badge else "Public"
+        status_str = badge.strip(" `[]") if badge else "Public (Everyone)"
 
-        slash_info = f"`/{cmd.name}`" if getattr(cmd, "app_command", None) else "Prefix command only"
-        if cat == "🤖・ARTIFICIAL INTELLIGENCE":
-            slash_info = f"`/ai` or `{p}{cmd.name}`"
+        is_hybrid = isinstance(cmd, commands.HybridCommand) or getattr(cmd, "app_command", None) is not None
+        availability = "Prefix & Slash (`+` and `/`)" if is_hybrid else "Prefix Only (`+`)"
+        slash_syntax = f"`/{cmd.qualified_name}`" if is_hybrid else "N/A"
 
         embed = discord.Embed(
             title=f"{cat_icon} Command: `{cmd.qualified_name}`",
             description=f"> {desc}",
-            color=0x2B0938,
+            color=0x7C3AED,
         )
 
         embed.add_field(
-            name="📌 Usage & Execution",
+            name="📋 Command Details",
             value=(
-                f"• **Syntax:** {usage}\n"
-                f"• **Example:** {example}\n"
-                f"• **Slash Command:** {slash_info}"
+                f"• **Command:** `{cmd.name}`\n"
+                f"• **Category:** `{cat}`\n"
+                f"• **Aliases:** {aliases}\n"
+                f"• **Availability:** {availability}\n"
+                f"• **Permissions:** `{status_str}`"
             ),
             inline=False,
         )
 
         embed.add_field(
-            name="⚙️ Metadata & Permissions",
+            name="📌 Syntax & Examples",
             value=(
-                f"• **Category:** `{cat}`\n"
-                f"• **Required Access:** `{status_str}`\n"
-                f"• **Aliases:** {aliases}"
+                f"• **Usage:** {usage}\n"
+                f"• **Prefix Example:** `{p}{cmd.qualified_name}`\n"
+                + (f"• **Slash Example:** {slash_syntax}\n" if is_hybrid else "")
             ),
             inline=False,
         )
@@ -1292,7 +1321,7 @@ class Help(commands.Cog):
             embed.set_thumbnail(url=thumb.strip())
 
         embed.set_footer(
-            text=f"Requested by {ctx.author.display_name} • Kyoka 3.0",
+            text=f"Requested by {ctx.author.display_name} • KYOKA 3.0 — Aizen Edition",
             icon_url=ctx.author.display_avatar.url if ctx.author.display_avatar else None,
         )
         return embed

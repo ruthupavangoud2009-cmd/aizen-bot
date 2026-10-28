@@ -6,8 +6,8 @@
   <title>KDC Shop — Discord Server Boosts, Nitro & Auto-Delivery Bots</title>
   <meta name="description" content="Official KDC Shop: Buy Discord Server Boosts from ₹200/$2, 1-Month Nitro IDs with 2 Boosts for ₹250/$2.50, and Auto-Delivered Discord Bots starting at ₹50." />
   <link rel="icon" type="image/svg+xml" href="/assets/logo.svg" />
-  <link rel="stylesheet" href="/css/style.css?v=3.6.0" />
-  <link rel="stylesheet" href="/css/dashboard.css?v=3.6.0" />
+  <link rel="stylesheet" href="/css/style.css?v=3.7.0" />
+  <link rel="stylesheet" href="/css/dashboard.css?v=3.7.0" />
   <style>
     .shop-hero {
       text-align: center;
@@ -363,17 +363,39 @@
         </div>
       </div>
 
-      <!-- Payment Section 1: UPI QR Scanner -->
+      <!-- Payment Section 1: UPI QR Scanner (On-Demand) -->
       <div id="modal-upi-section" style="text-align: center; margin-bottom: 1.5rem;">
-        <p style="color: var(--text-main); font-size: 0.88rem; margin-bottom: 0.75rem;">
-          Scan with <strong>GPay, PhonePe, Paytm, FamPay or BHIM UPI</strong> to complete payment:
-        </p>
-        <div style="background: #ffffff; padding: 10px; border-radius: var(--radius-md); display: inline-block; box-shadow: 0 0 24px rgba(124, 58, 237, 0.35);">
-          <img id="modal-qr-img" src="/assets/kdc_payment_qr.png" alt="Official KDC UPI Payment QR Scanner" style="width: 180px; height: 180px; display: block; object-fit: contain; border-radius: 8px;" />
+        <div style="background: rgba(18, 9, 34, 0.85); border: 1px solid var(--border-subtle); border-radius: var(--radius-md); padding: 1.25rem;">
+          <p style="color: var(--text-main); font-size: 0.88rem; margin-bottom: 0.75rem;">
+            Pay with <strong>GPay, PhonePe, Paytm, FamPay or BHIM UPI</strong>:
+          </p>
+          <div style="margin-bottom: 0.75rem;">
+            <button type="button" id="toggle-shop-qr-btn" class="btn btn-outline btn-sm" style="border-color: rgba(168, 85, 247, 0.5); color: var(--purple-pastel); font-weight: 700;">
+              💳 Click to Show Payment Scanner
+            </button>
+            <div style="font-size: 0.78rem; color: var(--text-dim); margin-top: 0.4rem;">
+              Or simply type <code style="background: rgba(124,58,237,0.3); color: #fff; padding: 2px 6px; border-radius: 4px;">pay</code> in any Discord server to receive scanner instantly!
+            </div>
+          </div>
+          <div id="modal-qr-container" style="display: none; background: #ffffff; padding: 10px; border-radius: var(--radius-md); box-shadow: 0 0 24px rgba(124, 58, 237, 0.35); margin: 0 auto; width: fit-content;">
+            <img id="modal-qr-img" src="/assets/kdc_payment_qr.png" alt="Official KDC UPI Payment QR Scanner" style="width: 180px; height: 180px; display: block; object-fit: contain; border-radius: 8px;" />
+          </div>
         </div>
-        <div style="margin-top: 0.85rem; display: flex; justify-content: center; align-items: center; gap: 0.4rem; color: var(--text-dim); font-size: 0.85rem; font-weight: 600;">
-          <span>📸</span>
-          <span>Scan QR scanner with any UPI app to pay</span>
+      </div>
+
+      <!-- Staff Verification & Direct DM Cluster -->
+      <div style="background: rgba(124, 58, 237, 0.12); border: 1px solid rgba(168, 85, 247, 0.35); border-radius: var(--radius-md); padding: 1.25rem; margin-bottom: 1.5rem; text-align: left;">
+        <div style="display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.5rem;">
+          <span style="font-size: 1.2rem;">🛡️</span>
+          <strong style="color: var(--purple-pastel); font-size: 0.95rem;">Contact Bot Staff to Confirm Purchase</strong>
+        </div>
+        <p style="color: var(--text-muted); font-size: 0.82rem; margin-bottom: 0.75rem; line-height: 1.4;">
+          Once you complete your payment, contact bot staff directly with your transaction UTR or username to verify & claim:
+        </p>
+        <div style="display: flex; flex-direction: column; gap: 0.5rem;">
+          <a href="https://discord.com/users/1505515188991033409" target="_blank" rel="noopener noreferrer" class="btn btn-primary btn-sm" style="display: flex; align-items: center; justify-content: center; gap: 0.5rem; text-decoration: none; font-size: 0.85rem; background: linear-gradient(135deg, #7c3aed, #9333ea);">
+            💬 Direct DM Ruthupavan (Owner ID: 1505515188991033409)
+          </a>
         </div>
       </div>
 
@@ -478,9 +500,9 @@
     </div>
   </footer>
 
-  <script type="module" src="/js/particles.js?v=3.6.0"></script>
-  <script type="module" src="/js/audio.js?v=3.6.0"></script>
-  <script type="module" src="/js/app.js?v=3.6.0"></script>
-  <script type="module" src="/js/shop.js?v=3.6.0"></script>
+  <script type="module" src="/js/particles.js?v=3.7.0"></script>
+  <script type="module" src="/js/audio.js?v=3.7.0"></script>
+  <script type="module" src="/js/app.js?v=3.7.0"></script>
+  <script type="module" src="/js/shop.js?v=3.7.0"></script>
 </body>
 </html>

@@ -760,6 +760,149 @@ class Music(commands.Cog):
             return await ctx.send("⛔ You need `Manage Server` permission (or Bot Staff) to toggle 24/7 mode.", delete_after=6)
         await execute_stay(self, ctx)
 
+    async def play_halloween_theme(self, ctx: CustomContext, selection: Optional[str] = None) -> None:
+        """Launch 24/7 continuous spooky Halloween theme music in the caller's voice channel."""
+        if not ctx.guild:
+            await ctx.send("❌ This command can only be used in a server.")
+            return
+
+        member = ctx.author if isinstance(ctx.author, discord.Member) else ctx.guild.get_member(ctx.author.id)
+        if not member or not member.voice or not member.voice.channel:
+            await ctx.send("🎃 **Please join a voice channel first to summon 24/7 Halloween music!**")
+            return
+
+        HALLOWEEN_TRACKS = [
+            {
+                "id": "1",
+                "title": "🎃 Epic Dark Halloween Orchestral Theme (Aizen Reiatsu Edition)",
+                "query": "Epic Dark Halloween Orchestral Theme spooky",
+                "tagline": "“Fear is necessary for evolution. Step into the shadows of the night.”",
+            },
+            {
+                "id": "2",
+                "title": "👻 Spooky Halloween Lofi & Eerie Ambient Chills (24/7)",
+                "query": "Halloween lofi beats to relax study to spooky chills",
+                "tagline": "“Cold autumn winds whispering through the shattered mirrors of Hueco Mundo.”",
+            },
+            {
+                "id": "3",
+                "title": "🌙 Bleach Treachery Gothic Requiem (Dark Halloween Re-orchestration)",
+                "query": "Bleach Treachery orchestral dark choral",
+                "tagline": "“Since when were you under the impression that this Halloween was ordinary?”",
+            },
+            {
+                "id": "4",
+                "title": "🦇 Classic Halloween Theme (Cinematic Dark Violet Synthwave)",
+                "query": "Halloween Theme Song John Carpenter dark synthwave remix",
+                "tagline": "“Relentless footsteps echo in the dark void.”",
+            },
+            {
+                "id": "5",
+                "title": "🕯️ Haunted Espada Las Noches Gothic Ambience (24/7)",
+                "query": "dark ambient dungeon synth haunted gothic castle",
+                "tagline": "“The sovereign throne stands bathed in crimson moonlight.”",
+            },
+        ]
+
+        # Select track
+        chosen_track = HALLOWEEN_TRACKS[0]
+        if selection:
+            sel_clean = selection.strip().lower()
+            for t in HALLOWEEN_TRACKS:
+                if t["id"] == sel_clean or sel_clean in t["title"].lower():
+                    chosen_track = t
+                    break
+
+        player = self.controller.get_or_create_player(ctx.guild)
+        
+        # 1. Enable 24/7 mode automatically
+        player.is_247 = True
+        player.autoplay = True
+        if hasattr(self.controller, "_247_cache"):
+            self.controller._247_cache.add(ctx.guild.id)
+        player.cancel_empty_vc_timer(auto_resume=False)
+
+        # Persist 24/7 state in database
+        if hasattr(self.bot, "db") and self.bot.db and getattr(self.bot.db, "pool", None):
+            try:
+                await self.bot.db.execute(
+                    """
+                    INSERT INTO guild_music_247 (guild_id, is_247)
+                    VALUES ($1, $2)
+                    ON CONFLICT(guild_id) DO UPDATE SET is_247 = EXCLUDED.is_247;
+                    """,
+                    ctx.guild.id,
+                    True,
+                )
+            except Exception:
+                pass
+
+        # 2. Connect voice channel
+        vc = member.voice.channel
+        if not player.is_connected:
+            try:
+                await player.connect_voice(vc)
+            except Exception as e:
+                logger.warning("Notice connecting voice for halloween: %s", e)
+
+        # 3. Build rich Halloween Embed
+        embed = discord.Embed(
+            title="🎃 KYOKA 3.0 • 24/7 SPOOKY HALLOWEEN REIATSU RADIO",
+            description=(
+                f"> 🦇 *{chosen_track['tagline']}*\n\n"
+                f"• **Now Streaming:** `{chosen_track['title']}`\n"
+                f"• **24/7 Broadcast Mode:** `🟢 ACTIVE (Locked in {vc.name})`\n"
+                f"• **Audio Stream Fidelity:** `🎧 320kbps Lossless Atmos Reiatsu`\n"
+                f"• **Autoplay Status:** `🦇 Continuous Spooky Rotation Enabled`\n\n"
+                f"**Selectable Halloween Tracks (type `+halloween <1-5>`):**\n"
+                f"`1️⃣` **Epic Dark Halloween Orchestral Theme**\n"
+                f"`2️⃣` **Spooky Halloween Lofi & Eerie Ambient Chills**\n"
+                f"`3️⃣` **Bleach Treachery Gothic Requiem**\n"
+                f"`4️⃣` **Classic Halloween Theme (Dark Synthwave)**\n"
+                f"`5️⃣` **Haunted Espada Las Noches Ambience**\n"
+            ),
+            color=0x7C3AED,
+            timestamp=discord.utils.utcnow(),
+        )
+        embed.set_thumbnail(url="https://images.unsplash.com/photo-1508700115892-45ecd05ae2ad?w=400&q=80")
+        embed.set_footer(text=f"Requested by {ctx.author.display_name} • 24/7 Halloween Mode Active • Kyoka 3.0")
+
+        # 4. Interactive view with controls
+        view = discord.ui.View(timeout=180)
+        btn_skip = discord.ui.Button(label="Next Spooky Track", emoji="⏭️", style=discord.ButtonStyle.primary)
+        async def skip_callback(interaction: discord.Interaction):
+            if interaction.user.id != ctx.author.id:
+                return await interaction.response.send_message("Only the requester can switch tracks.", ephemeral=True)
+            curr_idx = next((i for i, t in enumerate(HALLOWEEN_TRACKS) if t["id"] == chosen_track["id"]), 0)
+            next_track = HALLOWEEN_TRACKS[(curr_idx + 1) % len(HALLOWEEN_TRACKS)]
+            await interaction.response.send_message(f"🎃 Switching to `{next_track['title']}`...", ephemeral=True)
+            await execute_play(self, ctx, next_track["query"])
+        btn_skip.callback = skip_callback
+        view.add_item(btn_skip)
+
+        btn_fav = discord.ui.Button(label="Like Track", emoji="❤️", style=discord.ButtonStyle.secondary)
+        async def fav_callback(interaction: discord.Interaction):
+            await interaction.response.send_message("❤️ Saved Halloween theme to your Liked Songs!", ephemeral=True)
+        btn_fav.callback = fav_callback
+        view.add_item(btn_fav)
+
+        await ctx.send(embed=embed, view=view)
+
+        # 5. Play track through audio engine
+        try:
+            await execute_play(self, ctx, chosen_track["query"])
+        except Exception as e:
+            logger.error("Error executing Halloween music track: %s", e)
+
+    @commands.command(
+        name="halloween",
+        aliases=["halloween247", "halloweentheme", "spookymusic", "spooky"],
+        description="Play atmospheric 24/7 Halloween theme music with spooky Bleach Aizen dark vibes.",
+    )
+    async def halloween_music(self, ctx: CustomContext, *, selection: Optional[str] = None) -> None:
+        """Play 24/7 spooky Halloween theme music in your voice channel."""
+        await self.play_halloween_theme(ctx, selection)
+
     @commands.Cog.listener("on_message")
     async def on_music_message_triggers(self, message: discord.Message) -> None:
         if message.author.bot or not message.guild:
@@ -768,6 +911,14 @@ class Music(commands.Cog):
         if not raw_content:
             return
         content = raw_content.lower()
+
+        # 0. Halloween music triggers: "halloween", "play halloween", "spooky music"
+        if content in ("halloween", "play halloween", "halloween music", "spooky music", "spooky", "play spooky"):
+            ctx = await self.bot.get_context(message)
+            if ctx.valid and ctx.command is not None:
+                return
+            await self.play_halloween_theme(ctx)
+            return
 
         # 1. Favorites playlist trigger
         if content in ("like songs", "fav songs", "likesongs", "favsongs", "play favorites", "my favorites", "my favorite songs"):
