@@ -439,3 +439,78 @@ async def test_on_voice_state_update_auto_disconnects_when_vc_empty(
     with patch.object(voice_cog, "end_conversation_session", new_callable=AsyncMock) as mock_end:
         await voice_cog.on_voice_state_update(mock_member, before, after)
         mock_end.assert_awaited_once_with(mock_voice_channel.guild, mock_text_channel, trigger_user=None, summarize=True)
+
+
+# ---------------------------------------------------------------------------
+# 5. Expanded Personalities Tests
+# ---------------------------------------------------------------------------
+
+def test_conversational_vibes_structure_and_completeness():
+    """Verify all 17 voice personalities have valid metadata and valid Discord UI constraints."""
+    expected_personalities = [
+        "mastermind", "gamer", "chill", "tsundere", "podcast",
+        "cyberpunk", "comedian", "pirate", "butler", "sensei",
+        "chef", "detective", "therapist", "drillsergeant", "knight",
+        "supervillain", "crypto",
+    ]
+    assert len(CONVERSATIONAL_VIBES) >= 17
+
+    for p_id in expected_personalities:
+        assert p_id in CONVERSATIONAL_VIBES
+        meta = CONVERSATIONAL_VIBES[p_id]
+        assert "name" in meta
+        assert "emoji" in meta
+        assert "color" in meta
+        assert "voice" in meta
+        assert "description" in meta
+        assert len(meta["description"]) <= 100, f"Description for {p_id} exceeds Discord select limit"
+        assert "prompt" in meta
+        assert "greeting" in meta
+        assert "welcome" in meta
+
+
+@pytest.mark.asyncio
+async def test_personality_vibe_switching_and_local_responses(voice_cog: AIVoice):
+    """Verify switching between diverse personalities produces valid fallback responses and greetings."""
+    manager = VoiceConversationManager()
+    session = VoiceConversationSession(
+        guild_id=999,
+        channel_id=123,
+        channel_name="General Voice",
+        text_channel_id=456,
+        started_by_id=111,
+        started_by_name="Pavan",
+        vibe="pirate",
+    )
+
+    test_personalities = ["pirate", "butler", "sensei", "chef", "detective", "therapist", "drillsergeant", "knight", "supervillain", "crypto"]
+    for p in test_personalities:
+        session.vibe = p
+        _, fallback_reply = manager._generate_intelligent_local_turn(session, "Pavan")
+        assert isinstance(fallback_reply, str)
+        assert len(fallback_reply) > 0
+        assert "Pavan" in fallback_reply
+
+        welcome = session.get_vibe_meta()["welcome"].format(user="Pavan")
+        assert "Pavan" in welcome
+
+
+@pytest.mark.asyncio
+async def test_vcvibe_command_lists_all_personalities(voice_cog: AIVoice, mock_member: MagicMock):
+    """Verify +vcvibe with no arguments lists all available personalities."""
+    ctx = MagicMock()
+    ctx.guild = MagicMock(id=999)
+    ctx.channel = MagicMock()
+    ctx.author = mock_member
+    ctx.prefix = "+"
+    ctx.send = AsyncMock()
+
+    await voice_cog.cmd_vcvibe.callback(voice_cog, ctx, vibe_name=None)
+    ctx.send.assert_awaited_once()
+    kwargs = ctx.send.call_args[1]
+    embed = kwargs.get("embed")
+    assert embed is not None
+    assert "Conversational Voice Vibes" in embed.title
+    for key in ["pirate", "butler", "sensei", "chef", "crypto"]:
+        assert key in embed.description
+

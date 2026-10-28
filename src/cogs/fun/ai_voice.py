@@ -169,8 +169,9 @@ class AIVoice(commands.Cog, name="AIVoice"):
         self._guild_voices: Dict[int, str] = {}
         self._voice_locks: Dict[int, asyncio.Lock] = {}
         self._speech_queues: Dict[int, asyncio.Queue] = {}
-        self._active_tasks: Dict[int, asyncio.Task] = {}
         self._http_session: Optional[aiohttp.ClientSession] = None
+        for cmd in self.__cog_commands__:
+            cmd.cog = self
 
     def get_http_session(self) -> aiohttp.ClientSession:
         if self._http_session is None or self._http_session.closed:
@@ -1720,16 +1721,12 @@ class AIVoice(commands.Cog, name="AIVoice"):
         # 1. Member joined the voice agent's channel
         if after.channel and after.channel.id == vc_channel.id and (not before.channel or before.channel.id != vc_channel.id):
             if not session.is_bot_speaking:
-                welcome_text = f"Welcome to the call, {member.display_name}!"
-                vibe_key = session.vibe
-                if vibe_key == "mastermind":
-                    welcome_text = f"Welcome, {member.display_name}. Your presence was anticipated."
-                elif vibe_key == "gamer":
-                    welcome_text = f"Yoooo {member.display_name} in the building! What's good bro!"
-                elif vibe_key == "tsundere":
-                    welcome_text = f"Oh, {member.display_name} showed up? I-it's not like I was waiting for you!"
-                elif vibe_key == "comedian":
-                    welcome_text = f"Look who finally decided to grace us with their presence, {member.display_name}!"
+                vibe_meta = session.get_vibe_meta()
+                welcome_tpl = vibe_meta.get("welcome")
+                if welcome_tpl:
+                    welcome_text = welcome_tpl.format(user=member.display_name)
+                else:
+                    welcome_text = f"Welcome to the call, {member.display_name}!"
 
                 asyncio.create_task(
                     self.conv_mgr.play_custom_announcement(session, self, welcome_text, session.get_voice_meta()["id"])
