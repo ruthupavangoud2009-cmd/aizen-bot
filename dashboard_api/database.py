@@ -533,10 +533,15 @@ class PostgresDatabaseAdapter(BaseDatabaseAdapter):
                 }
 
                 # Load custom ticket categories if configured
-                cat_rows = await conn.fetch(
-                    "SELECT name, emoji, description, staff_role_id, category_channel_id, welcome_message, naming_format FROM ticket_categories WHERE guild_id = $1 ORDER BY sort_order ASC;",
-                    guild_id
-                )
+                cat_rows = []
+                try:
+                    cat_rows = await conn.fetch(
+                        "SELECT name, emoji, description, staff_role_id, category_channel_id, welcome_message, naming_format FROM ticket_categories WHERE guild_id = $1 ORDER BY sort_order ASC;",
+                        guild_id
+                    )
+                except Exception as cat_err:
+                    logger.debug(f"Notice fetching ticket_categories for guild {guild_id}: {cat_err}")
+                    cat_rows = []
                 categories_list = []
                 for cr in cat_rows:
                     categories_list.append({

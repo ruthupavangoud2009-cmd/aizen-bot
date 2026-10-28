@@ -1,6 +1,7 @@
 """Main web application factory, middleware, rate limiting, and security headers."""
 from __future__ import annotations
 
+import asyncio
 import logging
 import os
 from typing import Optional
@@ -18,6 +19,62 @@ from dashboard_api.routes.system_routes import register_system_routes
 from dashboard_api.routes.ticket_routes import register_ticket_routes
 
 logger = logging.getLogger("Kyoka.Dashboard.Server")
+
+
+@web.middleware
+async def error_handling_middleware(request: web.Request, handler) -> web.Response:
+    """Catch unhandled exceptions, client cancellations, and disconnections gracefully to prevent server-level error logs."""
+    try:
+        return await handler(request)
+    except web.HTTPRedirection:
+        raise
+    except web.HTTPException as http_exc:
+        # Re-raise standard HTML/page errors (e.g. 404 for missing static files)
+        if not request.path.startswith("/api/"):
+            raise
+
+        origin = request.headers.get("Origin", "")
+        headers = {
+            "Access-Control-Allow-Origin": origin if origin else "*",
+            "Access-Control-Allow-Headers": "Content-Type, Authorization, X-Requested-With, Accept",
+            "Access-Control-Allow-Methods": "GET, POST, PATCH, PUT, DELETE, OPTIONS",
+        }
+        if origin:
+            headers["Access-Control-Allow-Credentials"] = "true"
+
+        return web.json_response(
+            {
+                "error": http_exc.reason or type(http_exc).__name__,
+                "status": http_exc.status,
+                "message": getattr(http_exc, "text", str(http_exc.reason or "")),
+            },
+            status=http_exc.status,
+            headers=headers,
+        )
+    except (asyncio.CancelledError, ConnectionResetError, BrokenPipeError, ConnectionAbortedError) as conn_err:
+        logger.debug(f"Client disconnected during {request.method} {request.path} from {request.remote}: {conn_err}")
+        return web.Response(status=499, text="Client Closed Request")
+    except Exception as exc:
+        logger.warning(f"Handled error during {request.method} {request.path} from {request.remote}: {exc}")
+        if request.path.startswith("/api/"):
+            origin = request.headers.get("Origin", "")
+            headers = {
+                "Access-Control-Allow-Origin": origin if origin else "*",
+                "Access-Control-Allow-Headers": "Content-Type, Authorization, X-Requested-With, Accept",
+                "Access-Control-Allow-Methods": "GET, POST, PATCH, PUT, DELETE, OPTIONS",
+            }
+            if origin:
+                headers["Access-Control-Allow-Credentials"] = "true"
+            return web.json_response(
+                {
+                    "error": "Internal Server Error",
+                    "status": 500,
+                    "message": "An error occurred while processing the request.",
+                },
+                status=500,
+                headers=headers,
+            )
+        return web.Response(status=500, text="Internal Server Error")
 
 
 @web.middleware
@@ -173,6 +230,7 @@ def create_app(
 
     app = web.Application(
         middlewares=[
+            error_handling_middleware,
             rate_limit_middleware,
             cors_middleware,
             security_headers_middleware,

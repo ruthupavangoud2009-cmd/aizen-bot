@@ -250,7 +250,7 @@ async def handle_callback(request: web.Request) -> web.Response:
     )
     # Clear one-time state cookie
     response.del_cookie("kyoka_oauth_state", path="/")
-    return response
+    raise response
 
 
 async def handle_exchange(request: web.Request) -> web.Response:

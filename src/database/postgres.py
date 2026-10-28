@@ -407,6 +407,21 @@ class PostgresDatabase(BaseDatabase):
                 total_tickets INT DEFAULT 0
             );
             """,
+            # Guild Ticket Custom Categories table
+            """
+            CREATE TABLE IF NOT EXISTS ticket_categories (
+                guild_id BIGINT NOT NULL,
+                name VARCHAR(100) NOT NULL,
+                emoji VARCHAR(32) DEFAULT '🎫',
+                description VARCHAR(255) DEFAULT '',
+                staff_role_id BIGINT,
+                category_channel_id BIGINT,
+                welcome_message TEXT DEFAULT '',
+                naming_format VARCHAR(50) DEFAULT 'ticket-{count}',
+                sort_order INT DEFAULT 0,
+                PRIMARY KEY (guild_id, name)
+            );
+            """,
             # Website Staff Management table
             """
             CREATE TABLE IF NOT EXISTS website_staff (

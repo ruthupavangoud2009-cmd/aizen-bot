@@ -26,7 +26,20 @@ class HealthServer:
     ) -> None:
         self._bot = bot
         self._bot_getter = bot_getter
-        self.app = web.Application()
+        from dashboard_api.server import (
+            error_handling_middleware,
+            rate_limit_middleware,
+            cors_middleware,
+            security_headers_middleware,
+        )
+        self.app = web.Application(
+            middlewares=[
+                error_handling_middleware,
+                rate_limit_middleware,
+                cors_middleware,
+                security_headers_middleware,
+            ]
+        )
         self.runner: web.AppRunner | None = None
         self._setup_dashboard_integration()
         self._setup_routes()
@@ -127,12 +140,21 @@ class HealthServer:
                 ("owner", "owner.html"),
                 ("tickets", "tickets.html"),
                 ("staff", "staff.html"),
+                ("shop", "shop.html"),
             ]
             for clean_route, filename in named_pages:
                 page_path = os.path.join(website_dir, filename)
                 handler = make_page_handler(page_path)
                 self.app.router.add_get(f"/{clean_route}", handler)
                 self.app.router.add_get(f"/{filename}", handler)
+
+            favicon_path = os.path.join(website_dir, "assets", "logo.svg")
+            if os.path.isfile(favicon_path):
+                self.app.router.add_get("/favicon.ico", make_page_handler(favicon_path))
+            else:
+                async def _empty_favicon(req: web.Request) -> web.Response:
+                    return web.Response(status=204)
+                self.app.router.add_get("/favicon.ico", _empty_favicon)
 
             self.app.router.add_static("/assets", os.path.join(website_dir, "assets"), show_index=False)
             self.app.router.add_static("/css", os.path.join(website_dir, "css"), show_index=False)
