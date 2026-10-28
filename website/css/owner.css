@@ -175,18 +175,33 @@
   display: flex;
   flex-direction: column;
   gap: 2rem;
-  animation: fadeIn 0.25s ease;
+  opacity: 1;
+  animation: fadeIn 0.2s ease forwards;
 }
 
 @keyframes fadeIn {
   from {
-    opacity: 0;
-    transform: translateY(4px);
+    opacity: 0.2;
+    transform: translateY(2px);
   }
   to {
     opacity: 1;
     transform: translateY(0);
   }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .owner-section.active {
+    animation: none !important;
+    opacity: 1 !important;
+    transform: none !important;
+  }
+}
+
+.reduce-motion .owner-section.active {
+  animation: none !important;
+  opacity: 1 !important;
+  transform: none !important;
 }
 
 .owner-section-header {

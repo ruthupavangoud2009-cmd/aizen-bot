@@ -86,6 +86,10 @@ export async function onRequest(context) {
         ? `https://cdn.discordapp.com/avatars/${userData.id}/${userData.avatar}.png`
         : `https://cdn.discordapp.com/embed/avatars/${parseInt(userData.discriminator || '0') % 5}.png`;
 
+      const isOwner = String(userData.id) === '1505515188991033409';
+      const isStaff = isOwner || String(userData.id) === '1532660258403647687' || String(userData.username || '').toLowerCase() === 'mrhowler01';
+      const staffRole = isOwner ? 'admin' : (isStaff ? 'admin' : null);
+
       sessionPayload = {
         user_id: userData.id,
         username: userData.username,
@@ -93,6 +97,9 @@ export async function onRequest(context) {
         global_name: userData.global_name || userData.username,
         avatar_url: avatarUrl,
         access_token: tokenData.access_token,
+        is_owner: isOwner,
+        is_staff: isStaff,
+        staff_role: staffRole,
         expires_at: Date.now() + (tokenData.expires_in || 604800) * 1000,
       };
 

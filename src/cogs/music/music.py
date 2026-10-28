@@ -764,13 +764,21 @@ class Music(commands.Cog):
     async def on_music_message_triggers(self, message: discord.Message) -> None:
         if message.author.bot or not message.guild:
             return
-        content = message.content.strip().lower()
+        raw_content = message.content.strip()
+        if not raw_content:
+            return
+        content = raw_content.lower()
+
+        # 1. Favorites playlist trigger
         if content in ("like songs", "fav songs", "likesongs", "favsongs", "play favorites", "my favorites", "my favorite songs"):
             ctx = await self.bot.get_context(message)
             if ctx.valid and ctx.command is not None:
                 return
             await self.play_favorites_playlist(ctx)
-        elif content in ("247", "24/7", "stay 247"):
+            return
+
+        # 2. 24/7 Voice Stay toggle trigger
+        if content in ("247", "24/7", "stay 247"):
             from src.security.owner import is_owner_or_staff
             is_allowed = is_owner_or_staff(message.author.id) or (getattr(message.author, "guild_permissions", None) and message.author.guild_permissions.manage_guild)
             if is_allowed:
@@ -778,6 +786,43 @@ class Music(commands.Cog):
                 if ctx.valid and ctx.command is not None:
                     return
                 await execute_stay(self, ctx)
+            return
+
+        # 3. Direct Natural Music Typing: "play <query>" or "p <query>" without requiring command prefix
+        starts_with_play = False
+        song_query = None
+        for trigger in ("play ", "p ", "search "):
+            if content.startswith(trigger):
+                starts_with_play = True
+                song_query = raw_content[len(trigger):].strip()
+                break
+
+        # 4. Direct Streaming Media Links (YouTube, Spotify, SoundCloud)
+        is_media_url = raw_content.startswith(("http://", "https://", "www.")) and any(
+            domain in content for domain in ("youtube.com", "youtu.be", "spotify.com", "soundcloud.com", "apple.com")
+        )
+        if is_media_url and not song_query:
+            song_query = raw_content
+
+        # 5. Dedicated Music Channel Detection (e.g. #music, #songs, #bot-music, #song-requests)
+        ch_name = getattr(message.channel, "name", "").lower()
+        is_music_channel = any(term in ch_name for term in ("music", "song", "tunes", "beats", "radio", "dj", "requests"))
+
+        if not song_query and is_music_channel:
+            # If typed in a designated music channel and not starting with common bot command prefixes
+            if not raw_content.startswith(("+", "?", "!", "/", "-", ".", "$", ">")):
+                song_query = raw_content
+
+        if song_query:
+            ctx = await self.bot.get_context(message)
+            # If standard command dispatcher already matched this (e.g. +play), let it run naturally
+            if ctx.valid and ctx.command is not None:
+                return
+            try:
+                await execute_play(self, ctx, song_query)
+            except Exception as e:
+                logger.error(f"Error handling natural music query '{song_query}': {e}", exc_info=True)
+
 
     @commands.hybrid_command(
         name="musicdiag",

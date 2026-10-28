@@ -357,12 +357,25 @@
   display: flex;
   flex-direction: column;
   gap: 2rem;
-  animation: fadeIn 0.25s ease;
+  opacity: 1;
+  animation: fadeIn 0.2s ease forwards;
 }
 
 @keyframes fadeIn {
-  from { opacity: 0; }
+  from { opacity: 0.2; }
   to { opacity: 1; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .tab-panel.active {
+    animation: none !important;
+    opacity: 1 !important;
+  }
+}
+
+.reduce-motion .tab-panel.active {
+  animation: none !important;
+  opacity: 1 !important;
 }
 
 .panel-header {
@@ -827,12 +840,27 @@ input:checked + .slider:before {
   display: flex;
   flex-direction: column;
   overflow: hidden;
-  animation: wizardFadeIn 0.25s ease-out;
+  opacity: 1;
+  animation: wizardFadeIn 0.25s ease-out forwards;
 }
 
 @keyframes wizardFadeIn {
   from { opacity: 0; transform: scale(0.97) translateY(10px); }
   to { opacity: 1; transform: scale(1) translateY(0); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .wizard-window {
+    animation: none !important;
+    opacity: 1 !important;
+    transform: none !important;
+  }
+}
+
+.reduce-motion .wizard-window {
+  animation: none !important;
+  opacity: 1 !important;
+  transform: none !important;
 }
 
 .wizard-header {

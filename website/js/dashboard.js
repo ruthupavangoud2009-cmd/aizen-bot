@@ -1202,98 +1202,107 @@ function renderWelcomeLeaveTab(panel, s) {
   let currentSubTab = 'welcome'; // 'welcome' | 'leave' | 'dm' | 'card'
 
   function drawWelcomeCanvas() {
-    const canvas = document.getElementById('koya-welcome-canvas');
-    if (!canvas) return;
-    const ctx = canvas.getContext('2d');
-    const w = canvas.width;
-    const h = canvas.height;
+    try {
+      const canvas = document.getElementById('koya-welcome-canvas');
+      if (!canvas) return;
+      const ctx = canvas.getContext('2d');
+      if (!ctx) return;
+      const w = canvas.width;
+      const h = canvas.height;
 
-    // Background gradient based on theme
-    const theme = wl.card_theme || 'nebula';
-    const bgGrad = ctx.createLinearGradient(0, 0, w, h);
-    if (theme === 'cyan') {
-      bgGrad.addColorStop(0, '#041724');
-      bgGrad.addColorStop(0.5, '#083344');
-      bgGrad.addColorStop(1, '#0e4a5e');
-    } else if (theme === 'sunset') {
-      bgGrad.addColorStop(0, '#1c1007');
-      bgGrad.addColorStop(0.5, '#451a03');
-      bgGrad.addColorStop(1, '#78350f');
-    } else if (theme === 'midnight') {
-      bgGrad.addColorStop(0, '#090a0f');
-      bgGrad.addColorStop(0.5, '#13141f');
-      bgGrad.addColorStop(1, '#1e2030');
-    } else { // nebula
-      bgGrad.addColorStop(0, '#0d0714');
-      bgGrad.addColorStop(0.5, '#1a0b2e');
-      bgGrad.addColorStop(1, '#2e1065');
-    }
-    ctx.fillStyle = bgGrad;
-    ctx.fillRect(0, 0, w, h);
-
-    // Decorative grid dots
-    ctx.fillStyle = 'rgba(255, 255, 255, 0.04)';
-    for (let x = 20; x < w; x += 30) {
-      for (let y = 20; y < h; y += 30) {
-        ctx.beginPath();
-        ctx.arc(x, y, 1.5, 0, Math.PI * 2);
-        ctx.fill();
+      // Background gradient based on theme
+      const theme = wl.card_theme || 'nebula';
+      const bgGrad = ctx.createLinearGradient(0, 0, w, h);
+      if (theme === 'cyan') {
+        bgGrad.addColorStop(0, '#041724');
+        bgGrad.addColorStop(0.5, '#083344');
+        bgGrad.addColorStop(1, '#0e4a5e');
+      } else if (theme === 'sunset') {
+        bgGrad.addColorStop(0, '#1c1007');
+        bgGrad.addColorStop(0.5, '#451a03');
+        bgGrad.addColorStop(1, '#78350f');
+      } else if (theme === 'midnight') {
+        bgGrad.addColorStop(0, '#090a0f');
+        bgGrad.addColorStop(0.5, '#13141f');
+        bgGrad.addColorStop(1, '#1e2030');
+      } else { // nebula
+        bgGrad.addColorStop(0, '#0d0714');
+        bgGrad.addColorStop(0.5, '#1a0b2e');
+        bgGrad.addColorStop(1, '#2e1065');
       }
+      ctx.fillStyle = bgGrad;
+      ctx.fillRect(0, 0, w, h);
+
+      // Decorative grid dots
+      ctx.fillStyle = 'rgba(255, 255, 255, 0.04)';
+      for (let x = 20; x < w; x += 30) {
+        for (let y = 20; y < h; y += 30) {
+          ctx.beginPath();
+          ctx.arc(x, y, 1.5, 0, Math.PI * 2);
+          ctx.fill();
+        }
+      }
+
+      // Glowing accent circle behind avatar
+      const accentColor = wl.embed_color || '#7C3AED';
+      const glowGrad = ctx.createRadialGradient(100, 100, 10, 100, 100, 80);
+      glowGrad.addColorStop(0, accentColor);
+      glowGrad.addColorStop(1, 'transparent');
+      ctx.fillStyle = glowGrad;
+      ctx.beginPath();
+      ctx.arc(100, 100, 80, 0, Math.PI * 2);
+      ctx.fill();
+
+      // Avatar ring
+      ctx.strokeStyle = accentColor;
+      ctx.lineWidth = 4;
+      ctx.beginPath();
+      ctx.arc(100, 100, 52, 0, Math.PI * 2);
+      ctx.stroke();
+
+      // Avatar circle fill
+      ctx.fillStyle = '#1e1f22';
+      ctx.beginPath();
+      ctx.arc(100, 100, 48, 0, Math.PI * 2);
+      ctx.fill();
+
+      // Default Avatar letter / placeholder
+      ctx.fillStyle = '#ffffff';
+      ctx.font = 'bold 36px sans-serif';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText('👤', 100, 100);
+
+      // Header Text: "WELCOME TO THE SERVER"
+      const serverName = (state.selectedGuildObj?.name || 'THIS SERVER').toUpperCase();
+      ctx.textAlign = 'left';
+      ctx.textBaseline = 'alphabetic';
+      ctx.fillStyle = accentColor;
+      ctx.font = 'bold 14px sans-serif';
+      ctx.letterSpacing = '2px';
+      ctx.fillText(`WELCOME TO ${serverName}`, 180, 75);
+
+      // Username Hero
+      ctx.fillStyle = '#ffffff';
+      ctx.font = 'bold 28px sans-serif';
+      ctx.fillText('NewMember#0001', 180, 115);
+
+      // Member count pill
+      ctx.fillStyle = 'rgba(255, 255, 255, 0.12)';
+      ctx.beginPath();
+      if (typeof ctx.roundRect === 'function') {
+        ctx.roundRect(180, 130, 220, 28, 6);
+      } else {
+        ctx.rect(180, 130, 220, 28);
+      }
+      ctx.fill();
+
+      ctx.fillStyle = '#cbd5e1';
+      ctx.font = '13px sans-serif';
+      ctx.fillText('🎉 You are member #1,582', 192, 149);
+    } catch (err) {
+      console.warn('Canvas rendering notice:', err);
     }
-
-    // Glowing accent circle behind avatar
-    const accentColor = wl.embed_color || '#7C3AED';
-    const glowGrad = ctx.createRadialGradient(100, 100, 10, 100, 100, 80);
-    glowGrad.addColorStop(0, accentColor);
-    glowGrad.addColorStop(1, 'transparent');
-    ctx.fillStyle = glowGrad;
-    ctx.beginPath();
-    ctx.arc(100, 100, 80, 0, Math.PI * 2);
-    ctx.fill();
-
-    // Avatar ring
-    ctx.strokeStyle = accentColor;
-    ctx.lineWidth = 4;
-    ctx.beginPath();
-    ctx.arc(100, 100, 52, 0, Math.PI * 2);
-    ctx.stroke();
-
-    // Avatar circle fill
-    ctx.fillStyle = '#1e1f22';
-    ctx.beginPath();
-    ctx.arc(100, 100, 48, 0, Math.PI * 2);
-    ctx.fill();
-
-    // Default Avatar letter / placeholder
-    ctx.fillStyle = '#ffffff';
-    ctx.font = 'bold 36px sans-serif';
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'middle';
-    ctx.fillText('👤', 100, 100);
-
-    // Header Text: "WELCOME TO THE SERVER"
-    const serverName = (state.selectedGuildObj?.name || 'THIS SERVER').toUpperCase();
-    ctx.textAlign = 'left';
-    ctx.textBaseline = 'alphabetic';
-    ctx.fillStyle = accentColor;
-    ctx.font = 'bold 14px sans-serif';
-    ctx.letterSpacing = '2px';
-    ctx.fillText(`WELCOME TO ${serverName}`, 180, 75);
-
-    // Username Hero
-    ctx.fillStyle = '#ffffff';
-    ctx.font = 'bold 28px sans-serif';
-    ctx.fillText('NewMember#0001', 180, 115);
-
-    // Member count pill
-    ctx.fillStyle = 'rgba(255, 255, 255, 0.12)';
-    ctx.beginPath();
-    ctx.roundRect(180, 130, 220, 28, 6);
-    ctx.fill();
-
-    ctx.fillStyle = '#cbd5e1';
-    ctx.font = '13px sans-serif';
-    ctx.fillText('🎉 You are member #1,582', 192, 149);
   }
 
   function renderSubTabContent() {

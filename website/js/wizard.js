@@ -284,37 +284,52 @@ export class SetupWizard {
 
   renderStep() {
     this.updateStepper();
-    const body = this.container.querySelector('#wizard-step-body');
+    const body = this.container?.querySelector('#wizard-step-body');
     if (!body) return;
 
-    switch (this.currentStep) {
-      case 1:
-        this.renderStep1(body);
-        break;
-      case 2:
-        this.renderStep2(body);
-        break;
-      case 3:
-        this.renderStep3(body);
-        break;
-      case 4:
-        this.renderStep4(body);
-        break;
-      case 5:
-        this.renderStep5(body);
-        break;
-      case 6:
-        this.renderStep6(body);
-        break;
-      case 7:
-        this.renderStep7(body);
-        break;
-      case 8:
-        this.renderStep8(body);
-        break;
-      case 9:
-        this.renderStep9(body);
-        break;
+    try {
+      switch (this.currentStep) {
+        case 1:
+          this.renderStep1(body);
+          break;
+        case 2:
+          this.renderStep2(body);
+          break;
+        case 3:
+          this.renderStep3(body);
+          break;
+        case 4:
+          this.renderStep4(body);
+          break;
+        case 5:
+          this.renderStep5(body);
+          break;
+        case 6:
+          this.renderStep6(body);
+          break;
+        case 7:
+          this.renderStep7(body);
+          break;
+        case 8:
+          this.renderStep8(body);
+          break;
+        case 9:
+          this.renderStep9(body);
+          break;
+      }
+    } catch (err) {
+      console.error('Wizard render step error:', err);
+      body.innerHTML = `
+        <div class="wizard-step-card" style="text-align: center; padding: 2.5rem 1.5rem;">
+          <div style="font-size: 2.5rem; margin-bottom: 0.75rem;">⚠️</div>
+          <h3 style="color: #fca5a5; margin-bottom: 0.5rem;">Step Initialization Notice</h3>
+          <p style="color: var(--text-dim); font-size: 0.9rem; max-width: 480px; margin: 0 auto 1.5rem;">
+            ${err.message || 'Error initializing step controls.'}
+          </p>
+          <button id="retry-wizard-step-btn" class="btn btn-primary btn-sm">Retry Step</button>
+        </div>
+      `;
+      body.querySelector('#retry-wizard-step-btn')?.addEventListener('click', () => this.renderStep());
     }
   }
 
@@ -325,6 +340,10 @@ export class SetupWizard {
     const isInstalled = this.currentGuild?.bot_installed !== false;
     const inviteUrl = this.currentGuild?.invite_url ||
       'https://discord.com/oauth2/authorize?client_id=1474805799988756673&permissions=8&scope=bot%20applications.commands';
+
+    const guildsList = (Array.isArray(this.guilds) && this.guilds.length > 0)
+      ? this.guilds
+      : (this.currentGuild ? [this.currentGuild] : [{ id: '1515995663903752213', name: 'Kyoka Server', bot_installed: true }]);
 
     body.innerHTML = `
       <div class="wizard-step-card">
@@ -337,7 +356,7 @@ export class SetupWizard {
         <div class="wizard-form-group">
           <label class="wizard-label">Target Discord Server</label>
           <select id="w-guild-select" class="form-input wizard-select">
-            ${this.guilds.map(g => `
+            ${guildsList.map(g => `
               <option value="${g.id}" ${this.currentGuild?.id === g.id ? 'selected' : ''}>
                 ${g.name} ${g.bot_installed ? ' (KYOKA Active)' : ' (Invite Required)'}
               </option>
