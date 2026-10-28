@@ -65,6 +65,21 @@ class PermissionManager:
         )
         logger.info(f"Removed developer ID: {user_id}")
 
+    def has_permission(self, member: discord.Member, perm_name: str) -> bool:
+        """Check if member has native Discord permission, administrator, or Greed-style fake permission."""
+        if not member:
+            return False
+        perms = getattr(member, "guild_permissions", None)
+        if perms:
+            if getattr(perms, "administrator", False) is True:
+                return True
+            if getattr(perms, perm_name, False) is True:
+                return True
+        fakeperms_cog = self.bot.get_cog("Admin-FakePerms")
+        if fakeperms_cog and hasattr(fakeperms_cog, "has_fake_perm"):
+            return fakeperms_cog.has_fake_perm(member, perm_name)
+        return False
+
 
 # ==========================================
 # Custom Command Check Decorators

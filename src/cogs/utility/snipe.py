@@ -48,6 +48,8 @@ class SnipeCog(commands.Cog, name="Utility-Snipe"):
             self.bot.snipe_cache = {}
         if not hasattr(self.bot, "guild_snipe_cache"):
             self.bot.guild_snipe_cache = {}
+        if not hasattr(self.bot, "reaction_snipe_cache"):
+            self.bot.reaction_snipe_cache = {}
 
     @commands.Cog.listener()
     async def on_message_delete(self, message: discord.Message) -> None:
@@ -154,6 +156,31 @@ class SnipeCog(commands.Cog, name="Utility-Snipe"):
 
         self.bot.snipe_cache[channel_id].appendleft(entry)
         self.bot.guild_snipe_cache[guild_id].appendleft(entry)
+
+    @commands.Cog.listener()
+    async def on_raw_reaction_remove(self, payload: discord.RawReactionActionEvent) -> None:
+        """Capture removed reactions in memory buffer."""
+        if not payload.guild_id:
+            return
+        channel_id = payload.channel_id
+        if channel_id not in self.bot.reaction_snipe_cache:
+            self.bot.reaction_snipe_cache[channel_id] = deque(maxlen=25)
+
+        user_name = f"<@{payload.user_id}>"
+        guild = self.bot.get_guild(payload.guild_id)
+        if guild:
+            member = guild.get_member(payload.user_id)
+            if member:
+                user_name = member.display_name
+
+        self.bot.reaction_snipe_cache[channel_id].appendleft({
+            "message_id": payload.message_id,
+            "user_id": payload.user_id,
+            "user_name": user_name,
+            "emoji": str(payload.emoji),
+            "timestamp": discord.utils.utcnow(),
+            "channel_id": channel_id,
+        })
 
     @commands.command(
         name="snipe",
@@ -317,6 +344,74 @@ class SnipeCog(commands.Cog, name="Utility-Snipe"):
             container.add_separator(divider=True)
             container.add_text(f"> Successfully purged `{count}` cached message(s) from #{ctx.channel.name}.")
 
+        container.add_separator(divider=True)
+        container.add_text(f"-# Requested by {ctx.author.display_name}")
+        await send_container_response(ctx, container)
+
+    @commands.command(
+        name="editsnipe",
+        aliases=["es", "snipeedit"],
+        description="View recently edited messages in this channel.",
+    )
+    @commands.guild_only()
+    async def editsnipe(self, ctx: CustomContext) -> None:
+        """View recently edited messages in this channel."""
+        channel_id = ctx.channel.id
+        all_entries: deque[SnipeEntry] = self.bot.snipe_cache.get(channel_id, deque())
+        edit_entries = [e for e in all_entries if e.type == "edit"]
+
+        dot = getattr(self.bot, "custom_emojis", {}).get("heart_dot", "•")
+
+        if not edit_entries:
+            container = KyokaContainer(accent_color=None)
+            container.add_text(f"**Editsniped Messages • #{ctx.channel.name}**")
+            container.add_separator(divider=True)
+            container.add_text("> No recently edited messages found in this channel.")
+            container.add_separator(divider=True)
+            container.add_text(f"-# Requested by {ctx.author.display_name}")
+            return await send_container_response(ctx, container)
+
+        entry = edit_entries[0]
+        container = KyokaContainer(accent_color=None)
+        container.add_text(f"**Editsniped Message • #{ctx.channel.name}**")
+        container.add_separator(divider=True)
+        container.add_text(f"{dot} **{entry.author_name}**")
+        container.add_text(f"**Before:**\n> {entry.before or '*None*'}")
+        container.add_text(f"**After:**\n> {entry.after or '*None*'}")
+        container.add_separator(divider=True)
+        container.add_text(f"-# Requested by {ctx.author.display_name}")
+        await send_container_response(ctx, container)
+
+    @commands.command(
+        name="reactionsnipe",
+        aliases=["rs", "reactionrs"],
+        description="View recently removed reactions in this channel.",
+    )
+    @commands.guild_only()
+    async def reactionsnipe(self, ctx: CustomContext) -> None:
+        """View recently removed reactions in this channel."""
+        channel_id = ctx.channel.id
+        rs_entries = self.bot.reaction_snipe_cache.get(channel_id, deque())
+
+        dot = getattr(self.bot, "custom_emojis", {}).get("heart_dot", "•")
+
+        if not rs_entries:
+            container = KyokaContainer(accent_color=None)
+            container.add_text(f"**Reaction Snipe • #{ctx.channel.name}**")
+            container.add_separator(divider=True)
+            container.add_text("> No recently removed reactions found in this channel.")
+            container.add_separator(divider=True)
+            container.add_text(f"-# Requested by {ctx.author.display_name}")
+            return await send_container_response(ctx, container)
+
+        entry = rs_entries[0]
+        container = KyokaContainer(accent_color=None)
+        container.add_text(f"**Reaction Snipe • #{ctx.channel.name}**")
+        container.add_separator(divider=True)
+        container.add_text(
+            f"{dot} **{entry['user_name']}** removed {entry['emoji']}\n"
+            f"> [Jump to message](https://discord.com/channels/{ctx.guild.id}/{channel_id}/{entry['message_id']})"
+        )
         container.add_separator(divider=True)
         container.add_text(f"-# Requested by {ctx.author.display_name}")
         await send_container_response(ctx, container)

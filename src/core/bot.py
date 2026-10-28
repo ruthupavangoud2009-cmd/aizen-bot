@@ -451,8 +451,11 @@ class KyokaBot(commands.Bot):
                 logger.error(f"Failed to load extension {module_name}: {type(e).__name__}", exc_info=e)
 
     async def close(self) -> None:
-        """Gracefully release database pools, background tasks, and network sessions."""
+        """Gracefully release database pools, background tasks, presence loops, and network sessions."""
         logger.info("Shutting down Kyoka Bot gracefully...")
+
+        if hasattr(self, "_rotate_presence") and self._rotate_presence.is_running():
+            self._rotate_presence.cancel()
 
         if hasattr(self, "task_mgr"):
             try:
@@ -460,11 +463,14 @@ class KyokaBot(commands.Bot):
             except Exception as e:
                 logger.warning(f"Error during TaskManager shutdown: {e}")
 
-        if self.session:
+        if self.session and not self.session.closed:
             await self.session.close()
 
-        if self.db:
-            await self.db.close()
+        if self.db and hasattr(self.db, "close"):
+            try:
+                await self.db.close()
+            except Exception:
+                pass
 
         await super().close()
 
@@ -638,19 +644,6 @@ class KyokaBot(commands.Bot):
             await self.update_dynamic_presence()
         except Exception as e:
             logger.debug(f"Notice updating presence on guild remove: {e}")
-
-    async def close(self) -> None:
-        """Gracefully close background presence loops, HTTP sessions, and database connections."""
-        if hasattr(self, "_rotate_presence") and self._rotate_presence.is_running():
-            self._rotate_presence.cancel()
-        if self.session and not self.session.closed:
-            await self.session.close()
-        if hasattr(self, "db") and hasattr(self.db, "close"):
-            try:
-                await self.db.close()
-            except Exception:
-                pass
-        await super().close()
 
 
 # Backward Compatibility Alias
