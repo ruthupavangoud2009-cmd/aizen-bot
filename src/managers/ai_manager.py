@@ -139,7 +139,7 @@ AI_PERSONAS: dict[str, dict[str, Any]] = {
         "category": "⛩️・AIZEN AI SYSTEM",
         "color": 0x4C1D95,
         "gif_category": "dramatic",
-        "aliases": ["wise_aizen", "kyoka", "villain", "mastermind"],
+        "aliases": ["wise_aizen", "wise", "kyoka", "villain", "mastermind"],
         "description": "Calm, confident, strategic, elegant, and philosophical anime-inspired mastermind.",
         "prompt": (
             "You are KYŌKA, an original anime mastermind persona inspired by classical elegance and strategic intellect. "
@@ -353,7 +353,7 @@ class AIManager:
         channel_id: int,
         user_id: int,
         user_message: str,
-        persona: str = "aizen",
+        persona: str = "friend",
         session: aiohttp.ClientSession | None = None,
     ) -> str:
         """Convenience method to generate an AI response."""
@@ -597,6 +597,9 @@ class AIManager:
         for m in self.FALLBACK_MODELS:
             if m not in candidate_models:
                 candidate_models.append(m)
+        for safe_m in ("gemini-1.5-flash", "gemini-2.0-flash", "gemini-1.5-pro"):
+            if safe_m not in candidate_models:
+                candidate_models.append(safe_m)
 
         timeout = aiohttp.ClientTimeout(total=self.response_timeout)
         self._total_requests += 1
@@ -817,6 +820,9 @@ class AIManager:
         for m in self.FALLBACK_MODELS:
             if m not in candidate_models:
                 candidate_models.append(m)
+        for safe_m in ("gemini-1.5-flash", "gemini-2.0-flash", "gemini-1.5-pro"):
+            if safe_m not in candidate_models:
+                candidate_models.append(safe_m)
 
         timeout = aiohttp.ClientTimeout(total=8.0)
         body = {"contents": [{"parts": [{"text": "Ping"}]}]}

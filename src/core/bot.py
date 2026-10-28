@@ -347,6 +347,13 @@ class KyokaBot(commands.Bot):
             f"in {guild_info} | Prefix: '{ctx.prefix}'"
         )
 
+    @property
+    def http_session(self) -> aiohttp.ClientSession:
+        """Provide an active aiohttp.ClientSession, lazily initializing if needed."""
+        if self.session is None or self.session.closed:
+            self.session = aiohttp.ClientSession()
+        return self.session
+
     async def setup_hook(self) -> None:
         """Asynchronous initialization before websocket login."""
         logger.info("Initializing async subsystems and managers...")

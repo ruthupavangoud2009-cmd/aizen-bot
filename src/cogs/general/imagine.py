@@ -50,8 +50,10 @@ class Imagine(commands.Cog, name="General-Imagine"):
             await ctx.channel.typing()
 
         session = getattr(self.bot, "session", None)
+        close_session = False
         if not session or session.closed:
-            return await ctx.send_error("HTTP network session is currently unavailable.")
+            session = aiohttp.ClientSession()
+            close_session = True
 
         encoded_prompt = urllib.parse.quote(clean_prompt)
         # High-performance, fast HTTPS image synthesis endpoint
@@ -74,6 +76,12 @@ class Imagine(commands.Cog, name="General-Imagine"):
         except Exception as e:
             logger.debug(f"Image generation error: {e}")
             error_msg = "An unexpected error occurred while generating the image."
+        finally:
+            if close_session:
+                try:
+                    await session.close()
+                except Exception:
+                    pass
 
         if not img_bytes:
             container = KyokaContainer()

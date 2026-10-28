@@ -57,6 +57,7 @@ from src.managers.voice_conversation_manager import (
     SoundboardControlView,
     CONVERSATIONAL_VIBES,
     HUMAN_VOICES,
+    resolve_vibe,
 )
 
 logger = logging.getLogger("Kyoka.AIVoice")
@@ -189,8 +190,8 @@ class AIVoice(commands.Cog, name="AIVoice"):
         return self._speech_queues[guild_id]
 
     def _get_voice_id(self, guild_id: int) -> str:
-        key = self._guild_voices.get(guild_id, "aizen")
-        return AVAILABLE_VOICES.get(key, AVAILABLE_VOICES["aizen"])["id"]
+        key = self._guild_voices.get(guild_id, "ava")
+        return AVAILABLE_VOICES.get(key, AVAILABLE_VOICES["ava"])["id"]
 
     def _is_music_active(self, guild: discord.Guild) -> bool:
         """Check if guild voice client is owned or actively used by Music subsystem."""
@@ -275,8 +276,8 @@ class AIVoice(commands.Cog, name="AIVoice"):
     async def aivoice_group(self, ctx: CustomContext) -> None:
         """Display AI Voice commands and status."""
         p = self.bot.guild_mgr.get_prefix(ctx.guild.id if ctx.guild else None)
-        active_voice = self._guild_voices.get(ctx.guild.id if ctx.guild else 0, "aizen")
-        voice_meta = AVAILABLE_VOICES.get(active_voice, AVAILABLE_VOICES["aizen"])
+        active_voice = self._guild_voices.get(ctx.guild.id if ctx.guild else 0, "ava")
+        voice_meta = AVAILABLE_VOICES.get(active_voice, AVAILABLE_VOICES["ava"])
 
         embed = discord.Embed(
             title="🎙️ KYOKA AI Voice & Meeting Intelligence Hub",
@@ -476,10 +477,24 @@ class AIVoice(commands.Cog, name="AIVoice"):
             else:
                 answer = "In Blox Fruits, progression across the Three Seas requires prioritizing Buddha or Magma for grinding and Portal or Kitsune for PvP."
         else:
-            answer = (
-                f"You asked: {question}. As Sosuke Aizen, remember that no one stood on the top from the beginning. "
-                f"True power lies in patience, strategy, and shattering illusions."
-            )
+            session = self.conv_mgr.get_session(ctx.guild.id)
+            if session:
+                answer = await self.conv_mgr._generate_text_reply(session, ctx.author.display_name, question)
+            else:
+                guild_v = self._guild_voices.get(ctx.guild.id, "ava")
+                temp_sess = VoiceConversationSession(
+                    guild_id=ctx.guild.id,
+                    channel_id=0,
+                    channel_name="Voice Channel",
+                    text_channel_id=ctx.channel.id,
+                    started_by_id=ctx.author.id,
+                    started_by_name=ctx.author.display_name,
+                    voice_key=guild_v,
+                    vibe="normal",
+                )
+                answer = await self.conv_mgr._generate_text_reply(temp_sess, ctx.author.display_name, question)
+            if not answer:
+                answer = f"Hey {ctx.author.display_name}! You asked: '{question}'. That's a great question, let's talk about it!"
 
         # Synthesize and speak
         voice_id = self._get_voice_id(ctx.guild.id)
@@ -513,7 +528,7 @@ class AIVoice(commands.Cog, name="AIVoice"):
             description=f"**Q:** *{question}*\n\n**A:** {answer}",
             color=PURPLE,
         )
-        embed.set_footer(text=f"Spoken via {self._guild_voices.get(ctx.guild.id, 'aizen').title()} • KYOKA AI")
+        embed.set_footer(text=f"Spoken via {self._guild_voices.get(ctx.guild.id, 'ava').title()} • KYOKA AI")
         await ctx.send(embed=embed)
 
     @aivoice_group.command(name="voice", aliases=["switch", "personas"], description="Select or list available AI voice personas.")
@@ -522,7 +537,7 @@ class AIVoice(commands.Cog, name="AIVoice"):
         """List or switch voices."""
         if not voice_name:
             lines = []
-            current = self._guild_voices.get(ctx.guild.id if ctx.guild else 0, "aizen")
+            current = self._guild_voices.get(ctx.guild.id if ctx.guild else 0, "ava")
             for key, meta in AVAILABLE_VOICES.items():
                 cur_marker = " `[ACTIVE]`" if key == current else ""
                 lines.append(f"• **`{key}`** — **{meta['name']}** *({meta['gender']})*{cur_marker}\n  > {meta['style']}")
@@ -656,18 +671,22 @@ class AIVoice(commands.Cog, name="AIVoice"):
                 f"Use `{ctx.prefix}aivoice talkmode` to change mode or `{ctx.prefix}aivoice endtalk` to conclude."
             )
 
-        vibe_key = "mastermind"
+        vibe_key = "normal"
         clean_mode = "open"
+        resolved = resolve_vibe(mode)
         if mode.lower() in CONVERSATIONAL_VIBES:
             vibe_key = mode.lower()
+            clean_mode = "open"
+        elif resolved in CONVERSATIONAL_VIBES:
+            vibe_key = resolved
             clean_mode = "open"
         else:
             clean_mode = "wakeword" if mode.lower() in ("wake", "wakeword", "call") else "open"
 
         # Determine voice persona: prioritize server voice, else vibe default
-        vibe_meta = CONVERSATIONAL_VIBES[vibe_key]
+        vibe_meta = CONVERSATIONAL_VIBES.get(vibe_key, CONVERSATIONAL_VIBES["normal"])
         guild_v = self._guild_voices.get(ctx.guild.id)
-        voice_key = guild_v if guild_v in HUMAN_VOICES else vibe_meta.get("voice", "aizen")
+        voice_key = guild_v if guild_v in HUMAN_VOICES else vibe_meta.get("voice", "ava")
 
         vc = ctx.guild.voice_client
         if _is_vc_connected(vc):
@@ -769,7 +788,7 @@ class AIVoice(commands.Cog, name="AIVoice"):
                 return await ctx.send(embed=embed, file=banner)
             return await ctx.send(embed=embed)
 
-        clean_v = vibe_name.lower().strip()
+        clean_v = resolve_vibe(vibe_name.lower().strip())
         if clean_v not in CONVERSATIONAL_VIBES:
             valid_list = ", ".join(f"`{k}`" for k in CONVERSATIONAL_VIBES.keys())
             return await ctx.send_error(f"Invalid vibe `{vibe_name}`. Choose from: {valid_list}")
@@ -1457,7 +1476,7 @@ class AIVoice(commands.Cog, name="AIVoice"):
         aliases=["va", "talk", "agent", "call", "voicechat"],
         help="The Ultimate AI Voice Agent: joins voice channel and converses in real-time like a human.",
     )
-    async def cmd_voiceagent(self, ctx: CustomContext, vibe: str = "mastermind") -> None:
+    async def cmd_voiceagent(self, ctx: CustomContext, vibe: str = "normal") -> None:
         """Launch the Ultimate AI Voice Agent in your voice channel with real-time 2-way conversation."""
         await self.voice_talk(ctx, mode=vibe)
 

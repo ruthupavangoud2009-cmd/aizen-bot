@@ -109,6 +109,24 @@ HUMAN_VOICES: Dict[str, Dict[str, str]] = {
 
 # Conversational Vibes & Personalities
 CONVERSATIONAL_VIBES: Dict[str, Dict[str, Any]] = {
+    "normal": {
+        "id": "normal",
+        "name": "Natural Human (Friend)",
+        "emoji": "🎙️",
+        "color": 0x3498DB,
+        "voice": "ava",
+        "description": "Natural, casual, and friendly human conversationalist",
+        "prompt": (
+            "You are a real, friendly, natural human friend hanging out in Discord voice chat. "
+            "Talk like a normal person: warm, casual, down-to-earth, genuine, and helpful. "
+            "Do not roleplay as a fantasy character, anime villain, or corporate robot. "
+            "Speak naturally with friendly conversational markers like 'Hey!', 'Yeah totally', 'Honestly', 'Makes sense', 'Oh nice'. "
+            "Keep responses punchy and spoken: 1 to 2 conversational sentences max. "
+            "Never use markdown formatting, asterisks, emojis, or bullet points, as this is spoken aloud through neural voice synthesis."
+        ),
+        "greeting": "Hey everyone! Glad to be here in voice. How's everyone doing today?",
+        "welcome": "Hey {user}! Welcome to the channel, how are you doing?",
+    },
     "mastermind": {
         "id": "mastermind",
         "name": "Mastermind (Aizen)",
@@ -367,6 +385,59 @@ CONVERSATIONAL_VIBES: Dict[str, Dict[str, Any]] = {
     },
 }
 
+VIBE_ALIASES: Dict[str, str] = {
+    "natural": "normal",
+    "human": "normal",
+    "friend": "normal",
+    "casual": "normal",
+    "regular": "normal",
+    "default": "normal",
+    "aizen": "mastermind",
+    "anime": "tsundere",
+    "waifu": "tsundere",
+    "streamer": "gamer",
+    "gaming": "gamer",
+    "radio": "chill",
+    "lofi": "chill",
+    "ai": "cyberpunk",
+    "cyber": "cyberpunk",
+    "funny": "comedian",
+    "roast": "comedian",
+    "jokes": "comedian",
+    "pirates": "pirate",
+    "gentleman": "butler",
+    "master": "sensei",
+    "dojo": "sensei",
+    "gordon": "chef",
+    "cook": "chef",
+    "noir": "detective",
+    "cop": "detective",
+    "zen": "therapist",
+    "counselor": "therapist",
+    "therapy": "therapist",
+    "military": "drillsergeant",
+    "sergeant": "drillsergeant",
+    "drill": "drillsergeant",
+    "paladin": "knight",
+    "crusader": "knight",
+    "villain": "supervillain",
+    "evil": "supervillain",
+    "trader": "crypto",
+    "bitcoin": "crypto",
+}
+
+
+def resolve_vibe(vibe_name: Optional[str]) -> str:
+    """Resolve user input to canonical conversational vibe ID."""
+    if not vibe_name:
+        return "normal"
+    clean = str(vibe_name).lower().strip()
+    if clean in CONVERSATIONAL_VIBES:
+        return clean
+    if clean in VIBE_ALIASES:
+        return VIBE_ALIASES[clean]
+    return "normal"
+
 
 class SoundFXEngine:
     """Generates, caches, and triggers dynamic high-fidelity audio sound effects using FFmpeg."""
@@ -476,7 +547,7 @@ class VoiceConversationSession:
         started_by_name: str,
         voice_key: str = "ava",
         mode: str = "open",  # "open" = replies to all clear speech; "wakeword" = replies when called
-        vibe: str = "mastermind",
+        vibe: str = "normal",
     ) -> None:
         self.guild_id = guild_id
         self.channel_id = channel_id
@@ -486,7 +557,7 @@ class VoiceConversationSession:
         self.started_by_name = started_by_name
         self.voice_key = voice_key if voice_key in HUMAN_VOICES else "ava"
         self.mode = mode
-        self.vibe = vibe if vibe in CONVERSATIONAL_VIBES else "mastermind"
+        self.vibe = resolve_vibe(vibe)
         self.turn_count: int = 0
         self.total_sfx_played: int = 0
         self.active: bool = True
@@ -512,7 +583,7 @@ class VoiceConversationSession:
         return HUMAN_VOICES.get(self.voice_key, HUMAN_VOICES["ava"])
 
     def get_vibe_meta(self) -> Dict[str, Any]:
-        return CONVERSATIONAL_VIBES.get(self.vibe, CONVERSATIONAL_VIBES["mastermind"])
+        return CONVERSATIONAL_VIBES.get(self.vibe, CONVERSATIONAL_VIBES["normal"])
 
     def record_pcm(self, user: Optional[discord.User | discord.Member], pcm_bytes: bytes) -> None:
         """Stream raw PCM frames into the active speaker's utterance buffer."""
@@ -1193,7 +1264,14 @@ class VoiceConversationManager:
     def _generate_intelligent_local_turn(self, session: VoiceConversationSession, user_name: str) -> Tuple[str, str]:
         """Dynamic natural human-like responses tailored to the active vibe when offline."""
         vibe_key = session.vibe
-        if vibe_key == "mastermind":
+        if vibe_key == "normal":
+            replies = [
+                f"Hey {user_name}, yeah I totally get what you mean! What made you think of that?",
+                f"Honestly {user_name}, that's a really good point. How's your day going so far?",
+                f"Oh nice! Yeah, I'm right there with you on that one, {user_name}.",
+                f"Hey {user_name}, glad you mentioned that. What are you up to right now?",
+            ]
+        elif vibe_key == "mastermind":
             replies = [
                 f"An interesting thought, {user_name}. But tell me... have you accounted for what lies beyond your vision?",
                 f"Do not seek to comprehend that which is already preordained, {user_name}.",

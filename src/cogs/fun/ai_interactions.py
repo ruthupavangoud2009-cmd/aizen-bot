@@ -60,6 +60,7 @@ class AIInteractions(commands.Cog):
         self.user_last_call: dict[int, float] = {}
         self._locks: dict[tuple[int, int, int], asyncio.Lock] = {}
         self._gif_cache: dict[str, tuple[float, str | None]] = {}
+        self._own_session: aiohttp.ClientSession | None = None
 
     async def cog_load(self) -> None:
         await self.bot.db.execute("""CREATE TABLE IF NOT EXISTS kyoka_ai_settings (
@@ -78,9 +79,18 @@ class AIInteractions(commands.Cog):
 
     def _session(self) -> aiohttp.ClientSession:
         session = getattr(self.bot, "session", None)
-        if session is None or session.closed:
-            raise RuntimeError("HTTP session is not ready")
-        return session
+        if session is not None and not session.closed:
+            return session
+        if self._own_session is None or self._own_session.closed:
+            self._own_session = aiohttp.ClientSession()
+        return self._own_session
+
+    async def cog_unload(self) -> None:
+        if self._own_session and not self._own_session.closed:
+            try:
+                await self._own_session.close()
+            except Exception:
+                pass
 
     async def get_gif(self, query: str) -> str | None:
         """Fetch a validated GIF URL from GIPHY or Tenor; never fabricate URLs."""
@@ -160,11 +170,11 @@ class AIInteractions(commands.Cog):
                 contents.append({"role": turn["role"], "parts": [{"text": turn["text"]}]})
             contents.append({"role": "user", "parts": [{"text": prompt[:4000]}]})
             body = {
-                "system_instruction": {"parts": [{"text": "You are KYŌKA, an original Aizen-inspired assistant: composed, clever, calm, occasionally dryly witty. Never claim to literally be Sosuke Aizen. Be useful, punchy, concise, and conversational."}]},
+                "system_instruction": {"parts": [{"text": "You are Kyoka, a friendly, intelligent, and natural Discord AI assistant. Talk like a normal person: warm, casual, down-to-earth, helpful, and conversational without forced villain roleplay or corporate stiffness. Be clear, accurate, punchy, and helpful."}]},
                 "contents": contents,
                 "generationConfig": {"temperature": 0.7, "maxOutputTokens": 300}
             }
-            models_to_try: list[str] = ["gemini-flash-lite-latest", "gemini-3.8-flash", "gemini-2.5-flash", "gemini-flash-latest"]
+            models_to_try: list[str] = ["gemini-1.5-flash", "gemini-2.0-flash", "gemini-1.5-pro", "gemini-1.5-flash-8b"]
             env_model = os.getenv("GEMINI_MODEL", "").strip().strip("/")
             if env_model and env_model not in models_to_try:
                 models_to_try.insert(0, env_model)

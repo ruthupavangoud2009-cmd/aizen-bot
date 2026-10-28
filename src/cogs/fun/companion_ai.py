@@ -95,6 +95,22 @@ class CompanionAI(commands.Cog):
         self._channel_locks: dict[int, asyncio.Lock] = {}
         self._channel_last_time: dict[int, float] = {}
         self._user_last_time: dict[int, float] = {}
+        self._own_session: aiohttp.ClientSession | None = None
+
+    def _get_session(self) -> aiohttp.ClientSession:
+        session = getattr(self.bot, "session", None)
+        if session is not None and not session.closed:
+            return session
+        if self._own_session is None or self._own_session.closed:
+            self._own_session = aiohttp.ClientSession()
+        return self._own_session
+
+    async def cog_unload(self) -> None:
+        if self._own_session and not self._own_session.closed:
+            try:
+                await self._own_session.close()
+            except Exception:
+                pass
 
     async def cog_load(self) -> None:
         """Load persistent automatic AI channel configurations on startup."""
@@ -281,10 +297,7 @@ class CompanionAI(commands.Cog):
         server_name = ctx.guild.name if ctx.guild else "Direct Message"
         user_id = ctx.author.id
 
-        session = getattr(self.bot, "session", None)
-        if not session or session.closed:
-            await ctx.send("❌ Internal network session is not ready. Please try again in a moment.")
-            return
+        session = self._get_session()
 
         # Concurrently launch AI text generation and optional GIF fetch
         should_gif = (
@@ -415,9 +428,7 @@ class CompanionAI(commands.Cog):
         if lock.locked():
             return
 
-        session = getattr(self.bot, "session", None)
-        if not session or session.closed:
-            return
+        session = self._get_session()
 
         # Strip bot mention tag from prompt
         prompt = message.content
@@ -885,9 +896,7 @@ class CompanionAI(commands.Cog):
     @commands.command(name="aidiag", aliases=["aimodel", "aidebug"], help="Owner/Admin diagnostic: test AI connectivity and latency.")
     async def aidiag(self, ctx: CustomContext) -> None:
         """Show active provider, model, latency, errors, and reachability without exposing secrets."""
-        session = getattr(self.bot, "session", None)
-        if not session or session.closed:
-            return await ctx.send("❌ Bot HTTP session is not active.")
+        session = self._get_session()
 
         async with ctx.typing():
             diag = await self.bot.ai_mgr.get_diagnostics(session)

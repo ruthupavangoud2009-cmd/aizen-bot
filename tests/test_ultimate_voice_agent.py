@@ -224,6 +224,59 @@ async def test_handle_text_utterance_generates_vibe_reply():
     assert session.turn_count == 1
 
 
+@pytest.mark.asyncio
+async def test_handle_text_utterance_generates_normal_human_reply():
+    """Verify handle_text_utterance generates natural, warm human conversation for normal vibe."""
+    manager = VoiceConversationManager()
+    session = VoiceConversationSession(
+        guild_id=999,
+        channel_id=123,
+        channel_name="Chill Hangout",
+        text_channel_id=456,
+        started_by_id=111,
+        started_by_name="Pavan",
+        vibe="normal",
+    )
+    assert session.vibe == "normal"
+    assert session.get_voice_meta()["name"] == "Ava"
+
+    cog = MagicMock()
+    cog._get_lock.return_value = asyncio.Lock()
+    cog._play_audio_file = AsyncMock()
+    cog._synthesize_audio = AsyncMock(return_value=False)
+
+    mock_user = MagicMock(display_name="Pavan")
+
+    reply = await manager.handle_text_utterance(
+        session,
+        cog,
+        mock_user,
+        "Hey how's your day going?",
+    )
+
+    assert isinstance(reply, str)
+    assert len(reply) > 0
+    assert any(term in reply for term in ("Hey", "doing", "good", "nice", "hang", "Pavan"))
+    assert session.turn_count == 1
+
+
+def test_voice_session_defaults_to_normal_human_vibe():
+    """Verify VoiceConversationSession defaults to normal human persona with Ava voice."""
+    session = VoiceConversationSession(
+        guild_id=999,
+        channel_id=123,
+        channel_name="General Voice",
+        text_channel_id=456,
+        started_by_id=111,
+        started_by_name="Pavan",
+    )
+    assert session.vibe == "normal"
+    assert session.voice_key == "ava"
+    meta = session.get_vibe_meta()
+    assert meta["id"] == "normal"
+    assert "Natural Human" in meta["name"]
+
+
 # ---------------------------------------------------------------------------
 # 3. Top-Level Prefix Commands Tests
 # ---------------------------------------------------------------------------
