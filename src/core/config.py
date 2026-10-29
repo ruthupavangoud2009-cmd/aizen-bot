@@ -133,8 +133,8 @@ class Config:
     # PostgreSQL / Supabase Database Settings
     DATABASE_URL: str = os.getenv("DATABASE_URL", "").strip()
 
-    # Default verified Webshare datacenter proxy for emergency 429 bypass only
-    DEFAULT_BACKUP_PROXY: str = "http://wovozhfw:cfnxdvq5iyyi@64.137.10.153:5803"
+    # Proxy credentials must be supplied through environment variables, never committed to source.
+    DEFAULT_BACKUP_PROXY: str = ""
 
     # Proxy Configuration (Direct connection is primary for 10-30ms ping; proxy is failover only)
     DISCORD_PROXY: str | None = _clean_proxy_url(os.getenv("DISCORD_PROXY"))
@@ -146,9 +146,8 @@ class Config:
     def get_proxy_pool(cls) -> list[str]:
         """Return list of configured proxies for gateway failover & rotation."""
         pool = parse_proxy_pool(os.getenv("DISCORD_PROXY_POOL") or os.getenv("DISCORD_PROXY") or "")
-        # Provide emergency backup proxy as failover route if direct connection gets blocked
-        if not pool and cls.DEFAULT_BACKUP_PROXY:
-            pool = [cls.DEFAULT_BACKUP_PROXY]
+        # Do not silently fall back to a committed/shared proxy. Configure DISCORD_PROXY_POOL
+        # explicitly in the hosting environment when a trusted proxy is required.
         return pool
 
     # Lavalink / Audio Settings
