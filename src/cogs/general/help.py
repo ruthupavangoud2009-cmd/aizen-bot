@@ -337,7 +337,7 @@ class HelpView(discord.ui.View):
         """Ensure only the command requester can control this session."""
         if interaction.user.id != self.author_id:
             await interaction.response.send_message(
-                "❌ Only the user who requested this help menu can interact with it. Type `+help` or `/help` to open your own!",
+                f"❌ Only the user who requested this help menu can interact with it. Type `{self.cog.bot.guild_mgr.get_prefix(self.ctx.guild.id if self.ctx.guild else None)}help` or `/help` to open your own!",
                 ephemeral=True,
             )
             return False
@@ -441,7 +441,7 @@ class HelpView(discord.ui.View):
         self.stop()
         embed = discord.Embed(
             title="🔒 Help Session Closed",
-            description="> This help menu has been closed.\n> Type `+help` or `/help` whenever you need guidance.",
+            description=f"> This help menu has been closed.\\n> Type `{self.cog.bot.guild_mgr.get_prefix(self.ctx.guild.id if self.ctx.guild else None)}help` or `/help` whenever you need guidance.",
             color=0x2B0938,
         )
         for item in self.children:
@@ -578,7 +578,7 @@ class HCAView(discord.ui.View):
     async def interaction_check(self, interaction: discord.Interaction) -> bool:
         if interaction.user.id != self.author_id:
             await interaction.response.send_message(
-                "❌ Only the command requester can control this session. Type `+hca` to open your own!",
+                f"❌ Only the command requester can control this session. Type `{self.cog.bot.guild_mgr.get_prefix(self.ctx.guild.id if self.ctx.guild else None)}hca` to open your own!",
                 ephemeral=True,
             )
             return False
@@ -671,7 +671,7 @@ class HCAView(discord.ui.View):
         self.stop()
         embed = discord.Embed(
             title="🔒 Command Archive Closed",
-            description="> Use `+hca` or `/hca` whenever you need to explore commands.",
+            description=f"> Use `{self.cog.bot.guild_mgr.get_prefix(self.ctx.guild.id if self.ctx.guild else None)}hca` or `/hca` whenever you need to explore commands.",
             color=0x2B0938,
         )
         for item in self.children:
