@@ -1777,7 +1777,7 @@ class Help(commands.Cog):
             for cmd, cat in matched[:10]:
                 badge = self._get_badge(cmd) or " `[Public]`"
                 is_slash = getattr(cmd, "app_command", None) is not None or hasattr(cmd, "app_command")
-            type_tag = "`[Prefix + Slash]`" if is_slash else "`[Prefix]`"
+                type_tag = "`[Prefix + Slash]`" if is_slash else "`[Prefix]`"
                 desc = (cmd.description or cmd.help or "No description.").strip().split("\n")[0][:100]
                 sig = f" {cmd.signature}" if cmd.signature else ""
                 embed.add_field(
