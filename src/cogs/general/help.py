@@ -1152,7 +1152,7 @@ class Help(commands.Cog):
             color=0x2B0938,
         )
         embed.add_field(
-            name="",
+            name="\u200b",
             value=(
                 f"▾ **Latency:** `{ws_ping}ms`\n"
                 f"▾ **Prefix:** `{p}`  **Slash:** `/`\n"
