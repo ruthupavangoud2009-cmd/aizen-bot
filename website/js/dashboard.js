@@ -3385,7 +3385,7 @@ async function renderPremiumTab(panel, s) {
     </div>
 
     <!-- Active Tier Status Card -->
-    <div style="background: linear-gradient(135deg, rgba(22, 11, 42, 0.9) 0%, rgba(36, 12, 74, 0.7) 100%); border: 1px solid ${isPrem ? 'var(--border-active)' : 'var(--border-subtle)'}; border-radius: var(--radius-md); padding: 2rem; margin-bottom: 1.5rem; box-shadow: 0 10px 30px rgba(0,0,0,0.5);">
+    <div class="premium-hero-card" style="background: linear-gradient(135deg, rgba(22, 11, 42, 0.9) 0%, rgba(36, 12, 74, 0.7) 100%); border: 1px solid ${isPrem ? 'var(--border-active)' : 'var(--border-subtle)'}; border-radius: var(--radius-md); padding: 2rem; margin-bottom: 1.5rem; box-shadow: 0 10px 30px rgba(0,0,0,0.5);">
       <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.25rem; flex-wrap: wrap; gap: 1rem;">
         <div>
           <span style="font-size: 0.75rem; color: var(--text-dim); text-transform: uppercase; font-weight: 800; letter-spacing: 0.05em;">CURRENT SERVER ENTITLEMENT</span>
@@ -3412,7 +3412,7 @@ async function renderPremiumTab(panel, s) {
     </div>
 
     <!-- Premium Custom Bot Avatar Subsystem -->
-    <div style="background: var(--bg-card); border: 1px solid var(--border-subtle); border-radius: var(--radius-md); padding: 1.5rem; margin-bottom: 1.5rem;">
+    <div class="premium-feature-card" style="background: var(--bg-card); border: 1px solid var(--border-subtle); border-radius: var(--radius-md); padding: 1.5rem; margin-bottom: 1.5rem;">
       <div style="display: flex; justify-content: space-between; align-items: flex-start; flex-wrap: wrap; gap: 1rem; margin-bottom: 1rem;">
         <div>
           <h5 style="color: var(--purple-white); font-weight: 700; margin-bottom: 0.25rem;">
@@ -3460,7 +3460,7 @@ async function renderPremiumTab(panel, s) {
     </div>
 
     <!-- Plan Feature Comparison Matrix -->
-    <div style="background: var(--bg-card); border: 1px solid var(--border-subtle); border-radius: var(--radius-md); padding: 1.5rem;">
+    <div class="premium-compare-card" style="background: var(--bg-card); border: 1px solid var(--border-subtle); border-radius: var(--radius-md); padding: 1.5rem;">
       <h5 style="color: var(--purple-white); font-weight: 700; margin-bottom: 1rem;">Tier Comparison Matrix</h5>
       <div style="overflow-x: auto;">
         <table class="wizard-review-table" style="width: 100%;">
