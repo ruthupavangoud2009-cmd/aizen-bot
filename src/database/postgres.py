@@ -1339,6 +1339,14 @@ class PostgresDatabase(BaseDatabase):
             """,
             "CREATE INDEX IF NOT EXISTS idx_voice_summaries_guild ON guild_voice_summaries(guild_id);",
             "CREATE INDEX IF NOT EXISTS idx_suggestions_guild ON guild_suggestions(guild_id);",
+            # Persistent AI Guild Voice Persona Configuration
+            """
+            CREATE TABLE IF NOT EXISTS guild_voice_settings (
+                guild_id BIGINT PRIMARY KEY,
+                voice_key VARCHAR(64) NOT NULL DEFAULT 'ava',
+                updated_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
+            );
+            """,
         ]
         if not self.pool or self.pool._closed:
             await self._heal_pool()

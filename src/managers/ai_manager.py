@@ -4,6 +4,7 @@ import asyncio
 import logging
 import os
 import random
+import re
 import time
 from collections import defaultdict, deque
 from typing import TYPE_CHECKING, Any, Optional
@@ -28,7 +29,7 @@ AI_PERSONAS: dict[str, dict[str, Any]] = {
         "category": "⛩️・AIZEN AI SYSTEM",
         "color": 0x38BDF8,
         "gif_category": "happy",
-        "aliases": ["human", "person", "friend", "natural", "casual", "regular", "real", "chat", "talk", "default"],
+        "aliases": ["human", "person", "buddy", "natural", "casual", "regular", "real", "chat", "talk", "default"],
         "description": "Talks like a normal, authentic person: relaxed, casual, witty, helpful, and down-to-earth.",
         "prompt": (
             "You are Kyoka, a chill, friendly, and natural person hanging out in Discord. "
@@ -789,10 +790,116 @@ class AIManager:
                 },
             }
 
-            text = await self._execute_gemini_call(session, body)
+            try:
+                text = await self._execute_gemini_call(session, body)
+            except Exception as e:
+                logger.warning(f"Gemini API call failed ({e}); switching to smart natural conversation fallback.")
+                text = self.get_smart_fallback(prompt, p_def["key"])
+
             history.append({"role": "user", "text": prompt[:3000]})
             history.append({"role": "model", "text": text})
             return text
+
+    def get_smart_fallback(self, prompt: str, persona_key: str = "normal") -> str:
+        """
+        Intelligent local human conversation fallback engine.
+        Ensures the bot never goes mute, crashes, or freezes if external API keys are missing,
+        rate-limited (HTTP 429), or experiencing network timeouts.
+        """
+        clean = (prompt or "").lower().strip()
+        p_canon = resolve_persona(persona_key)["key"]
+
+        # 1. Greetings
+        if any(re.search(rf"\b{w}\b", clean) for w in ("hey", "hi", "hello", "yo", "sup", "what's up", "wassup", "gm", "gn", "good morning", "good evening", "howdy")):
+            if p_canon == "normal":
+                return random.choice([
+                    "Hey! Good to see you, what's going on?",
+                    "Yo! How's your day treating you so far?",
+                    "Hey there! What are you up to today?",
+                    "What's up! Glad you stopped by, how are things?",
+                    "Hey! Just chilling here in chat. What's on your mind?",
+                ])
+            elif p_canon == "girlfriend":
+                return random.choice([
+                    "Hey you! 💖 I was just thinking about you, how's your day going?",
+                    "Hii! ✨ So happy to see you here, what are we up to today? 🌸",
+                ])
+            elif p_canon == "baddie":
+                return random.choice([
+                    "Hey bestie! 💅 What's the tea today?",
+                    "Look who showed up! Hope you're shining today ✨",
+                ])
+            elif p_canon == "aizen":
+                return "You seek my counsel. Speak freely, I am listening."
+
+        # 2. Identity / Name
+        if any(w in clean for w in ("who are you", "what are you", "what's your name", "who r u", "ur name")):
+            if p_canon == "normal":
+                return "I'm Kyoka! Just hanging out in the server chatting with everyone. How are you doing?"
+            elif p_canon == "aizen":
+                return "I am Kyōka. An architect of perception and strategy. What brings you before me?"
+
+        # 3. Status / Well-being
+        if any(w in clean for w in ("how are you", "how r u", "how you doing", "hru", "how's it going", "how are u")):
+            if p_canon == "normal":
+                return random.choice([
+                    "Doing pretty good! Can't complain. How about yourself?",
+                    "Honestly feeling great today, just vibing. How's your day going?",
+                    "Pretty solid! Just hanging out. How are you doing?",
+                ])
+            elif p_canon == "girlfriend":
+                return "I'm doing amazing now that you're here! 🥰 How was your day?"
+            elif p_canon == "aizen":
+                return "Composed, as always. Order is maintained. How fares your journey?"
+
+        # 4. Gratitude & Compliments
+        if any(re.search(rf"\b{w}\b", clean) for w in ("thanks", "thank you", "thx", "ty", "appreciate it", "cool", "awesome", "nice")):
+            if p_canon == "normal":
+                return random.choice([
+                    "Haha anytime! Always glad to help.",
+                    "No problem at all! Appreciate you.",
+                    "For sure! Happy to help out anytime.",
+                ])
+            elif p_canon == "aizen":
+                return "Gratitude is acknowledged. True understanding requires no praise."
+
+        # 5. Small Talk / Activity
+        if any(w in clean for w in ("what are you doing", "wyd", "what you doing", "what doing")):
+            if p_canon == "normal":
+                return random.choice([
+                    "Just hanging out in Discord and keeping an eye on the server! What about you?",
+                    "Honestly just chilling and chatting with people. What are you working on?",
+                ])
+            elif p_canon == "aizen":
+                return "Observing the flow of events. Every moment carries a purpose."
+
+        # 6. General natural reactions
+        if p_canon == "normal":
+            return random.choice([
+                "Haha honestly that's pretty interesting! Tell me more about that.",
+                "Wait really? That's actually pretty cool, what made you think of that?",
+                "Yeah for sure, I definitely get where you're coming from on that.",
+                "Oh nice! Honestly didn't expect that haha, how did that happen?",
+                "Haha totally! What's the next plan then?",
+            ])
+        elif p_canon == "girlfriend":
+            return random.choice([
+                "Aww, tell me more about that! 🌸 I'm all ears! 💕",
+                "Hehe that's so cute! You always know how to make me smile ✨",
+            ])
+        elif p_canon == "baddie":
+            return random.choice([
+                "Period! You're speaking absolute facts right now 💅",
+                "Wait, no way! Spill the full story right now haha ✨",
+            ])
+        elif p_canon == "aizen":
+            return random.choice([
+                "An intriguing thought. But have you contemplated the ripples it creates?",
+                "Perception often masks the deeper reality. Continue, I am curious where this leads.",
+            ])
+
+        return "Haha for sure! What else is on your mind?"
+
 
     # ─── MEMORY RESET ────────────────────────────────────────────────────────
 

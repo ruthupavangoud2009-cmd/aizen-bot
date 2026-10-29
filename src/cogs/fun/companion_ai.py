@@ -334,11 +334,16 @@ class CompanionAI(commands.Cog):
                 reply, gif_url = await asyncio.gather(ai_coro, _fetch_gif())
 
         except RuntimeError as e:
-            await ctx.send(f"{e}")
-            return
+            reply = self.bot.ai_mgr.get_smart_fallback(prompt, p_def["key"])
+            gif_url = None
         except Exception as e:
             logger.error(f"Error generating {p_def['key']} reply: {e}", exc_info=True)
-            await ctx.send("⛩️ *The connection flickers. Please rephrase your thought shortly.*")
+            reply = self.bot.ai_mgr.get_smart_fallback(prompt, p_def["key"])
+            gif_url = None
+
+        if p_def["key"] == "normal" and not gif_url:
+            # For natural person persona, chat in clean plain text like a real friend rather than a heavy embed
+            await ctx.send(reply[:1950])
             return
 
         embed = discord.Embed(
@@ -363,15 +368,16 @@ class CompanionAI(commands.Cog):
         Listens to ordinary messages in configured channels or when mentioned/replied to,
         and replies naturally like a real person without requiring 'hey' or any formal wake words.
         """
-        # 1. Ignore bots, webhooks, non-guild messages
-        if message.author.bot or message.webhook_id or not message.guild or not message.content.strip():
+        # 1. Ignore bots, webhooks, empty messages
+        if message.author.bot or message.webhook_id or not message.content.strip():
             return
 
         # 2. Prevent self-responses
         if self.bot.user and message.author.id == self.bot.user.id:
             return
 
-        # 3. Check if bot is mentioned or replied to, or if channel is configured
+        # 3. Check if in DMs, mentioned, replied to, addressed by name, or if channel is configured
+        is_dm = message.guild is None
         is_mentioned = bool(self.bot.user and (
             self.bot.user in message.mentions 
             or f"<@{self.bot.user.id}>" in message.content 
@@ -382,18 +388,21 @@ class CompanionAI(commands.Cog):
             if self.bot.user and message.reference.resolved.author.id == self.bot.user.id:
                 is_reply_to_bot = True
 
+        clean_start = message.content.strip().lower()
+        starts_with_bot_name = any(clean_start.startswith(p) for p in ("kyoka ", "kyoka,", "kyoka:", "aizen ", "aizen,", "aizen:"))
+
         channel_id = message.channel.id
-        config = self._channel_configs.get(channel_id)
+        config = self._channel_configs.get(channel_id) if message.guild else None
         is_configured_channel = bool(config and config.get("enabled", True))
 
-        # Drop message if neither mentioned, nor replied to bot, nor in a configured AI channel
-        if not (is_mentioned or is_reply_to_bot or is_configured_channel):
+        # Drop message if neither in DM, nor mentioned, nor replied to bot, nor directly addressed, nor in configured channel
+        if not (is_dm or is_mentioned or is_reply_to_bot or starts_with_bot_name or is_configured_channel):
             return
 
         # 4. Skip command messages
         try:
             ctx = await self.bot.get_context(message)
-            if ctx.valid:
+            if ctx.valid and ctx.command is not None:
                 return
         except Exception:
             pass
@@ -401,7 +410,7 @@ class CompanionAI(commands.Cog):
         # 5. Determine settings: configured channel settings or natural human fallback
         if is_configured_channel and config:
             mention_only = config.get("mention_only", False)
-            if mention_only and not (is_mentioned or is_reply_to_bot):
+            if mention_only and not (is_dm or is_mentioned or is_reply_to_bot or starts_with_bot_name):
                 return
             persona_key = config.get("persona", "normal")
             send_gifs = config.get("send_gifs", True)
@@ -429,8 +438,9 @@ class CompanionAI(commands.Cog):
         # User channel throttle
         if now - last_usr_time < cooldown_val:
             return
-        # Channel-wide throttle (exempt if explicitly mentioned or replied)
-        if now - last_ch_time < cooldown_sec and not (is_mentioned or is_reply_to_bot):
+        # Channel-wide throttle (exempt if in DM, explicitly mentioned, replied, or addressed by name)
+        is_direct_chat = is_dm or is_mentioned or is_reply_to_bot or starts_with_bot_name
+        if now - last_ch_time < cooldown_sec and not is_direct_chat:
             return
 
         self._user_last_time[message.author.id] = now
@@ -472,17 +482,18 @@ class CompanionAI(commands.Cog):
                 async with message.channel.typing():
                     ai_task = self.bot.ai_mgr.generate_persona_reply(
                         session=session,
-                        guild_id=message.guild.id,
+                        guild_id=message.guild.id if message.guild else 0,
                         user_id=message.author.id,
                         persona_key=p_def["key"],
                         prompt=prompt[:3000],
-                        server_name=message.guild.name,
+                        server_name=message.guild.name if message.guild else "Direct Message",
                         enforce_cooldown=False,
                     )
                     reply, gif_url = await asyncio.gather(ai_task, _fetch_auto_gif())
             except Exception as e:
-                logger.debug(f"Auto AI response error in #{message.channel.name}: {e}")
-                return
+                logger.debug(f"Auto AI primary API note in #{getattr(message.channel, 'name', 'DM')}: {e}")
+                reply = self.bot.ai_mgr.get_smart_fallback(prompt, p_def["key"])
+                gif_url = None
 
             embed: discord.Embed | None = None
             if gif_url:

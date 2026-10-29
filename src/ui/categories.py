@@ -503,6 +503,7 @@ def resolve_command_category(cmd: Any) -> CategoryMeta:
         "aigf", "aibaddie", "aispecial", "aiclearcompanion", "aichannel", "aidiag",
         "aistatus", "aisetup", "aipersonality", "aiconfig", "aitest", "aiclear",
         "aimodel", "aidebug", "companion", "setaichannel", "setcompanionchannel",
+        "setvoice", "botvoice", "changevoice", "voice", "voices", "voicelist",
     ) or root_name.startswith("aivoice"):
         return CATEGORY_BY_ID["ai"]
 

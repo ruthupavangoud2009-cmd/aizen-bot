@@ -939,13 +939,22 @@ class Music(commands.Cog):
             return
 
         # 3. Direct Natural Music Typing: "play <query>" or "p <query>" without requiring command prefix
+        # Only activate if author is in voice channel, in a designated music channel, or sending a direct media link
+        user_in_vc = bool(
+            getattr(message.author, "voice", None)
+            and getattr(message.author.voice, "channel", None)
+        )
+        ch_name = getattr(message.channel, "name", "").lower()
+        is_music_channel = any(term in ch_name for term in ("music", "song", "tunes", "beats", "radio", "dj", "requests"))
+
         starts_with_play = False
         song_query = None
-        for trigger in ("play ", "p ", "search "):
-            if content.startswith(trigger):
-                starts_with_play = True
-                song_query = raw_content[len(trigger):].strip()
-                break
+        if user_in_vc or is_music_channel:
+            for trigger in ("play ", "p ", "search "):
+                if content.startswith(trigger):
+                    starts_with_play = True
+                    song_query = raw_content[len(trigger):].strip()
+                    break
 
         # 4. Direct Streaming Media Links (YouTube, Spotify, SoundCloud)
         is_media_url = raw_content.startswith(("http://", "https://", "www.")) and any(
@@ -955,15 +964,12 @@ class Music(commands.Cog):
             song_query = raw_content
 
         # 5. Dedicated Music Channel Detection (e.g. #music, #songs, #bot-music, #song-requests)
-        ch_name = getattr(message.channel, "name", "").lower()
-        is_music_channel = any(term in ch_name for term in ("music", "song", "tunes", "beats", "radio", "dj", "requests"))
-
         if not song_query and is_music_channel:
             # If typed in a designated music channel and not starting with common bot command prefixes
             if not raw_content.startswith(("+", "?", "!", "/", "-", ".", "$", ">")):
                 song_query = raw_content
 
-        if song_query:
+        if song_query and (user_in_vc or is_music_channel or is_media_url):
             ctx = await self.bot.get_context(message)
             # If standard command dispatcher already matched this (e.g. +play), let it run naturally
             if ctx.valid and ctx.command is not None:
