@@ -445,12 +445,25 @@ class KyokaBot(commands.Bot):
         cogs_dir = Path(__file__).resolve().parent.parent / "cogs"
 
         for file in cogs_dir.rglob("*.py"):
-            # Skip any file that starts with '_' or is inside a directory starting with '_'
-            if any(part.startswith("_") for part in file.relative_to(cogs_dir).parts):
+            relative_to_cogs = file.relative_to(cogs_dir)
+            # Skip any file that starts with '_' or is inside a directory starting with '_'.
+            if any(part.startswith("_") for part in relative_to_cogs.parts):
                 continue
 
             relative = file.relative_to(cogs_dir.parent.parent)
             module_name = ".".join(relative.with_suffix("").parts)
+
+            # There used to be three competing no-prefix cogs, each registering
+            # the same "noprefix" command. Keep the developer/no_prefix hybrid
+            # command as the single canonical implementation (prefix + slash).
+            # These older/duplicate modules remain in the repo for history, but
+            # must not be loaded alongside the canonical cog.
+            if module_name in {
+                "src.cogs.developer.noprefix",
+                "src.cogs.noprefix",
+            }:
+                logger.info("Skipping duplicate no-prefix extension: %s", module_name)
+                continue
 
             try:
                 await self.load_extension(module_name)
