@@ -69,7 +69,7 @@ class HelpRenderer:
             value=(
                 "• Use the **Category Dropdown** below to inspect a module.\n"
                 "• Use **◀️ / ▶️** buttons to page through commands (5–15 per page).\n"
-                "• Type `+help <command>` for syntax, aliases, and permissions."
+                f"• Type `{prefix}help <command>` for syntax, aliases, and permissions.\\n"
             ),
             inline=False,
         )
@@ -124,7 +124,7 @@ class HelpRenderer:
             is_slash = entry.get("is_slash", False)
 
             alias_str = f" `[{', '.join(aliases[:3])}]`" if aliases else ""
-            badge = " `[/]`" if is_slash else " `[+]`"
+            badge = " `[/]`" if is_slash else " `[Prefix]`"
 
             field_title = f"`{prefix}{name}`{alias_str}{badge}"
             field_value = f"{desc[:100]}\n> **Usage:** `{usage}`"
