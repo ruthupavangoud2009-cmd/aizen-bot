@@ -190,6 +190,69 @@ export async function updateGuildSettings(guildId, updates) {
 }
 
 /**
+ * --- Guild Bot Branding & Visual Customization API ---
+ */
+export async function fetchGuildBranding(guildId) {
+  return await apiFetch(`/guilds/${guildId}/branding`);
+}
+
+export async function updateGuildAvatar(guildId, fileOrUrl) {
+  if (typeof fileOrUrl === 'string') {
+    return await apiFetch(`/guilds/${guildId}/avatar`, {
+      method: 'POST',
+      body: { avatar_url: fileOrUrl },
+    });
+  } else if (typeof FormData !== 'undefined' && fileOrUrl instanceof FormData) {
+    return await apiFetch(`/guilds/${guildId}/avatar`, {
+      method: 'POST',
+      body: fileOrUrl,
+    });
+  } else if (typeof File !== 'undefined' && (fileOrUrl instanceof File || fileOrUrl instanceof Blob)) {
+    const formData = new FormData();
+    formData.append('avatar', fileOrUrl);
+    return await apiFetch(`/guilds/${guildId}/avatar`, {
+      method: 'POST',
+      body: formData,
+    });
+  }
+}
+
+export async function updateGuildBanner(guildId, fileOrUrl) {
+  if (typeof fileOrUrl === 'string') {
+    return await apiFetch(`/guilds/${guildId}/banner`, {
+      method: 'POST',
+      body: { banner_url: fileOrUrl },
+    });
+  } else if (typeof FormData !== 'undefined' && fileOrUrl instanceof FormData) {
+    return await apiFetch(`/guilds/${guildId}/banner`, {
+      method: 'POST',
+      body: fileOrUrl,
+    });
+  } else if (typeof File !== 'undefined' && (fileOrUrl instanceof File || fileOrUrl instanceof Blob)) {
+    const formData = new FormData();
+    formData.append('banner', fileOrUrl);
+    return await apiFetch(`/guilds/${guildId}/banner`, {
+      method: 'POST',
+      body: formData,
+    });
+  }
+}
+
+export async function updateGuildBio(guildId, bioText) {
+  return await apiFetch(`/guilds/${guildId}/bio`, {
+    method: 'POST',
+    body: { bio: bioText },
+  });
+}
+
+export async function resetGuildBranding(guildId) {
+  return await apiFetch(`/guilds/${guildId}/branding/reset`, {
+    method: 'POST',
+  });
+}
+
+
+/**
  * Public bot statistics for landing page
  */
 export async function fetchPublicStats() {

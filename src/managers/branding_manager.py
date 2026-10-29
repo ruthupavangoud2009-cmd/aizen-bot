@@ -138,6 +138,54 @@ class BrandingManager:
             logger.error(f"Failed to update branding {field} for guild {guild_id}: {e}")
             raise
 
+    async def load_cache(self) -> None:
+        """Preload all server branding configurations into memory."""
+        if not self.db or not hasattr(self.db, "fetch_all"):
+            return
+        query = """
+        SELECT guild_id, display_name, bio, avatar_url, banner_url, set_by, applied_nickname, applied_discord_avatar, updated_at
+        FROM guild_branding;
+        """
+        try:
+            rows = await self.db.fetch_all(query)
+            defaults = self.get_default_branding()
+            for row in rows:
+                gid = row.get("guild_id")
+                if not gid:
+                    continue
+                is_custom = bool(
+                    row.get("display_name") or row.get("bio") or row.get("avatar_url") or row.get("banner_url")
+                )
+                self._cache[int(gid)] = {
+                    "guild_id": int(gid),
+                    "display_name": row.get("display_name") or defaults["display_name"],
+                    "bio": row.get("bio") or defaults["bio"],
+                    "avatar_url": row.get("avatar_url") or defaults["avatar_url"],
+                    "banner_url": row.get("banner_url") or defaults["banner_url"],
+                    "is_custom": is_custom,
+                    "applied_nickname": bool(row.get("applied_nickname")),
+                    "applied_discord_avatar": bool(row.get("applied_discord_avatar")),
+                    "set_by": row.get("set_by"),
+                    "updated_at": row.get("updated_at"),
+                }
+            logger.info("Loaded %d guild branding configurations into cache.", len(self._cache))
+        except Exception as e:
+            logger.warning("Could not pre-load guild branding cache: %s", e)
+
+    async def reset_field(self, guild_id: int, field: str) -> None:
+        """Reset a single branding field back to default for a guild."""
+        if field not in {"display_name", "bio", "avatar_url", "banner_url"}:
+            raise ValueError(f"Invalid branding field: {field}")
+        if not self.db:
+            return
+        query = f"UPDATE guild_branding SET {field} = NULL, updated_at = CURRENT_TIMESTAMP WHERE guild_id = ?;"
+        try:
+            await self.db.execute(query, guild_id)
+            self.invalidate_cache(guild_id)
+        except Exception as e:
+            logger.error(f"Failed to reset branding field {field} for guild {guild_id}: {e}")
+            raise
+
     async def reset_branding(self, guild_id: int) -> None:
         """Reset all branding for a guild back to global default."""
         try:
@@ -147,3 +195,4 @@ class BrandingManager:
         except Exception as e:
             logger.error(f"Failed to reset branding for guild {guild_id}: {e}")
             raise
+

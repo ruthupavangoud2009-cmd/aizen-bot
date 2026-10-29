@@ -1434,6 +1434,17 @@ class PostgresDatabase(BaseDatabase):
             rows = await conn.fetch(pg_query, *args)
             return [dict(r) for r in rows]
 
+    async def fetch(self, query: str, *args: Any) -> list[dict[str, Any]]:
+        """Alias for fetch_all supporting postgres standard nomenclature."""
+        return await self.fetch_all(query, *args)
+
+    async def fetchval(self, query: str, *args: Any) -> Any:
+        """Fetch a single scalar value from the first column of the first row."""
+        row = await self.fetch_one(query, *args)
+        if row:
+            return next(iter(row.values()))
+        return None
+
     async def set_ai_channel(
         self,
         guild_id: int,

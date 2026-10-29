@@ -1069,7 +1069,7 @@ async def handle_set_guild_avatar(request: web.Request) -> web.Response:
                 logger.info(f"Dashboard member avatar Discord API notice: {e}")
                 applied_discord_api = False
 
-    # 4. Save to PostgreSQL database
+    # 4. Save to PostgreSQL database & sync with BrandingManager
     final_url = target_url or f"https://cdn.discordapp.com/avatars/{bot.user.id if bot and bot.user else 0}/custom_{guild_id}.png"
     try:
         if hasattr(db, "execute"):
@@ -1088,6 +1088,25 @@ async def handle_set_guild_avatar(request: web.Request) -> web.Response:
                 final_url,
                 user_id,
                 applied_discord_api,
+            )
+            await db.execute(
+                """
+                INSERT INTO guild_branding (guild_id, avatar_url, set_by, applied_discord_avatar, updated_at)
+                VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP)
+                ON CONFLICT (guild_id) DO UPDATE SET
+                    avatar_url = excluded.avatar_url,
+                    set_by = excluded.set_by,
+                    applied_discord_avatar = excluded.applied_discord_avatar,
+                    updated_at = CURRENT_TIMESTAMP;
+                """,
+                guild_id,
+                final_url,
+                user_id,
+                applied_discord_api,
+            )
+        if bot and hasattr(bot, "branding_mgr"):
+            await bot.branding_mgr.set_field(
+                guild_id, "avatar_url", final_url, user_id, {"applied_discord_avatar": applied_discord_api}
             )
     except Exception as dbe:
         logger.error(f"Failed to persist avatar to DB: {dbe}")
@@ -1122,6 +1141,9 @@ async def handle_reset_guild_avatar(request: web.Request) -> web.Response:
     try:
         if hasattr(db, "execute"):
             await db.execute("DELETE FROM guild_custom_avatars WHERE guild_id = ?;", guild_id)
+            await db.execute("UPDATE guild_branding SET avatar_url = NULL, updated_at = CURRENT_TIMESTAMP WHERE guild_id = ?;", guild_id)
+        if bot and hasattr(bot, "branding_mgr"):
+            await bot.branding_mgr.reset_field(guild_id, "avatar_url")
     except Exception as dbe:
         logger.error(f"Failed to delete custom avatar from DB: {dbe}")
 
@@ -1133,6 +1155,206 @@ async def handle_reset_guild_avatar(request: web.Request) -> web.Response:
         "success": True,
         "default_avatar_url": default_avatar,
         "message": "Custom avatar reset. Default Aizen branding restored.",
+    })
+
+
+async def handle_get_guild_branding(request: web.Request) -> web.Response:
+    """Fetch complete server bot identity and visual branding."""
+    try:
+        guild_id = int(request.match_info["guild_id"])
+    except (ValueError, KeyError):
+        raise web.HTTPBadRequest(reason="Invalid guild ID specified.")
+
+    await verify_guild_access(request, guild_id)
+    bot = request.app.get("bot") or (request.app["bot_getter"]() if "bot_getter" in request.app else None)
+    db = request.app["db"]
+
+    branding = None
+    if bot and hasattr(bot, "branding_mgr"):
+        branding = await bot.branding_mgr.get_branding(guild_id)
+    else:
+        row = None
+        try:
+            if hasattr(db, "fetch_one"):
+                row = await db.fetch_one("SELECT display_name, bio, avatar_url, banner_url, set_by, applied_nickname, applied_discord_avatar, updated_at FROM guild_branding WHERE guild_id = ?;", guild_id)
+            elif hasattr(db, "pool") and db.pool:
+                async with db.pool.acquire() as conn:
+                    row = await conn.fetchrow("SELECT display_name, bio, avatar_url, banner_url, set_by, applied_nickname, applied_discord_avatar, updated_at FROM guild_branding WHERE guild_id = $1;", guild_id)
+        except Exception as e:
+            logger.debug(f"Notice querying branding: {e}")
+
+        default_av = str(bot.user.display_avatar.url) if bot and bot.user else "https://cdn.discordapp.com/embed/avatars/0.png"
+        branding = {
+            "guild_id": str(guild_id),
+            "display_name": (row["display_name"] if row and row.get("display_name") else "KYOKA 3.0"),
+            "bio": (row["bio"] if row and row.get("bio") else "Power isn't given. It's taken. — Sosuke Aizen"),
+            "avatar_url": (row["avatar_url"] if row and row.get("avatar_url") else default_av),
+            "banner_url": (row["banner_url"] if row and row.get("banner_url") else ""),
+            "is_custom": bool(row and (row.get("display_name") or row.get("bio") or row.get("avatar_url") or row.get("banner_url"))),
+            "applied_nickname": bool(row and row.get("applied_nickname")),
+            "applied_discord_avatar": bool(row and row.get("applied_discord_avatar")),
+        }
+
+    return web.json_response({
+        "success": True,
+        "guild_id": str(guild_id),
+        "branding": branding,
+    })
+
+
+async def handle_set_guild_banner(request: web.Request) -> web.Response:
+    """Set or upload custom server bot banner."""
+    try:
+        guild_id = int(request.match_info["guild_id"])
+    except (ValueError, KeyError):
+        raise web.HTTPBadRequest(reason="Invalid guild ID specified.")
+
+    session_data = await verify_guild_access(request, guild_id)
+    bot = request.app.get("bot") or (request.app["bot_getter"]() if "bot_getter" in request.app else None)
+    db = request.app["db"]
+    user_id = int(session_data.get("id") or 0)
+
+    is_premium = False
+    if bot and hasattr(bot, "premium_mgr"):
+        is_premium = bot.premium_mgr.is_guild_premium(guild_id)
+    elif db and hasattr(db, "is_guild_premium"):
+        is_premium = await db.is_guild_premium(guild_id)
+
+    from src.security.owner import is_primary_owner
+    if not is_premium and not is_primary_owner(user_id):
+        return web.json_response({
+            "success": False,
+            "error": "Custom bot banner is an exclusive Kyoka Premium feature. Upgrade your server to unlock custom bot banners.",
+            "premium_required": True,
+        }, status=403)
+
+    target_url = None
+    content_type = request.content_type.lower()
+    if "multipart" in content_type:
+        reader = await request.multipart()
+        field = await reader.next()
+        if field and field.name in ("banner", "file", "image"):
+            data = await field.read()
+            if len(data) > 10 * 1024 * 1024:
+                return web.json_response({"success": False, "error": "Banner exceeds 10MB limit."}, status=400)
+            target_url = f"https://cdn.discordapp.com/attachments/branding/banner_{guild_id}.png"
+    else:
+        try:
+            body = await request.json()
+            target_url = str(body.get("banner_url", "") or body.get("image_url", "")).strip()
+        except Exception:
+            return web.json_response({"success": False, "error": "Invalid request body."}, status=400)
+
+    if not target_url:
+        return web.json_response({"success": False, "error": "No valid banner image or URL provided."}, status=400)
+
+    try:
+        if hasattr(db, "execute"):
+            await db.execute(
+                """
+                INSERT INTO guild_branding (guild_id, banner_url, set_by, updated_at)
+                VALUES (?, ?, ?, CURRENT_TIMESTAMP)
+                ON CONFLICT (guild_id) DO UPDATE SET
+                    banner_url = excluded.banner_url,
+                    set_by = excluded.set_by,
+                    updated_at = CURRENT_TIMESTAMP;
+                """,
+                guild_id, target_url, user_id
+            )
+        if bot and hasattr(bot, "branding_mgr"):
+            await bot.branding_mgr.set_field(guild_id, "banner_url", target_url, user_id)
+    except Exception as e:
+        logger.error(f"Error saving banner: {e}")
+
+    return web.json_response({
+        "success": True,
+        "banner_url": target_url,
+        "message": "Custom bot banner configured successfully!",
+    })
+
+
+async def handle_set_guild_bio(request: web.Request) -> web.Response:
+    """Set custom server bot bio description."""
+    try:
+        guild_id = int(request.match_info["guild_id"])
+    except (ValueError, KeyError):
+        raise web.HTTPBadRequest(reason="Invalid guild ID specified.")
+
+    session_data = await verify_guild_access(request, guild_id)
+    bot = request.app.get("bot") or (request.app["bot_getter"]() if "bot_getter" in request.app else None)
+    db = request.app["db"]
+    user_id = int(session_data.get("id") or 0)
+
+    try:
+        body = await request.json()
+        bio_text = str(body.get("bio", "")).strip()
+    except Exception:
+        return web.json_response({"success": False, "error": "Invalid request body."}, status=400)
+
+    if len(bio_text) > 300:
+        return web.json_response({"success": False, "error": "Bio cannot exceed 300 characters."}, status=400)
+
+    try:
+        if hasattr(db, "execute"):
+            await db.execute(
+                """
+                INSERT INTO guild_branding (guild_id, bio, set_by, updated_at)
+                VALUES (?, ?, ?, CURRENT_TIMESTAMP)
+                ON CONFLICT (guild_id) DO UPDATE SET
+                    bio = excluded.bio,
+                    set_by = excluded.set_by,
+                    updated_at = CURRENT_TIMESTAMP;
+                """,
+                guild_id, bio_text, user_id
+            )
+        if bot and hasattr(bot, "branding_mgr"):
+            await bot.branding_mgr.set_field(guild_id, "bio", bio_text, user_id)
+    except Exception as e:
+        logger.error(f"Error saving bio: {e}")
+
+    return web.json_response({
+        "success": True,
+        "bio": bio_text,
+        "message": "Custom bot bio saved successfully!",
+    })
+
+
+async def handle_reset_guild_branding(request: web.Request) -> web.Response:
+    """Reset all server-specific bot branding back to global default."""
+    try:
+        guild_id = int(request.match_info["guild_id"])
+    except (ValueError, KeyError):
+        raise web.HTTPBadRequest(reason="Invalid guild ID specified.")
+
+    await verify_guild_access(request, guild_id)
+    bot = request.app.get("bot") or (request.app["bot_getter"]() if "bot_getter" in request.app else None)
+    db = request.app["db"]
+
+    if bot:
+        guild = bot.get_guild(guild_id)
+        if guild and guild.me:
+            try:
+                await guild.me.edit(avatar=None, nick=None, reason="Dashboard branding reset")
+            except Exception:
+                pass
+
+    try:
+        if hasattr(db, "execute"):
+            await db.execute("DELETE FROM guild_branding WHERE guild_id = ?;", guild_id)
+            await db.execute("DELETE FROM guild_custom_avatars WHERE guild_id = ?;", guild_id)
+        if bot and hasattr(bot, "branding_mgr"):
+            await bot.branding_mgr.reset_branding(guild_id)
+    except Exception as e:
+        logger.error(f"Error resetting branding: {e}")
+
+    default_avatar = "https://cdn.discordapp.com/embed/avatars/0.png"
+    if bot and bot.user:
+        default_avatar = str(bot.user.display_avatar.url)
+
+    return web.json_response({
+        "success": True,
+        "message": "Server branding reset to default global Aizen theme.",
+        "default_avatar_url": default_avatar,
     })
 
 
@@ -1150,3 +1372,8 @@ def register_guild_routes(app: web.Application) -> None:
     app.router.add_get("/api/guilds/{guild_id}/avatar", handle_get_guild_avatar)
     app.router.add_post("/api/guilds/{guild_id}/avatar", handle_set_guild_avatar)
     app.router.add_delete("/api/guilds/{guild_id}/avatar", handle_reset_guild_avatar)
+    app.router.add_get("/api/guilds/{guild_id}/branding", handle_get_guild_branding)
+    app.router.add_post("/api/guilds/{guild_id}/banner", handle_set_guild_banner)
+    app.router.add_post("/api/guilds/{guild_id}/bio", handle_set_guild_bio)
+    app.router.add_post("/api/guilds/{guild_id}/branding/reset", handle_reset_guild_branding)
+

@@ -385,6 +385,7 @@ class KyokaBot(commands.Bot):
         await self.ai_mgr.load_cache()
         await self.leveling_mgr.load_cache()
         await self.reaction_role_mgr.load_cache()
+        await self.branding_mgr.load_cache()
         await self.custom_emojis.load()
 
         # Load No-Prefix authorized users into memory

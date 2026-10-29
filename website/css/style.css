@@ -1,46 +1,49 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600;700&family=Syne:wght@600;700;800&display=swap');
+
 /* ==========================================================================
    KYOKA 3.0 — AIZEN AESTHETIC DESIGN SYSTEM & CORE STYLES
-   Dark Imperial Violet, Glassmorphism & High-Contrast Typography
+   Obsidian Dark, Electric Violet, Syne/Inter Typography & Glassmorphism
+   Inspired by Velux Aesthetics
    ========================================================================== */
 
 :root {
-  /* Color Palette */
-  --bg-darkest: #07030C;
-  --bg-primary: #0D0618;
-  --bg-secondary: #140A26;
-  --bg-tertiary: #1C0F35;
-  --bg-card: rgba(22, 11, 42, 0.75);
-  --bg-card-hover: rgba(34, 17, 64, 0.85);
-  --bg-glass: rgba(18, 9, 34, 0.65);
+  /* Obsidian Dark Palette (Velux Aesthetic Reference) */
+  --bg-darkest: #06070a;
+  --bg-primary: #08090e;
+  --bg-secondary: #0c0d16;
+  --bg-tertiary: #131522;
+  --bg-card: rgba(12, 13, 22, 0.72);
+  --bg-card-hover: rgba(19, 21, 35, 0.88);
+  --bg-glass: rgba(8, 9, 14, 0.78);
 
-  /* Aizen Purple Radiance */
-  --purple-dark: #3B0764;
-  --purple-deep: #581C87;
-  --purple-primary: #7C3AED;
-  --purple-vibrant: #9333EA;
-  --purple-glow: #A855F7;
-  --purple-light: #C084FC;
-  --purple-pastel: #E9D5FF;
-  --purple-white: #FAF5FF;
+  /* Aizen Purple Radiance & Electric Violet */
+  --purple-dark: #2e0854;
+  --purple-deep: #4c1d95;
+  --purple-primary: #7c3aed;
+  --purple-vibrant: #8b5cf6;
+  --purple-glow: #a855f7;
+  --purple-light: #c084fc;
+  --purple-pastel: #e9d5ff;
+  --purple-white: #faf5ff;
 
   /* Accent & Functional */
-  --cyan-accent: #06B6D4;
-  --emerald-accent: #10B981;
-  --amber-accent: #F59E0B;
-  --rose-accent: #F43F5E;
+  --cyan-accent: #06b6d4;
+  --emerald-accent: #10b981;
+  --amber-accent: #f59e0b;
+  --rose-accent: #f43f5e;
 
   /* Text Colors */
-  --text-main: #F3EEFA;
-  --text-muted: #B4A4CC;
-  --text-dim: #7E6E99;
+  --text-main: #f3eefa;
+  --text-muted: #94a3b8;
+  --text-dim: #64748b;
 
   /* Borders & Shadows */
-  --border-subtle: rgba(168, 85, 247, 0.16);
-  --border-active: rgba(168, 85, 247, 0.45);
-  --border-strong: rgba(192, 132, 252, 0.6);
-  --glow-shadow: 0 0 25px rgba(124, 58, 237, 0.35);
-  --glow-strong: 0 0 35px rgba(168, 85, 247, 0.55);
-  --card-shadow: 0 12px 30px rgba(0, 0, 0, 0.45);
+  --border-subtle: rgba(255, 255, 255, 0.08);
+  --border-active: rgba(139, 92, 246, 0.38);
+  --border-strong: rgba(168, 85, 247, 0.65);
+  --glow-shadow: 0 0 25px rgba(124, 58, 237, 0.22);
+  --glow-strong: 0 0 35px rgba(168, 85, 247, 0.42);
+  --card-shadow: 0 16px 40px rgba(0, 0, 0, 0.65);
 
   /* Layout & Transitions */
   --radius-sm: 8px;
@@ -48,8 +51,9 @@
   --radius-lg: 20px;
   --radius-full: 9999px;
   --transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1);
-  --font-main: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
-  --font-mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+  --font-main: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  --font-heading: 'Syne', -apple-system, BlinkMacSystemFont, sans-serif;
+  --font-mono: 'JetBrains Mono', ui-monospace, SFMono-Regular, monospace;
 }
 
 *, *::before, *::after {
@@ -60,21 +64,41 @@
 
 html {
   font-family: var(--font-main);
-  background-color: var(--bg-primary);
+  background-color: var(--bg-darkest);
   color: var(--text-main);
   line-height: 1.6;
   scroll-behavior: smooth;
   -webkit-font-smoothing: antialiased;
 }
 
+h1, h2, h3, h4, .nav-brand, .hero-title, .section-title {
+  font-family: var(--font-heading);
+  letter-spacing: -0.02em;
+}
+
 body {
   min-height: 100vh;
   display: flex;
   flex-direction: column;
-  background: radial-gradient(circle at 50% 0%, #200E3D 0%, var(--bg-primary) 50%, var(--bg-darkest) 100%);
+  background: radial-gradient(circle at 50% -10%, rgba(139, 92, 246, 0.16) 0%, rgba(8, 9, 14, 0.98) 50%, var(--bg-darkest) 100%);
   background-attachment: fixed;
   overflow-x: hidden;
 }
+
+.live-pulse-dot {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #10b981;
+  box-shadow: 0 0 10px #10b981;
+  animation: pulse-dot-anim 2s infinite ease-in-out;
+}
+@keyframes pulse-dot-anim {
+  0%, 100% { transform: scale(1); opacity: 1; }
+  50% { transform: scale(0.85); opacity: 0.5; }
+}
+
 
 a {
   color: inherit;

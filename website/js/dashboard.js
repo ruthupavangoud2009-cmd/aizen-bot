@@ -9,6 +9,11 @@ import {
   fetchGuilds,
   fetchGuildSettings,
   updateGuildSettings,
+  fetchGuildBranding,
+  updateGuildAvatar,
+  updateGuildBanner,
+  updateGuildBio,
+  resetGuildBranding,
   testEventSimulation,
   showToast,
   fetchMusicPlayback,
@@ -123,6 +128,17 @@ function ensureSettingsDefaults(s) {
   if (!s.premium) s.premium = { is_premium: false, tier: 'free', status: 'none', expires_at: null, features_unlocked: ['Basic Anti-Nuke', 'Standard Music Player', 'Basic Giveaways'] };
   if (!Array.isArray(s.premium.features_unlocked)) s.premium.features_unlocked = ['Basic Anti-Nuke', 'Standard Music Player', 'Basic Giveaways'];
   if (!s.embeds) s.embeds = { primary_color: '#7C3AED', accent_color: '#8B5CF6', footer_text: 'KYOKA 3.0 • Aizen Edition', thumbnail_url: '', banner_url: '' };
+  if (!s.branding) {
+    s.branding = {
+      display_name: 'KYOKA 3.0',
+      bio: "Power isn't given. It's taken. — Sosuke Aizen",
+      avatar_url: '',
+      banner_url: '',
+      is_custom: false,
+      applied_nickname: false,
+      applied_discord_avatar: false,
+    };
+  }
   if (!s.roles_channels) s.roles_channels = { mod_role_id: null, admin_role_id: null, human_role_id: null, bot_role_id: null, ignored_channels: [] };
   if (!s.roles_utilities) s.roles_utilities = { role_id: null, human_role_id: null, bot_role_id: null, ghostping_enabled: false, ghostping_channel_id: null };
   if (!s.diagnostics) s.diagnostics = { bot_status: 'online', gateway_ping_ms: 28, database_connected: true, shard_id: 0, uptime_seconds: 86400 };
@@ -4413,7 +4429,7 @@ function renderUtilitiesTab(panel, s) {
   });
 }
 
-// 16. Custom Embeds & Branding
+// 16. Custom Server Bot Identity, Banner, Bio & Embeds
 function renderEmbedsTab(panel, s) {
   if (!s.embeds) {
     s.embeds = {
@@ -4424,72 +4440,396 @@ function renderEmbedsTab(panel, s) {
       banner_url: '',
     };
   }
+  if (!s.branding) {
+    s.branding = {
+      display_name: 'KYOKA 3.0',
+      bio: "Power isn't given. It's taken. — Sosuke Aizen",
+      avatar_url: '',
+      banner_url: '',
+      is_custom: false,
+      applied_nickname: false,
+      applied_discord_avatar: false,
+    };
+  }
   const em = s.embeds;
+  const br = s.branding;
+  const currentAvatar = br.avatar_url || 'https://cdn.discordapp.com/embed/avatars/0.png';
+  const currentBanner = br.banner_url || '';
+  const currentBio = br.bio || "Power isn't given. It's taken. — Sosuke Aizen";
+  const currentName = br.display_name || 'KYOKA 3.0';
 
   panel.innerHTML = `
     <div class="panel-header">
-      <h4>Server Branding, Embeds &amp; Aesthetics</h4>
-      <p>Customize the visual presentation of KYOKA announcements, notifications, and panels.</p>
+      <div style="display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 1rem;">
+        <div>
+          <h4>Server Bot Identity, Banner, Bio &amp; Embeds</h4>
+          <p>Customize Kyoka's visual identity specifically for this server. Strict server isolation guarantees changes never leak to other servers or DMs.</p>
+        </div>
+        <button id="reset-all-branding-btn" class="btn btn-outline btn-sm" style="border-color: rgba(239, 68, 68, 0.4); color: #f87171;" title="Restore default global Aizen branding">
+          🔄 Restore Default Global Branding
+        </button>
+      </div>
     </div>
 
+    <!-- Section 1: Server Bot Name & Nickname -->
     <div class="setting-row">
       <div class="setting-info">
-        <label>Primary Embed Accent Color</label>
-        <p>Main border highlight color utilized across announcements and embeds.</p>
+        <label>Server Bot Display Name</label>
+        <p>Custom name and Discord nickname applied exclusively to Kyoka in this server (max 32 chars).</p>
       </div>
-      <div class="setting-control" style="display: flex; align-items: center; gap: 0.75rem;">
-        <input type="color" id="em-color-picker" value="${em.primary_color || '#7C3AED'}" style="width: 44px; height: 38px; border: none; border-radius: 4px; cursor: pointer; background: transparent;" />
-        <input type="text" id="em-primary-color" class="form-input" value="${em.primary_color || '#7C3AED'}" style="width: 120px; font-family: monospace;" />
+      <div class="setting-control" style="display: flex; gap: 0.5rem; align-items: center;">
+        <input type="text" id="br-name-input" class="form-input" value="${currentName}" maxlength="32" placeholder="KYOKA 3.0" style="max-width: 240px;" />
+        <button id="br-save-name-btn" class="btn btn-primary btn-sm">Save Name</button>
       </div>
     </div>
 
-    <div class="setting-row">
+    <!-- Section 2: Server Bot Avatar -->
+    <div class="setting-row" style="align-items: flex-start;">
       <div class="setting-info">
-        <label>Embed Footer Text</label>
-        <p>Branded signature text rendered at the bottom of generated embeds.</p>
+        <label>Server Bot Avatar</label>
+        <p>Upload a custom server avatar (PNG, JPEG, WebP, GIF) or provide an HTTPS image URL.</p>
+        <div style="font-size: 0.78rem; color: var(--text-dim); margin-top: 0.35rem;">
+          ℹ️ Supported by Kyoka Visual Engine &amp; Discord member profile integration.
+        </div>
       </div>
-      <div class="setting-control">
-        <input type="text" id="em-footer" class="form-input" value="${em.footer_text || 'KYOKA 3.0 • Aizen Edition'}" maxlength="100" />
+      <div class="setting-control" style="display: flex; flex-direction: column; gap: 0.75rem; align-items: flex-end; width: 100%; max-width: 440px;">
+        <div style="display: flex; align-items: center; gap: 1rem; width: 100%;">
+          <div style="position: relative; width: 64px; height: 64px; border-radius: 50%; overflow: hidden; border: 2px solid var(--purple-primary); box-shadow: 0 0 16px rgba(124, 58, 237, 0.35); flex-shrink: 0; background: #0c0d16;">
+            <img id="avatar-preview-img" src="${currentAvatar}" alt="Avatar Preview" style="width: 100%; height: 100%; object-fit: cover;" />
+          </div>
+          <div style="flex: 1; display: flex; flex-direction: column; gap: 0.4rem;">
+            <input type="url" id="br-avatar-url" class="form-input" value="${br.avatar_url || ''}" placeholder="https://example.com/avatar.png" style="font-size: 0.85rem;" />
+            <div style="display: flex; gap: 0.5rem;">
+              <button id="br-save-avatar-url-btn" class="btn btn-primary btn-sm" style="flex: 1;">Set URL</button>
+              <label class="btn btn-outline btn-sm" style="cursor: pointer; margin: 0; padding: 0.35rem 0.65rem;" title="Upload an image file from your device">
+                📁 Upload File
+                <input type="file" id="br-avatar-file-input" accept="image/png,image/jpeg,image/webp,image/gif" style="display: none;" />
+              </label>
+              <button id="br-reset-avatar-btn" class="btn btn-outline btn-sm" style="color: var(--text-dim);" title="Reset to default Aizen avatar">↺</button>
+            </div>
+          </div>
+        </div>
       </div>
     </div>
 
-    <div class="setting-row">
+    <!-- Section 3: Server Bot Banner -->
+    <div class="setting-row" style="align-items: flex-start;">
       <div class="setting-info">
-        <label>Custom Thumbnail URL</label>
-        <p>Small icon displayed in the top-right corner of standard embeds.</p>
+        <label>Server Bot Banner</label>
+        <p>Custom server bot banner art displayed on bot profile cards, help headers, and embeds in this server.</p>
+        <div style="font-size: 0.78rem; color: var(--purple-light); margin-top: 0.35rem;">
+          👑 Kyoka Premium Feature • High-resolution banners &amp; animated GIFs supported.
+        </div>
       </div>
-      <div class="setting-control">
-        <input type="url" id="em-thumbnail" class="form-input" value="${em.thumbnail_url || ''}" placeholder="https://example.com/icon.png" />
+      <div class="setting-control" style="display: flex; flex-direction: column; gap: 0.75rem; width: 100%; max-width: 440px;">
+        <div id="banner-preview-box" style="width: 100%; height: 120px; border-radius: var(--radius-md); overflow: hidden; border: 1px solid var(--border-subtle); background: #0c0d16; display: flex; align-items: center; justify-content: center; position: relative;">
+          ${currentBanner ? `<img id="banner-preview-img" src="${currentBanner}" alt="Banner Preview" style="width: 100%; height: 100%; object-fit: cover;" />` : `<span id="banner-empty-text" style="color: var(--text-dim); font-size: 0.85rem;">No custom server banner set</span>`}
+        </div>
+        <input type="url" id="br-banner-url" class="form-input" value="${br.banner_url || ''}" placeholder="https://example.com/banner.gif" style="font-size: 0.85rem;" />
+        <div style="display: flex; gap: 0.5rem;">
+          <button id="br-save-banner-url-btn" class="btn btn-primary btn-sm" style="flex: 1;">Apply Banner</button>
+          <label class="btn btn-outline btn-sm" style="cursor: pointer; margin: 0; padding: 0.35rem 0.65rem;" title="Upload a banner file">
+            📁 Upload Banner
+            <input type="file" id="br-banner-file-input" accept="image/png,image/jpeg,image/webp,image/gif" style="display: none;" />
+          </label>
+          <button id="br-reset-banner-btn" class="btn btn-outline btn-sm" style="color: var(--text-dim);" title="Reset banner to default">↺</button>
+        </div>
       </div>
     </div>
 
-    <div class="setting-row">
-      <div class="setting-info">
-        <label>Custom Banner / Image URL</label>
-        <p>Large banner image rendered inside welcome and milestone embeds.</p>
+    <!-- Section 4: Server Bot Bio / About Me -->
+    <div class="setting-row" style="flex-direction: column; align-items: flex-start; gap: 0.5rem;">
+      <div class="setting-info" style="display: flex; justify-content: space-between; width: 100%; align-items: center;">
+        <div>
+          <label>Server Bot Bio / About Me</label>
+          <p>Custom bio description rendered in Kyoka's bot profile cards and help command in this server.</p>
+        </div>
+        <span id="bio-char-count" style="font-size: 0.8rem; font-family: monospace; color: var(--text-dim);">${currentBio.length} / 300</span>
       </div>
-      <div class="setting-control">
-        <input type="url" id="em-banner" class="form-input" value="${em.banner_url || ''}" placeholder="https://example.com/banner.gif" />
+      <div class="setting-control" style="width: 100%;">
+        <textarea id="br-bio-textarea" class="form-input" rows="3" maxlength="300" style="width: 100%; font-size: 0.9rem;">${currentBio}</textarea>
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 0.5rem;">
+          <span style="font-size: 0.78rem; color: var(--text-dim);">🔒 Members in other servers or DMs will see the standard global bio.</span>
+          <div style="display: flex; gap: 0.5rem;">
+            <button id="br-reset-bio-btn" class="btn btn-outline btn-sm" style="color: var(--text-dim);">Restore Default Bio</button>
+            <button id="br-save-bio-btn" class="btn btn-primary btn-sm">Save Bio</button>
+          </div>
+        </div>
       </div>
     </div>
 
-    <!-- Live Embed Simulator -->
-    <div class="wizard-preview-card" style="margin-top: 1.5rem;">
-      <div class="preview-header">
-        <span>✨ LIVE DISCORD EMBED PREVIEW</span>
+    <!-- Interactive Discord Bot Profile Card Simulator -->
+    <div class="wizard-preview-card" style="margin-top: 1.75rem; background: rgba(8, 9, 14, 0.8); border: 1px solid rgba(255, 255, 255, 0.08); border-radius: var(--radius-md); overflow: hidden;">
+      <div class="preview-header" style="background: rgba(12, 13, 22, 0.85); padding: 0.65rem 1rem; border-bottom: 1px solid var(--border-subtle); display: flex; align-items: center; justify-content: space-between;">
+        <span style="font-size: 0.8rem; font-weight: 700; color: var(--purple-pastel); display: flex; align-items: center; gap: 0.4rem;">
+          <span>⛩️</span> LIVE DISCORD BOT PROFILE SIMULATOR (${state.selectedGuildObj?.name || 'Server'})
+        </span>
+        <span class="server-badge" style="background: rgba(139, 92, 246, 0.2); color: #c084fc; font-size: 0.7rem;">Server Isolated</span>
       </div>
-      <div id="embed-live-sim" style="background: #1e1f22; border-left: 4px solid ${em.primary_color || '#7C3AED'}; border-radius: 4px; padding: 1rem 1.25rem;">
-        <h5 style="color: #FFFFFF; font-size: 1rem; margin-bottom: 0.35rem;">Sample Server Notification</h5>
-        <p style="color: #dcddde; font-size: 0.88rem; margin-bottom: 0.75rem;">
-          This preview reflects the custom accent color, thumbnail, and branded footer configured above.
-        </p>
-        <div id="embed-footer-preview" style="font-size: 0.75rem; color: #949ba4; border-top: 1px solid rgba(255, 255, 255, 0.08); padding-top: 0.5rem;">
-          ${em.footer_text || 'KYOKA 3.0 • Aizen Edition'}
+      <div style="padding: 1.25rem;">
+        <div style="background: #111214; border-radius: 12px; overflow: hidden; max-width: 380px; margin: 0 auto; box-shadow: 0 12px 36px rgba(0,0,0,0.6); border: 1px solid rgba(255,255,255,0.06);">
+          <!-- Sim Banner -->
+          <div id="sim-banner" style="height: 105px; background: ${currentBanner ? `url('${currentBanner}') center/cover` : 'linear-gradient(135deg, #3B0764 0%, #1e1136 100%)'}; position: relative;"></div>
+          <!-- Sim Avatar & Badges -->
+          <div style="padding: 0 1rem 1rem; position: relative;">
+            <div style="position: relative; width: 68px; height: 68px; margin-top: -34px; border-radius: 50%; border: 4px solid #111214; overflow: hidden; background: #0c0d16; box-shadow: 0 4px 12px rgba(0,0,0,0.5);">
+              <img id="sim-avatar" src="${currentAvatar}" alt="Sim Avatar" style="width: 100%; height: 100%; object-fit: cover;" />
+            </div>
+            <div style="margin-top: 0.65rem;">
+              <div style="display: flex; align-items: center; gap: 0.45rem;">
+                <h5 id="sim-name" style="color: #F2F3F5; font-size: 1.1rem; font-weight: 700; margin: 0;">${currentName}</h5>
+                <span style="background: #5865F2; color: #FFFFFF; font-size: 0.62rem; font-weight: 700; padding: 0.1rem 0.35rem; border-radius: 3px;">APP</span>
+              </div>
+              <div style="color: #949BA4; font-size: 0.8rem; margin-top: 0.15rem;">@kyoka</div>
+            </div>
+            <div style="margin-top: 0.85rem; padding-top: 0.75rem; border-top: 1px solid rgba(255,255,255,0.08);">
+              <div style="font-size: 0.72rem; font-weight: 800; color: #B5BAC1; text-transform: uppercase; margin-bottom: 0.25rem;">ABOUT ME</div>
+              <p id="sim-bio" style="color: #DBDEE1; font-size: 0.85rem; line-height: 1.4; margin: 0; white-space: pre-line;">${currentBio}</p>
+            </div>
+            <div style="margin-top: 0.75rem; padding-top: 0.65rem; border-top: 1px solid rgba(255,255,255,0.08); display: flex; gap: 0.35rem; flex-wrap: wrap;">
+              <span style="background: rgba(255,255,255,0.06); color: #B5BAC1; font-size: 0.7rem; padding: 0.15rem 0.45rem; border-radius: 4px;">Verified Bot</span>
+              <span style="background: rgba(124, 58, 237, 0.2); color: #C084FC; font-size: 0.7rem; padding: 0.15rem 0.45rem; border-radius: 4px;">Kyoka Sovereign</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Section 5: Standard Embed Accent & Footers -->
+    <div style="margin-top: 2rem;">
+      <h5 style="color: var(--purple-white); font-size: 1rem; margin-bottom: 0.75rem;">Embed Aesthetics &amp; Highlights</h5>
+
+      <div class="setting-row">
+        <div class="setting-info">
+          <label>Primary Embed Accent Color</label>
+          <p>Highlight border color utilized across announcements and embeds.</p>
+        </div>
+        <div class="setting-control" style="display: flex; align-items: center; gap: 0.75rem;">
+          <input type="color" id="em-color-picker" value="${em.primary_color || '#7C3AED'}" style="width: 44px; height: 38px; border: none; border-radius: 4px; cursor: pointer; background: transparent;" />
+          <input type="text" id="em-primary-color" class="form-input" value="${em.primary_color || '#7C3AED'}" style="width: 120px; font-family: monospace;" />
+        </div>
+      </div>
+
+      <div class="setting-row">
+        <div class="setting-info">
+          <label>Embed Footer Text</label>
+          <p>Branded signature text rendered at the bottom of generated embeds.</p>
+        </div>
+        <div class="setting-control">
+          <input type="text" id="em-footer" class="form-input" value="${em.footer_text || 'KYOKA 3.0 • Aizen Edition'}" maxlength="100" />
+        </div>
+      </div>
+
+      <!-- Live Embed Simulator -->
+      <div class="wizard-preview-card" style="margin-top: 1.5rem;">
+        <div class="preview-header">
+          <span>✨ LIVE DISCORD EMBED PREVIEW</span>
+        </div>
+        <div id="embed-live-sim" style="background: #1e1f22; border-left: 4px solid ${em.primary_color || '#7C3AED'}; border-radius: 4px; padding: 1rem 1.25rem;">
+          <h5 style="color: #FFFFFF; font-size: 1rem; margin-bottom: 0.35rem;">Sample Server Notification</h5>
+          <p style="color: #dcddde; font-size: 0.88rem; margin-bottom: 0.75rem;">
+            This preview reflects the custom accent color, thumbnail, and branded footer configured above.
+          </p>
+          <div id="embed-footer-preview" style="font-size: 0.75rem; color: #949ba4; border-top: 1px solid rgba(255, 255, 255, 0.08); padding-top: 0.5rem;">
+            ${em.footer_text || 'KYOKA 3.0 • Aizen Edition'}
+          </div>
         </div>
       </div>
     </div>
   `;
 
+  // Attach Event Handlers
+  const gid = state.selectedGuildId;
+
+  // Name handling
+  const nameInput = document.getElementById('br-name-input');
+  const simName = document.getElementById('sim-name');
+  nameInput?.addEventListener('input', (e) => {
+    br.display_name = e.target.value.trim() || 'KYOKA 3.0';
+    if (simName) simName.textContent = br.display_name;
+    markChanged();
+  });
+  document.getElementById('br-save-name-btn')?.addEventListener('click', async () => {
+    const newName = (nameInput?.value || '').trim() || 'KYOKA 3.0';
+    br.display_name = newName;
+    try {
+      await updateGuildSettings(gid, { branding: { display_name: newName } });
+      showToast('Bot display name updated!', 'success');
+      markChanged();
+    } catch (err) {
+      showToast(`Error: ${err.message}`, 'error');
+    }
+  });
+
+  // Avatar handling
+  const avatarUrlInput = document.getElementById('br-avatar-url');
+  const avatarPreview = document.getElementById('avatar-preview-img');
+  const simAvatar = document.getElementById('sim-avatar');
+  const setAvatar = (url) => {
+    br.avatar_url = url;
+    if (avatarPreview) avatarPreview.src = url;
+    if (simAvatar) simAvatar.src = url;
+    if (avatarUrlInput) avatarUrlInput.value = url;
+    markChanged();
+  };
+
+  document.getElementById('br-save-avatar-url-btn')?.addEventListener('click', async () => {
+    const url = (avatarUrlInput?.value || '').trim();
+    if (!url) {
+      showToast('Please enter an avatar URL.', 'error');
+      return;
+    }
+    try {
+      showToast('Updating custom avatar...', 'info');
+      const res = await updateGuildAvatar(gid, url);
+      setAvatar(res.avatar_url || url);
+      showToast('Custom bot avatar applied successfully!', 'success');
+    } catch (err) {
+      showToast(`Failed: ${err.message}`, 'error');
+    }
+  });
+
+  document.getElementById('br-avatar-file-input')?.addEventListener('change', async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    try {
+      showToast('Uploading custom avatar image...', 'info');
+      const res = await updateGuildAvatar(gid, file);
+      setAvatar(res.avatar_url || URL.createObjectURL(file));
+      showToast('Custom bot avatar uploaded successfully!', 'success');
+    } catch (err) {
+      showToast(`Upload failed: ${err.message}`, 'error');
+    }
+  });
+
+  document.getElementById('br-reset-avatar-btn')?.addEventListener('click', async () => {
+    try {
+      showToast('Resetting avatar to default...', 'info');
+      setAvatar('https://cdn.discordapp.com/embed/avatars/0.png');
+      await updateGuildSettings(gid, { branding: { avatar_url: null } });
+      showToast('Default avatar restored.', 'success');
+    } catch (err) {
+      showToast(`Reset error: ${err.message}`, 'error');
+    }
+  });
+
+  // Banner handling
+  const bannerUrlInput = document.getElementById('br-banner-url');
+  const bannerPreviewBox = document.getElementById('banner-preview-box');
+  const simBanner = document.getElementById('sim-banner');
+  const setBanner = (url) => {
+    br.banner_url = url;
+    if (bannerUrlInput) bannerUrlInput.value = url;
+    if (bannerPreviewBox) {
+      bannerPreviewBox.innerHTML = url ? `<img id="banner-preview-img" src="${url}" alt="Banner Preview" style="width: 100%; height: 100%; object-fit: cover;" />` : `<span style="color: var(--text-dim); font-size: 0.85rem;">No custom server banner set</span>`;
+    }
+    if (simBanner) {
+      simBanner.style.background = url ? `url('${url}') center/cover` : 'linear-gradient(135deg, #3B0764 0%, #1e1136 100%)';
+    }
+    markChanged();
+  };
+
+  document.getElementById('br-save-banner-url-btn')?.addEventListener('click', async () => {
+    const url = (bannerUrlInput?.value || '').trim();
+    if (!url) {
+      showToast('Please enter a banner URL.', 'error');
+      return;
+    }
+    try {
+      showToast('Configuring custom bot banner...', 'info');
+      const res = await updateGuildBanner(gid, url);
+      setBanner(res.banner_url || url);
+      showToast('Custom bot banner saved successfully!', 'success');
+    } catch (err) {
+      showToast(`Failed: ${err.message}`, 'error');
+    }
+  });
+
+  document.getElementById('br-banner-file-input')?.addEventListener('change', async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    try {
+      showToast('Uploading custom bot banner...', 'info');
+      const res = await updateGuildBanner(gid, file);
+      setBanner(res.banner_url || URL.createObjectURL(file));
+      showToast('Custom bot banner uploaded successfully!', 'success');
+    } catch (err) {
+      showToast(`Upload failed: ${err.message}`, 'error');
+    }
+  });
+
+  document.getElementById('br-reset-banner-btn')?.addEventListener('click', async () => {
+    try {
+      showToast('Resetting banner to default...', 'info');
+      setBanner('');
+      await updateGuildSettings(gid, { branding: { banner_url: null } });
+      showToast('Default banner restored.', 'success');
+    } catch (err) {
+      showToast(`Reset error: ${err.message}`, 'error');
+    }
+  });
+
+  // Bio handling
+  const bioTextarea = document.getElementById('br-bio-textarea');
+  const bioCount = document.getElementById('bio-char-count');
+  const simBio = document.getElementById('sim-bio');
+
+  bioTextarea?.addEventListener('input', (e) => {
+    const text = e.target.value;
+    br.bio = text;
+    if (bioCount) bioCount.textContent = `${text.length} / 300`;
+    if (simBio) simBio.textContent = text || "Power isn't given. It's taken. — Sosuke Aizen";
+    markChanged();
+  });
+
+  document.getElementById('br-save-bio-btn')?.addEventListener('click', async () => {
+    const text = (bioTextarea?.value || '').trim();
+    try {
+      showToast('Saving server bot bio...', 'info');
+      await updateGuildBio(gid, text);
+      br.bio = text;
+      showToast('Server bot bio configured successfully!', 'success');
+      markChanged();
+    } catch (err) {
+      showToast(`Error saving bio: ${err.message}`, 'error');
+    }
+  });
+
+  document.getElementById('br-reset-bio-btn')?.addEventListener('click', async () => {
+    const defaultBio = "Power isn't given. It's taken. — Sosuke Aizen";
+    try {
+      await updateGuildBio(gid, defaultBio);
+      br.bio = defaultBio;
+      if (bioTextarea) bioTextarea.value = defaultBio;
+      if (bioCount) bioCount.textContent = `${defaultBio.length} / 300`;
+      if (simBio) simBio.textContent = defaultBio;
+      showToast('Default global bio restored.', 'success');
+      markChanged();
+    } catch (err) {
+      showToast(`Error: ${err.message}`, 'error');
+    }
+  });
+
+  // Master reset
+  document.getElementById('reset-all-branding-btn')?.addEventListener('click', async () => {
+    if (!confirm(`Are you sure you want to reset all custom branding for ${state.selectedGuildObj?.name || 'this server'} back to the default global Aizen theme?`)) {
+      return;
+    }
+    try {
+      showToast('Resetting server branding...', 'info');
+      await resetGuildBranding(gid);
+      br.display_name = 'KYOKA 3.0';
+      br.avatar_url = '';
+      br.banner_url = '';
+      br.bio = "Power isn't given. It's taken. — Sosuke Aizen";
+      renderActiveTab('embeds');
+      showToast('Server branding reset to default global Aizen theme.', 'success');
+    } catch (err) {
+      showToast(`Reset error: ${err.message}`, 'error');
+    }
+  });
+
+  // Embed controls
   const colorPicker = document.getElementById('em-color-picker');
   const colorInput = document.getElementById('em-primary-color');
   const footerInput = document.getElementById('em-footer');
@@ -4515,17 +4855,8 @@ function renderEmbedsTab(panel, s) {
     if (footerSim) footerSim.textContent = e.target.value;
     markChanged();
   });
-
-  document.getElementById('em-thumbnail')?.addEventListener('input', (e) => {
-    em.thumbnail_url = e.target.value.trim();
-    markChanged();
-  });
-
-  document.getElementById('em-banner')?.addEventListener('input', (e) => {
-    em.banner_url = e.target.value.trim();
-    markChanged();
-  });
 }
+
 
 // 17. Server Roles & Channel Mappings
 function renderRolesChannelsTab(panel, s) {

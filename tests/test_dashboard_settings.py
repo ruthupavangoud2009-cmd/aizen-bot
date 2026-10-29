@@ -116,3 +116,36 @@ class TestDashboardSettings(AioHTTPTestCase):
         bad_punish_payload = {"antinuke": {"punishment": "destroy_server"}}
         resp = await self.client.patch("/api/guilds/1001/settings", headers=headers, json=bad_punish_payload)
         assert resp.status == 400
+
+    async def test_branding_endpoints_lifecycle(self):
+        headers = self._create_auth_headers("1001")
+
+        # 1. Fetch initial branding
+        resp = await self.client.get("/api/guilds/1001/branding", headers=headers)
+        assert resp.status == 200
+        data = await resp.json()
+        assert data["success"] is True
+        assert "branding" in data
+        assert data["branding"]["display_name"] == "KYOKA 3.0"
+
+        # 2. Update bio
+        resp_bio = await self.client.post("/api/guilds/1001/bio", headers=headers, json={"bio": "Testing server bio from dashboard"})
+        assert resp_bio.status == 200
+        bio_data = await resp_bio.json()
+        assert bio_data["success"] is True
+        assert bio_data["bio"] == "Testing server bio from dashboard"
+
+        # 3. Update banner (guild 1001 has mock premium)
+        resp_banner = await self.client.post("/api/guilds/1001/banner", headers=headers, json={"banner_url": "https://cdn.discordapp.com/attachments/123/banner.png"})
+        assert resp_banner.status == 200
+        banner_data = await resp_banner.json()
+        assert banner_data["success"] is True
+        assert banner_data["banner_url"] == "https://cdn.discordapp.com/attachments/123/banner.png"
+
+        # 4. Reset branding
+        resp_reset = await self.client.post("/api/guilds/1001/branding/reset", headers=headers)
+        assert resp_reset.status == 200
+        reset_data = await resp_reset.json()
+        assert reset_data["success"] is True
+        assert "reset" in reset_data["message"].lower()
+

@@ -597,46 +597,85 @@ class VoiceSummaryManager:
             return record["id"]
 
         try:
-            row_id = await self.bot.db.fetchval(
-                """
-                INSERT INTO guild_voice_summaries 
-                (guild_id, channel_id, channel_name, started_by, started_by_name, duration_seconds, speaker_count, speakers, summary_text, notes)
-                VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
-                RETURNING id;
-                """,
-                session.guild_id,
-                session.channel_id,
-                session.channel_name,
-                session.started_by_id,
-                session.started_by_name,
-                session.get_duration_seconds(),
-                len(session.speakers),
-                json.dumps(list(session.speakers.values())),
-                summary_data["summary_markdown"],
-                json.dumps(session.notes),
-            )
+            db = self.bot.db
+            row_id = None
+            if hasattr(db, "fetch_one"):
+                row = await db.fetch_one(
+                    """
+                    INSERT INTO guild_voice_summaries 
+                    (guild_id, channel_id, channel_name, started_by, started_by_name, duration_seconds, speaker_count, speakers, summary_text, notes)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    RETURNING id;
+                    """,
+                    session.guild_id,
+                    session.channel_id,
+                    session.channel_name,
+                    session.started_by_id,
+                    session.started_by_name,
+                    session.get_duration_seconds(),
+                    len(session.speakers),
+                    json.dumps(list(session.speakers.values())),
+                    summary_data["summary_markdown"],
+                    json.dumps(session.notes),
+                )
+                if row:
+                    row_id = row.get("id")
+            elif hasattr(db, "fetchval"):
+                row_id = await db.fetchval(
+                    """
+                    INSERT INTO guild_voice_summaries 
+                    (guild_id, channel_id, channel_name, started_by, started_by_name, duration_seconds, speaker_count, speakers, summary_text, notes)
+                    VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+                    RETURNING id;
+                    """,
+                    session.guild_id,
+                    session.channel_id,
+                    session.channel_name,
+                    session.started_by_id,
+                    session.started_by_name,
+                    session.get_duration_seconds(),
+                    len(session.speakers),
+                    json.dumps(list(session.speakers.values())),
+                    summary_data["summary_markdown"],
+                    json.dumps(session.notes),
+                )
             return row_id or record["id"]
         except Exception as e:
             logger.debug(f"Could not persist voice summary to DB: {e}")
             return record["id"]
 
     async def get_recent_summaries(self, guild_id: int, limit: int = 5) -> List[Dict[str, Any]]:
-        """Retrieve recent voice summaries for a server."""
+        """Retrieve recent voice summaries for a server with fallback to in-memory history cache."""
         if not self.bot or not getattr(self.bot, "db", None):
             return self._history_cache.get(guild_id, [])[:limit]
 
         try:
-            rows = await self.bot.db.fetch(
-                """
-                SELECT id, channel_name, started_by_name as started_by, duration_seconds, speaker_count, summary_text as summary, created_at
-                FROM guild_voice_summaries
-                WHERE guild_id = $1
-                ORDER BY created_at DESC
-                LIMIT $2;
-                """,
-                guild_id,
-                limit,
-            )
+            db = self.bot.db
+            rows = None
+            if hasattr(db, "fetch_all"):
+                rows = await db.fetch_all(
+                    """
+                    SELECT id, channel_name, started_by_name as started_by, duration_seconds, speaker_count, summary_text as summary, created_at
+                    FROM guild_voice_summaries
+                    WHERE guild_id = ?
+                    ORDER BY created_at DESC
+                    LIMIT ?;
+                    """,
+                    guild_id,
+                    limit,
+                )
+            elif hasattr(db, "fetch"):
+                rows = await db.fetch(
+                    """
+                    SELECT id, channel_name, started_by_name as started_by, duration_seconds, speaker_count, summary_text as summary, created_at
+                    FROM guild_voice_summaries
+                    WHERE guild_id = $1
+                    ORDER BY created_at DESC
+                    LIMIT $2;
+                    """,
+                    guild_id,
+                    limit,
+                )
             if rows:
                 results = []
                 for r in rows:
@@ -649,10 +688,10 @@ class VoiceSummaryManager:
                         "duration": f"{m}m {s}s",
                         "speaker_count": r.get("speaker_count", 0),
                         "summary": r.get("summary", ""),
-                        "created_at": r["created_at"].strftime("%Y-%m-%d %H:%M UTC") if r.get("created_at") else "Recent",
+                        "created_at": r["created_at"].strftime("%Y-%m-%d %H:%M UTC") if r.get("created_at") and hasattr(r["created_at"], "strftime") else str(r.get("created_at", "Recent")),
                     })
                 return results
         except Exception as e:
-            logger.debug(f"DB query for summaries failed: {e}")
+            logger.debug(f"DB query for voice summaries notice: {e}")
 
         return self._history_cache.get(guild_id, [])[:limit]

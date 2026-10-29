@@ -742,6 +742,24 @@ class PostgresDatabaseAdapter(BaseDatabaseAdapter):
                     "banner_url": "",
                 }
 
+                # 17b. Server Bot Branding
+                try:
+                    branding_row = await conn.fetchrow(
+                        "SELECT display_name, bio, avatar_url, banner_url, set_by, applied_nickname, applied_discord_avatar, updated_at FROM guild_branding WHERE guild_id = $1;",
+                        guild_id
+                    )
+                except Exception:
+                    branding_row = None
+                branding = {
+                    "display_name": (branding_row["display_name"] if branding_row and branding_row.get("display_name") else "KYOKA 3.0"),
+                    "bio": (branding_row["bio"] if branding_row and branding_row.get("bio") else "Power isn't given. It's taken. — Sosuke Aizen"),
+                    "avatar_url": (branding_row["avatar_url"] if branding_row and branding_row.get("avatar_url") else ""),
+                    "banner_url": (branding_row["banner_url"] if branding_row and branding_row.get("banner_url") else ""),
+                    "is_custom": bool(branding_row and (branding_row.get("display_name") or branding_row.get("bio") or branding_row.get("avatar_url") or branding_row.get("banner_url"))),
+                    "applied_nickname": bool(branding_row and branding_row.get("applied_nickname")),
+                    "applied_discord_avatar": bool(branding_row and branding_row.get("applied_discord_avatar")),
+                }
+
                 # 18. Server Roles & Channel Mappings
                 roles_channels = {
                     "mod_role_id": general.get("mod_role_id"),
@@ -779,6 +797,7 @@ class PostgresDatabaseAdapter(BaseDatabaseAdapter):
                     "utilities": utilities,
                     "premium": premium,
                     "embeds": embeds,
+                    "branding": branding,
                     "roles_channels": roles_channels,
                     "roles_utilities": roles_utilities,
                     "autoroles": roles_utilities,
@@ -1172,6 +1191,28 @@ class PostgresDatabaseAdapter(BaseDatabaseAdapter):
                         """,
                         guild_id, p_color
                     )
+
+                # 10b. Update Server Bot Branding
+                if "branding" in updates:
+                    b_data = updates["branding"]
+                    if isinstance(b_data, dict):
+                        b_name = str(b_data.get("display_name") or "").strip() or None
+                        b_bio = str(b_data.get("bio") or "").strip() or None
+                        b_avatar = str(b_data.get("avatar_url") or "").strip() or None
+                        b_banner = str(b_data.get("banner_url") or "").strip() or None
+                        await conn.execute(
+                            """
+                            INSERT INTO guild_branding (guild_id, display_name, bio, avatar_url, banner_url, updated_at)
+                            VALUES ($1, $2, $3, $4, $5, CURRENT_TIMESTAMP)
+                            ON CONFLICT (guild_id) DO UPDATE SET
+                                display_name = COALESCE(EXCLUDED.display_name, guild_branding.display_name),
+                                bio = COALESCE(EXCLUDED.bio, guild_branding.bio),
+                                avatar_url = COALESCE(EXCLUDED.avatar_url, guild_branding.avatar_url),
+                                banner_url = COALESCE(EXCLUDED.banner_url, guild_branding.banner_url),
+                                updated_at = CURRENT_TIMESTAMP;
+                            """,
+                            guild_id, b_name, b_bio, b_avatar, b_banner
+                        )
 
                 # 11. Update Prefix & Commands
                 if "prefix_commands" in updates:
@@ -2367,6 +2408,15 @@ class MockDatabaseAdapter(BaseDatabaseAdapter):
                 "footer_text": "KYOKA 3.0 • Aizen Edition",
                 "thumbnail_url": "",
                 "banner_url": "",
+            },
+            "branding": {
+                "display_name": "KYOKA 3.0",
+                "bio": "Power isn't given. It's taken. — Sosuke Aizen",
+                "avatar_url": "",
+                "banner_url": "",
+                "is_custom": False,
+                "applied_nickname": False,
+                "applied_discord_avatar": False,
             },
             "roles_channels": {
                 "mod_role_id": None,

@@ -567,3 +567,41 @@ async def test_vcvibe_command_lists_all_personalities(voice_cog: AIVoice, mock_m
     for key in ["pirate", "butler", "sensei", "chef", "crypto"]:
         assert key in embed.description
 
+
+@pytest.mark.asyncio
+async def test_voice_sessions_command_handles_empty_and_records(voice_cog: AIVoice, mock_member: MagicMock):
+    """Verify +aivoice sessions handles both empty history and populated session logs cleanly without crashing."""
+    ctx = MagicMock()
+    ctx.guild = MagicMock(id=999, name="Audio HQ")
+    ctx.channel = MagicMock()
+    ctx.author = mock_member
+    ctx.prefix = "+"
+    ctx.send = AsyncMock()
+    ctx.send_info = AsyncMock()
+
+    # 1. Empty history
+    voice_cog.summary_mgr._history_cache.clear()
+    await voice_cog.voice_sessions(ctx)
+    ctx.send_info.assert_awaited_once()
+
+    # 2. Populated history
+    voice_cog.summary_mgr._history_cache[999] = [{
+        "id": 1,
+        "guild_id": 999,
+        "channel_id": 123,
+        "channel_name": "General Voice",
+        "started_by": "Pavan",
+        "duration": "12m 30s",
+        "speaker_count": 3,
+        "summary": "Meeting discussion notes",
+        "created_at": "2026-10-29 02:00 UTC",
+    }]
+    ctx.send_info.reset_mock()
+    await voice_cog.voice_sessions(ctx)
+    ctx.send.assert_awaited_once()
+    kwargs = ctx.send.call_args[1]
+    embed = kwargs.get("embed")
+    assert embed is not None
+    assert "Voice Meeting History" in embed.title
+    assert "Session `#1`" in embed.description
+

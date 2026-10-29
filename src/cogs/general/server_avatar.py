@@ -334,6 +334,14 @@ class ServerAvatar(commands.Cog, name="General-ServerAvatar"):
                     ctx.author.id,
                     applied_discord_api,
                 )
+            if hasattr(self.bot, "branding_mgr"):
+                await self.bot.branding_mgr.set_field(
+                    ctx.guild.id,
+                    "avatar_url",
+                    target_url,
+                    ctx.author.id,
+                    {"applied_discord_avatar": applied_discord_api},
+                )
         except Exception as dbe:
             logger.error(f"Failed to persist custom guild avatar to DB: {dbe}")
 
@@ -428,6 +436,8 @@ class ServerAvatar(commands.Cog, name="General-ServerAvatar"):
                     "DELETE FROM guild_custom_avatars WHERE guild_id = ?;",
                     ctx.guild.id,
                 )
+            if hasattr(self.bot, "branding_mgr"):
+                await self.bot.branding_mgr.reset_field(ctx.guild.id, "avatar_url")
         except Exception as dbe:
             logger.error(f"Failed to delete custom avatar from DB: {dbe}")
 
@@ -453,6 +463,321 @@ class ServerAvatar(commands.Cog, name="General-ServerAvatar"):
             await confirm_msg.edit(embed=reset_embed, view=None)
         except Exception:
             await ctx.send(embed=reset_embed)
+
+    @commands.command(
+        name="setbotbanner",
+        aliases=["botbanner", "serverbotbanner", "guildbotbanner"],
+        description="Set a custom server-specific banner for Kyoka in this server (Premium).",
+    )
+    @commands.guild_only()
+    @commands.cooldown(1, 10, commands.BucketType.guild)
+    @require_premium("custom_bot_avatar")
+    async def set_bot_banner(self, ctx: CustomContext, image_url: Optional[str] = None) -> None:
+        """
+        Set a custom bot banner for Kyoka in this server.
+        Usage: +setbotbanner <image_url> or attach an image with +setbotbanner
+        Requires: Kyoka Premium & Manage Server permissions.
+        """
+        is_server_admin = ctx.author.guild_permissions.manage_guild or ctx.author.id == ctx.guild.owner_id
+        if not is_server_admin and not is_owner_or_staff(ctx.author.id):
+            await ctx.send_warning("❌ You need **Manage Server** permission or Server Ownership to customize Kyoka's banner.")
+            return
+
+        target_url = None
+        if ctx.message and ctx.message.attachments:
+            target_url = ctx.message.attachments[0].url
+        elif image_url:
+            target_url = image_url.strip()
+
+        p = self.bot.guild_mgr.get_prefix(ctx.guild.id)
+        if not target_url:
+            branding = await self.bot.branding_mgr.get_branding(ctx.guild.id) if hasattr(self.bot, "branding_mgr") else {}
+            curr_banner = branding.get("banner_url")
+            embed = discord.Embed(
+                title=f"⛩️ KYOKA 3.0 • SERVER BOT BANNER • {ctx.guild.name}",
+                description=(
+                    f"**Current Server Banner for `{ctx.guild.name}`:**\n"
+                    f"> {'🎨 Custom Server Banner Active' if curr_banner else '⛩️ Default Global Banner Active'}\n\n"
+                    f"🔒 **Strict Server Isolation:**\n"
+                    f"> This banner applies **ONLY** to `{ctx.guild.name}`. Other servers will never see it.\n\n"
+                    f"**How to Set:**\n"
+                    f"• `{p}setbotbanner <image URL>` or upload an image with `{p}setbotbanner`\n"
+                    f"• To reset: `{p}resetbotbanner`"
+                ),
+                color=0x7C3AED,
+            )
+            if curr_banner:
+                embed.set_image(url=curr_banner)
+            await ctx.send(embed=embed)
+            return
+
+        if not self._is_valid_image_url(target_url):
+            await ctx.send_warning(
+                "❌ Invalid image URL. Must be an HTTPS link ending with `.png`, `.jpg`, `.jpeg`, `.webp`, or `.gif`."
+            )
+            return
+
+        try:
+            async with self.bot.session.get(target_url, timeout=12) as resp:
+                if resp.status != 200:
+                    await ctx.send_warning(f"❌ Failed to download banner image (HTTP {resp.status}).")
+                    return
+                content_type = resp.headers.get("Content-Type", "").lower()
+                if not any(t in content_type for t in ("image/png", "image/jpeg", "image/webp", "image/gif")):
+                    await ctx.send_warning("❌ Unsupported file format. Please upload PNG, JPEG, WebP, or GIF.")
+                    return
+                banner_bytes = await resp.read()
+                if len(banner_bytes) > 10 * 1024 * 1024:
+                    await ctx.send_warning("❌ Banner image file size exceeds 10MB limit.")
+                    return
+        except Exception as e:
+            logger.warning("Error fetching banner: %s", e)
+            await ctx.send_warning(f"❌ Could not retrieve image: {e}")
+            return
+
+        if hasattr(self.bot, "branding_mgr"):
+            try:
+                await self.bot.branding_mgr.set_field(
+                    ctx.guild.id,
+                    "banner_url",
+                    target_url,
+                    ctx.author.id,
+                )
+            except Exception as dbe:
+                logger.error("Failed to save branding banner: %s", dbe)
+                await ctx.send_warning(f"❌ Failed to persist banner to database: {dbe}")
+                return
+
+        await audit(self.bot, ctx.author.id, "set-bot-banner", ctx.guild.id, "success", f"url={target_url[:100]}")
+
+        embed = discord.Embed(
+            title="⛩️ KYOKA 3.0 • CUSTOM SERVER BANNER ACTIVATED",
+            description=(
+                f"✅ **Kyoka's custom banner for `{ctx.guild.name}` has been successfully configured!**\n\n"
+                f"• **Target Server:** `{ctx.guild.name}` (`{ctx.guild.id}`)\n"
+                f"• **Configured By:** {ctx.author.mention}\n"
+                f"• **Strict Isolation:** This banner applies exclusively to `{ctx.guild.name}`.\n"
+                f"• **Reset Anytime:** Type `{p}resetbotbanner` to restore default."
+            ),
+            color=0x7C3AED,
+            timestamp=discord.utils.utcnow(),
+        )
+        embed.set_image(url=target_url)
+        embed.set_footer(text=f"Kyoka Premium • {ctx.guild.name}")
+        await ctx.send(embed=embed)
+
+    @commands.command(
+        name="resetbotbanner",
+        aliases=["resetbanner", "removebotbanner"],
+        description="Reset Kyoka's server banner back to default (Premium).",
+    )
+    @commands.guild_only()
+    @commands.cooldown(1, 10, commands.BucketType.guild)
+    @require_premium("custom_bot_avatar")
+    async def reset_bot_banner(self, ctx: CustomContext) -> None:
+        """Reset Kyoka's custom server banner back to default."""
+        is_server_admin = ctx.author.guild_permissions.manage_guild or ctx.author.id == ctx.guild.owner_id
+        if not is_server_admin and not is_owner_or_staff(ctx.author.id):
+            await ctx.send_warning("❌ You need **Manage Server** permission or Server Ownership to reset Kyoka's banner.")
+            return
+
+        if hasattr(self.bot, "branding_mgr"):
+            try:
+                await self.bot.branding_mgr.reset_field(ctx.guild.id, "banner_url")
+            except Exception as e:
+                logger.error("Failed to reset banner field: %s", e)
+                await ctx.send_warning(f"❌ Failed to reset banner in database: {e}")
+                return
+
+        await audit(self.bot, ctx.author.id, "reset-bot-banner", ctx.guild.id, "success")
+
+        p = self.bot.guild_mgr.get_prefix(ctx.guild.id)
+        embed = discord.Embed(
+            title="⛩️ KYOKA 3.0 • DEFAULT BANNER RESTORED",
+            description=(
+                f"✅ **Kyoka's server banner for `{ctx.guild.name}` has been restored to default global theme.**\n\n"
+                f"• **Actioned By:** {ctx.author.mention}\n"
+                f"• **Active Branding:** Sōsuke Aizen Sovereign Edition (Default)\n"
+                f"• **Customize Again:** `{p}setbotbanner <url>`"
+            ),
+            color=0x7C3AED,
+            timestamp=discord.utils.utcnow(),
+        )
+        embed.set_footer(text=f"Default Global Branding Active • {ctx.guild.name}")
+        await ctx.send(embed=embed)
+
+    @commands.command(
+        name="setbotbio",
+        aliases=["botbio", "serverbotbio", "guildbotbio"],
+        description="Set Kyoka's server-specific bio (only people in this server can see it).",
+    )
+    @commands.guild_only()
+    @commands.cooldown(1, 5, commands.BucketType.guild)
+    async def set_bot_bio(self, ctx: CustomContext, *, text: Optional[str] = None) -> None:
+        """
+        Set server-specific bot bio description.
+        Usage: +setbotbio <text>
+        Requires: Manage Server or Administrator permissions.
+        """
+        p = self.bot.guild_mgr.get_prefix(ctx.guild.id)
+        if not text or not text.strip():
+            branding = await self.bot.branding_mgr.get_branding(ctx.guild.id) if hasattr(self.bot, "branding_mgr") else {}
+            curr_bio = branding.get("bio", "Power isn't given. It's taken. — Sosuke Aizen")
+            embed = discord.Embed(
+                title=f"⛩️ KYOKA 3.0 • SERVER BOT BIO • {ctx.guild.name}",
+                description=(
+                    f"**Active Bio for `{ctx.guild.name}`:**\n"
+                    f"> {curr_bio}\n\n"
+                    f"🔒 **Strict Server Isolation:**\n"
+                    f"> Only members in this server see this bio in bot profile cards.\n\n"
+                    f"**How to Set:**\n"
+                    f"• `{p}setbotbio <new bio text>`\n"
+                    f"• To reset: `{p}resetbotbio`"
+                ),
+                color=0x7C3AED,
+            )
+            embed.set_footer(text=f"Server Isolation Active • {ctx.guild.name}")
+            await ctx.send(embed=embed)
+            return
+
+        is_server_admin = ctx.author.guild_permissions.manage_guild or ctx.author.id == ctx.guild.owner_id
+        if not is_server_admin and not is_owner_or_staff(ctx.author.id):
+            await ctx.send_warning("❌ You need **Manage Server** permission or Server Ownership to customize Kyoka's bio.")
+            return
+
+        clean_bio = text.strip()
+        if len(clean_bio) > 300:
+            await ctx.send_warning("❌ Bio cannot exceed 300 characters.")
+            return
+
+        if hasattr(self.bot, "branding_mgr"):
+            try:
+                await self.bot.branding_mgr.set_field(
+                    ctx.guild.id,
+                    "bio",
+                    clean_bio,
+                    ctx.author.id,
+                )
+            except Exception as dbe:
+                logger.error("Failed to save branding bio: %s", dbe)
+                await ctx.send_warning(f"❌ Failed to persist bio to database: {dbe}")
+                return
+
+        await audit(self.bot, ctx.author.id, "set-bot-bio", ctx.guild.id, "success", f"bio={clean_bio[:60]}")
+
+        embed = discord.Embed(
+            title="⛩️ KYOKA 3.0 • SERVER BOT BIO CONFIGURED",
+            description=(
+                f"✅ **KYOKA's server bio for `{ctx.guild.name}` has been successfully configured!**\n\n"
+                f"• **Active Server Bio:**\n> {clean_bio}\n\n"
+                f"🔒 **Strict Server Isolation Guaranteed:**\n"
+                f"> **Only members in `{ctx.guild.name}` will see this bio.**\n"
+                f"> Members in other servers or DMs will see the standard global bio.\n\n"
+                f"• **Configured By:** {ctx.author.mention}\n"
+                f"• **Reset Anytime:** `{p}resetbotbio`"
+            ),
+            color=0x7C3AED,
+            timestamp=discord.utils.utcnow(),
+        )
+        embed.set_footer(text=f"Server Branding • {ctx.guild.name}")
+        await ctx.send(embed=embed)
+
+    @commands.command(
+        name="resetbotbio",
+        aliases=["resetbio", "removebotbio"],
+        description="Reset Kyoka's server bio back to default.",
+    )
+    @commands.guild_only()
+    @commands.cooldown(1, 5, commands.BucketType.guild)
+    async def reset_bot_bio(self, ctx: CustomContext) -> None:
+        """Reset Kyoka's custom server bio back to default."""
+        is_server_admin = ctx.author.guild_permissions.manage_guild or ctx.author.id == ctx.guild.owner_id
+        if not is_server_admin and not is_owner_or_staff(ctx.author.id):
+            await ctx.send_warning("❌ You need **Manage Server** permission or Server Ownership to reset Kyoka's bio.")
+            return
+
+        if hasattr(self.bot, "branding_mgr"):
+            try:
+                await self.bot.branding_mgr.reset_field(ctx.guild.id, "bio")
+            except Exception as e:
+                logger.error("Failed to reset bio field: %s", e)
+                await ctx.send_warning(f"❌ Failed to reset bio in database: {e}")
+                return
+
+        await audit(self.bot, ctx.author.id, "reset-bot-bio", ctx.guild.id, "success")
+
+        p = self.bot.guild_mgr.get_prefix(ctx.guild.id)
+        embed = discord.Embed(
+            title="⛩️ KYOKA 3.0 • DEFAULT BIO RESTORED",
+            description=(
+                f"✅ **KYOKA's server bio for `{ctx.guild.name}` has been restored to default global theme.**\n\n"
+                f"• **Actioned By:** {ctx.author.mention}\n"
+                f"• **Active Bio:** Power isn't given. It's taken. — Sosuke Aizen\n"
+                f"• **Customize Again:** `{p}setbotbio <text>`"
+            ),
+            color=0x7C3AED,
+            timestamp=discord.utils.utcnow(),
+        )
+        embed.set_footer(text=f"Default Global Branding Active • {ctx.guild.name}")
+        await ctx.send(embed=embed)
+
+    @commands.command(
+        name="botprofile",
+        aliases=["botbranding", "serverbranding", "botidentity"],
+        description="View Kyoka's complete active identity and branding configured for this server.",
+    )
+    @commands.guild_only()
+    async def show_bot_profile(self, ctx: CustomContext) -> None:
+        """Display Kyoka's complete active server profile (Avatar, Banner, Bio, Display Name)."""
+        branding = await self.bot.branding_mgr.get_branding(ctx.guild.id) if hasattr(self.bot, "branding_mgr") else {}
+        is_custom = branding.get("is_custom", False)
+        status_badge = "🎨 Custom Server Branding Active" if is_custom else "⛩️ Default Global Branding (Aizen Edition)"
+
+        embed = discord.Embed(
+            title=f"⛩️ Server Bot Identity Profile • {ctx.guild.name}",
+            description=f"Status: **{status_badge}**\n*All overrides are isolated strictly to this server.*",
+            color=0x7C3AED,
+            timestamp=discord.utils.utcnow(),
+        )
+
+        embed.add_field(
+            name="🏷️ Display Name",
+            value=f"`{branding.get('display_name', 'KYOKA 3.0')}`",
+            inline=True,
+        )
+
+        bio_text = str(branding.get("bio") or "Power isn't given. It's taken. — Sosuke Aizen")[:200]
+        embed.add_field(
+            name="📝 Bio",
+            value=bio_text,
+            inline=False,
+        )
+
+        av_url = branding.get("avatar_url")
+        if av_url:
+            embed.set_thumbnail(url=av_url)
+            embed.add_field(
+                name="🖼️ Avatar",
+                value=f"[Download / View]({av_url})",
+                inline=True,
+            )
+
+        banner_url = branding.get("banner_url")
+        if banner_url:
+            embed.set_image(url=banner_url)
+            embed.add_field(
+                name="🚩 Banner",
+                value=f"[Download / View]({banner_url})",
+                inline=True,
+            )
+
+        p = self.bot.guild_mgr.get_prefix(ctx.guild.id)
+        embed.set_footer(
+            text=f"Use {p}setbotavatar, {p}setbotbanner, {p}setbotbio to customize • Kyoka 3.0",
+            icon_url=ctx.author.display_avatar.url if ctx.author.display_avatar else None,
+        )
+        await ctx.send(embed=embed)
+
 
     @commands.command(
         name="setservericon",
