@@ -42,7 +42,7 @@ services:
       - key: DISCORD_CLIENT_ID
         value: "1562505487214321714"
       - key: DISCORD_CLIENT_SECRET
-        value: "H-jh8-F8qlVMOQfpSVkiXtzOreiXisbF"
+        sync: false
       - key: DISCORD_REDIRECT_URI
         value: "https://aizen-bot.pages.dev/api/auth/callback"
       - key: FRONTEND_ORIGIN
