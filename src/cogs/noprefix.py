@@ -35,7 +35,7 @@ class NoPrefix(commands.Cog):
             "`noprefix grant @user` — allow a user to invoke commands without the prefix\n"
             "`noprefix revoke @user` — remove no-prefix access\n"
             "`noprefix list` — show the current allowlist",
-            ephemeral=ctx.interaction is not None,
+            **({"ephemeral": True} if ctx.interaction is not None else {}),
         )
 
     @noprefix.command(name="grant", description="Grant no-prefix access to one user (owner only).")
@@ -58,13 +58,13 @@ class NoPrefix(commands.Cog):
             log.exception("Failed to persist no-prefix grant")
             await ctx.send(
                 "Could not save this grant to the database. No change was made to the in-memory allowlist.",
-                ephemeral=ctx.interaction is not None,
+                **({"ephemeral": True} if ctx.interaction is not None else {}),
             )
             return
 
         await ctx.send(
             f"Granted no-prefix access to {user.mention} (`{user.id}`).",
-            ephemeral=ctx.interaction is not None,
+            **({"ephemeral": True} if ctx.interaction is not None else {}),
         )
 
     @noprefix.command(name="revoke", description="Revoke no-prefix access from one user (owner only).")
@@ -83,13 +83,13 @@ class NoPrefix(commands.Cog):
             log.exception("Failed to persist no-prefix revocation")
             await ctx.send(
                 "Could not update the database. The in-memory allowlist was left unchanged.",
-                ephemeral=ctx.interaction is not None,
+                **({"ephemeral": True} if ctx.interaction is not None else {}),
             )
             return
 
         await ctx.send(
             f"Revoked no-prefix access from {user.mention} (`{user.id}`).",
-            ephemeral=ctx.interaction is not None,
+            **({"ephemeral": True} if ctx.interaction is not None else {}),
         )
 
     @noprefix.command(name="list", description="List users who can run commands without a prefix (owner only).")
@@ -107,7 +107,7 @@ class NoPrefix(commands.Cog):
         rendered = "\n".join(f"• <@{user_id}> — `{user_id}`" for user_id in ids)
         await ctx.send(
             f"**No-prefix allowlist ({len(ids)})**\n{rendered}",
-            ephemeral=ctx.interaction is not None,
+            **({"ephemeral": True} if ctx.interaction is not None else {}),
             allowed_mentions=discord.AllowedMentions.none(),
         )
 
