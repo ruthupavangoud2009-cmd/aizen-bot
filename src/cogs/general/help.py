@@ -1109,80 +1109,67 @@ class Help(commands.Cog):
         ctx: CustomContext,
         visible_categories: dict[str, list[commands.Command]],
     ) -> discord.Embed:
-        """Compact modular home embed — clean module grid layout."""
+        """Render a compact, clean home card matching the approved Kyro-style reference."""
         guild = ctx.guild
         author = ctx.author
         p = self.bot.guild_mgr.get_prefix(guild.id if guild else None)
         ws_ping = self._get_latency_ms()
         total_commands = sum(len(cmds) for cmds in visible_categories.values())
 
-        # ── Branding ─────────────────────────────────────────────────────────
         branding = None
-        if hasattr(self.bot, "branding_mgr"):
-            mgr = getattr(self.bot, "branding_mgr", None)
-            if hasattr(mgr, "_cache") and isinstance(mgr._cache, dict):
-                branding = mgr._cache.get(guild.id if guild else None)
-            if not isinstance(branding, dict) and hasattr(mgr, "get_default_branding") and callable(mgr.get_default_branding):
-                branding = mgr.get_default_branding()
+        manager = getattr(self.bot, "branding_mgr", None)
+        if manager:
+            cache = getattr(manager, "_cache", None)
+            if isinstance(cache, dict):
+                branding = cache.get(guild.id if guild else None)
+            if not isinstance(branding, dict):
+                getter = getattr(manager, "get_default_branding", None)
+                if callable(getter):
+                    try:
+                        branding = getter()
+                    except Exception:
+                        branding = None
+
         if not isinstance(branding, dict):
-            assets = getattr(Config, "ASSETS", None)
-            branding = {
-                "display_name": "Kyoka 3.0",
-                "bio": "Your server's all-in-one bot.",
-                "avatar_url": getattr(assets, "AIZEN_AVATAR_URL", "") or (
-                    self.bot.user.display_avatar.url if getattr(self.bot, "user", None) else ""
-                ),
-                "banner_url": "",
-            }
+            branding = {}
 
-        raw_display = branding.get("display_name") if isinstance(branding, dict) else None
-        display_name = raw_display if isinstance(raw_display, str) and raw_display.strip() else "Kyoka 3.0"
-        raw_bio = branding.get("bio") if isinstance(branding, dict) else None
-        bio = raw_bio if isinstance(raw_bio, str) and raw_bio.strip() else "Your server's all-in-one bot."
-
-        # ── Compact module grid (3 per row using inline fields) ───────────────
-        # Build 3-column grid from categories
-        cat_items = list(visible_categories.items())
-
-        embed = KyokaHelpEmbed(
-            title=f"✦ {display_name}",
-            description=(
-                f"> {bio}\n"
-                f"`{p}`  **·**  `{ws_ping}ms`  **·**  `{total_commands}` cmds  **·**  `{len(visible_categories)}` modules"
-            ),
-            color=0x2B0938,
+        raw_display = branding.get("display_name")
+        display_name = (
+            raw_display.strip()
+            if isinstance(raw_display, str) and raw_display.strip()
+            else (getattr(getattr(self.bot, "user", None), "display_name", None) or "Kyoka")
+        )
+        raw_bio = branding.get("bio")
+        bio = (
+            raw_bio.strip()
+            if isinstance(raw_bio, str) and raw_bio.strip()
+            else "Built for our community — keeping your server safe, active, and effortlessly connected."
         )
 
-        # Add module fields in 3-column grid
-        for cat_name, cmds in cat_items:
-            raw_title = cat_name.split("・", 1)[1] if "・" in cat_name else cat_name
-            clean_label = raw_title.strip()
-            emoji_str = UNICODE_CATEGORY_EMOJIS.get(cat_name, "📁")
-            embed.add_field(
-                name=f"{emoji_str} {clean_label}",
-                value=f"`{len(cmds)}` cmds",
-                inline=True,
-            )
-
+        embed = KyokaHelpEmbed(
+            title=f"Hey, I'm {display_name}",
+            description=f"> {bio}",
+            color=0x2B0938,
+        )
         embed.add_field(
-            name="\u200b",
+            name="",
             value=(
-                f"**Quick:** `{p}help <cmd>` · `{p}hca` · `/help`"
+                f"▾ **Latency:** `{ws_ping}ms`\n"
+                f"▾ **Prefix:** `{p}`  **Slash:** `/`\n"
+                f"▾ **Available Commands:** `{total_commands}`"
             ),
             inline=False,
         )
 
-        avatar_url = branding.get("avatar_url") if isinstance(branding, dict) else None
-        if avatar_url and str(avatar_url).strip():
-            embed.set_thumbnail(url=str(avatar_url).strip())
-
-        banner_url = branding.get("banner_url") if isinstance(branding, dict) else None
-        if banner_url and str(banner_url).strip():
-            embed.set_image(url=str(banner_url).strip())
+        avatar_url = branding.get("avatar_url")
+        if isinstance(avatar_url, str) and avatar_url.strip():
+            embed.set_thumbnail(url=avatar_url.strip())
+        elif getattr(self.bot, "user", None):
+            embed.set_thumbnail(url=self.bot.user.display_avatar.url)
 
         embed.set_footer(
-            text=f"Requested by {author.display_name}  •  Use the dropdown to browse modules",
-            icon_url=author.display_avatar.url if author and author.display_avatar else None,
+            text=f"Requested by {author.display_name}",
+            icon_url=author.display_avatar.url if getattr(author, "display_avatar", None) else None,
         )
         embed.banner_file = None
         return embed
