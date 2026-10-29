@@ -149,3 +149,29 @@ class TestDashboardSettings(AioHTTPTestCase):
         assert reset_data["success"] is True
         assert "reset" in reset_data["message"].lower()
 
+    async def test_voice_endpoints_lifecycle(self):
+        headers = self._create_auth_headers("1001")
+
+        # 1. Fetch available voices and active voice
+        resp = await self.client.get("/api/guilds/1001/voice", headers=headers)
+        assert resp.status == 200
+        data = await resp.json()
+        assert data["success"] is True
+        assert data["active_voice"] == "ava"
+        assert len(data["available_voices"]) >= 9
+        assert any(v["key"] == "andrew" for v in data["available_voices"])
+
+        # 2. Update voice via API
+        resp_set = await self.client.post("/api/guilds/1001/voice", headers=headers, json={"voice": "andrew"})
+        assert resp_set.status == 200
+        set_data = await resp_set.json()
+        assert set_data["success"] is True
+        assert set_data["active_voice"] == "andrew"
+        assert set_data["voice_name"] == "Andrew"
+
+        # 3. Confirm branding endpoint returns the updated voice
+        resp_b = await self.client.get("/api/guilds/1001/branding", headers=headers)
+        assert resp_b.status == 200
+        b_data = await resp_b.json()
+        assert b_data["branding"]["voice"] == "andrew"
+

@@ -360,8 +360,8 @@ class CompanionAI(commands.Cog):
     @commands.Cog.listener()
     async def on_message(self, message: discord.Message) -> None:
         """
-        Listens to ordinary messages in configured channels and replies as the configured persona.
-        Zero latency delay, no bot loops, no self-replies.
+        Listens to ordinary messages in configured channels or when mentioned/replied to,
+        and replies naturally like a real person without requiring 'hey' or any formal wake words.
         """
         # 1. Ignore bots, webhooks, non-guild messages
         if message.author.bot or message.webhook_id or not message.guild or not message.content.strip():
@@ -371,10 +371,23 @@ class CompanionAI(commands.Cog):
         if self.bot.user and message.author.id == self.bot.user.id:
             return
 
-        # 3. Check if channel is configured
+        # 3. Check if bot is mentioned or replied to, or if channel is configured
+        is_mentioned = bool(self.bot.user and (
+            self.bot.user in message.mentions 
+            or f"<@{self.bot.user.id}>" in message.content 
+            or f"<@!{self.bot.user.id}>" in message.content
+        ))
+        is_reply_to_bot = False
+        if message.reference and message.reference.resolved and isinstance(message.reference.resolved, discord.Message):
+            if self.bot.user and message.reference.resolved.author.id == self.bot.user.id:
+                is_reply_to_bot = True
+
         channel_id = message.channel.id
         config = self._channel_configs.get(channel_id)
-        if not config or not config.get("enabled", True):
+        is_configured_channel = bool(config and config.get("enabled", True))
+
+        # Drop message if neither mentioned, nor replied to bot, nor in a configured AI channel
+        if not (is_mentioned or is_reply_to_bot or is_configured_channel):
             return
 
         # 4. Skip command messages
@@ -385,18 +398,19 @@ class CompanionAI(commands.Cog):
         except Exception:
             pass
 
-        # 5. Check mention_only mode
-        mention_only = config.get("mention_only", False)
-        is_mentioned = self.bot.user and self.bot.user in message.mentions
-        is_reply_to_bot = False
-        if message.reference and message.reference.resolved and isinstance(message.reference.resolved, discord.Message):
-            if self.bot.user and message.reference.resolved.author.id == self.bot.user.id:
-                is_reply_to_bot = True
+        # 5. Determine settings: configured channel settings or natural human fallback
+        if is_configured_channel and config:
+            mention_only = config.get("mention_only", False)
+            if mention_only and not (is_mentioned or is_reply_to_bot):
+                return
+            persona_key = config.get("persona", "normal")
+            send_gifs = config.get("send_gifs", True)
+            cooldown_sec = config.get("cooldown_seconds", 2)
+        else:
+            persona_key = "normal"
+            send_gifs = False
+            cooldown_sec = 2
 
-        if mention_only and not (is_mentioned or is_reply_to_bot):
-            return
-
-        persona_key = config.get("persona", "aizen")
         p_def = resolve_persona(persona_key)
 
         # 6. Adult check for special persona
@@ -409,7 +423,6 @@ class CompanionAI(commands.Cog):
         cooldown_val = getattr(getattr(self.bot, "ai_mgr", None), "channel_cooldown_default", 2.0)
         if not isinstance(cooldown_val, (int, float)):
             cooldown_val = 2.0
-        cooldown_sec = config.get("cooldown_seconds", int(cooldown_val))
         last_ch_time = self._channel_last_time.get(channel_id, 0.0)
         last_usr_time = self._user_last_time.get(message.author.id, 0.0)
 
@@ -430,14 +443,14 @@ class CompanionAI(commands.Cog):
 
         session = self._get_session()
 
-        # Strip bot mention tag from prompt
+        # Strip bot mention tag and leading casual triggers like "hey kyoka,"
         prompt = message.content
         if self.bot.user:
             prompt = re.sub(rf"<@!?{self.bot.user.id}>", "", prompt).strip()
+        prompt = re.sub(r"^(hey|hi|yo|hello)?\s*(kyoka|aizen|bot)[,:\s]*", "", prompt, flags=re.IGNORECASE).strip()
         if not prompt:
-            prompt = "Hello!"
+            prompt = "What's up?"
 
-        send_gifs = config.get("send_gifs", True)
         should_gif = send_gifs and (
             random.random() < 0.22
             or any(kw in prompt.lower() for kw in ("gif", "show me", "hug", "kiss", "look", "smile", "tease"))
@@ -537,12 +550,12 @@ class CompanionAI(commands.Cog):
                 return
 
             # Determine active persona for this channel or server
-            persona_to_use = "aizen"
+            persona_to_use = "normal"
             if ctx.channel.id in self._channel_configs:
-                persona_to_use = self._channel_configs[ctx.channel.id].get("persona", "aizen")
+                persona_to_use = self._channel_configs[ctx.channel.id].get("persona", "normal")
             elif ctx.guild:
                 server_cfg = self.bot.ai_mgr.get_server_config(ctx.guild.id)
-                persona_to_use = server_cfg.get("personality", "aizen")
+                persona_to_use = server_cfg.get("personality", "normal")
 
             await self._handle_direct_response(ctx=ctx, persona_key=persona_to_use, prompt=message)
 

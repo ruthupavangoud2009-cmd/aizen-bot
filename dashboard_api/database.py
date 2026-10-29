@@ -750,11 +750,20 @@ class PostgresDatabaseAdapter(BaseDatabaseAdapter):
                     )
                 except Exception:
                     branding_row = None
+                try:
+                    voice_row = await conn.fetchrow(
+                        "SELECT voice_key FROM guild_voice_settings WHERE guild_id = $1;",
+                        guild_id
+                    )
+                except Exception:
+                    voice_row = None
+                voice_key = voice_row["voice_key"] if voice_row and voice_row.get("voice_key") else "ava"
                 branding = {
                     "display_name": (branding_row["display_name"] if branding_row and branding_row.get("display_name") else "KYOKA 3.0"),
                     "bio": (branding_row["bio"] if branding_row and branding_row.get("bio") else "Power isn't given. It's taken. — Sosuke Aizen"),
                     "avatar_url": (branding_row["avatar_url"] if branding_row and branding_row.get("avatar_url") else ""),
                     "banner_url": (branding_row["banner_url"] if branding_row and branding_row.get("banner_url") else ""),
+                    "voice": voice_key,
                     "is_custom": bool(branding_row and (branding_row.get("display_name") or branding_row.get("bio") or branding_row.get("avatar_url") or branding_row.get("banner_url"))),
                     "applied_nickname": bool(branding_row and branding_row.get("applied_nickname")),
                     "applied_discord_avatar": bool(branding_row and branding_row.get("applied_discord_avatar")),
@@ -1300,6 +1309,45 @@ class PostgresDatabaseAdapter(BaseDatabaseAdapter):
                                     )
                                 except (ValueError, TypeError):
                                     pass
+
+                # 16. Update Branding & Voice Persona
+                if "branding" in updates:
+                    br = updates["branding"]
+                    d_name = str(br.get("display_name", "")).strip()[:100] or None
+                    b_text = str(br.get("bio", "")).strip()[:300] or None
+                    av_url = str(br.get("avatar_url", "")).strip() or None
+                    bn_url = str(br.get("banner_url", "")).strip() or None
+                    v_key = str(br.get("voice", "") or br.get("voice_key", "")).strip()
+                    if d_name or b_text or av_url or bn_url:
+                        await conn.execute(
+                            """
+                            INSERT INTO guild_branding (guild_id, display_name, bio, avatar_url, banner_url, updated_at)
+                            VALUES ($1, $2, $3, $4, $5, CURRENT_TIMESTAMP)
+                            ON CONFLICT (guild_id) DO UPDATE SET
+                                display_name = COALESCE(EXCLUDED.display_name, guild_branding.display_name),
+                                bio = COALESCE(EXCLUDED.bio, guild_branding.bio),
+                                avatar_url = COALESCE(EXCLUDED.avatar_url, guild_branding.avatar_url),
+                                banner_url = COALESCE(EXCLUDED.banner_url, guild_branding.banner_url),
+                                updated_at = CURRENT_TIMESTAMP;
+                            """,
+                            guild_id, d_name, b_text, av_url, bn_url
+                        )
+                    if v_key:
+                        await conn.execute(
+                            """
+                            CREATE TABLE IF NOT EXISTS guild_voice_settings (
+                                guild_id BIGINT PRIMARY KEY,
+                                voice_key TEXT NOT NULL,
+                                updated_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
+                            );
+                            INSERT INTO guild_voice_settings (guild_id, voice_key, updated_at)
+                            VALUES ($1, $2, CURRENT_TIMESTAMP)
+                            ON CONFLICT (guild_id) DO UPDATE SET
+                                voice_key = EXCLUDED.voice_key,
+                                updated_at = CURRENT_TIMESTAMP;
+                            """,
+                            guild_id, v_key
+                        )
 
         return await self.get_guild_settings(guild_id)
 
@@ -2414,6 +2462,7 @@ class MockDatabaseAdapter(BaseDatabaseAdapter):
                 "bio": "Power isn't given. It's taken. — Sosuke Aizen",
                 "avatar_url": "",
                 "banner_url": "",
+                "voice": "ava",
                 "is_custom": False,
                 "applied_nickname": False,
                 "applied_discord_avatar": False,

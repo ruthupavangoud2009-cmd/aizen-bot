@@ -605,3 +605,47 @@ async def test_voice_sessions_command_handles_empty_and_records(voice_cog: AIVoi
     assert "Voice Meeting History" in embed.title
     assert "Session `#1`" in embed.description
 
+
+def test_resolve_voice_key_aliases():
+    """Verify resolve_voice_key maps friendly aliases and defaults correctly."""
+    from src.cogs.fun.ai_voice import resolve_voice_key
+
+    assert resolve_voice_key("ava") == "ava"
+    assert resolve_voice_key("female") == "ava"
+    assert resolve_voice_key("girl") == "ava"
+
+    assert resolve_voice_key("andrew") == "andrew"
+    assert resolve_voice_key("male") == "andrew"
+    assert resolve_voice_key("boy") == "andrew"
+
+    assert resolve_voice_key("kyoka") == "kyoka"
+    assert resolve_voice_key("waifu") == "kyoka"
+
+    assert resolve_voice_key("aizen") == "aizen"
+    assert resolve_voice_key("villain") == "aizen"
+
+    # Default fallback
+    assert resolve_voice_key(None) == "ava"
+    assert resolve_voice_key("nonexistent_random_voice") == "ava"
+
+
+@pytest.mark.asyncio
+async def test_cmd_setvoice_updates_and_persists_voice(voice_cog: AIVoice):
+    """Verify +setvoice switches guild voice, updates cache, and persists to DB."""
+    ctx = MagicMock()
+    ctx.guild = MagicMock(id=12345, name="Test Guild")
+    ctx.clean_prefix = "+"
+    ctx.send = AsyncMock()
+
+    voice_cog.bot.db = AsyncMock()
+
+    # Call +setvoice with alias 'male' -> resolves to 'andrew'
+    await voice_cog.cmd_setvoice.callback(voice_cog, ctx, voice_name="male")
+
+    assert voice_cog._guild_voices[12345] == "andrew"
+    voice_cog.bot.db.execute.assert_awaited_once()
+    ctx.send.assert_awaited_once()
+    embed = ctx.send.call_args[1]["embed"]
+    assert "Andrew" in embed.description
+    assert "Updated" in embed.title
+

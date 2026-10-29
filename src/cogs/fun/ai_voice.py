@@ -157,6 +157,43 @@ AVAILABLE_VOICES: Dict[str, Dict[str, str]] = {
     },
 }
 
+VOICE_ALIASES: Dict[str, str] = {
+    "female": "ava",
+    "girl": "ava",
+    "woman": "ava",
+    "natural_female": "ava",
+    "male": "andrew",
+    "boy": "andrew",
+    "man": "andrew",
+    "natural_male": "andrew",
+    "anime": "kyoka",
+    "waifu": "kyoka",
+    "jenny": "kyoka",
+    "villain": "aizen",
+    "ryan": "aizen",
+    "british": "aizen",
+    "casual": "guy",
+    "american": "guy",
+    "chris": "christopher",
+    "studio": "aria",
+    "cyber": "aria",
+    "japanese": "keita",
+    "japanese_male": "keita",
+    "japanese_female": "nanami",
+}
+
+
+def resolve_voice_key(voice_input: Optional[str]) -> str:
+    """Normalize and resolve voice key or friendly alias to canonical voice key."""
+    if not voice_input:
+        return "ava"
+    clean = str(voice_input).lower().strip()
+    if clean in AVAILABLE_VOICES:
+        return clean
+    if clean in VOICE_ALIASES:
+        return VOICE_ALIASES[clean]
+    return "ava"
+
 
 class AIVoice(commands.Cog, name="AIVoice"):
     """Modular AI Voice Assistant with neural TTS and voice channel interactions."""
@@ -173,6 +210,46 @@ class AIVoice(commands.Cog, name="AIVoice"):
         self._http_session: Optional[aiohttp.ClientSession] = None
         for cmd in self.__cog_commands__:
             cmd.cog = self
+
+    async def cog_load(self) -> None:
+        """Create voice settings table if needed and pre-load guild voice choices into cache."""
+        try:
+            if hasattr(self.bot, "db") and self.bot.db:
+                await self.bot.db.execute("""
+                    CREATE TABLE IF NOT EXISTS guild_voice_settings (
+                        guild_id BIGINT PRIMARY KEY,
+                        voice_key TEXT NOT NULL,
+                        updated_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
+                    );
+                """)
+                rows = await self.bot.db.fetch_all("SELECT guild_id, voice_key FROM guild_voice_settings;")
+                if rows:
+                    for r in rows:
+                        gid = int(r["guild_id"])
+                        self._guild_voices[gid] = resolve_voice_key(r.get("voice_key"))
+                    logger.info("Loaded %d guild voice configuration(s) from database.", len(self._guild_voices))
+        except Exception as e:
+            logger.warning("Could not pre-load guild voice settings: %s", e)
+
+    async def set_guild_voice(self, guild_id: int, voice_key: str) -> str:
+        """Set, persist, and update active voice persona for a server."""
+        canonical = resolve_voice_key(voice_key)
+        self._guild_voices[guild_id] = canonical
+        session = self.conv_mgr.get_session(guild_id)
+        if session and session.active:
+            session.voice_key = canonical
+        try:
+            if hasattr(self.bot, "db") and self.bot.db:
+                await self.bot.db.execute("""
+                    INSERT INTO guild_voice_settings (guild_id, voice_key, updated_at)
+                    VALUES (?, ?, CURRENT_TIMESTAMP)
+                    ON CONFLICT (guild_id) DO UPDATE SET
+                        voice_key = EXCLUDED.voice_key,
+                        updated_at = CURRENT_TIMESTAMP;
+                """, guild_id, canonical)
+        except Exception as e:
+            logger.warning(f"Failed to persist guild voice setting for {guild_id}: {e}")
+        return canonical
 
     def get_http_session(self) -> aiohttp.ClientSession:
         if self._http_session is None or self._http_session.closed:
@@ -553,13 +630,14 @@ class AIVoice(commands.Cog, name="AIVoice"):
             )
             return await ctx.send(embed=embed)
 
-        key = voice_name.lower().strip()
-        if key not in AVAILABLE_VOICES:
+        clean_input = str(voice_name).lower().strip()
+        key = resolve_voice_key(clean_input)
+        if clean_input not in AVAILABLE_VOICES and clean_input not in VOICE_ALIASES:
             valid_keys = ", ".join(f"`{k}`" for k in AVAILABLE_VOICES.keys())
-            return await ctx.send_error(f"Unknown voice persona. Choose from: {valid_keys}")
+            return await ctx.send_error(f"Unknown voice persona `{voice_name}`. Choose from: {valid_keys}")
 
         if ctx.guild:
-            self._guild_voices[ctx.guild.id] = key
+            await self.set_guild_voice(ctx.guild.id, key)
 
         meta = AVAILABLE_VOICES[key]
         embed = discord.Embed(
@@ -572,6 +650,61 @@ class AIVoice(commands.Cog, name="AIVoice"):
             color=0x2ECC71,
         )
         await ctx.send(embed=embed)
+
+    @commands.command(
+        name="setvoice",
+        aliases=["botvoice", "changevoice"],
+        help="Change the AI voice persona for this server.",
+    )
+    @commands.guild_only()
+    async def cmd_setvoice(self, ctx: CustomContext, *, voice_name: Optional[str] = None) -> None:
+        """Switch the AI voice persona for this server with persistence."""
+        if not voice_name:
+            current = self._guild_voices.get(ctx.guild.id, "ava")
+            curr_meta = AVAILABLE_VOICES.get(current, AVAILABLE_VOICES["ava"])
+            voices_list = ", ".join(f"`{k}`" for k in AVAILABLE_VOICES.keys())
+            embed = discord.Embed(
+                title="🎙️ Change AI Server Voice",
+                description=(
+                    f"> Current active voice: **{curr_meta['name']}** *({curr_meta['gender']})*\n\n"
+                    f"**Available Voices:** {voices_list}\n\n"
+                    f"💡 *Usage:* `{ctx.prefix}setvoice <name>` (e.g. `{ctx.prefix}setvoice andrew` or `{ctx.prefix}setvoice ava`)\n"
+                    f"Or type `{ctx.prefix}voices` to see detailed descriptions of each voice."
+                ),
+                color=PURPLE,
+            )
+            return await ctx.send(embed=embed)
+
+        clean_input = voice_name.lower().strip()
+        canonical = resolve_voice_key(clean_input)
+        if clean_input not in AVAILABLE_VOICES and clean_input not in VOICE_ALIASES:
+            valid_keys = ", ".join(f"`{k}`" for k in AVAILABLE_VOICES.keys())
+            return await ctx.send_error(f"Unknown voice persona `{voice_name}`. Choose from: {valid_keys}")
+
+        await self.set_guild_voice(ctx.guild.id, canonical)
+        meta = AVAILABLE_VOICES[canonical]
+
+        embed = discord.Embed(
+            title="✅ AI Voice Persona Updated",
+            description=(
+                f"> Successfully changed server voice to **{meta['name']}**!\n"
+                f"> **Gender/Style:** *{meta['gender']}* • {meta['style']}\n"
+                f"> **Engine Model:** `{meta['id']}`\n\n"
+                f"All spoken responses, TTS, and voice call conversations will now use this voice."
+            ),
+            color=0x2ECC71,
+        )
+        embed.set_footer(text=f"Server: {ctx.guild.name} • Saved to Database")
+        await ctx.send(embed=embed)
+
+    @commands.command(
+        name="voice",
+        aliases=["voices", "voicelist"],
+        help="Display all available AI voices or switch voice.",
+    )
+    async def cmd_voice(self, ctx: CustomContext, *, voice_name: Optional[str] = None) -> None:
+        """Show available voices or switch voice."""
+        await self.voice_select(ctx, voice_name=voice_name)
 
     @aivoice_group.command(name="stop", description="Stop current audio playback in the voice channel.")
     async def voice_stop(self, ctx: CustomContext) -> None:

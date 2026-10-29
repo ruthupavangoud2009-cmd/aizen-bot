@@ -1184,12 +1184,28 @@ async def handle_get_guild_branding(request: web.Request) -> web.Response:
             logger.debug(f"Notice querying branding: {e}")
 
         default_av = str(bot.user.display_avatar.url) if bot and bot.user else "https://cdn.discordapp.com/embed/avatars/0.png"
+        active_voice = "ava"
+        if bot:
+            voice_cog = bot.get_cog("AIVoice")
+            if voice_cog and hasattr(voice_cog, "_guild_voices"):
+                active_voice = voice_cog._guild_voices.get(guild_id, "ava")
+        elif hasattr(db, "settings_store") and guild_id in db.settings_store and "branding" in db.settings_store[guild_id]:
+            active_voice = db.settings_store[guild_id]["branding"].get("voice", "ava")
+        elif hasattr(db, "fetch_one"):
+            try:
+                v_row = await db.fetch_one("SELECT voice_key FROM guild_voice_settings WHERE guild_id = ?;", guild_id)
+                if v_row and v_row.get("voice_key"):
+                    active_voice = v_row["voice_key"]
+            except Exception:
+                pass
+
         branding = {
             "guild_id": str(guild_id),
             "display_name": (row["display_name"] if row and row.get("display_name") else "KYOKA 3.0"),
             "bio": (row["bio"] if row and row.get("bio") else "Power isn't given. It's taken. — Sosuke Aizen"),
             "avatar_url": (row["avatar_url"] if row and row.get("avatar_url") else default_av),
             "banner_url": (row["banner_url"] if row and row.get("banner_url") else ""),
+            "voice": active_voice,
             "is_custom": bool(row and (row.get("display_name") or row.get("bio") or row.get("avatar_url") or row.get("banner_url"))),
             "applied_nickname": bool(row and row.get("applied_nickname")),
             "applied_discord_avatar": bool(row and row.get("applied_discord_avatar")),
@@ -1199,6 +1215,114 @@ async def handle_get_guild_branding(request: web.Request) -> web.Response:
         "success": True,
         "guild_id": str(guild_id),
         "branding": branding,
+    })
+
+
+VOICES_CATALOG = [
+    {"key": "ava", "name": "Ava", "gender": "Female (Human)", "style": "Ultra-realistic, expressive human conversational female"},
+    {"key": "andrew", "name": "Andrew", "gender": "Male (Human)", "style": "Ultra-realistic, natural warm conversational male"},
+    {"key": "kyoka", "name": "Kyoka", "gender": "Female (Anime)", "style": "Expressive, melodic female anime voice"},
+    {"key": "aizen", "name": "Sosuke Aizen", "gender": "Male (Anime)", "style": "Deep, authoritative British anime male"},
+    {"key": "guy", "name": "Guy", "gender": "Male (Human)", "style": "Neutral, clean modern American male"},
+    {"key": "christopher", "name": "Christopher", "gender": "Male (Human)", "style": "Warm, confident conversational male"},
+    {"key": "aria", "name": "Aria", "gender": "Female (Studio)", "style": "Crisp, futuristic studio cyber female"},
+    {"key": "keita", "name": "Keita", "gender": "Male (Japanese)", "style": "Authentic Japanese male anime voice"},
+    {"key": "nanami", "name": "Nanami", "gender": "Female (Japanese)", "style": "Authentic Japanese female anime voice"},
+]
+
+
+async def handle_get_guild_voice(request: web.Request) -> web.Response:
+    """Retrieve active AI voice persona and catalogue for a server."""
+    try:
+        guild_id = int(request.match_info["guild_id"])
+    except (ValueError, KeyError):
+        raise web.HTTPBadRequest(reason="Invalid guild ID specified.")
+
+    await verify_guild_access(request, guild_id)
+    bot = request.app.get("bot") or (request.app["bot_getter"]() if "bot_getter" in request.app else None)
+    db = request.app["db"]
+
+    active_voice = "ava"
+    if bot:
+        voice_cog = bot.get_cog("AIVoice")
+        if voice_cog and hasattr(voice_cog, "_guild_voices"):
+            active_voice = voice_cog._guild_voices.get(guild_id, "ava")
+    elif hasattr(db, "settings_store") and guild_id in db.settings_store and "branding" in db.settings_store[guild_id]:
+        active_voice = db.settings_store[guild_id]["branding"].get("voice", "ava")
+    elif hasattr(db, "fetch_one"):
+        try:
+            row = await db.fetch_one("SELECT voice_key FROM guild_voice_settings WHERE guild_id = ?;", guild_id)
+            if row and row.get("voice_key"):
+                active_voice = row["voice_key"]
+        except Exception:
+            pass
+
+    return web.json_response({
+        "success": True,
+        "guild_id": str(guild_id),
+        "active_voice": active_voice,
+        "available_voices": VOICES_CATALOG,
+    })
+
+
+async def handle_set_guild_voice(request: web.Request) -> web.Response:
+    """Update server-specific AI voice persona with instant bot cache & database persistence."""
+    try:
+        guild_id = int(request.match_info["guild_id"])
+    except (ValueError, KeyError):
+        raise web.HTTPBadRequest(reason="Invalid guild ID specified.")
+
+    await verify_guild_access(request, guild_id)
+    bot = request.app.get("bot") or (request.app["bot_getter"]() if "bot_getter" in request.app else None)
+    db = request.app["db"]
+
+    try:
+        body = await request.json()
+        target_voice = str(body.get("voice") or body.get("voice_key") or "").strip()
+    except Exception:
+        return web.json_response({"success": False, "error": "Invalid request body."}, status=400)
+
+    from src.cogs.fun.ai_voice import resolve_voice_key, AVAILABLE_VOICES
+    canonical = resolve_voice_key(target_voice)
+
+    if bot:
+        voice_cog = bot.get_cog("AIVoice")
+        if voice_cog and hasattr(voice_cog, "set_guild_voice"):
+            await voice_cog.set_guild_voice(guild_id, canonical)
+        elif voice_cog and hasattr(voice_cog, "_guild_voices"):
+            voice_cog._guild_voices[guild_id] = canonical
+
+    if hasattr(db, "settings_store"):
+        if guild_id not in db.settings_store:
+            from dashboard_api.database import MockDatabaseAdapter
+            db.settings_store[guild_id] = MockDatabaseAdapter.get_default_settings(guild_id)
+        if "branding" not in db.settings_store[guild_id]:
+            db.settings_store[guild_id]["branding"] = {}
+        db.settings_store[guild_id]["branding"]["voice"] = canonical
+
+    try:
+        if hasattr(db, "execute"):
+            await db.execute("""
+                CREATE TABLE IF NOT EXISTS guild_voice_settings (
+                    guild_id BIGINT PRIMARY KEY,
+                    voice_key TEXT NOT NULL,
+                    updated_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
+                );
+                INSERT INTO guild_voice_settings (guild_id, voice_key, updated_at)
+                VALUES (?, ?, CURRENT_TIMESTAMP)
+                ON CONFLICT (guild_id) DO UPDATE SET
+                    voice_key = EXCLUDED.voice_key,
+                    updated_at = CURRENT_TIMESTAMP;
+            """, guild_id, canonical)
+    except Exception as e:
+        logger.warning(f"Error persisting voice via dashboard endpoint: {e}")
+
+    meta = AVAILABLE_VOICES.get(canonical, AVAILABLE_VOICES["ava"])
+    return web.json_response({
+        "success": True,
+        "active_voice": canonical,
+        "voice_name": meta["name"],
+        "message": f"Server AI voice persona successfully updated to {meta['name']}!",
     })
 
 
@@ -1376,4 +1500,6 @@ def register_guild_routes(app: web.Application) -> None:
     app.router.add_post("/api/guilds/{guild_id}/banner", handle_set_guild_banner)
     app.router.add_post("/api/guilds/{guild_id}/bio", handle_set_guild_bio)
     app.router.add_post("/api/guilds/{guild_id}/branding/reset", handle_reset_guild_branding)
+    app.router.add_get("/api/guilds/{guild_id}/voice", handle_get_guild_voice)
+    app.router.add_post("/api/guilds/{guild_id}/voice", handle_set_guild_voice)
 

@@ -14,6 +14,8 @@ import {
   updateGuildBanner,
   updateGuildBio,
   resetGuildBranding,
+  fetchGuildVoice,
+  updateGuildVoice,
   testEventSimulation,
   showToast,
   fetchMusicPlayback,
@@ -134,11 +136,13 @@ function ensureSettingsDefaults(s) {
       bio: "Power isn't given. It's taken. — Sosuke Aizen",
       avatar_url: '',
       banner_url: '',
+      voice: 'ava',
       is_custom: false,
       applied_nickname: false,
       applied_discord_avatar: false,
     };
   }
+  if (!s.branding.voice) s.branding.voice = 'ava';
   if (!s.roles_channels) s.roles_channels = { mod_role_id: null, admin_role_id: null, human_role_id: null, bot_role_id: null, ignored_channels: [] };
   if (!s.roles_utilities) s.roles_utilities = { role_id: null, human_role_id: null, bot_role_id: null, ghostping_enabled: false, ghostping_channel_id: null };
   if (!s.diagnostics) s.diagnostics = { bot_status: 'online', gateway_ping_ms: 28, database_connected: true, shard_id: 0, uptime_seconds: 86400 };
@@ -4457,6 +4461,7 @@ function renderEmbedsTab(panel, s) {
   const currentBanner = br.banner_url || '';
   const currentBio = br.bio || "Power isn't given. It's taken. — Sosuke Aizen";
   const currentName = br.display_name || 'KYOKA 3.0';
+  const currentVoice = br.voice || 'ava';
 
   panel.innerHTML = `
     <div class="panel-header">
@@ -4558,6 +4563,31 @@ function renderEmbedsTab(panel, s) {
       </div>
     </div>
 
+    <!-- Section 5: Server Bot Voice Persona -->
+    <div class="setting-row">
+      <div class="setting-info">
+        <label>Server Voice &amp; TTS Persona</label>
+        <p>Select the neural voice model Kyoka uses when speaking in voice channels and generating voice messages in this server.</p>
+        <div style="font-size: 0.78rem; color: var(--text-dim); margin-top: 0.35rem;">
+          🎙️ Switchable anytime via dashboard or Discord command (<code>+setvoice &lt;name&gt;</code>).
+        </div>
+      </div>
+      <div class="setting-control" style="display: flex; gap: 0.5rem; align-items: center;">
+        <select id="br-voice-select" class="form-input" style="max-width: 240px; background: #13141f; color: #fff;">
+          <option value="ava" ${currentVoice === 'ava' ? 'selected' : ''}>Ava (Warm, Casual, Natural)</option>
+          <option value="andrew" ${currentVoice === 'andrew' ? 'selected' : ''}>Andrew (Confident, Friendly)</option>
+          <option value="kyoka" ${currentVoice === 'kyoka' ? 'selected' : ''}>Kyoka (Sovereign Anime)</option>
+          <option value="aizen" ${currentVoice === 'aizen' ? 'selected' : ''}>Aizen (Sosuke Aizen, Calm)</option>
+          <option value="guy" ${currentVoice === 'guy' ? 'selected' : ''}>Guy (Passionate, Upbeat)</option>
+          <option value="christopher" ${currentVoice === 'christopher' ? 'selected' : ''}>Christopher (Authoritative)</option>
+          <option value="aria" ${currentVoice === 'aria' ? 'selected' : ''}>Aria (Gentle, Melodic)</option>
+          <option value="keita" ${currentVoice === 'keita' ? 'selected' : ''}>Keita (Young Energetic)</option>
+          <option value="nanami" ${currentVoice === 'nanami' ? 'selected' : ''}>Nanami (Kawaii Anime)</option>
+        </select>
+        <button id="br-save-voice-btn" class="btn btn-primary btn-sm">Save Voice</button>
+      </div>
+    </div>
+
     <!-- Interactive Discord Bot Profile Card Simulator -->
     <div class="wizard-preview-card" style="margin-top: 1.75rem; background: rgba(8, 9, 14, 0.8); border: 1px solid rgba(255, 255, 255, 0.08); border-radius: var(--radius-md); overflow: hidden;">
       <div class="preview-header" style="background: rgba(12, 13, 22, 0.85); padding: 0.65rem 1rem; border-bottom: 1px solid var(--border-subtle); display: flex; align-items: center; justify-content: space-between;">
@@ -4589,6 +4619,7 @@ function renderEmbedsTab(panel, s) {
             <div style="margin-top: 0.75rem; padding-top: 0.65rem; border-top: 1px solid rgba(255,255,255,0.08); display: flex; gap: 0.35rem; flex-wrap: wrap;">
               <span style="background: rgba(255,255,255,0.06); color: #B5BAC1; font-size: 0.7rem; padding: 0.15rem 0.45rem; border-radius: 4px;">Verified Bot</span>
               <span style="background: rgba(124, 58, 237, 0.2); color: #C084FC; font-size: 0.7rem; padding: 0.15rem 0.45rem; border-radius: 4px;">Kyoka Sovereign</span>
+              <span id="sim-voice-badge" style="background: rgba(59, 130, 246, 0.2); color: #60a5fa; font-size: 0.7rem; padding: 0.15rem 0.45rem; border-radius: 4px;">🎙️ Voice: ${(currentVoice || 'ava').toUpperCase()}</span>
             </div>
           </div>
         </div>
@@ -4810,6 +4841,29 @@ function renderEmbedsTab(panel, s) {
     }
   });
 
+  // Voice handling
+  const voiceSelect = document.getElementById('br-voice-select');
+  const simVoiceBadge = document.getElementById('sim-voice-badge');
+  voiceSelect?.addEventListener('change', (e) => {
+    const v = e.target.value;
+    br.voice = v;
+    if (simVoiceBadge) simVoiceBadge.textContent = `🎙️ Voice: ${v.toUpperCase()}`;
+    markChanged();
+  });
+  document.getElementById('br-save-voice-btn')?.addEventListener('click', async () => {
+    const selectedVoice = voiceSelect?.value || 'ava';
+    br.voice = selectedVoice;
+    try {
+      showToast('Saving server voice persona...', 'info');
+      await updateGuildVoice(gid, selectedVoice);
+      if (simVoiceBadge) simVoiceBadge.textContent = `🎙️ Voice: ${selectedVoice.toUpperCase()}`;
+      showToast(`Server voice updated to ${selectedVoice.toUpperCase()}!`, 'success');
+      markChanged();
+    } catch (err) {
+      showToast(`Error updating voice: ${err.message}`, 'error');
+    }
+  });
+
   // Master reset
   document.getElementById('reset-all-branding-btn')?.addEventListener('click', async () => {
     if (!confirm(`Are you sure you want to reset all custom branding for ${state.selectedGuildObj?.name || 'this server'} back to the default global Aizen theme?`)) {
@@ -4822,6 +4876,7 @@ function renderEmbedsTab(panel, s) {
       br.avatar_url = '';
       br.banner_url = '';
       br.bio = "Power isn't given. It's taken. — Sosuke Aizen";
+      br.voice = 'ava';
       renderActiveTab('embeds');
       showToast('Server branding reset to default global Aizen theme.', 'success');
     } catch (err) {

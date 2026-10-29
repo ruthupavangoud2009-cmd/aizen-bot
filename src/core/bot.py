@@ -5,6 +5,7 @@ import collections
 import logging
 import os
 from pathlib import Path
+import re
 import time
 import aiohttp
 import discord
@@ -290,10 +291,12 @@ class KyokaBot(commands.Bot):
             except Exception:
                 pass
 
-            # Not an explicit command; check anti-spam mention cooldown
-            if self._check_mention_cooldown(message.author.id, message.guild.id if message.guild else None):
-                await self._handle_bot_mention(message)
-            return
+            # If the mention is standalone/greeting with no conversation prompt, show the prefix card
+            clean_text = re.sub(rf"<@!?{self.user.id}>", "", message.content).strip(" \t\n\r?,.!:;")
+            if not clean_text:
+                if self._check_mention_cooldown(message.author.id, message.guild.id if message.guild else None):
+                    await self._handle_bot_mention(message)
+                return
 
         # Record qualifying message activity & progression in background (non-blocking & fail-safe)
         if message.guild:

@@ -251,6 +251,17 @@ export async function resetGuildBranding(guildId) {
   });
 }
 
+export async function fetchGuildVoice(guildId) {
+  return await apiFetch(`/guilds/${guildId}/voice`);
+}
+
+export async function updateGuildVoice(guildId, voiceKey) {
+  return await apiFetch(`/guilds/${guildId}/voice`, {
+    method: 'POST',
+    body: { voice: voiceKey },
+  });
+}
+
 
 /**
  * Public bot statistics for landing page
