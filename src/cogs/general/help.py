@@ -1709,7 +1709,7 @@ class Help(commands.Cog):
         for c in page_cmds:
             badge = self._get_badge(c) or " `[Public]`"
             is_slash = getattr(c, "app_command", None) is not None or hasattr(c, "app_command")
-                type_tag = "`[Prefix + Slash]`" if is_slash else "`[Prefix]`"
+            type_tag = "`[Prefix + Slash]`" if is_slash else "`[Prefix]`"
             sig = f" {c.signature}" if c.signature else ""
             desc = (c.description or getattr(c, "help", None) or "No detailed description provided.").strip().split("\n")[0][:90]
             alias_str = f" · *Aliases:* {', '.join(f'`{a}`' for a in c.aliases)}" if c.aliases else ""
