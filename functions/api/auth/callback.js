@@ -37,14 +37,14 @@ export async function onRequest(context) {
   const clearStateCookie = `kyoka_oauth_state=; Path=/; Max-Age=0; HttpOnly; SameSite=Lax${isHttps ? '; Secure' : ''}`;
 
   // 2. Token Exchange Parameters
-  const clientId = (env.DISCORD_CLIENT_ID || env.CLIENT_ID || '1562505487214321714').trim();
-  const clientSecret = (env.DISCORD_CLIENT_SECRET || env.CLIENT_SECRET || 'H-jh8-F8qlVMOQfpSVkiXtzOreiXisbF').trim();
+  const clientId = (env.DISCORD_CLIENT_ID || env.CLIENT_ID || '1562407391440535633').trim();
+  const clientSecret = (env.DISCORD_CLIENT_SECRET || env.CLIENT_SECRET || '').trim();
   const redirectUri = `${destinationOrigin}/api/auth/callback`;
 
   const backendBase = (
     env.BACKEND_URL ||
     env.KYOKA_BACKEND_URL ||
-    'https://kyokasugisetsu.onrender.com'
+    'https://aizen-bot-uty6.onrender.com'
   ).replace(/\/+$/, '');
 
   let sessionPayload = null;
