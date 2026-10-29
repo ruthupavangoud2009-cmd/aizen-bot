@@ -467,7 +467,14 @@ class HCACategorySelect(discord.ui.Select):
                 description="Complete directory index of all categories",
                 emoji="📚",
                 default=(current_selection == "home"),
-            )
+            ),
+            discord.SelectOption(
+                label="All Commands (Full Directory)",
+                value="all",
+                description="Every registered command with full usage",
+                emoji="📖",
+                default=(current_selection == "all"),
+            ),
         ]
         for cat_name, cmds in categories.items():
             raw_title = cat_name.split("・", 1)[1] if "・" in cat_name else cat_name
@@ -1102,13 +1109,14 @@ class Help(commands.Cog):
         ctx: CustomContext,
         visible_categories: dict[str, list[commands.Command]],
     ) -> discord.Embed:
-        """Construct compact, clean Default Help Embed matching Kyro specification."""
+        """Compact modular home embed — clean module grid layout."""
         guild = ctx.guild
         author = ctx.author
         p = self.bot.guild_mgr.get_prefix(guild.id if guild else None)
         ws_ping = self._get_latency_ms()
         total_commands = sum(len(cmds) for cmds in visible_categories.values())
 
+        # ── Branding ─────────────────────────────────────────────────────────
         branding = None
         if hasattr(self.bot, "branding_mgr"):
             mgr = getattr(self.bot, "branding_mgr", None)
@@ -1120,38 +1128,48 @@ class Help(commands.Cog):
             assets = getattr(Config, "ASSETS", None)
             branding = {
                 "display_name": "Kyoka 3.0",
-                "bio": "Built for our community — keeping your server safe, active, and effortlessly connected.",
-                "avatar_url": getattr(assets, "AIZEN_AVATAR_URL", "") or (self.bot.user.display_avatar.url if getattr(self.bot, "user", None) else ""),
+                "bio": "Your server's all-in-one bot.",
+                "avatar_url": getattr(assets, "AIZEN_AVATAR_URL", "") or (
+                    self.bot.user.display_avatar.url if getattr(self.bot, "user", None) else ""
+                ),
                 "banner_url": "",
             }
 
         raw_display = branding.get("display_name") if isinstance(branding, dict) else None
         display_name = raw_display if isinstance(raw_display, str) and raw_display.strip() else "Kyoka 3.0"
         raw_bio = branding.get("bio") if isinstance(branding, dict) else None
-        bio = raw_bio if isinstance(raw_bio, str) and raw_bio.strip() else "Built for our community — keeping your server safe, active, and effortlessly connected."
+        bio = raw_bio if isinstance(raw_bio, str) and raw_bio.strip() else "Your server's all-in-one bot."
 
-        # Compact category directory
-        cat_labels = []
-        for cat_name in visible_categories.keys():
-            clean = cat_name.split("・", 1)[-1].strip().title() if "・" in cat_name else cat_name.strip().title()
-            cat_labels.append(f"`{clean}`")
-        categories_line = " · ".join(cat_labels)
-
-        desc = (
-            f"> {bio}\n\n"
-            f"• **Latency:** `{ws_ping}ms`\n"
-            f"• **Prefix:** `{p}` | **Slash:** `/`\n"
-            f"• **Available Commands:** `{total_commands}`\n\n"
-            f"📁 **Command Modules ({len(visible_categories)}):**\n"
-            f"{categories_line}\n\n"
-            f"⚡ **Essential Commands:**\n"
-            f"`{p}help` · `{p}play` · `{p}ai` · `{p}ticket` · `{p}setup` · `{p}botedit`"
-        )
+        # ── Compact module grid (3 per row using inline fields) ───────────────
+        # Build 3-column grid from categories
+        cat_items = list(visible_categories.items())
 
         embed = KyokaHelpEmbed(
-            title=f"Hey, I'm {display_name}",
-            description=desc,
+            title=f"✦ {display_name}",
+            description=(
+                f"> {bio}\n"
+                f"`{p}`  **·**  `{ws_ping}ms`  **·**  `{total_commands}` cmds  **·**  `{len(visible_categories)}` modules"
+            ),
             color=0x2B0938,
+        )
+
+        # Add module fields in 3-column grid
+        for cat_name, cmds in cat_items:
+            raw_title = cat_name.split("・", 1)[1] if "・" in cat_name else cat_name
+            clean_label = raw_title.strip()
+            emoji_str = UNICODE_CATEGORY_EMOJIS.get(cat_name, "📁")
+            embed.add_field(
+                name=f"{emoji_str} {clean_label}",
+                value=f"`{len(cmds)}` cmds",
+                inline=True,
+            )
+
+        embed.add_field(
+            name="\u200b",
+            value=(
+                f"**Quick:** `{p}help <cmd>` · `{p}hca` · `/help`"
+            ),
+            inline=False,
         )
 
         avatar_url = branding.get("avatar_url") if isinstance(branding, dict) else None
@@ -1163,7 +1181,7 @@ class Help(commands.Cog):
             embed.set_image(url=str(banner_url).strip())
 
         embed.set_footer(
-            text=f"Requested by {author.display_name}",
+            text=f"Requested by {author.display_name}  •  Use the dropdown to browse modules",
             icon_url=author.display_avatar.url if author and author.display_avatar else None,
         )
         embed.banner_file = None
@@ -1241,22 +1259,26 @@ class Help(commands.Cog):
         visible_categories: dict[str, list[commands.Command]],
         page: int = 1,
     ) -> discord.Embed:
-        """Construct compact, clean category embed (10 commands per page, single line descriptions)."""
+        """Compact modular category embed — 8 cmds per page, tight bullet layout."""
         guild = ctx.guild
         p = self.bot.guild_mgr.get_prefix(guild.id if guild else None)
 
         clean_cat_title = cat_name.split("・", 1)[1] if "・" in cat_name else cat_name
-        cat_desc = CATEGORY_DESCRIPTIONS.get(cat_name, f"Accessible commands for {clean_cat_title}.")
+        cat_emoji = self._get_category_emoji(cat_name)
+        cat_desc = CATEGORY_DESCRIPTIONS.get(cat_name, f"{clean_cat_title} commands.")
 
-        # Retrieve guild branding for avatar
+        # Branding
         branding = None
         if hasattr(self.bot, "branding_mgr"):
-            branding = self.bot.branding_mgr._cache.get(guild.id if guild else None)
+            try:
+                branding = self.bot.branding_mgr._cache.get(guild.id if guild else None)
+            except Exception:
+                pass
         avatar_url = branding.get("avatar_url") if branding else None
         if not avatar_url and hasattr(self.bot, "user") and self.bot.user:
             avatar_url = self.bot.user.display_avatar.url
 
-        # Collect unique command names
+        # Deduplicate and sort
         seen: set[str] = set()
         unique_cmds: list[commands.Command] = []
         for c in commands_list:
@@ -1265,28 +1287,42 @@ class Help(commands.Cog):
                 unique_cmds.append(c)
         unique_cmds.sort(key=lambda c: c.qualified_name)
 
-        per_page = 10
+        per_page = 8
         total_pages = max(1, math.ceil(len(unique_cmds) / per_page))
         safe_page = max(1, min(page, total_pages))
         start_idx = (safe_page - 1) * per_page
-        page_cmds = unique_cmds[start_idx : start_idx + per_page]
-
-        desc_lines = [
-            f"> *{cat_desc}*\n",
-            f"**Page {safe_page}/{total_pages}** • **{len(unique_cmds)}** commands\n",
-        ]
-        for c in page_cmds:
-            desc_text = (c.description or getattr(c, "help", None) or "No description provided.").strip().split("\n")[0][:90]
-            c_name = c.qualified_name if isinstance(getattr(c, "qualified_name", None), str) else (c.name if isinstance(getattr(c, "name", None), str) else str(c))
-            desc_lines.append(f"• **`{c_name}`** — {desc_text}")
-
-        desc_lines.append(f"\n`{p}help <command>` — View details for one command.")
+        page_cmds = unique_cmds[start_idx: start_idx + per_page]
 
         embed = KyokaHelpEmbed(
-            title=f"{self._get_category_emoji(cat_name)} {cat_name}",
-            description="\n".join(desc_lines),
+            title=f"{cat_emoji} {clean_cat_title}",
+            description=f"> *{cat_desc}*",
             color=0x2B0938,
         )
+
+        # Each command as its own inline field (modular cards)
+        for c in page_cmds:
+            sig = f" {c.signature}" if c.signature else ""
+            short_desc = (
+                (c.description or getattr(c, "help", None) or "No description.")
+                .strip().split("\n")[0][:80]
+            )
+            badge = self._get_badge(c)
+            aliases_str = ""
+            if c.aliases:
+                aliases_str = f"\nAliases: {', '.join(f'`{a}`' for a in c.aliases[:3])}"
+            embed.add_field(
+                name=f"`{p}{c.qualified_name}{sig}`{badge}",
+                value=f"{short_desc}{aliases_str}",
+                inline=True,
+            )
+
+        # Fill last row to keep grid aligned (Discord needs multiples of 3 for inline)
+        remainder = len(page_cmds) % 3
+        if remainder == 1:
+            embed.add_field(name="\u200b", value="\u200b", inline=True)
+            embed.add_field(name="\u200b", value="\u200b", inline=True)
+        elif remainder == 2:
+            embed.add_field(name="\u200b", value="\u200b", inline=True)
 
         embed.banner_file = None
 
@@ -1298,66 +1334,52 @@ class Help(commands.Cog):
             embed.set_image(url=str(banner_url).strip())
 
         embed.set_footer(
-            text=f"Page {safe_page}/{total_pages} • Requested by {ctx.author.display_name}",
+            text=f"Page {safe_page}/{total_pages}  ·  {len(unique_cmds)} commands  ·  Requested by {ctx.author.display_name}",
             icon_url=ctx.author.display_avatar.url if ctx.author and ctx.author.display_avatar else None,
         )
         return embed
 
     def build_command_embed(self, ctx: CustomContext, cmd: commands.Command) -> discord.Embed:
-        """Construct compact, clean single-command manual embed."""
+        """Compact minimal single-command detail embed."""
         guild = ctx.guild
         p = self.bot.guild_mgr.get_prefix(guild.id if guild else None)
         cat = self._resolve_category(cmd)
-        cat_icon = self._get_category_emoji(cat)
-        desc = (cmd.description or cmd.help or "No detailed description provided.").strip()
-        aliases = ", ".join([f"`{a}`" for a in cmd.aliases]) if cmd.aliases else "`None`"
+        cat_emoji = self._get_category_emoji(cat)
+        cat_label = cat.split("・", 1)[1] if "・" in cat else cat
+
+        desc = (cmd.description or cmd.help or "No description provided.").strip().split("\n")[0][:200]
         sig = f" {cmd.signature}" if cmd.signature else ""
-        usage = f"`{p}{cmd.qualified_name}{sig}`"
-        example = f"`{p}{cmd.qualified_name}`"
-
         badge = self._get_badge(cmd)
-        status_str = badge.strip(" `[]") if badge else "Public"
-
+        aliases = " · ".join(f"`{a}`" for a in cmd.aliases) if cmd.aliases else "none"
         is_hybrid = isinstance(cmd, commands.HybridCommand) or getattr(cmd, "app_command", None) is not None
-        slash_syntax = f"`/{cmd.qualified_name}`" if is_hybrid else "N/A"
 
         embed = discord.Embed(
-            title=f"{cat_icon} Command: `{cmd.qualified_name}`",
+            title=f"`{p}{cmd.qualified_name}{sig}`{badge}",
             description=f"> {desc}",
             color=0x2B0938,
         )
 
-        embed.add_field(
-            name="📝 Usage & Example",
-            value=(
-                f"• **Usage:** {usage}\n"
-                f"• **Prefix Example:** {example}\n"
-                + (f"• **Slash Example:** {slash_syntax}\n" if is_hybrid else "")
-            ),
-            inline=False,
-        )
+        # Info row as one compact field
+        info_parts = [
+            f"**Category:** {cat_emoji} {cat_label}",
+            f"**Aliases:** {aliases}",
+        ]
+        if is_hybrid:
+            info_parts.append(f"**Slash:** `/{cmd.qualified_name}`")
+        embed.add_field(name="Info", value="  ·  ".join(info_parts), inline=False)
 
-        embed.add_field(
-            name="📋 Command Details",
-            value=(
-                f"• **Category:** `{cat}`\n"
-                f"• **Aliases:** {aliases}\n"
-                f"• **Required Permissions:** `{status_str}`"
-            ),
-            inline=False,
-        )
-
+        # Subcommands if group
         if isinstance(cmd, commands.Group) and cmd.commands:
-            subcmds = ", ".join([f"`{sc.name}`" for sc in sorted(cmd.commands, key=lambda s: s.name)])
-            embed.add_field(
-                name="📂 Subcommands",
-                value=subcmds,
-                inline=False,
-            )
+            subcmds = "  ·  ".join(f"`{sc.name}`" for sc in sorted(cmd.commands, key=lambda s: s.name))
+            embed.add_field(name="Subcommands", value=subcmds, inline=False)
 
+        # Branding thumbnail
         branding = None
         if hasattr(self.bot, "branding_mgr"):
-            branding = self.bot.branding_mgr._cache.get(guild.id if guild else None)
+            try:
+                branding = self.bot.branding_mgr._cache.get(guild.id if guild else None)
+            except Exception:
+                pass
         avatar_url = branding.get("avatar_url") if branding else None
         if not avatar_url and hasattr(self.bot, "user") and self.bot.user:
             avatar_url = self.bot.user.display_avatar.url
@@ -1369,7 +1391,7 @@ class Help(commands.Cog):
             embed.set_image(url=str(banner_url).strip())
 
         embed.set_footer(
-            text=f"Requested by {ctx.author.display_name} • Type {p}help to return",
+            text=f"Requested by {ctx.author.display_name}  ·  {p}help to go back",
             icon_url=ctx.author.display_avatar.url if ctx.author and ctx.author.display_avatar else None,
         )
         return embed
