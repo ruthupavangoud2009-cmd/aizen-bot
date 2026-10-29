@@ -18,7 +18,7 @@ export async function onRequest(context) {
   const backendBase = (
     env.BACKEND_URL ||
     env.KYOKA_BACKEND_URL ||
-    'https://kyokasugisetsu.onrender.com'
+    'https://aizen-bot-uty6.onrender.com'
   ).replace(/\/+$/, '');
 
   if (backendBase) {
@@ -93,7 +93,7 @@ export async function onRequest(context) {
     }
 
     const rawGuilds = await discordRes.json();
-    const clientId = (env.DISCORD_CLIENT_ID || env.CLIENT_ID || '1562505487214321714').trim();
+    const clientId = (env.DISCORD_CLIENT_ID || env.CLIENT_ID || '1562407391440535633').trim();
 
     // Edge bot guild verification if bot token is configured in Cloudflare environment
     const rawBotToken = (env.DISCORD_TOKEN || env.BOT_TOKEN || env.TOKEN || '').trim();
