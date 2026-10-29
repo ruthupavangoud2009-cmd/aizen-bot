@@ -24,7 +24,7 @@ export async function onRequest(context) {
     const backendBase = (
       env.BACKEND_URL ||
       env.KYOKA_BACKEND_URL ||
-      'https://kyokasugisetsu.onrender.com'
+      'https://aizen-bot-uty6.onrender.com'
     ).replace(/\/+$/, '');
 
     if (backendBase) {
