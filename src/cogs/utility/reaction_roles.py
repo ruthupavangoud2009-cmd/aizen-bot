@@ -127,13 +127,35 @@ class PersistentRoleView(discord.ui.View):
         super().__init__(timeout=None)
 
 
+class PersistentRoleDynamicItem(
+    discord.ui.DynamicItem[PersistentRoleButton],
+    template=r"^kyoka_rr:(?P<role_id>[0-9]+):(?P<mode>normal|unique|verify)$",
+):
+    """Reconstruct role buttons from their custom IDs after a bot restart."""
+
+    @classmethod
+    async def from_custom_id(
+        cls,
+        interaction: discord.Interaction,
+        item: discord.ui.Button,
+        match: re.Match[str],
+    ) -> PersistentRoleDynamicItem:
+        button = PersistentRoleButton(
+            role_id=int(match["role_id"]),
+            label=item.label or "Role",
+            emoji=str(item.emoji) if item.emoji else None,
+            mode=match["mode"],
+            style=item.style,
+        )
+        return cls(button)
+
+
 class ReactionRoles(commands.Cog, name="Reaction Roles"):
     """Carl-bot & Dyno grade Reaction Roles system with Emojis & Buttons."""
 
     def __init__(self, bot: KyokaBot) -> None:
         self.bot = bot
-        # Register persistent view handler
-        self.bot.add_view(PersistentRoleView())
+        self.bot.add_dynamic_items(PersistentRoleDynamicItem)
 
     # ─── LISTENERS ────────────────────────────────────────────────────────────
 

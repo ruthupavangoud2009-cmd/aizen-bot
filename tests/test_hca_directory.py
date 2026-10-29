@@ -205,3 +205,37 @@ def test_hca_search_results_embed(help_cog: Help, mock_ordinary_ctx: MagicMock):
     # Search for nonexistent keyword
     embed_none = help_cog.build_hca_search_embed(mock_ordinary_ctx, categories, "xyz_not_found")
     assert "No registered commands matching" in embed_none.description
+
+
+@pytest.mark.asyncio
+async def test_hca_all_commands_selection_is_paginated(help_cog: Help, mock_ordinary_ctx: MagicMock):
+    """Verify the All Commands dropdown target renders and navigates its own pages."""
+    commands_list = [
+        commands.Command(_dummy_coro, name=f"cmd{i}", help=f"Command number {i}")
+        for i in range(11)
+    ]
+    categories = {"🎵・MUSIC": commands_list}
+    view = HCAView(help_cog, mock_ordinary_ctx, categories, current_category="all")
+    select = next(item for item in view.children if isinstance(item, discord.ui.Select))
+    assert any(option.value == "all" for option in select.options)
+
+    embed, _ = help_cog.build_hca_embed_for_selection(
+        mock_ordinary_ctx, categories, "all", page=2
+    )
+    assert "All Commands" in embed.title
+    assert "Page **2/2**" in embed.description
+    assert "cmd10" in embed.fields[0].name
+
+    interaction = MagicMock()
+    interaction.response.edit_message = AsyncMock()
+    await view.btn_next_callback(interaction)
+    assert view.current_page == 2
+    await view.btn_back_callback(interaction)
+    assert view.current_page == 1
+
+    for command in commands_list:
+        help_cog.bot.add_command(command)
+    await help_cog.hca_command.callback(help_cog, mock_ordinary_ctx, category="all")
+    _, kwargs = mock_ordinary_ctx.send.call_args
+    assert "All Commands" in kwargs["embed"].title
+    assert kwargs["view"].current_category == "all"

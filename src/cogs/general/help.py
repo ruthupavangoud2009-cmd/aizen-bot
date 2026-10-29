@@ -283,7 +283,6 @@ class HelpView(discord.ui.View):
                 label="Back",
                 emoji="◀️",
                 style=discord.ButtonStyle.secondary,
-                disabled=(self.current_page <= 1),
                 row=1,
             )
             btn_back.callback = self.btn_back_callback
@@ -609,7 +608,7 @@ class HCAView(discord.ui.View):
     async def btn_back_callback(self, interaction: discord.Interaction) -> None:
         if self.current_category != "home":
             cat_match = next((c for c in self.category_keys if c.lower() == self.current_category.lower()), None)
-            if cat_match and self.current_page > 1:
+            if (cat_match or self.current_category == "all") and self.current_page > 1:
                 self.current_page -= 1
                 embed, banner_file = self.cog.build_hca_embed_for_selection(self.ctx, self.all_categories, self.current_category, page=self.current_page)
                 if banner_file:
@@ -638,9 +637,13 @@ class HCAView(discord.ui.View):
     async def btn_next_callback(self, interaction: discord.Interaction) -> None:
         if self.current_category != "home":
             cat_match = next((c for c in self.category_keys if c.lower() == self.current_category.lower()), None)
-            if cat_match:
-                cmds = self.all_categories.get(cat_match, [])
-                total_pages = max(1, math.ceil(len(cmds) / HELP_COMMANDS_PER_PAGE))
+            if cat_match or self.current_category == "all":
+                command_count = (
+                    len(self.cog._get_hca_all_commands(self.all_categories))
+                    if self.current_category == "all"
+                    else len(self.all_categories.get(cat_match, []))
+                )
+                total_pages = max(1, math.ceil(command_count / HELP_COMMANDS_PER_PAGE))
                 if self.current_page < total_pages:
                     self.current_page += 1
                     embed, banner_file = self.cog.build_hca_embed_for_selection(self.ctx, self.all_categories, self.current_category, page=self.current_page)
@@ -1729,6 +1732,59 @@ class Help(commands.Cog):
         )
         return embed, banner_file
 
+    @staticmethod
+    def _get_hca_all_commands(
+        all_categories: dict[str, list[commands.Command]],
+    ) -> list[tuple[str, commands.Command]]:
+        """Return a stable, de-duplicated command list for the full archive."""
+        seen: set[str] = set()
+        entries: list[tuple[str, commands.Command]] = []
+        for category, command_list in all_categories.items():
+            for command in command_list:
+                if command.qualified_name not in seen:
+                    seen.add(command.qualified_name)
+                    entries.append((category, command))
+        return entries
+
+    def build_hca_all_commands_embed(
+        self,
+        ctx: CustomContext,
+        all_categories: dict[str, list[commands.Command]],
+        page: int = 1,
+    ) -> tuple[discord.Embed, Optional[discord.File]]:
+        """Render the full command archive as pages of compact command cards."""
+        p = self.bot.guild_mgr.get_prefix(ctx.guild.id if ctx.guild else None)
+        entries = self._get_hca_all_commands(all_categories)
+        per_page = 10
+        total_pages = max(1, math.ceil(len(entries) / per_page))
+        safe_page = max(1, min(page, total_pages))
+        start = (safe_page - 1) * per_page
+
+        embed = discord.Embed(
+            title="📖 KYOKA 3.0 — All Commands",
+            description=f"Complete command directory • Page **{safe_page}/{total_pages}** • **{len(entries)}** commands",
+            color=0x2B0938,
+        )
+        for category, command in entries[start : start + per_page]:
+            signature = f" {command.signature}" if command.signature else ""
+            badge = self._get_badge(command) or " `[Public]`"
+            is_slash = getattr(command, "app_command", None) is not None
+            type_tag = "`[+ /]`" if is_slash else "`[+]`"
+            description = (
+                (command.description or command.help or "No description provided.")
+                .strip()
+                .split("\n")[0][:160]
+            )
+            embed.add_field(
+                name=f"`{p}{command.qualified_name}{signature}` {type_tag}{badge}",
+                value=f"> {description}\n> *Module: {category}*",
+                inline=False,
+            )
+
+        banner_file = AssetManager.attach_help_banner(embed, "home")
+        embed.set_footer(text=f"Page {safe_page}/{total_pages} • KYOKA 3.0 Command Archive")
+        return embed, banner_file
+
     def build_hca_search_embed(
         self,
         ctx: CustomContext,
@@ -1806,6 +1862,8 @@ class Help(commands.Cog):
         """Route HCA selection to index or category embed with artwork."""
         if selected_val == "home":
             return self.build_hca_index_embed(ctx, all_categories)
+        if selected_val == "all":
+            return self.build_hca_all_commands_embed(ctx, all_categories, page=page)
         matched_cat = next((c for c in all_categories.keys() if c.lower() == selected_val.lower()), None)
         if matched_cat:
             return self.build_hca_category_embed(
@@ -1825,17 +1883,18 @@ class Help(commands.Cog):
 
         if category:
             query = category.lower().strip()
-            cat_meta = get_category_by_query(query)
-            target_cat = None
-            if cat_meta and cat_meta.tag in all_categories:
-                target_cat = cat_meta.tag
+            if query in {"all", "all commands", "allcommands"}:
+                target_cat = "all"
             else:
-                target_cat = next(
-                    (c for c in all_categories.keys() if query in c.lower() or c.lower().endswith(query)),
-                    None,
-                )
+                cat_meta = get_category_by_query(query)
+                target_cat = cat_meta.tag if cat_meta and cat_meta.tag in all_categories else None
+                if not target_cat:
+                    target_cat = next(
+                        (c for c in all_categories.keys() if query in c.lower() or c.lower().endswith(query)),
+                        None,
+                    )
 
-            if target_cat and target_cat in all_categories:
+            if target_cat == "all" or (target_cat is not None and target_cat in all_categories):
                 view = HCAView(
                     cog=self,
                     ctx=ctx,
@@ -1843,9 +1902,12 @@ class Help(commands.Cog):
                     current_category=target_cat,
                     current_page=1,
                 )
-                embed, banner_file = self.build_hca_category_embed(
-                    ctx, target_cat, all_categories[target_cat], all_categories, page=1
-                )
+                if target_cat == "all":
+                    embed, banner_file = self.build_hca_all_commands_embed(ctx, all_categories, page=1)
+                else:
+                    embed, banner_file = self.build_hca_category_embed(
+                        ctx, target_cat, all_categories[target_cat], all_categories, page=1
+                    )
                 if banner_file:
                     msg = await ctx.send(embed=embed, file=banner_file, view=view)
                 else:
@@ -2212,4 +2274,3 @@ async def setup(bot: KyokaBot) -> None:
     cog = Help(bot)
     await bot.add_cog(cog)
     logger.info("⛩️ [KYOKA CONTROL] Aizen Premium Help Dashboard loaded successfully (Hybrid Prefix & Slash).")
-

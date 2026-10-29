@@ -155,6 +155,7 @@ def test_help_view_components_and_author_lock(help_cog: Help, mock_ctx: MagicMoc
     nav_buttons = [i for i in cat_view.children if isinstance(i, discord.ui.Button) and i.style != discord.ButtonStyle.link]
     labels = [b.label for b in nav_buttons]
     assert "Back" in labels
+    assert next(button for button in nav_buttons if button.label == "Back").disabled is False
     assert "Home" in labels
     assert "Next" in labels
 
@@ -268,4 +269,3 @@ def test_help_can_run_command_spam_check(help_cog: Help, mock_ctx: MagicMock):
     # Owner can run spam
     mock_ctx.author.id = OWNER_ID
     assert help_cog._can_run_command(spam_cmd, mock_ctx) is True
-

@@ -127,6 +127,16 @@ class InteractivePollView(discord.ui.View):
             btn.callback = self._make_callback(i)
             self.add_item(btn)
 
+    async def on_timeout(self) -> None:
+        for item in self.children:
+            if isinstance(item, discord.ui.Button):
+                item.disabled = True
+        try:
+            if self.message:
+                await self.message.edit(view=self)
+        except discord.HTTPException as error:
+            logger.warning("Failed to disable expired poll controls: %s", error)
+
     def _make_callback(self, index: int):
         async def callback(interaction: discord.Interaction):
             user_id = interaction.user.id
@@ -309,7 +319,7 @@ class Games(commands.Cog):
 
         view = InteractivePollView(question, options, ctx.author)
         embed = view.build_embed()
-        await ctx.send(embed=embed, view=view)
+        view.message = await ctx.send(embed=embed, view=view)
 
     # ─── 4. WORD GUESSING MINI-GAME ───────────────────────────────────────────
 
