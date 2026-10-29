@@ -2607,3 +2607,70 @@ html.reduce-motion *::after {
 
 
 
+
+
+/* ==========================================================================
+   AIZEN PREMIUM CONTROL SUITE — elevated surfaces, motion-safe polish
+   ========================================================================== */
+.premium-hero-card,
+.premium-feature-card,
+.premium-compare-card {
+  position: relative;
+  overflow: hidden;
+  isolation: isolate;
+  transition: border-color .22s ease, transform .22s ease, box-shadow .22s ease;
+}
+.premium-hero-card::before {
+  content: "";
+  position: absolute;
+  inset: 0 0 auto 0;
+  height: 2px;
+  background: linear-gradient(90deg, transparent, #c084fc, #f4c76b, #a855f7, transparent);
+  opacity: .95;
+  pointer-events: none;
+}
+.premium-hero-card::after {
+  content: "";
+  position: absolute;
+  width: 260px;
+  height: 260px;
+  right: -120px;
+  top: -160px;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(168,85,247,.22), transparent 68%);
+  pointer-events: none;
+  z-index: -1;
+}
+.premium-feature-card:hover,
+.premium-compare-card:hover {
+  border-color: rgba(192,132,252,.42) !important;
+  box-shadow: 0 14px 38px rgba(0,0,0,.28), 0 0 24px rgba(124,58,237,.10);
+}
+.premium-hero-card .btn,
+.premium-feature-card .btn {
+  box-shadow: 0 8px 24px rgba(124,58,237,.18);
+}
+.premium-compare-card table { border-collapse: separate; border-spacing: 0; }
+.premium-compare-card thead th {
+  background: rgba(124,58,237,.13);
+  color: var(--purple-pastel);
+  white-space: nowrap;
+}
+.premium-compare-card th,
+.premium-compare-card td {
+  padding: .85rem .9rem;
+  border-bottom: 1px solid var(--border-subtle);
+}
+.premium-compare-card tbody tr:hover { background: rgba(168,85,247,.055); }
+@media (max-width: 640px) {
+  .premium-hero-card { padding: 1.25rem !important; }
+  .premium-feature-card,
+  .premium-compare-card { padding: 1rem !important; }
+  .premium-compare-card th,
+  .premium-compare-card td { padding: .65rem; font-size: .82rem; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .premium-hero-card,
+  .premium-feature-card,
+  .premium-compare-card { transition: none; }
+}
