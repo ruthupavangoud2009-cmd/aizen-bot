@@ -532,3 +532,80 @@ async def test_botedit_no_argument_views(branding_cog: Branding, mock_bot: Kyoka
     name_embed = ctx.send.call_args[1]["embed"]
     assert "Cool Bot" in name_embed.description
 
+
+@pytest.mark.asyncio
+async def test_discord_api_banner_and_bio_live_edit(branding_cog: Branding, mock_bot: KyokaBot):
+    """Verify setbot banner, bio, and reset directly call ctx.guild.me.edit with banner and bio."""
+    gid = 9988
+    ctx = MagicMock()
+    ctx.guild = MagicMock(id=gid, name="Live Edit Guild")
+    ctx.guild.me.edit = AsyncMock()
+    ctx.author = MagicMock(id=OWNER_ID, mention="<@123>")
+    ctx.message = MagicMock(attachments=[])
+    ctx.send = AsyncMock()
+    ctx.send_warning = AsyncMock()
+
+    # 1. Test setbot banner calls guild.me.edit(banner=...)
+    mock_resp = AsyncMock()
+    mock_resp.status = 200
+    mock_resp.headers = {"Content-Type": "image/png"}
+    mock_resp.read = AsyncMock(return_value=b"\x89PNG\r\n\x1a\nfakebannerbytes")
+    mock_bot.session.get.return_value.__aenter__.return_value = mock_resp
+
+    await branding_cog.setbot_banner.callback(branding_cog, ctx, image_url="https://cdn.discordapp.com/banner.png")
+    assert ctx.guild.me.edit.called
+    assert ctx.guild.me.edit.call_args[1]["banner"] == b"\x89PNG\r\n\x1a\nfakebannerbytes"
+    brand = await mock_bot.branding_mgr.get_branding(gid)
+    assert brand["banner_url"] == "https://cdn.discordapp.com/banner.png"
+
+    # 2. Test setbot bio calls guild.me.edit(bio=...)
+    ctx.guild.me.edit.reset_mock()
+    await branding_cog.setbot_bio.callback(branding_cog, ctx, text="Sovereign Las Noches Bio")
+    assert ctx.guild.me.edit.called
+    assert ctx.guild.me.edit.call_args[1]["bio"] == "Sovereign Las Noches Bio"
+    brand = await mock_bot.branding_mgr.get_branding(gid)
+    assert brand["bio"] == "Sovereign Las Noches Bio"
+
+    # 3. Test setbot reset clears nick, avatar, banner, bio on Discord
+    ctx.guild.me.edit.reset_mock()
+    await branding_cog.setbot_reset.callback(branding_cog, ctx)
+    assert ctx.guild.me.edit.called
+    call_kwargs = ctx.guild.me.edit.call_args[1]
+    assert call_kwargs["banner"] is None
+    assert call_kwargs["bio"] is None
+    assert call_kwargs["avatar"] is None
+    assert call_kwargs["nick"] is None
+
+
+@pytest.mark.asyncio
+async def test_help_embeds_render_custom_banner_and_all_modules(mock_bot: KyokaBot):
+    """Verify build_home_embed and build_category_embed render custom banner and full module directory."""
+    from src.cogs.general.help import Help
+    gid = 7711
+    await mock_bot.branding_mgr.set_field(gid, "banner_url", "https://cdn.discordapp.com/banner_guild.png", set_by=1)
+    await mock_bot.branding_mgr.set_field(gid, "bio", "Aizen Custom Bio for Server", set_by=1)
+
+    ctx = MagicMock()
+    ctx.guild = MagicMock(id=gid)
+    ctx.author = MagicMock(display_name="Aizen")
+    ctx.author.display_avatar.url = "https://cdn.discordapp.com/author.png"
+
+    cmd1 = MagicMock(qualified_name="ban", description="Ban member")
+    cmd2 = MagicMock(qualified_name="play", description="Play music")
+    visible = {
+        "🛡️・MODERATION": [cmd1],
+        "🎵・MUSIC": [cmd2],
+    }
+
+    help_cog = Help(mock_bot)
+    home_embed = help_cog.build_home_embed(ctx, visible)
+
+    assert home_embed.image.url == "https://cdn.discordapp.com/banner_guild.png"
+    assert "Aizen Custom Bio for Server" in home_embed.description
+    assert "Command Modules" in home_embed.description
+    assert "Essential Commands" in home_embed.description
+
+    cat_embed = help_cog.build_category_embed(ctx, "🛡️・MODERATION", [cmd1], visible)
+    assert cat_embed.image.url == "https://cdn.discordapp.com/banner_guild.png"
+
+

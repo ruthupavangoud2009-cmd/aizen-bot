@@ -410,6 +410,19 @@ class Branding(commands.Cog, name="Admin-Branding"):
             if close_session:
                 await session.close()
 
+        # Attempt Discord API guild member banner update
+        applied_discord_banner = False
+        try:
+            guild_me = ctx.guild.me
+            await guild_me.edit(
+                banner=banner_bytes,
+                reason=f"KYOKA server branding updated by {ctx.author} ({ctx.author.id})",
+            )
+            applied_discord_banner = True
+        except Exception as e:
+            logger.debug(f"Discord member banner edit notice: {e}")
+            applied_discord_banner = False
+
         # Persist to database
         try:
             await self.bot.branding_mgr.set_field(
@@ -417,6 +430,7 @@ class Branding(commands.Cog, name="Admin-Branding"):
                 "banner_url",
                 target_url,
                 ctx.author.id,
+                {"applied_discord_banner": applied_discord_banner},
             )
         except Exception as dbe:
             logger.error("Failed to save branding banner: %s", dbe)
@@ -483,6 +497,19 @@ class Branding(commands.Cog, name="Admin-Branding"):
             await ctx.send_warning("❌ Bio cannot exceed 300 characters.")
             return
 
+        # Attempt Discord API guild member bio update
+        applied_discord_bio = False
+        try:
+            guild_me = ctx.guild.me
+            await guild_me.edit(
+                bio=clean_bio[:190],
+                reason=f"KYOKA server branding updated by {ctx.author} ({ctx.author.id})",
+            )
+            applied_discord_bio = True
+        except Exception as e:
+            logger.debug(f"Discord member bio edit notice: {e}")
+            applied_discord_bio = False
+
         # Persist to database
         try:
             await self.bot.branding_mgr.set_field(
@@ -490,6 +517,7 @@ class Branding(commands.Cog, name="Admin-Branding"):
                 "bio",
                 clean_bio,
                 ctx.author.id,
+                {"applied_discord_bio": applied_discord_bio},
             )
         except Exception as dbe:
             logger.error("Failed to save branding bio: %s", dbe)
@@ -528,23 +556,17 @@ class Branding(commands.Cog, name="Admin-Branding"):
             await ctx.send_warning("❌ You need **Manage Server** or **Administrator** permissions to modify KYOKA's branding.")
             return
 
-        # 1. Reset Discord API nickname if modified
+        # 1. Reset Discord API member overrides (nick, avatar, banner, bio)
         try:
             await ctx.guild.me.edit(
                 nick=None,
-                reason=f"KYOKA server branding reset by {ctx.author} ({ctx.author.id})",
-            )
-        except Exception as e:
-            logger.debug("Notice resetting guild nickname: %s", e)
-
-        # 2. Reset Discord API avatar if modified
-        try:
-            await ctx.guild.me.edit(
                 avatar=None,
+                banner=None,
+                bio=None,
                 reason=f"KYOKA server branding reset by {ctx.author} ({ctx.author.id})",
             )
         except Exception as e:
-            logger.debug("Notice resetting guild avatar: %s", e)
+            logger.debug("Notice resetting guild member branding: %s", e)
 
         # 3. Clear database entries
         try:

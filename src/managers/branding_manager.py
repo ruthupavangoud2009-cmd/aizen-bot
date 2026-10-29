@@ -133,7 +133,19 @@ class BrandingManager:
 
         try:
             await self.db.execute(query, guild_id, value, set_by)
-            self.invalidate_cache(guild_id)
+            if guild_id in self._cache:
+                self._cache[guild_id][field] = value
+                self._cache[guild_id]["is_custom"] = True
+                if extra_flags:
+                    self._cache[guild_id].update(extra_flags)
+            else:
+                defaults = self.get_default_branding()
+                defaults["guild_id"] = guild_id
+                defaults[field] = value
+                defaults["is_custom"] = True
+                if extra_flags:
+                    defaults.update(extra_flags)
+                self._cache[guild_id] = defaults
         except Exception as e:
             logger.error(f"Failed to update branding {field} for guild {guild_id}: {e}")
             raise
@@ -181,7 +193,16 @@ class BrandingManager:
         query = f"UPDATE guild_branding SET {field} = NULL, updated_at = CURRENT_TIMESTAMP WHERE guild_id = ?;"
         try:
             await self.db.execute(query, guild_id)
-            self.invalidate_cache(guild_id)
+            if guild_id in self._cache:
+                defaults = self.get_default_branding()
+                self._cache[guild_id][field] = defaults[field]
+                is_custom = any(
+                    self._cache[guild_id].get(f) != defaults[f]
+                    for f in ("display_name", "bio", "avatar_url", "banner_url")
+                )
+                self._cache[guild_id]["is_custom"] = is_custom
+            else:
+                self.invalidate_cache(guild_id)
         except Exception as e:
             logger.error(f"Failed to reset branding field {field} for guild {guild_id}: {e}")
             raise
@@ -191,7 +212,9 @@ class BrandingManager:
         try:
             if self.db:
                 await self.db.execute("DELETE FROM guild_branding WHERE guild_id = ?;", guild_id)
-            self.invalidate_cache(guild_id)
+            defaults = self.get_default_branding()
+            defaults["guild_id"] = guild_id
+            self._cache[guild_id] = defaults
         except Exception as e:
             logger.error(f"Failed to reset branding for guild {guild_id}: {e}")
             raise

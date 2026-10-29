@@ -252,7 +252,15 @@ class HelpView(discord.ui.View):
         support_url = Config.SUPPORT_URL or "https://discord.gg/7q4tn6dA6V"
 
         if self.current_category == "home":
-            # On Home: ONLY Dropdown + Link Buttons (clean, minimal like Kyro in Image 1)
+            btn_search = discord.ui.Button(
+                label="Search",
+                emoji="🔍",
+                style=discord.ButtonStyle.secondary,
+                row=1,
+            )
+            btn_search.callback = self.btn_search_callback
+            self.add_item(btn_search)
+
             self.add_item(
                 discord.ui.Button(
                     label=f"Invite {bot_name}",
@@ -298,6 +306,15 @@ class HelpView(discord.ui.View):
             )
             btn_next.callback = self.btn_next_callback
             self.add_item(btn_next)
+
+            btn_search = discord.ui.Button(
+                label="Search",
+                emoji="🔍",
+                style=discord.ButtonStyle.secondary,
+                row=1,
+            )
+            btn_search.callback = self.btn_search_callback
+            self.add_item(btn_search)
 
             self.add_item(
                 discord.ui.Button(
@@ -713,14 +730,18 @@ class Help(commands.Cog):
                 return False
 
         cmd_name = str(getattr(cmd, "name", "")).strip().lower()
-        owner_only = {
-            "spam", "spamcancel", "guesshostadd", "guesshostremove", "guesshosts",
-            "eval", "exec", "restart", "shutdown", "sync", "leaveserver", "blacklist",
-            "whitelistuser", "errors", "validateconfig", "maintenance", "systemstatus",
-            "dbstatus", "extstatus",
-        }
-        if cmd_name in owner_only and not is_primary_owner(author_id):
-            return False
+        if cmd_name in {"spam", "spamcancel"}:
+            if not is_owner_or_staff(author_id):
+                return False
+        else:
+            owner_only = {
+                "guesshostadd", "guesshostremove", "guesshosts",
+                "eval", "exec", "restart", "shutdown", "sync", "leaveserver", "blacklist",
+                "whitelistuser", "errors", "validateconfig", "maintenance", "systemstatus",
+                "dbstatus", "extstatus",
+            }
+            if cmd_name in owner_only and not is_primary_owner(author_id):
+                return False
 
         # Adult-humor allowlist restriction check
         if cog_cat in ("adult humor — restricted", "adult humor - restricted", "adulthumor"):
@@ -1109,11 +1130,22 @@ class Help(commands.Cog):
         raw_bio = branding.get("bio") if isinstance(branding, dict) else None
         bio = raw_bio if isinstance(raw_bio, str) and raw_bio.strip() else "Built for our community — keeping your server safe, active, and effortlessly connected."
 
+        # Compact category directory
+        cat_labels = []
+        for cat_name in visible_categories.keys():
+            clean = cat_name.split("・", 1)[-1].strip().title() if "・" in cat_name else cat_name.strip().title()
+            cat_labels.append(f"`{clean}`")
+        categories_line = " · ".join(cat_labels)
+
         desc = (
             f"> {bio}\n\n"
             f"• **Latency:** `{ws_ping}ms`\n"
             f"• **Prefix:** `{p}` | **Slash:** `/`\n"
-            f"• **Available Commands:** `{total_commands}`"
+            f"• **Available Commands:** `{total_commands}`\n\n"
+            f"📁 **Command Modules ({len(visible_categories)}):**\n"
+            f"{categories_line}\n\n"
+            f"⚡ **Essential Commands:**\n"
+            f"`{p}help` · `{p}play` · `{p}ai` · `{p}ticket` · `{p}setup` · `{p}botedit`"
         )
 
         embed = KyokaHelpEmbed(
@@ -1125,6 +1157,10 @@ class Help(commands.Cog):
         avatar_url = branding.get("avatar_url") if isinstance(branding, dict) else None
         if avatar_url and str(avatar_url).strip():
             embed.set_thumbnail(url=str(avatar_url).strip())
+
+        banner_url = branding.get("banner_url") if isinstance(branding, dict) else None
+        if banner_url and str(banner_url).strip():
+            embed.set_image(url=str(banner_url).strip())
 
         embed.set_footer(
             text=f"Requested by {author.display_name}",
@@ -1257,6 +1293,10 @@ class Help(commands.Cog):
         if avatar_url:
             embed.set_thumbnail(url=avatar_url)
 
+        banner_url = branding.get("banner_url") if branding else None
+        if banner_url and str(banner_url).strip():
+            embed.set_image(url=str(banner_url).strip())
+
         embed.set_footer(
             text=f"Page {safe_page}/{total_pages} • Requested by {ctx.author.display_name}",
             icon_url=ctx.author.display_avatar.url if ctx.author and ctx.author.display_avatar else None,
@@ -1323,6 +1363,10 @@ class Help(commands.Cog):
             avatar_url = self.bot.user.display_avatar.url
         if avatar_url:
             embed.set_thumbnail(url=avatar_url)
+
+        banner_url = branding.get("banner_url") if branding else None
+        if banner_url and str(banner_url).strip():
+            embed.set_image(url=str(banner_url).strip())
 
         embed.set_footer(
             text=f"Requested by {ctx.author.display_name} • Type {p}help to return",
