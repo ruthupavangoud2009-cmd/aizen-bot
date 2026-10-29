@@ -446,38 +446,40 @@ class CompanionAI(commands.Cog):
         self._user_last_time[message.author.id] = now
         self._channel_last_time[channel_id] = now
 
-        # Per-channel non-blocking concurrency guard
+        # Per-channel concurrency guard
         lock = self._channel_locks.setdefault(channel_id, asyncio.Lock())
-        if lock.locked():
+        try:
+            await asyncio.wait_for(lock.acquire(), timeout=4.0)
+        except (asyncio.TimeoutError, asyncio.CancelledError):
             return
 
-        session = self._get_session()
+        try:
+            session = self._get_session()
 
-        # Strip bot mention tag and leading casual triggers like "hey kyoka,"
-        prompt = message.content
-        if self.bot.user:
-            prompt = re.sub(rf"<@!?{self.bot.user.id}>", "", prompt).strip()
-        prompt = re.sub(r"^(hey|hi|yo|hello)?\s*(kyoka|aizen|bot)[,:\s]*", "", prompt, flags=re.IGNORECASE).strip()
-        if not prompt:
-            prompt = "What's up?"
+            # Strip bot mention tag and leading casual triggers like "hey kyoka,"
+            prompt = message.content
+            if self.bot.user:
+                prompt = re.sub(rf"<@!?{self.bot.user.id}>", "", prompt).strip()
+            prompt = re.sub(r"^(hey|hi|yo|hello)?\s*(kyoka|aizen|bot)[,:\s]*", "", prompt, flags=re.IGNORECASE).strip()
+            if not prompt:
+                prompt = "What's up?"
 
-        should_gif = send_gifs and (
-            random.random() < 0.22
-            or any(kw in prompt.lower() for kw in ("gif", "show me", "hug", "kiss", "look", "smile", "tease"))
-        ) and bool(p_def.get("gif_category"))
+            should_gif = send_gifs and (
+                random.random() < 0.22
+                or any(kw in prompt.lower() for kw in ("gif", "show me", "hug", "kiss", "look", "smile", "tease"))
+            ) and bool(p_def.get("gif_category"))
 
-        async def _fetch_auto_gif() -> str | None:
-            if not should_gif:
-                return None
-            try:
-                return await asyncio.wait_for(
-                    self.gif_mgr.get_action_gif(p_def["gif_category"], session=session),
-                    timeout=1.8,
-                )
-            except Exception:
-                return None
+            async def _fetch_auto_gif() -> str | None:
+                if not should_gif:
+                    return None
+                try:
+                    return await asyncio.wait_for(
+                        self.gif_mgr.get_action_gif(p_def["gif_category"], session=session),
+                        timeout=1.8,
+                    )
+                except Exception:
+                    return None
 
-        async with lock:
             try:
                 async with message.channel.typing():
                     ai_task = self.bot.ai_mgr.generate_persona_reply(
@@ -519,14 +521,17 @@ class CompanionAI(commands.Cog):
                 except Exception as e:
                     logger.debug(f"Failed to deliver auto AI reply: {e}")
                     break
+        finally:
+            if lock.locked():
+                lock.release()
 
     # ─── MASTER UNIFIED PREFIX GROUP: +ai ────────────────────────────────────
 
     @commands.group(
         name="ai",
-        aliases=["chat", "askai", "aizenai"],
+        aliases=["chat", "ask", "talk", "askai", "aizenai"],
         invoke_without_command=True,
-        help="Converse with KYOKA using the configured persona, or manage the AI system.",
+        help="Converse with KYOKA like a normal friend, or manage the AI system.",
     )
     async def ai(self, ctx: CustomContext, *, message: str = "") -> None:
         """Master AI command: ask a question or explore personalities."""

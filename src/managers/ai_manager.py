@@ -421,12 +421,12 @@ class AIManager:
             "guild_id": int(row["guild_id"]),
             "enabled": bool(row.get("enabled", True)),
             "channel_id": int(row["channel_id"]) if row.get("channel_id") else None,
-            "personality": str(row.get("personality", "aizen")),
-            "tone": str(row.get("tone", "composed")),
-            "humor": str(row.get("humor", "dry")),
+            "personality": str(row.get("personality") or "normal"),
+            "tone": str(row.get("tone", "casual")),
+            "humor": str(row.get("humor", "witty")),
             "language": str(row.get("language", "English")),
             "response_length": str(row.get("response_length", "balanced")),
-            "purpose": str(row.get("purpose", "Server assistant and guide")),
+            "purpose": str(row.get("purpose", "Friendly authentic chat companion and server helper")),
             "custom_rules": str(row.get("custom_rules", "")),
             "faqs": str(row.get("faqs", "")),
             "respond_mode": str(row.get("respond_mode", "mentions_and_replies")),
@@ -445,12 +445,12 @@ class AIManager:
                 "guild_id": guild_id,
                 "enabled": True,
                 "channel_id": None,
-                "personality": "aizen",
-                "tone": "composed",
-                "humor": "dry",
+                "personality": "normal",
+                "tone": "casual",
+                "humor": "witty",
                 "language": "English",
                 "response_length": "balanced",
-                "purpose": "Server assistant and guide",
+                "purpose": "Friendly authentic chat companion and server helper",
                 "custom_rules": "",
                 "faqs": "",
                 "respond_mode": "mentions_and_replies",
@@ -563,7 +563,7 @@ class AIManager:
         Dynamically assemble isolated system instructions tailored to server and persona.
         """
         config = self.get_server_config(guild_id)
-        effective_key = persona_key or config.get("personality", "aizen")
+        effective_key = persona_key or config.get("personality", "normal")
 
         if effective_key in PERSONALITY_PRESETS:
             base_prompt = PERSONALITY_PRESETS[effective_key]["prompt"]

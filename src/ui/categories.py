@@ -267,7 +267,7 @@ CATEGORY_SEARCH_ALIASES: dict[str, str] = {
     # Blox Fruits AI
     "bloxai": "blox_fruits", "bfai": "blox_fruits", "bloxfruits": "blox_fruits", "bf": "blox_fruits", "fruit": "blox_fruits", "fruitnotifier": "blox_fruits",
     # AI System & Voice
-    "ai": "ai", "aizen": "ai", "ask": "ai", "aivoice": "ai", "voice": "ai", "voiceai": "ai", "tts": "ai", "gemini": "ai",
+    "ai": "ai", "aizen": "ai", "ask": "ai", "talk": "ai", "chat": "ai", "aivoice": "ai", "voice": "ai", "voiceai": "ai", "tts": "ai", "gemini": "ai",
     # Leveling
     "rank": "leveling", "levels": "leveling", "leveling": "leveling", "xp": "leveling", "leaderboard": "leveling", "lb": "leveling", "community": "leveling",
     # Images & Avatars
@@ -277,7 +277,7 @@ CATEGORY_SEARCH_ALIASES: dict[str, str] = {
     # Server Config
     "config": "config", "setup": "config", "settings": "config", "prefix": "config", "logs": "config", "admin": "config", "administration": "config", "setbot": "config", "branding": "config", "brand": "config",
     # Social & Fun
-    "social": "social", "fun": "social", "games": "social", "romance": "social", "anime": "social",
+    "social": "social", "fun": "social", "games": "social", "romance": "social", "anime": "social", "ltlvc": "social", "ltl": "social", "lasttoleave": "social", "lasttoleavevc": "social",
     # KDC Shop & Stock & Reviews
     "stock": "service_bills", "kdc": "service_bills", "shop": "service_bills", "store": "service_bills", "kdcshop": "service_bills", "review": "service_bills", "reviews": "service_bills",
     # Owner & Developer
@@ -402,6 +402,8 @@ COG_MAPPINGS: dict[str, str] = {
     "games": "social",
     "romance": "social",
     "adulthumor": "social",
+    "lasttoleavevc": "social",
+    "ltlvc": "social",
 
     # Images & Avatars
     "animeactions": "images",
