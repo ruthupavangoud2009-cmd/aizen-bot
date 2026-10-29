@@ -101,61 +101,171 @@ if not discord.opus.is_loaded():
             pass
 
 AVAILABLE_VOICES: Dict[str, Dict[str, str]] = {
+    # ── English voices ──
     "ava": {
         "id": "en-US-AvaNeural",
         "name": "Ava",
         "style": "Ultra-realistic, expressive human conversational female",
         "gender": "Female (Human)",
+        "lang": "en",
     },
     "andrew": {
         "id": "en-US-AndrewNeural",
         "name": "Andrew",
         "style": "Ultra-realistic, natural warm conversational male",
         "gender": "Male (Human)",
+        "lang": "en",
     },
     "aizen": {
         "id": "en-GB-RyanNeural",
         "name": "Sosuke Aizen",
         "style": "Deep, authoritative British male anime cadence",
         "gender": "Male",
+        "lang": "en",
     },
     "kyoka": {
         "id": "en-US-JennyNeural",
         "name": "Kyoka",
         "style": "Expressive, melodic female anime voice",
         "gender": "Female",
+        "lang": "en",
     },
     "guy": {
         "id": "en-US-GuyNeural",
         "name": "Guy",
         "style": "Neutral, clean modern American male",
         "gender": "Male",
+        "lang": "en",
     },
     "christopher": {
         "id": "en-US-ChristopherNeural",
         "name": "Christopher",
         "style": "Warm, confident conversational male",
         "gender": "Male",
+        "lang": "en",
     },
     "aria": {
         "id": "en-US-AriaNeural",
         "name": "Aria",
         "style": "Crisp, professional studio female",
         "gender": "Female",
+        "lang": "en",
     },
+    # ── Hindi voices ──
+    "aarav": {
+        "id": "hi-IN-MadhurNeural",
+        "name": "Aarav (Hindi Male)",
+        "style": "Natural Hindi male voice, smooth and confident",
+        "gender": "Male (Hindi)",
+        "lang": "hi",
+    },
+    "ananya": {
+        "id": "hi-IN-SwaraNeural",
+        "name": "Ananya (Hindi Female)",
+        "style": "Warm and expressive Hindi female voice",
+        "gender": "Female (Hindi)",
+        "lang": "hi",
+    },
+    # ── Japanese voices ──
     "keita": {
         "id": "ja-JP-KeitaNeural",
         "name": "Keita",
         "style": "Authentic Japanese male anime voice",
         "gender": "Male (Japanese)",
+        "lang": "ja",
     },
     "nanami": {
         "id": "ja-JP-NanamiNeural",
         "name": "Nanami",
         "style": "Authentic Japanese female anime voice",
         "gender": "Female (Japanese)",
+        "lang": "ja",
+    },
+    # ── Spanish voice ──
+    "elena": {
+        "id": "es-MX-DaliaNeural",
+        "name": "Elena (Spanish)",
+        "style": "Natural, warm Mexican Spanish female voice",
+        "gender": "Female (Spanish)",
+        "lang": "es",
+    },
+    # ── French voice ──
+    "claire": {
+        "id": "fr-FR-DeniseNeural",
+        "name": "Claire (French)",
+        "style": "Elegant and natural French female voice",
+        "gender": "Female (French)",
+        "lang": "fr",
+    },
+    # ── Korean voice ──
+    "jisoo": {
+        "id": "ko-KR-SunHiNeural",
+        "name": "Jisoo (Korean)",
+        "style": "Natural and expressive Korean female voice",
+        "gender": "Female (Korean)",
+        "lang": "ko",
+    },
+    # ── Arabic voice ──
+    "amira": {
+        "id": "ar-SA-ZariyahNeural",
+        "name": "Amira (Arabic)",
+        "style": "Clear and natural Arabic female voice",
+        "gender": "Female (Arabic)",
+        "lang": "ar",
+    },
+    # ── Portuguese voice ──
+    "lucas": {
+        "id": "pt-BR-FranciscaNeural",
+        "name": "Lucas (Portuguese)",
+        "style": "Natural Brazilian Portuguese female voice",
+        "gender": "Female (Portuguese)",
+        "lang": "pt",
+    },
+    # ── German voice ──
+    "max": {
+        "id": "de-DE-ConradNeural",
+        "name": "Max (German)",
+        "style": "Confident and clear German male voice",
+        "gender": "Male (German)",
+        "lang": "de",
     },
 }
+
+# Language code to gTTS lang mapping for fallback
+GTTS_LANG_MAP: Dict[str, str] = {
+    "en": "en",
+    "hi": "hi",
+    "ja": "ja",
+    "es": "es",
+    "fr": "fr",
+    "ko": "ko",
+    "ar": "ar",
+    "pt": "pt",
+    "de": "de",
+}
+
+# Simple Unicode-range based language auto-detection for gTTS fallback
+def _detect_lang(text: str) -> str:
+    """Detect language from text characters for gTTS fallback."""
+    for ch in text:
+        cp = ord(ch)
+        # Devanagari (Hindi)
+        if 0x0900 <= cp <= 0x097F:
+            return "hi"
+        # Japanese Hiragana / Katakana
+        if (0x3040 <= cp <= 0x309F) or (0x30A0 <= cp <= 0x30FF):
+            return "ja"
+        # Korean Hangul
+        if 0xAC00 <= cp <= 0xD7AF:
+            return "ko"
+        # Arabic
+        if 0x0600 <= cp <= 0x06FF:
+            return "ar"
+        # CJK (Chinese)
+        if 0x4E00 <= cp <= 0x9FFF:
+            return "zh-CN"
+    return "en"
+
 
 VOICE_ALIASES: Dict[str, str] = {
     "female": "ava",
@@ -180,6 +290,20 @@ VOICE_ALIASES: Dict[str, str] = {
     "japanese": "keita",
     "japanese_male": "keita",
     "japanese_female": "nanami",
+    # Hindi aliases
+    "hindi": "aarav",
+    "hindi_male": "aarav",
+    "hindi_female": "ananya",
+    "hin": "aarav",
+    "india": "aarav",
+    "indian": "aarav",
+    # Other language aliases
+    "spanish": "elena",
+    "french": "claire",
+    "korean": "jisoo",
+    "arabic": "amira",
+    "portuguese": "lucas",
+    "german": "max",
 }
 
 
@@ -271,21 +395,39 @@ class AIVoice(commands.Cog, name="AIVoice"):
         return AVAILABLE_VOICES.get(key, AVAILABLE_VOICES["ava"])["id"]
 
     def _is_music_active(self, guild: discord.Guild) -> bool:
-        """Check if guild voice client is owned or actively used by Music subsystem."""
+        """Check if guild voice client is actively playing music (not just connected)."""
         vc = guild.voice_client
         if not vc:
             return False
+        # Only block if wavelink.Player AND actively playing/paused with content
         if isinstance(vc, wavelink.Player):
-            return True
+            is_playing = getattr(vc, "playing", False) or getattr(vc, "is_playing", False)
+            is_paused = getattr(vc, "paused", False) or getattr(vc, "is_paused", False)
+            has_queue = bool(getattr(vc, "queue", None))
+            is_247 = getattr(vc, "is_247", False)
+            if callable(is_playing):
+                is_playing = is_playing()
+            if callable(is_paused):
+                is_paused = is_paused()
+            return bool(is_playing or is_paused or has_queue or is_247)
         music_ctrl = getattr(self.bot, "_music_controller", None)
         if music_ctrl and hasattr(music_ctrl, "get_player"):
             player = music_ctrl.get_player(guild.id)
-            if player and (player.is_playing or player.queue or getattr(player, "is_247", False)):
-                return True
+            if player:
+                active = getattr(player, "is_playing", False)
+                if callable(active):
+                    active = active()
+                return bool(active or player.queue or getattr(player, "is_247", False))
         return False
 
-    async def _synthesize_audio(self, text: str, voice_id: str, output_path: str) -> bool:
-        """Synthesize text to mp3 using Edge-TTS or gTTS fallback."""
+    def _get_voice_lang(self, guild_id: int) -> str:
+        """Get the gTTS language code for the active voice in this guild."""
+        key = self._guild_voices.get(guild_id, "ava")
+        voice_meta = AVAILABLE_VOICES.get(key, AVAILABLE_VOICES["ava"])
+        return voice_meta.get("lang", "en")
+
+    async def _synthesize_audio(self, text: str, voice_id: str, output_path: str, lang: str = "en") -> bool:
+        """Synthesize text to mp3 using Edge-TTS (multilingual) or gTTS fallback."""
         if HAS_EDGE_TTS:
             try:
                 comm = edge_tts.Communicate(text, voice_id)
@@ -293,16 +435,25 @@ class AIVoice(commands.Cog, name="AIVoice"):
                 if os.path.exists(output_path) and os.path.getsize(output_path) > 0:
                     return True
             except Exception as e:
-                logger.debug(f"Edge-TTS failed, falling back to gTTS: {e}")
+                logger.debug(f"Edge-TTS failed for voice_id={voice_id}, falling back to gTTS: {e}")
 
-        # Fallback to gTTS
+        # Fallback to gTTS — auto-detect language from text or use provided lang
         try:
             loop = asyncio.get_running_loop()
-            await loop.run_in_executor(None, lambda: gTTS(text=text, lang="en").save(output_path))
+            # Auto-detect from text characters first; fall back to voice lang
+            detected = _detect_lang(text)
+            gtts_lang = detected if detected != "en" else GTTS_LANG_MAP.get(lang, "en")
+            await loop.run_in_executor(None, lambda: gTTS(text=text, lang=gtts_lang).save(output_path))
             return os.path.exists(output_path) and os.path.getsize(output_path) > 0
         except Exception as e:
-            logger.error(f"TTS synthesis failure: {e}")
-            return False
+            logger.error(f"TTS synthesis failure (lang={lang}): {e}")
+            # Last resort: try English
+            try:
+                loop = asyncio.get_running_loop()
+                await loop.run_in_executor(None, lambda: gTTS(text=text, lang="en").save(output_path))
+                return os.path.exists(output_path) and os.path.getsize(output_path) > 0
+            except Exception:
+                return False
 
     async def _play_audio_file(self, voice_client: discord.VoiceClient, file_path: str) -> None:
         """Play local audio file through VoiceClient with completion await and safe error recovery."""
@@ -481,13 +632,14 @@ class AIVoice(commands.Cog, name="AIVoice"):
                 return await ctx.send_error(f"I am not in a voice channel. Connect first with `{ctx.prefix}aivoice join`!")
 
         voice_id = self._get_voice_id(ctx.guild.id)
+        voice_lang = self._get_voice_lang(ctx.guild.id)
         lock = self._get_lock(ctx.guild.id)
 
         async with ctx.typing():
             temp_fd, temp_path = tempfile.mkstemp(suffix=".mp3")
             os.close(temp_fd)
 
-            success = await self._synthesize_audio(text, voice_id, temp_path)
+            success = await self._synthesize_audio(text, voice_id, temp_path, lang=voice_lang)
             if not success or not os.path.exists(temp_path):
                 return await ctx.send_error("Audio synthesis failed. Please try again.")
 
@@ -575,6 +727,7 @@ class AIVoice(commands.Cog, name="AIVoice"):
 
         # Synthesize and speak
         voice_id = self._get_voice_id(ctx.guild.id)
+        voice_lang = self._get_voice_lang(ctx.guild.id)
         lock = self._get_lock(ctx.guild.id)
 
         async with ctx.typing():
@@ -582,7 +735,7 @@ class AIVoice(commands.Cog, name="AIVoice"):
             os.close(temp_fd)
 
             spoken_text = answer[:350]
-            success = await self._synthesize_audio(spoken_text, voice_id, temp_path)
+            success = await self._synthesize_audio(spoken_text, voice_id, temp_path, lang=voice_lang)
             if not success:
                 return await ctx.send_error("Voice synthesis failed. Check `+aivoice diag` for audio engine health.")
 
