@@ -521,32 +521,108 @@ class NativeExtractor:
         except Exception as e:
             logger.debug(f"YouTube fallback search notice: {e}")
 
-        # Priority 3: Raw query fallback if cleaned was different
-        if search_target.lower() != cleaned_query.lower():
-            try:
-                results = await asyncio.wait_for(
-                    wavelink.Playable.search(search_target, source=wavelink.TrackSource.YouTube),
-                    timeout=8.0,
+        # Priority 3: Default Lavalink search (uses node default source manager)
+        try:
+            results = await asyncio.wait_for(
+                wavelink.Playable.search(cleaned_query),
+                timeout=8.0,
+            )
+            if results and not isinstance(results, wavelink.Playlist):
+                top = results[0] if isinstance(results, list) else results.tracks[0]
+                thumb = top.artwork or (f"https://i.ytimg.com/vi/{top.identifier}/hqdefault.jpg" if getattr(top, "identifier", None) else None)
+                trk = Track(
+                    title=top.title or cleaned_query,
+                    author=top.author or "Artist",
+                    url=orig_spotify_url or top.uri or orig_yt_url or raw_q,
+                    stream_url="",
+                    duration=int((top.length or 0) / 1000),
+                    thumbnail=thumb,
+                    requester=requester,
+                    is_autoplay=is_autoplay,
+                    query=raw_q,
                 )
-                if results:
-                    top = results[0] if isinstance(results, list) else results.tracks[0]
-                    thumb = top.artwork or (f"https://i.ytimg.com/vi/{top.identifier}/hqdefault.jpg" if getattr(top, "identifier", None) else None)
-                    trk = Track(
-                        title=top.title or search_target,
-                        author=top.author or "Artist",
-                        url=orig_spotify_url or top.uri or orig_yt_url or raw_q,
-                        stream_url="",
-                        duration=int((top.length or 0) / 1000),
-                        thumbnail=thumb,
-                        requester=requester,
-                        is_autoplay=is_autoplay,
-                        query=raw_q,
+                trk._playable = top
+                _SEARCH_CACHE[cache_key] = (now, trk)
+                return trk
+        except Exception as e:
+            logger.debug(f"Default search notice: {e}")
+
+        # Priority 4: SoundCloud search via Lavalink
+        try:
+            results = await asyncio.wait_for(
+                wavelink.Playable.search(cleaned_query, source=wavelink.TrackSource.SoundCloud),
+                timeout=8.0,
+            )
+            if results and not isinstance(results, wavelink.Playlist):
+                top = results[0] if isinstance(results, list) else results.tracks[0]
+                thumb = top.artwork
+                trk = Track(
+                    title=top.title or cleaned_query,
+                    author=top.author or "Artist",
+                    url=orig_spotify_url or top.uri or orig_yt_url or raw_q,
+                    stream_url="",
+                    duration=int((top.length or 0) / 1000),
+                    thumbnail=thumb,
+                    requester=requester,
+                    is_autoplay=is_autoplay,
+                    query=raw_q,
+                )
+                trk._playable = top
+                _SEARCH_CACHE[cache_key] = (now, trk)
+                return trk
+        except Exception as e:
+            logger.debug(f"SoundCloud search notice: {e}")
+
+        # Priority 5: Raw query fallback if cleaned was different
+        if search_target.lower() != cleaned_query.lower():
+            for raw_source in (wavelink.TrackSource.YouTubeMusic, wavelink.TrackSource.YouTube, None, wavelink.TrackSource.SoundCloud):
+                try:
+                    kwargs = {"source": raw_source} if raw_source else {}
+                    results = await asyncio.wait_for(
+                        wavelink.Playable.search(search_target, **kwargs),
+                        timeout=8.0,
                     )
-                    trk._playable = top
-                    _SEARCH_CACHE[cache_key] = (now, trk)
-                    return trk
+                    if results and not isinstance(results, wavelink.Playlist):
+                        top = results[0] if isinstance(results, list) else results.tracks[0]
+                        thumb = top.artwork or (f"https://i.ytimg.com/vi/{top.identifier}/hqdefault.jpg" if getattr(top, "identifier", None) else None)
+                        trk = Track(
+                            title=top.title or search_target,
+                            author=top.author or "Artist",
+                            url=orig_spotify_url or top.uri or orig_yt_url or raw_q,
+                            stream_url="",
+                            duration=int((top.length or 0) / 1000),
+                            thumbnail=thumb,
+                            requester=requester,
+                            is_autoplay=is_autoplay,
+                            query=raw_q,
+                        )
+                        trk._playable = top
+                        _SEARCH_CACHE[cache_key] = (now, trk)
+                        return trk
+                except Exception as e:
+                    logger.debug(f"Raw query fallback notice ({raw_source}): {e}")
+
+        # Priority 6: JioSaavn 320kbps HD Audio Engine Fallback (Unblocked, 100M+ tracks)
+        if not is_direct_url:
+            try:
+                saavn_trk = await asyncio.wait_for(
+                    cls._extract_jiosaavn(search_target, requester=requester, is_autoplay=is_autoplay),
+                    timeout=5.0,
+                )
+                if saavn_trk:
+                    if saavn_trk.stream_url:
+                        try:
+                            direct_res = await asyncio.wait_for(
+                                wavelink.Playable.search(saavn_trk.stream_url), timeout=6.0
+                            )
+                            if direct_res:
+                                saavn_trk._playable = direct_res[0] if isinstance(direct_res, list) else direct_res.tracks[0]
+                        except Exception:
+                            pass
+                    _SEARCH_CACHE[cache_key] = (now, saavn_trk)
+                    return saavn_trk
             except Exception as e:
-                logger.debug(f"Raw query fallback notice: {e}")
+                logger.debug(f"JioSaavn extraction fallback notice: {e}")
 
         return None
 

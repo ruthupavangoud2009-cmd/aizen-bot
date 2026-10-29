@@ -516,6 +516,30 @@ async def execute_play(cog: Music, ctx: commands.Context, query: Optional[str] =
             except Exception as e:
                 logger.debug(f"Spotify bridge search notice: {e}")
 
+        # Fallback 3.5: Default Node Search via Lavalink
+        if not track and not is_direct_url:
+            try:
+                results = await asyncio.wait_for(
+                    wavelink.Playable.search(lookup_target),
+                    timeout=8.0
+                )
+                if results and not isinstance(results, wavelink.Playlist):
+                    top_p = results[0]
+                    track = Track(
+                        title=top_p.title or "Unknown Track",
+                        author=top_p.author or "Unknown Artist",
+                        url=top_p.uri or query,
+                        stream_url="",
+                        duration=int((top_p.length or 0) / 1000),
+                        thumbnail=top_p.artwork,
+                        requester=ctx.author.display_name,
+                        requester_id=ctx.author.id,
+                        query=query,
+                    )
+                    track._playable = top_p
+            except Exception as e:
+                logger.debug(f"Default search fallback notice: {e}")
+
         # Fallback 4: SoundCloud Search via Lavalink
         if not track and not is_direct_url:
             try:
@@ -552,6 +576,24 @@ async def execute_play(cog: Music, ctx: commands.Context, query: Optional[str] =
                     track._playable = top_p
             except Exception as e:
                 logger.debug(f"SoundCloud fallback search notice: {e}")
+
+        # Fallback 5: JioSaavn 320kbps HD Audio Fallback
+        if not track and not is_direct_url:
+            try:
+                saavn_track = await asyncio.wait_for(
+                    NativeExtractor._extract_jiosaavn(lookup_target, requester=ctx.author.display_name, is_autoplay=False),
+                    timeout=5.0
+                )
+                if saavn_track and saavn_track.stream_url:
+                    try:
+                        direct_res = await asyncio.wait_for(wavelink.Playable.search(saavn_track.stream_url), timeout=6.0)
+                        if direct_res:
+                            saavn_track._playable = direct_res[0] if isinstance(direct_res, list) else direct_res.tracks[0]
+                    except Exception:
+                        pass
+                    track = saavn_track
+            except Exception as e:
+                logger.debug(f"JioSaavn final fallback notice: {e}")
 
         # If still no track found, edit the searching message to inform user
         if not track:

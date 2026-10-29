@@ -448,8 +448,9 @@ async def probe_candidate_node(
             sources = info.get("sourceManagers") or []
             plugins = [p.get("name") for p in (info.get("plugins") or []) if isinstance(p, dict)]
             has_youtube = "youtube" in sources or any("youtube" in str(p).lower() for p in plugins)
-            if not has_youtube:
-                return False, "node has no YouTube source"
+            has_other_audio = any(s in sources for s in ("soundcloud", "spotify", "http", "jiosaavn"))
+            if not has_youtube and not has_other_audio:
+                return False, "node has no supported audio source"
 
             return True, "node is fully operational"
 
@@ -518,10 +519,10 @@ async def connect_lavalink_node(
         else:
             # Pool.connect logs connection errors instead of raising them, so the
             # real state has to be verified explicitly.
-            for _ in range(10):
+            for _ in range(25):
                 if node.status == wavelink.NodeStatus.CONNECTED:
                     break
-                await asyncio.sleep(0.5)
+                await asyncio.sleep(0.2)
 
             if node.status == wavelink.NodeStatus.CONNECTED:
                 if await probe_node(node):

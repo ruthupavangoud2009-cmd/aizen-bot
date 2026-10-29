@@ -85,3 +85,38 @@ async def test_loadfailed_track_ends_queue_cleanly_if_empty():
             assert player.current is None
             mock_ended.assert_awaited_once()
             mock_timer.assert_called_once()
+
+
+def test_direct_stream_url_detection():
+    """Verify _is_direct_stream_url identifies valid direct audio streams."""
+    bot = MagicMock()
+    guild = MagicMock(id=123456789)
+    player = GuildPlayer(bot, guild)
+
+    # Valid streams
+    assert player._is_direct_stream_url("https://aac.saavncdn.com/981/ddf4f57d94d268001967dc60725c52ca_320.mp4") is True
+    assert player._is_direct_stream_url("https://example.com/audio/track.mp3") is True
+    assert player._is_direct_stream_url("https://example.com/stream.opus?token=xyz") is True
+    assert player._is_direct_stream_url("https://stream.zeno.fm/station") is True
+
+    # Invalid / Web pages
+    assert player._is_direct_stream_url("https://www.youtube.com/watch?v=12345") is False
+    assert player._is_direct_stream_url("https://open.spotify.com/track/12345") is False
+    assert player._is_direct_stream_url("") is False
+    assert player._is_direct_stream_url(None) is False
+
+
+@pytest.mark.asyncio
+async def test_resolve_playable_with_attached_playable():
+    """Verify _resolve_playable_cascade returns pre-attached _playable immediately."""
+    bot = MagicMock()
+    guild = MagicMock(id=123456789)
+    player = GuildPlayer(bot, guild)
+
+    dummy_playable = MagicMock()
+    track = Track(title="Attached Track", url="https://example.com/track", author="Artist")
+    track._playable = dummy_playable
+
+    resolved = await player._resolve_playable_cascade(track)
+    assert resolved is dummy_playable
+

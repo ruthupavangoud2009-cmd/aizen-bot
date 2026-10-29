@@ -559,10 +559,12 @@ class GuildPlayer:
 
     def _is_direct_stream_url(self, url: str) -> bool:
         """Return True only if url is a raw audio stream Lavalink can play via HTTP."""
-        if not url or not url.startswith("http"):
+        if not url or not url.startswith(("http://", "https://")):
             return False
         u_low = url.lower()
-        if "googlevideo.com" in u_low and any(ext in u_low for ext in (".mp4", "videoplayback", ".m4a", ".webm", ".opus", ".mp3")):
+        if any(cdn in u_low for cdn in ("saavncdn.com", "googlevideo.com", "sndcdn.com", "stream.zeno.fm", "icecast", "shoutcast")):
+            return True
+        if any(u_low.endswith(ext) or f"{ext}?" in u_low for ext in (".mp4", ".m4a", ".mp3", ".aac", ".ogg", ".flac", ".opus", "videoplayback")):
             return True
         return False
 
@@ -638,6 +640,16 @@ class GuildPlayer:
 
         url = track.url or ""
 
+        # ── Priority 1.5: Direct Audio Stream URL (JioSaavn 320kbps / CDN / HTTP stream) ──
+        stream_url = getattr(track, "stream_url", None)
+        if stream_url and self._is_direct_stream_url(stream_url):
+            try:
+                results = await asyncio.wait_for(wavelink.Playable.search(stream_url), timeout=8.0)
+                if results:
+                    return results[0] if isinstance(results, list) else results.tracks[0]
+            except Exception as e:
+                logger.debug(f"Direct stream URL resolve notice for '{track.title}': {e}")
+
         # ── Priority 2: Direct URL (YouTube or Spotify track) ──
         if url.startswith(("http://", "https://")):
             is_yt = any(yt in url for yt in ("youtube.com/watch", "youtu.be/", "music.youtube.com/watch"))
@@ -670,18 +682,22 @@ class GuildPlayer:
         if full_query:
             strategies.append((full_query, wavelink.TrackSource.YouTubeMusic))
             strategies.append((full_query, wavelink.TrackSource.YouTube))
-            strategies.append((full_query, "spsearch"))
+            strategies.append((full_query, None))
             strategies.append((full_query, wavelink.TrackSource.SoundCloud))
+            strategies.append((full_query, "spsearch"))
         if clean_title and clean_title != full_query:
             strategies.append((clean_title, wavelink.TrackSource.YouTubeMusic))
             strategies.append((clean_title, wavelink.TrackSource.YouTube))
+            strategies.append((clean_title, None))
             strategies.append((clean_title, wavelink.TrackSource.SoundCloud))
         if track.query and track.query not in (full_query, clean_title) and not track.query.startswith(("http://", "https://")):
             strategies.append((track.query, wavelink.TrackSource.YouTubeMusic))
             strategies.append((track.query, wavelink.TrackSource.YouTube))
+            strategies.append((track.query, None))
             strategies.append((track.query, wavelink.TrackSource.SoundCloud))
         if track.title and track.title not in (full_query, clean_title):
             strategies.append((track.title, wavelink.TrackSource.YouTube))
+            strategies.append((track.title, None))
             strategies.append((track.title, wavelink.TrackSource.SoundCloud))
 
         for query, source in strategies:
@@ -709,6 +725,21 @@ class GuildPlayer:
                 except Exception as e:
                     logger.debug(f"Search error for '{query}' source={source}: {e}")
                     break  # non-timeout error — skip retry, try next strategy
+
+        # ── Priority 4: JioSaavn HD Audio Engine Fallback ──
+        if not url.startswith(("http://", "https://")):
+            try:
+                from src.cogs.music._extractor import NativeExtractor
+                saavn_t = await asyncio.wait_for(
+                    NativeExtractor._extract_jiosaavn(full_query or track.title, requester=track.requester, is_autoplay=track.is_autoplay),
+                    timeout=5.0
+                )
+                if saavn_t and saavn_t.stream_url:
+                    s_res = await asyncio.wait_for(wavelink.Playable.search(saavn_t.stream_url), timeout=6.0)
+                    if s_res:
+                        return s_res[0] if isinstance(s_res, list) else s_res.tracks[0]
+            except Exception as e:
+                logger.debug(f"JioSaavn playable cascade fallback notice: {e}")
 
         logger.warning(f"All resolution strategies exhausted for '{track.title}' (queries tried: {[s[0] for s in strategies]})")
         return None
@@ -855,6 +886,7 @@ class GuildPlayer:
 
         if reason and str(reason).lower() in ("loadfailed", "load_failed", "stuck", "error"):
             logger.warning(f"Guild {self.guild.id}: Lavalink reported track {reason}.")
+            failed_title = self.current.title if self.current else "track"
             if self.voice_client and hasattr(self.voice_client, "skip"):
                 try:
                     await asyncio.wait_for(
@@ -863,6 +895,13 @@ class GuildPlayer:
                     )
                 except Exception as e:
                     logger.debug(f"Guild {self.guild.id}: voice skip cleanup notice: {e}")
+            if self.home_channel:
+                try:
+                    warn_c = KyokaContainer(accent_color=None)
+                    warn_c.add_text(f"⚠️ **Could not stream track:** `{failed_title}` (audio source error). Advancing queue...")
+                    await send_container_response(self.home_channel, warn_c)
+                except Exception:
+                    pass
             next_track = await self.pop_next_track()
             if next_track:
                 await self.play_track(next_track)
