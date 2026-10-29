@@ -21,7 +21,7 @@ from src.core.config import Config
 from src.core.context import CustomContext
 from src.utils.containers import KyokaContainer, send_container_response, edit_container_response
 from src.utils.ui import KyokaEmbed, AizenPalette, AizenSymbols
-from src.security.owner import is_primary_owner
+from src.security.owner import is_primary_owner, is_owner_or_staff
 from src.security.adult_guard import is_adult_authorized
 from src.ui.cards.hero_banner import generate_kyoka_hero_banner
 from src.ui.cards.hca_banner import generate_hca_banner

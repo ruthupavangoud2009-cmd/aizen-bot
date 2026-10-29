@@ -254,3 +254,18 @@ async def test_help_owner_developer_isolation(help_cog: Help, mock_ctx: MagicMoc
     with patch.object(type(help_cog.bot), "cogs", new_callable=PropertyMock, return_value={"Owner": MagicMock(get_commands=lambda: [owner_cmd]), "General": MagicMock(get_commands=lambda: [public_cmd])}):
         visible_owner = await help_cog._get_visible_categories(mock_ctx)
         assert "👑・OWNER & DEVELOPER" in visible_owner
+
+
+def test_help_can_run_command_spam_check(help_cog: Help, mock_ctx: MagicMock):
+    """Verify _can_run_command handles spam and spamcancel without NameError."""
+    spam_cmd = MagicMock(name="spam", hidden=False, cog=None)
+    spam_cmd.name = "spam"
+
+    # Regular user cannot run spam
+    mock_ctx.author.id = 111222333
+    assert help_cog._can_run_command(spam_cmd, mock_ctx) is False
+
+    # Owner can run spam
+    mock_ctx.author.id = OWNER_ID
+    assert help_cog._can_run_command(spam_cmd, mock_ctx) is True
+
