@@ -1646,7 +1646,7 @@ class Help(commands.Cog):
                 "> Accessible to every server member. Explore all loaded features, aliases, and syntax.\n\n"
                 f"• **Global Prefix:** `{p}<command>` · **Slash Support:** `/<command>`\n"
                 f"• **Total Commands:** `{total_commands}` across `{len(all_categories)}` active modules\n"
-                f"• **Legend:** `[+]` Prefix · `[/]` Slash · `[Public]` Everyone · `[Mod]` Staff · `[Admin]` Admin · `[Owner]` Dev\n\n"
+                f"• **Legend:** `[Prefix]` Prefix · `[/]` Slash · `[Public]` Everyone · `[Mod]` Staff · `[Admin]` Admin · `[Owner]` Dev\n\n"
                 f"💡 *Select a module from the dropdown or click **Search** to find any command.*"
             ),
             color=0x2B0938,
@@ -1709,7 +1709,7 @@ class Help(commands.Cog):
         for c in page_cmds:
             badge = self._get_badge(c) or " `[Public]`"
             is_slash = getattr(c, "app_command", None) is not None or hasattr(c, "app_command")
-            type_tag = "`[+ /]`" if is_slash else "`[+]`"
+            type_tag = "`[Prefix + Slash]`" if is_slash else "`[Prefix]`"
             sig = f" {c.signature}" if c.signature else ""
             desc = (c.description or getattr(c, "help", None) or "No detailed description provided.").strip().split("\n")[0][:90]
             alias_str = f" · *Aliases:* {', '.join(f'`{a}`' for a in c.aliases)}" if c.aliases else ""
@@ -1777,7 +1777,7 @@ class Help(commands.Cog):
             for cmd, cat in matched[:10]:
                 badge = self._get_badge(cmd) or " `[Public]`"
                 is_slash = getattr(cmd, "app_command", None) is not None or hasattr(cmd, "app_command")
-                type_tag = "`[+ /]`" if is_slash else "`[+]`"
+            type_tag = "`[Prefix + Slash]`" if is_slash else "`[Prefix]`"
                 desc = (cmd.description or cmd.help or "No description.").strip().split("\n")[0][:100]
                 sig = f" {cmd.signature}" if cmd.signature else ""
                 embed.add_field(
