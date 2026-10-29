@@ -204,7 +204,23 @@ class ErrorHandler(commands.Cog, name="ErrorHandler"):
 
         incident_id = f"INC-{uuid.uuid4().hex[:8].upper()}"
         tb = "".join(traceback.format_exception(type(error), error, error.__traceback__))
-        logger.error(f"[Slash Incident {incident_id}] Error in slash command '{interaction.command}': {error}\n{tb}")
+        # Include safe identifiers so an incident can be traced from the user's
+        # Discord error card to Render logs without logging message content or tokens.
+        command_name = getattr(interaction.command, "qualified_name", None) or "unknown"
+        guild_id = interaction.guild_id
+        user_id = interaction.user.id if interaction.user else None
+        logger.error(
+            "[Slash Incident %s] command=%s guild_id=%s user_id=%s "
+            "interaction_id=%s error_type=%s error=%s\\n%s",
+            incident_id,
+            command_name,
+            guild_id,
+            user_id,
+            interaction.id,
+            type(error).__name__,
+            str(error),
+            tb,
+        )
 
         if isinstance(error, app_commands.CommandOnCooldown):
             msg = f"⏳ **Cooldown Active:** Please wait `{error.retry_after:.1f}s` before trying again."
@@ -222,8 +238,18 @@ class ErrorHandler(commands.Cog, name="ErrorHandler"):
                 await interaction.response.send_message(msg, ephemeral=True)
             else:
                 await interaction.followup.send(msg, ephemeral=True)
+        except (discord.NotFound, discord.InteractionResponded) as send_err:
+            # The interaction token may have expired or already been acknowledged.
+            logger.warning(
+                "Could not deliver slash error card (incident_id=%s command=%s): %s",
+                incident_id, command_name, type(send_err).__name__,
+            )
         except Exception as send_err:
-            logger.debug(f"Failed to send slash error response: {send_err}")
+            logger.exception(
+                "Slash error response failed (incident_id=%s command=%s); "
+                "the original callback error is logged above.",
+                incident_id, command_name, exc_info=send_err,
+            )
 
 
 async def setup(bot: commands.Bot) -> None:
