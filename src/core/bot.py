@@ -48,26 +48,34 @@ async def get_prefix(bot: KyokaBot, message: discord.Message) -> list[str]:
     retain their explicit no-prefix authorization.
     """
     guild_id = message.guild.id if message.guild else None
-    configured_prefix = (
-        bot.guild_mgr.get_prefix(guild_id)
-        if guild_id is not None and hasattr(bot, "guild_mgr")
-        else Config.DEFAULT_PREFIX
-    )
-    # Never silently enable legacy prefixes: one server prefix means one prefix.
-    prefixes: list[str] = [configured_prefix or Config.DEFAULT_PREFIX]
+
+    # Prefix resolution must never prevent command dispatch. A damaged or not-yet-
+    # initialized guild cache falls back to the configured default instead of
+    # raising inside discord.py's message parser.
+    configured_prefix = Config.DEFAULT_PREFIX or "+"
+    if guild_id is not None:
+        try:
+            guild_manager = getattr(bot, "guild_mgr", None)
+            if guild_manager is not None:
+                candidate = guild_manager.get_prefix(guild_id)
+                if isinstance(candidate, str) and candidate.strip():
+                    configured_prefix = candidate
+        except Exception:
+            logger.exception("Could not resolve guild prefix; using the configured default.")
+
+    # Exactly one text prefix per server; do not revive obsolete hardcoded prefixes.
+    prefixes: list[str] = [configured_prefix]
 
     author_id = message.author.id if message.author else None
-    is_no_prefix = False
-    if author_id is not None:
-        # No-prefix is an explicit allowlist, not an automatic privilege for every
-        # bot staff/developer. The owner is always allowed; everyone else must be
-        # granted access through the persistent `noprefix grant` command.
-        if is_primary_owner(author_id) or author_id in getattr(bot, "no_prefix_users", set()):
-            is_no_prefix = True
-
+    no_prefix_users = getattr(bot, "no_prefix_users", set())
+    is_no_prefix = bool(
+        author_id is not None
+        and (is_primary_owner(author_id) or author_id in no_prefix_users)
+    )
     if is_no_prefix:
         prefixes.append("")
 
+    # Keep mention commands available even if the normal prefix is misconfigured.
     if bot.user:
         return commands.when_mentioned_or(*prefixes)(bot, message)
     return prefixes
@@ -317,8 +325,18 @@ class KyokaBot(commands.Bot):
                 except Exception as e:
                     logger.debug(f"Leveling XP notice: {e}")
 
-        # Dispatch prefix & no-prefix commands with complete safety
-        await self.process_commands(message)
+        # Always dispatch commands for non-bot messages. Log enough metadata to
+        # diagnose prefix failures without logging message contents or secrets.
+        try:
+            await self.process_commands(message)
+        except Exception:
+            logger.exception(
+                "Command dispatch failed (guild_id=%s, author_id=%s, content_length=%s).",
+                message.guild.id if message.guild else None,
+                message.author.id,
+                len(message.content or ""),
+            )
+            raise
 
     async def _process_message_xp(self, message: discord.Message) -> None:
         """Process XP gain and optional level-up alerts safely in the background."""
