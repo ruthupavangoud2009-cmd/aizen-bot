@@ -26,11 +26,6 @@ class NoPrefix(commands.Cog):
     def __init__(self, bot: commands.Bot) -> None:
         self.bot = bot
 
-    async def _owner_only(self, ctx: commands.Context) -> bool:
-        if is_primary_owner(ctx.author.id):
-            return True
-        raise commands.CheckFailure("Only the primary bot owner can manage no-prefix access.")
-
     @commands.hybrid_command(
         name="noprefix",
         description="Owner only: grant, revoke, or list users allowed to use commands without a prefix.",
@@ -69,8 +64,7 @@ class NoPrefix(commands.Cog):
                 log.exception("Failed to read persistent no-prefix grants")
                 await ctx.send("⚠️ Could not read the no-prefix list because the database query failed.")
                 return
-            ids = sorted({int(row["user_id"]) for row in rows} | {int(getattr(self.bot, "no_prefix_users", set()).pop()) if False else -1})
-            ids = [uid for uid in ids if uid != -1]
+            ids = sorted({int(row["user_id"]) for row in rows})
             if not ids:
                 await ctx.send("No explicitly granted no-prefix users are saved.")
                 return
