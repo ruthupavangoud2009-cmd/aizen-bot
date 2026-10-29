@@ -39,6 +39,7 @@ class NoPrefix(commands.Cog):
         )
 
     @noprefix.command(name="grant", description="Grant no-prefix access to one user (owner only).")
+    @commands.check(_primary_owner_only)
     async def noprefix_grant(self, ctx: commands.Context, user: discord.User) -> None:
         if user.bot and user.id != self.bot.user.id:
             await ctx.send("No-prefix access is intended for human users.", ephemeral=ctx.interaction is not None)
@@ -68,6 +69,7 @@ class NoPrefix(commands.Cog):
         )
 
     @noprefix.command(name="revoke", description="Revoke no-prefix access from one user (owner only).")
+    @commands.check(_primary_owner_only)
     async def noprefix_revoke(self, ctx: commands.Context, user: discord.User) -> None:
         if is_primary_owner(user.id):
             await ctx.send("The primary owner's no-prefix access cannot be revoked.", ephemeral=ctx.interaction is not None)
@@ -93,6 +95,7 @@ class NoPrefix(commands.Cog):
         )
 
     @noprefix.command(name="list", description="List users who can run commands without a prefix (owner only).")
+    @commands.check(_primary_owner_only)
     async def noprefix_list(self, ctx: commands.Context) -> None:
         try:
             rows = await self.bot.db.fetch_all(
