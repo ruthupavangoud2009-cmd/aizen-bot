@@ -69,7 +69,7 @@ class HelpRenderer:
             value=(
                 "• Use the **Category Dropdown** below to inspect a module.\n"
                 "• Use **◀️ / ▶️** buttons to page through commands (5–15 per page).\n"
-                f"• Type `{prefix}help <command>` for syntax, aliases, and permissions.\\n"
+                f"• Type `{prefix}help <command>` for syntax, aliases, and permissions.\n"
             ),
             inline=False,
         )
