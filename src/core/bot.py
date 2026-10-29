@@ -59,9 +59,10 @@ async def get_prefix(bot: KyokaBot, message: discord.Message) -> list[str]:
     author_id = message.author.id if message.author else None
     is_no_prefix = False
     if author_id is not None:
+        # No-prefix is an explicit allowlist, not an automatic privilege for every
+        # bot staff/developer. The owner is always allowed; everyone else must be
+        # granted access through the persistent `noprefix grant` command.
         if is_primary_owner(author_id) or author_id in getattr(bot, "no_prefix_users", set()):
-            is_no_prefix = True
-        elif hasattr(bot, "perm_mgr") and bot.perm_mgr.is_developer_sync(author_id):
             is_no_prefix = True
 
     if is_no_prefix:
