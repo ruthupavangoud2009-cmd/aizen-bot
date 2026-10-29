@@ -43,31 +43,28 @@ logger = logging.getLogger("Kyoka.Core")
 
 async def get_prefix(bot: KyokaBot, message: discord.Message) -> list[str]:
     """
-    Dynamic prefix resolver:
-    - Supports configured guild prefix, default prefix ('+'), and legacy prefix ('?').
-    - Supports bot mentions (<@id>, <@!id>).
-    - Bot Owner, Developers & No-Prefix Authorized Users can also use commands with NO prefix.
+    Resolve exactly one configured prefix per server (or the default in DMs).
+    Bot mentions remain supported. Owner/developer/no-prefix allowlisted users
+    retain their explicit no-prefix authorization.
     """
     guild_id = message.guild.id if message.guild else None
-    guild_prefix = bot.guild_mgr.get_prefix(guild_id) if hasattr(bot, "guild_mgr") else Config.DEFAULT_PREFIX
+    configured_prefix = (
+        bot.guild_mgr.get_prefix(guild_id)
+        if guild_id is not None and hasattr(bot, "guild_mgr")
+        else Config.DEFAULT_PREFIX
+    )
+    # Never silently enable legacy prefixes: one server prefix means one prefix.
+    prefixes: list[str] = [configured_prefix or Config.DEFAULT_PREFIX]
 
-    prefixes: list[str] = [guild_prefix]
-    if "+" not in prefixes:
-        prefixes.append("+")
-    if "?" not in prefixes:
-        prefixes.append("?")
-
-    # Check if author has No-Prefix authorization or is Owner/Developer
+    author_id = message.author.id if message.author else None
     is_no_prefix = False
-    if message.author:
-        author_id = message.author.id
-        from src.security.owner import is_primary_owner
+    if author_id is not None:
         if is_primary_owner(author_id) or author_id in getattr(bot, "no_prefix_users", set()):
             is_no_prefix = True
         elif hasattr(bot, "perm_mgr") and bot.perm_mgr.is_developer_sync(author_id):
             is_no_prefix = True
 
-    if is_no_prefix and "" not in prefixes:
+    if is_no_prefix:
         prefixes.append("")
 
     if bot.user:
@@ -610,7 +607,7 @@ class KyokaBot(commands.Bot):
             f"> Cogs Loaded: {cogs_count}\n"
             f"> Registered Prefix Commands: {prefix_count}\n"
             f"> Registered Slash Commands: {slash_count}\n"
-            f"> Default Prefix: '{Config.DEFAULT_PREFIX}' (Also accepts: '+', '?', mentions, and No-Prefix for owner)\n"
+            f"> Prefix Mode: one configured prefix per server (mentions and authorized no-prefix retained)\n"
             f"> Gateway Message Content Intent: {'ENABLED (OK)' if msg_intent else 'DISABLED (CRITICAL)'}\n"
             f"======================================"
         )
