@@ -65,23 +65,9 @@ export async function onRequest(context) {
       session = JSON.parse(atob(raw + padding));
     } catch {}
 
-    const defaultGuilds = [
-      {
-        id: '1515995663903752213',
-        name: 'Kyoka HQ',
-        icon_url: null,
-        is_owner: true,
-        can_manage: true,
-        bot_installed: true,
-        status: 'installed',
-        permissions: '8',
-        invite_url: `https://discord.com/oauth2/authorize?client_id=1562505487214321714&guild_id=1515995663903752213&permissions=8&scope=bot%20applications.commands`,
-      }
-    ];
-
     const token = session?.access_token;
     if (!token) {
-      return new Response(JSON.stringify({ guilds: defaultGuilds, total: defaultGuilds.length, notice: 'Session fallback guild loaded' }), {
+      return new Response(JSON.stringify({ guilds: [], total: 0, verification_status: 'unavailable', notice: 'No Discord access token is available; no server is assumed to have the bot installed.' }), {
         status: 200,
         headers: {
           'Content-Type': 'application/json',
@@ -96,7 +82,7 @@ export async function onRequest(context) {
     });
 
     if (!discordRes.ok) {
-      return new Response(JSON.stringify({ guilds: defaultGuilds, total: defaultGuilds.length, notice: 'Discord API unavailable, fallback guild loaded' }), {
+      return new Response(JSON.stringify({ guilds: [], total: 0, verification_status: 'unavailable', notice: 'Discord guild verification failed.' }), {
         status: 200,
         headers: {
           'Content-Type': 'application/json',
@@ -163,9 +149,9 @@ export async function onRequest(context) {
         status = 'not_installed';
         isInstalled = false;
       } else {
-        // Fallback: If edge bot token is absent, allow immediate server management
-        status = 'installed';
-        isInstalled = true;
+        // Fail closed: never claim installation when the bot token cannot verify membership.
+        status = 'unavailable';
+        isInstalled = false;
       }
 
       return {
@@ -182,13 +168,9 @@ export async function onRequest(context) {
       };
     });
 
-    if (!manageable.some(g => g.id === '1515995663903752213')) {
-      manageable.unshift(defaultGuilds[0]);
-    }
-
-    const finalGuilds = installedOnly
-      ? manageable.filter(g => (g.can_manage && g.bot_installed) || g.status === 'unavailable')
-      : manageable;
+    // Only list servers where the bot's own token verified membership.
+    // When verification is unavailable, do not fabricate installation states.
+    const finalGuilds = manageable.filter(g => g.can_manage && g.bot_installed);
 
     return new Response(JSON.stringify({ guilds: finalGuilds, total: finalGuilds.length, verification_status: botCheckOk ? 'verified' : 'unavailable' }), {
       status: 200,
@@ -199,20 +181,9 @@ export async function onRequest(context) {
       },
     });
   } catch (err) {
-    const fallbackGuilds = [
-      {
-        id: '1515995663903752213',
-        name: 'Kyoka HQ',
-        icon_url: null,
-        is_owner: true,
-        can_manage: true,
-        bot_installed: true,
-        status: 'installed',
-        permissions: '8',
-      }
-    ];
-    return new Response(JSON.stringify({ guilds: fallbackGuilds, total: fallbackGuilds.length, notice: 'Edge fallback' }), {
-      status: 200,
+    console.warn('Guild verification failed; returning no unverified servers.');
+    return new Response(JSON.stringify({ guilds: [], total: 0, verification_status: 'unavailable', error: 'Guild verification failed.' }), {
+      status: 503,
       headers: {
         'Content-Type': 'application/json',
         'Access-Control-Allow-Origin': url.origin,
