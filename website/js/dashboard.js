@@ -203,36 +203,17 @@ async function initDashboard(forceRefresh = false) {
     state.guilds = [];
   }
 
-  // Ensure default authoritative server (Kyoka HQ) is always available
-  const defaultGuildId = '1515995663903752213';
-  if (!state.guilds.some(g => g.id === defaultGuildId)) {
-    state.guilds.push({
-      id: defaultGuildId,
-      name: 'Kyoka HQ',
-      icon_url: null,
-      can_manage: true,
-      is_owner: true,
-      bot_installed: true,
-      permissions: 8
-    });
-  }
-
-  // Check URL query for direct guild deep-link: /dashboard.html?guild_id=123
+  // Only allow real servers returned by Discord/API. Never fabricate a server
+  // card or grant access merely because a guild ID appears in the URL.
   const targetGid = urlParams.get('guild_id');
-
   if (targetGid) {
-    if (!state.guilds.some(g => g.id === targetGid)) {
-      state.guilds.push({
-        id: targetGid,
-        name: targetGid === defaultGuildId ? 'Kyoka HQ' : 'Server Settings',
-        icon_url: null,
-        can_manage: true,
-        is_owner: true,
-        bot_installed: true,
-        permissions: 8
-      });
+    const targetGuild = state.guilds.find(g => String(g.id) === String(targetGid));
+    if (!targetGuild) {
+      showToast('That server is not in your authorized server list. Make sure you manage it and KYOKA is installed.', 'error');
+      renderServerSelector(container);
+      return;
     }
-    await selectGuild(targetGid, container);
+    await selectGuild(targetGuild.id, container);
   } else if (state.guilds.length === 1) {
     await selectGuild(state.guilds[0].id, container);
   } else {
@@ -3374,11 +3355,28 @@ function renderPrefixCommandsTab(panel, s) {
 }
 
 // M. Premium & Entitlements
-function renderPremiumTab(panel, s) {
-  const p = s.premium || {};
-  const isPrem = Boolean(p.is_premium);
+async function renderPremiumTab(panel, s) {
+  // Prefer the live entitlement endpoint over a stale settings snapshot. The API
+  // remains authoritative; if temporarily unavailable, show saved server data.
+  let p = s.premium || {};
+  try {
+    const live = await fetchGuildPremiumStatus(state.selectedGuildId);
+    const entitlement = live?.premium || live?.entitlement || live?.data || live;
+    if (entitlement && typeof entitlement === 'object' &&
+        (Object.prototype.hasOwnProperty.call(entitlement, 'is_premium') ||
+         Object.prototype.hasOwnProperty.call(entitlement, 'tier') ||
+         Object.prototype.hasOwnProperty.call(entitlement, 'status'))) {
+      p = { ...p, ...entitlement };
+    }
+  } catch (err) {
+    console.warn('Live premium status unavailable; showing saved server entitlement.', err?.message || err);
+  }
+  const isPrem = Boolean(p.is_premium) && String(p.status || 'active').toLowerCase() !== 'expired';
   const tier = String(p?.tier || 'free').toUpperCase();
-  const expires = p.expires_at ? new Date(p.expires_at).toLocaleDateString() : 'Lifetime / Active';
+  const expiryDate = p.expires_at ? new Date(p.expires_at) : null;
+  const expires = expiryDate && !Number.isNaN(expiryDate.getTime())
+    ? expiryDate.toLocaleDateString()
+    : (isPrem ? 'No expiry recorded' : 'Not subscribed');
 
   panel.innerHTML = `
     <div class="panel-header">
