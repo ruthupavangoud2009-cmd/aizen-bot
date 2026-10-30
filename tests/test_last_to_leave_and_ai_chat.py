@@ -197,6 +197,29 @@ async def test_ltlvc_start_and_status():
 
 
 @pytest.mark.asyncio
+async def test_ltlvc_does_not_start_when_voice_connection_fails():
+    bot = MagicMock()
+    cog = LastToLeaveVC(bot)
+    voice_channel = MagicMock(spec=discord.VoiceChannel)
+    voice_channel.id = 300
+    voice_channel.mention = "<#300>"
+    voice_channel.members = [MagicMock(id=401, display_name="Host", bot=False)]
+    voice_channel.connect = AsyncMock(side_effect=discord.Forbidden(MagicMock(), "forbidden"))
+
+    ctx = MagicMock()
+    ctx.guild = MagicMock(id=200, voice_client=None)
+    ctx.author = MagicMock(id=401, voice=MagicMock(channel=voice_channel))
+    ctx.channel = MagicMock(id=500)
+    ctx.send_error = AsyncMock()
+
+    await cog.ltlvc_start.callback(cog, ctx, channel=None)
+
+    assert cog.get_game(ctx.guild.id) is None
+    ctx.send_error.assert_awaited_once()
+    assert "couldn't join" in ctx.send_error.await_args.args[0]
+
+
+@pytest.mark.asyncio
 async def test_ltlvc_voice_state_elimination_and_winner():
     """Verify on_voice_state_update records eliminations and declares winner when 1 person remains."""
     bot = MagicMock()
@@ -272,6 +295,7 @@ async def test_ltlvc_voice_state_elimination_and_winner():
     assert "WE HAVE A WINNER" in winner_embed.title
     assert "<@701>" in winner_embed.description
     assert "Leaderboard" in winner_embed.description
+    assert winner_embed.image.url.startswith("https://")
 
     # Bot should disconnect from voice
     assert guild.voice_client.disconnect.called

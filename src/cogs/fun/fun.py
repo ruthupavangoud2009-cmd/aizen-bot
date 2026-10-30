@@ -24,7 +24,7 @@ logger = logging.getLogger("Kyoka.Fun")
 def parse_guess_bounds(bounds: str) -> tuple[int, int]:
     match = re.fullmatch(r"\s*(\d+)\s*-\s*(\d+)\s*", bounds)
     if not match:
-        raise ValueError("Use a range like `&guessanumber 1-1000`.")
+        raise ValueError("Enter a range like `1-1000`.")
     if any(len(value) > 10 for value in match.groups()):
         raise ValueError("Choose a range within PostgreSQL's supported integer bounds.")
     low, high = map(int, match.groups())
@@ -41,7 +41,6 @@ class Fun(commands.Cog):
         self.bot = bot
         self.gif_mgr = GIFManager()
         self.games: dict[int, dict[str, Any]] = {}
-        self._guess_attempts_by_channel: dict[int, set[int]] = {}
         self._guess_locks: dict[int, asyncio.Lock] = {}
         self._spam_tasks: dict[int, asyncio.Task] = {}
         self._countdown_tasks: dict[int, asyncio.Task] = {}
@@ -250,7 +249,7 @@ class Fun(commands.Cog):
         question, answer = random.choice(questions)
         await ctx.send(f"🧠 **Trivia:** {question}\nReply with your answer. (Answer: ||{answer}||)")
 
-    @commands.command(name="guessanumber", aliases=["guessnumber", "guess"], help="Start an authorized number guessing game, e.g. ?guessanumber 1-10000.")
+    @commands.command(name="guessanumber", aliases=["guessnumber", "guess"], help="Start an authorized number guessing game with unlimited guesses.")
     async def guessanumber(self, ctx: CustomContext, bounds: str = "1-10000"):
         if ctx.guild is None:
             return await ctx.send("Start a number game in a server channel.")
@@ -322,9 +321,7 @@ class Fun(commands.Cog):
             "expires_at": expiry.timestamp(),
             "start_time": start_time,
             "countdown_active": True,
-            "max_attempts": 100,
         }
-        self._guess_attempts_by_channel[ctx.channel.id] = set()
         secret_message = (f"🧠 **KYŌKA private number-game answer**\nServer: {ctx.guild.name} (`{ctx.guild.id}`)\n"
                           f"Channel: #{getattr(ctx.channel, 'name', 'channel')} (`{ctx.channel.id}`)\n"
                           f"Host: {ctx.author} (`{ctx.author.id}`)\nRange: {low}–{high}\n**Secret number: {answer}**")
@@ -451,7 +448,6 @@ class Fun(commands.Cog):
                 if cd_task and not cd_task.done():
                     cd_task.cancel()
                 self.games.pop(ctx.channel.id, None)
-                self._guess_attempts_by_channel.pop(ctx.channel.id, None)
                 await self.bot.db.execute(
                     "UPDATE guess_number_games SET status = 'expired' "
                     "WHERE channel_id = ? AND status = 'active';",
@@ -492,7 +488,6 @@ class Fun(commands.Cog):
             game["game_id"],
         )
         self.games.pop(ctx.channel.id, None)
-        self._guess_attempts_by_channel.pop(ctx.channel.id, None)
         await ctx.send("The number game was cancelled. The answer was not revealed.")
         await self._lock_channel_after_game(ctx.channel, "Game cancelled by host")
 
@@ -519,7 +514,6 @@ class Fun(commands.Cog):
 
             if game["expires_at"] <= time.time():
                 self.games.pop(message.channel.id, None)
-                self._guess_attempts_by_channel.pop(message.channel.id, None)
                 await self.bot.db.execute(
                     "UPDATE guess_number_games SET status = 'expired' "
                     "WHERE channel_id = ? AND status = 'active';", message.channel.id,
@@ -555,24 +549,6 @@ class Fun(commands.Cog):
                 await message.add_reaction("🔁")
                 return
 
-            # Track attempts and enforce maximum attempts limit
-            attempts = self._guess_attempts_by_channel.setdefault(message.channel.id, set())
-            attempts.add(guess)
-            max_attempts = game.get("max_attempts", 100)
-            if len(attempts) >= max_attempts and guess != game["answer"]:
-                answer = game["answer"]
-                self.games.pop(message.channel.id, None)
-                self._guess_attempts_by_channel.pop(message.channel.id, None)
-                await self.bot.db.execute(
-                    "UPDATE guess_number_games SET status = 'completed' WHERE game_id = ? AND status = 'active';",
-                    game["game_id"],
-                )
-                await message.channel.send(
-                    f"🛑 **Maximum attempts reached ({max_attempts})!** The game has concluded. The secret number was **{answer}**."
-                )
-                await self._lock_channel_after_game(message.channel, "Maximum attempts reached")
-                return
-
             if guess == game["answer"]:
                 try:
                     completed = await self.bot.db.fetch_one(
@@ -588,24 +564,21 @@ class Fun(commands.Cog):
                     return
                 answer = game["answer"]
                 self.games.pop(message.channel.id, None)
-                self._guess_attempts_by_channel.pop(message.channel.id, None)
                 await message.add_reaction("🎉")
                 await message.reply(
                     f"🏆 **{message.author.mention} got it!** The secret number was **{answer}**. The illusion is broken. Congratulations!",
                     mention_author=False,
                     allowed_mentions=discord.AllowedMentions(users=[message.author], roles=False, everyone=False),
                 )
-                get_cog = getattr(self.bot, "get_cog", None)
-                gif_cog = get_cog("AIInteractions") if callable(get_cog) else None
-                if gif_cog is not None:
-                    try:
-                        gif_url = await gif_cog.get_gif("anime celebration victory")
-                        if gif_url:
-                            celebration = discord.Embed(title="Victory belongs to you", color=0x7C3AED)
-                            celebration.set_image(url=gif_url)
-                            await message.channel.send(embed=celebration)
-                    except Exception:
-                        logger.debug("Could not attach number-game celebration GIF")
+                gif_url = await self.gif_mgr.get_action_gif("celebrate")
+                celebration = discord.Embed(
+                    title="🏆 Number Game Champion!",
+                    description=f"{message.author.mention} found **{answer}**!",
+                    color=0x7C3AED,
+                )
+                if gif_url:
+                    celebration.set_image(url=gif_url)
+                await message.channel.send(embed=celebration)
                 guild_name = getattr(message.guild, "name", "Server")
                 channel_mention = getattr(message.channel, "mention", getattr(message.channel, "name", "channel"))
                 try:
@@ -858,12 +831,12 @@ class Fun(commands.Cog):
     @commands.command(name="guesshelp", help="Explain number-game rules and host authorization.")
     async def guesshelp(self, ctx: CustomContext):
         embed = discord.Embed(title="🌀 KYŌKA Number Game", color=0x7C3AED, description=(
-            "An authorized host starts a game with `?guessanumber 1-10000`. Members type guesses in that same channel.\n\n"
+            f"An authorized host starts a game with `{ctx.prefix}guessanumber 1-10000`. Members type guesses in that same channel.\n\n"
             "• `+` means your guess is lower than the secret number.\n"
             "• `-` means your guess is higher than the secret number.\n"
-            "• The first correct guess wins. The answer is privately DM'd to the host and primary owner.\n"
+            "• There is no guess-count limit; the first correct guess wins. The answer is privately DM'd to the host and primary owner.\n"
             "• Only the primary owner or a host on the server allowlist may start a game.\n\n"
-            "Owner allowlist commands: `?guesshostadd @member`, `?guesshostremove @member`, `?guesshosts`."
+            f"Owner allowlist commands: `{ctx.prefix}guesshostadd @member`, `{ctx.prefix}guesshostremove @member`, `{ctx.prefix}guesshosts`."
         ))
         await ctx.send(embed=embed)
 
@@ -915,7 +888,18 @@ class Fun(commands.Cog):
 
     @commands.command(name="funhelp", help="Quick guide to fun commands.")
     async def funhelp(self, ctx: CustomContext):
-        embed = discord.Embed(title="🌀 Aizen's Fun Commands", description="`slap/hug/pat/kiss/bonk/cuddle/poke/highfive/kill @user` · `roast/compliment @user` · `ship @user [@user]`\n`8ball question` · `coinflip` · `dice` · `choose one | two` · `rate something` · `joke` · `rps rock` · `trivia`\n`guessanumber 1-1000` · `guessstatus` · `guesscancel` · `premium`\n\nUse the main `help` command for the full command menu.", color=0x7C3AED)
+        embed = discord.Embed(
+            title="🌀 Aizen's Fun Commands",
+            description=(
+                "`slap/hug/pat/kiss/bonk/cuddle/poke/highfive/kill @user` · "
+                "`roast/compliment @user` · `ship @user [@user]`\n"
+                f"`{ctx.prefix}games` — Interactive games\n"
+                f"`{ctx.prefix}guessanumber 1-1000` — Number game with unlimited guesses\n"
+                f"`{ctx.prefix}guessstatus` · `{ctx.prefix}guesscancel` · `{ctx.prefix}premium`\n\n"
+                "Use the main `help` command for the full command menu."
+            ),
+            color=0x7C3AED,
+        )
         embed.set_footer(text="Made by Aizen • Support server linked in botinfo")
         await ctx.send(embed=embed)
 

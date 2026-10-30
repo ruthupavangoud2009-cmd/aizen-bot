@@ -10,6 +10,7 @@ import discord
 from discord.ext import commands
 
 from src.core.context import CustomContext
+from src.managers.gif_manager import GIFManager
 from src.security.owner import is_owner_or_staff
 
 if TYPE_CHECKING:
@@ -67,6 +68,7 @@ class LastToLeaveVC(commands.Cog):
 
     def __init__(self, bot: KyokaBot) -> None:
         self.bot = bot
+        self.gif_manager = GIFManager()
         # guild_id -> LastToLeaveGame
         self.active_games: dict[int, LastToLeaveGame] = {}
 
@@ -222,8 +224,15 @@ class LastToLeaveVC(commands.Cog):
                     await ctx.guild.voice_client.move_to(target_channel)
             else:
                 await target_channel.connect(timeout=10.0, reconnect=False)
-        except Exception as e:
-            logger.warning(f"Notice connecting to voice channel for LTLVC: {e}")
+        except (discord.DiscordException, asyncio.TimeoutError):
+            logger.exception(
+                "Could not join voice channel %s for Last To Leave game in guild %s",
+                target_channel.id,
+                ctx.guild.id,
+            )
+            return await ctx.send_error(
+                f"I couldn't join {target_channel.mention}. Check my Connect and Speak permissions, then try again."
+            )
 
         # Initialize game
         game = LastToLeaveGame(
@@ -411,6 +420,9 @@ class LastToLeaveVC(commands.Cog):
                         color=GOLD,
                     )
                     embed.set_footer(text=f"Server: {member.guild.name} • Thank you all for playing!")
+                    gif_url = await self.gif_manager.get_action_gif("celebrate")
+                    if gif_url:
+                        embed.set_image(url=gif_url)
 
                     game.is_active = False
                     self.active_games.pop(member.guild.id, None)

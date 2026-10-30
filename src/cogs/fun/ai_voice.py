@@ -11,6 +11,7 @@ import asyncio
 import logging
 import os
 import random
+import re
 import shutil
 import sys
 import io
@@ -59,6 +60,7 @@ from src.managers.voice_conversation_manager import (
     HUMAN_VOICES,
     resolve_vibe,
 )
+from src.managers.gif_manager import GIFManager
 
 logger = logging.getLogger("Kyoka.AIVoice")
 PURPLE = 0x6F43BE
@@ -331,6 +333,8 @@ class AIVoice(commands.Cog, name="AIVoice"):
         self._guild_voices: Dict[int, str] = {}
         self._voice_locks: Dict[int, asyncio.Lock] = {}
         self._speech_queues: Dict[int, asyncio.Queue] = {}
+        self._active_voice_trivia: dict[int, dict[str, Any]] = {}
+        self.gif_manager = GIFManager()
         self._http_session: Optional[aiohttp.ClientSession] = None
         for cmd in self.__cog_commands__:
             cmd.cog = self
@@ -552,7 +556,7 @@ class AIVoice(commands.Cog, name="AIVoice"):
         # Guard: never disconnect or crash a Music wavelink player
         if isinstance(vc, wavelink.Player):
             return await ctx.send_error(
-                "KYOKA is connected to a Music session. Use `+leave` or `+stop` to disconnect music."
+                f"KYOKA is connected to a Music session. Use `{ctx.prefix}leave` or `{ctx.prefix}stop` to disconnect music."
             )
 
         # Stop playback and cleanup
@@ -581,7 +585,7 @@ class AIVoice(commands.Cog, name="AIVoice"):
         vc = ctx.guild.voice_client
         if vc and isinstance(vc, wavelink.Player):
             return await ctx.send_error(
-                "Cannot speak while Music player is connected. Use `+stop` first."
+                f"Cannot speak while Music player is connected. Use `{ctx.prefix}stop` first."
             )
 
         if not _is_vc_connected(vc):
@@ -642,7 +646,7 @@ class AIVoice(commands.Cog, name="AIVoice"):
         vc = ctx.guild.voice_client
         if vc and isinstance(vc, wavelink.Player):
             return await ctx.send_error(
-                "Cannot speak while Music player is connected. Use `+stop` first."
+                f"Cannot speak while Music player is connected. Use `{ctx.prefix}stop` first."
             )
 
         if not _is_vc_connected(vc):
@@ -700,7 +704,9 @@ class AIVoice(commands.Cog, name="AIVoice"):
             spoken_text = answer[:350]
             success = await self._synthesize_audio(spoken_text, voice_id, temp_path, lang=voice_lang)
             if not success:
-                return await ctx.send_error("Voice synthesis failed. Check `+aivoice diag` for audio engine health.")
+                return await ctx.send_error(
+                    f"Voice synthesis failed. Check `{ctx.prefix}aivoice diag` for audio engine health."
+                )
 
         async def _speak_task() -> None:
             async with lock:
@@ -910,7 +916,9 @@ class AIVoice(commands.Cog, name="AIVoice"):
 
         # Music coexistence check
         if self._is_music_active(ctx.guild):
-            return await ctx.send_error("A Music session is currently active in this server. Stop music with `+stop` first.")
+            return await ctx.send_error(
+                f"A Music session is currently active in this server. Stop music with `{ctx.prefix}stop` first."
+            )
 
         # Check if meeting summary is active
         if self.summary_mgr.is_listening(ctx.guild.id):
@@ -947,7 +955,7 @@ class AIVoice(commands.Cog, name="AIVoice"):
         vc = ctx.guild.voice_client
         if _is_vc_connected(vc):
             if isinstance(vc, wavelink.Player):
-                return await ctx.send_error("A Music player is currently in voice. Use `+stop` first.")
+                return await ctx.send_error(f"A Music player is currently in voice. Use `{ctx.prefix}stop` first.")
             if HAS_VOICE_RECV and not isinstance(vc, voice_recv.VoiceRecvClient):
                 await vc.disconnect(force=True)
                 vc = await self._connect_voice(target_channel)
@@ -1111,7 +1119,9 @@ class AIVoice(commands.Cog, name="AIVoice"):
 
         vc = ctx.guild.voice_client
         if not _is_vc_connected(vc):
-            return await ctx.send_error("I am not connected to any voice channel. Connect first with `+aivoice join` or `+vctalk`!")
+            return await ctx.send_error(
+                f"I am not connected to any voice channel. Connect first with `{ctx.prefix}aivoice join` or `{ctx.prefix}vctalk`!"
+            )
 
         lock = self._get_lock(ctx.guild.id)
         async with lock:
@@ -1129,7 +1139,9 @@ class AIVoice(commands.Cog, name="AIVoice"):
         target = member or ctx.author
         vc = ctx.guild.voice_client
         if not _is_vc_connected(vc):
-            return await ctx.send_error("KYOKA must be in a voice channel first! Use `+vctalk` or `+aivoice join`.")
+            return await ctx.send_error(
+                f"KYOKA must be in a voice channel first! Use `{ctx.prefix}vctalk` or `{ctx.prefix}aivoice join`."
+            )
 
         roasts = [
             f"{target.display_name}, your gameplay is like a broken pencil. Completely pointless, but everyone still has to watch you struggle with it.",
@@ -1177,7 +1189,9 @@ class AIVoice(commands.Cog, name="AIVoice"):
             return
         vc = ctx.guild.voice_client
         if not _is_vc_connected(vc):
-            return await ctx.send_error("KYOKA must be connected to voice. Use `+vctalk` or `+aivoice join` first!")
+            return await ctx.send_error(
+                f"KYOKA must be connected to voice. Use `{ctx.prefix}vctalk` or `{ctx.prefix}aivoice join` first!"
+            )
 
         beatbox_lyrics = (
             "Boots and cats and boots and cats. "
@@ -1221,12 +1235,26 @@ class AIVoice(commands.Cog, name="AIVoice"):
 
     @aivoice_group.command(name="trivia", aliases=["quiz"], description="Host a live voice trivia challenge in the voice channel.")
     async def voice_trivia(self, ctx: CustomContext) -> None:
-        """Read a trivia question aloud in voice with sound effects."""
+        """Read a trivia question aloud and award the first correct voice participant."""
         if not ctx.guild:
             return
+        active = self._active_voice_trivia.get(ctx.guild.id)
+        if active and active["expires_at"] > time.monotonic():
+            return await ctx.send_warning("A voice trivia round is already active in this server.")
+
         vc = ctx.guild.voice_client
         if not _is_vc_connected(vc):
-            return await ctx.send_error("KYOKA must be in voice! Use `+vctalk` or `+aivoice join`.")
+            return await ctx.send_error(
+                f"KYOKA must be in voice! Use `{ctx.prefix}vctalk` or `{ctx.prefix}aivoice join`."
+            )
+        voice_channel = getattr(vc, "channel", None)
+        if not voice_channel:
+            return await ctx.send_error("I couldn't identify the active voice channel.")
+        author_voice = getattr(getattr(ctx.author, "voice", None), "channel", None)
+        if not author_voice or author_voice.id != voice_channel.id:
+            return await ctx.send_error("Join KYOKA's voice channel before starting trivia.")
+        if sum(not member.bot for member in voice_channel.members) < 2:
+            return await ctx.send_error("Voice trivia needs at least two people in the channel.")
 
         questions = [
             ("In Bleach, what is the name of Sosuke Aizen's Zanpakuto?", "Kyoka Suigetsu"),
@@ -1236,7 +1264,7 @@ class AIVoice(commands.Cog, name="AIVoice"):
             ("What is the highest bounty in One Piece history?", "Gol D. Roger"),
         ]
         q, a = random.choice(questions)
-        spoken_text = f"Voice Trivia Challenge! Listen carefully: {q}. Shout your answer into your mic now!"
+        spoken_text = f"Voice Trivia Challenge! Listen carefully: {q}. Type your answer in the game chat while staying in voice."
 
         voice_id = self._get_voice_id(ctx.guild.id)
         temp_fd, temp_path = tempfile.mkstemp(suffix=".mp3")
@@ -1262,11 +1290,23 @@ class AIVoice(commands.Cog, name="AIVoice"):
                         pass
 
         embed = discord.Embed(
-            title="🧠 Live Voice Channel Trivia!",
-            description=f"### ❓ Question:\n> **{q}**\n\n*Shout the answer into your microphone or discuss in VC!*",
+            title="🧠 Live Voice Trivia Battle!",
+            description=(
+                f"### ❓ Question:\n> **{q}**\n\n"
+                f"Type your answer in this channel while connected to {voice_channel.mention}. "
+                "The first correct player wins! This round lasts 60 seconds."
+            ),
             color=0x3498DB,
         )
-        embed.set_footer(text="Answer will be revealed when someone shouts it on mic or in chat!")
+        embed.set_footer(text="The winner gets a celebration GIF.")
+        self._active_voice_trivia[ctx.guild.id] = {
+            "answer": re.sub(r"[^a-z0-9]+", " ", a.lower()).strip(),
+            "answer_display": a,
+            "question": q,
+            "voice_channel_id": voice_channel.id,
+            "text_channel_id": ctx.channel.id,
+            "expires_at": time.monotonic() + 60,
+        }
         await ctx.send(embed=embed)
 
     @aivoice_group.command(name="talkmode", aliases=["vcmode"], description="Switch between Open Mic and Wake Word conversation mode.")
@@ -1395,7 +1435,9 @@ class AIVoice(commands.Cog, name="AIVoice"):
 
         # Music coexistence check
         if self._is_music_active(ctx.guild):
-            return await ctx.send_error("A Music session is currently active in this server. Stop music with `+stop` first.")
+            return await ctx.send_error(
+                f"A Music session is currently active in this server. Stop music with `{ctx.prefix}stop` first."
+            )
 
         # Check if already listening in this guild
         if self.summary_mgr.is_listening(ctx.guild.id):
@@ -1411,7 +1453,7 @@ class AIVoice(commands.Cog, name="AIVoice"):
         # Reconnect with VoiceRecvClient if not already receiving capable
         if _is_vc_connected(vc):
             if isinstance(vc, wavelink.Player):
-                return await ctx.send_error("A Music player is currently in voice. Use `+stop` first.")
+                return await ctx.send_error(f"A Music player is currently in voice. Use `{ctx.prefix}stop` first.")
             if HAS_VOICE_RECV and not isinstance(vc, voice_recv.VoiceRecvClient):
                 await vc.disconnect(force=True)
                 vc = await self._connect_voice(target_channel)
@@ -1798,7 +1840,9 @@ class AIVoice(commands.Cog, name="AIVoice"):
             return
         vc = ctx.guild.voice_client
         if not _is_vc_connected(vc):
-            return await ctx.send_error("KYOKA must be connected to voice first! Use `+talk` or `+aivoice join`.")
+            return await ctx.send_error(
+                f"KYOKA must be connected to voice first! Use `{ctx.prefix}talk` or `{ctx.prefix}aivoice join`."
+            )
 
         subjects = [
             ("Goku from Dragon Ball", "anime character"),
@@ -1865,7 +1909,9 @@ class AIVoice(commands.Cog, name="AIVoice"):
             return
         vc = ctx.guild.voice_client
         if not _is_vc_connected(vc):
-            return await ctx.send_error("KYOKA must be connected to voice first! Use `+talk` or `+aivoice join`.")
+            return await ctx.send_error(
+                f"KYOKA must be connected to voice first! Use `{ctx.prefix}talk` or `{ctx.prefix}aivoice join`."
+            )
 
         scenarios = [
             (
@@ -1945,6 +1991,36 @@ class AIVoice(commands.Cog, name="AIVoice"):
         if message.author.bot or not message.guild:
             return
 
+        trivia = self._active_voice_trivia.get(message.guild.id)
+        if trivia:
+            if trivia["expires_at"] <= time.monotonic():
+                self._active_voice_trivia.pop(message.guild.id, None)
+            elif message.channel.id == trivia["text_channel_id"]:
+                voice = getattr(message.author, "voice", None)
+                voice_channel = getattr(voice, "channel", None)
+                guess = re.sub(r"[^a-z0-9]+", " ", message.content.lower()).strip()
+                if (
+                    voice_channel
+                    and voice_channel.id == trivia["voice_channel_id"]
+                    and guess == trivia["answer"]
+                ):
+                    self._active_voice_trivia.pop(message.guild.id, None)
+                    await message.reply(
+                        f"🏆 {message.author.mention} got it! The answer was **{trivia['answer_display']}**!",
+                        mention_author=False,
+                        allowed_mentions=discord.AllowedMentions(users=[message.author], roles=False, everyone=False),
+                    )
+                    embed = discord.Embed(
+                        title="🎉 Voice Trivia Champion!",
+                        description=f"{message.author.mention} won by answering **{trivia['question']}** correctly.",
+                        color=0x10B981,
+                    )
+                    gif_url = await self.gif_manager.get_action_gif("celebrate")
+                    if gif_url:
+                        embed.set_image(url=gif_url)
+                    await message.channel.send(embed=embed)
+                    return
+
         session = self.summary_mgr.get_session(message.guild.id)
         if session and session.status == "listening":
             if message.channel.id in (session.channel_id, session.text_channel_id):
@@ -1955,9 +2031,9 @@ class AIVoice(commands.Cog, name="AIVoice"):
             author_voice = getattr(getattr(message.author, "voice", None), "channel", None)
             voice_channel_id = author_voice.id if author_voice else None
             if conv_session.handles_text_message(message.channel.id, message.author.id, voice_channel_id):
-                prefixes = ("+", "?", "!", "/", "$")
                 clean_content = message.content.strip()
-                if not clean_content or any(clean_content.startswith(p) for p in prefixes):
+                configured_prefix = self.bot.guild_mgr.get_prefix(message.guild.id)
+                if not clean_content or clean_content.startswith(configured_prefix) or clean_content.startswith("/"):
                     return
 
                 async def _speak_chat_reply() -> None:

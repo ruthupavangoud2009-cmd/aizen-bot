@@ -45,8 +45,7 @@ logger = logging.getLogger("Kyoka.Core")
 async def get_prefix(bot: KyokaBot, message: discord.Message) -> list[str]:
     """
     Resolve exactly one configured prefix per server (or the default in DMs).
-    Bot mentions remain supported. Owner/developer/no-prefix allowlisted users
-    retain their explicit no-prefix authorization.
+    Bot mentions and explicit no-prefix authorization remain supported.
     """
     guild_id = message.guild.id if message.guild else None
 

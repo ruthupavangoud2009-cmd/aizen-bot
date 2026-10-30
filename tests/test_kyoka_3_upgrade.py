@@ -727,12 +727,12 @@ async def test_help_categories_and_owner_privacy():
 # ─────────────────────────────────────────────────────────────────────────────
 
 @pytest.mark.asyncio
-async def test_prefix_resolver_resolves_plus_and_question():
+async def test_prefix_resolver_uses_only_configured_guild_prefix():
     from src.core.bot import get_prefix
 
     mock_bot = MagicMock()
     mock_bot.user = MagicMock(id=123456789)
-    mock_bot.guild_mgr.get_prefix.return_value = "+"
+    mock_bot.guild_mgr.get_prefix.return_value = "!"
     mock_bot.no_prefix_users = set()
     mock_bot.perm_mgr.is_developer_sync.return_value = False
 
@@ -741,9 +741,10 @@ async def test_prefix_resolver_resolves_plus_and_question():
     msg.author = MagicMock(id=222)
 
     prefixes = await get_prefix(mock_bot, msg)
-    # Should include bot mention, '+', and '?'
-    assert "+" in prefixes
-    assert "?" in prefixes
+    # Mentions remain supported, but only the configured text prefix is active.
+    assert "!" in prefixes
+    assert "+" not in prefixes
+    assert "?" not in prefixes
     assert "<@123456789> " in prefixes or "<@!123456789> " in prefixes
 
 
@@ -764,20 +765,25 @@ async def test_prefix_resolver_safe_when_bot_user_none():
     # Must NOT raise AttributeError: 'NoneType' object has no attribute 'id'
     prefixes = await get_prefix(mock_bot, msg)
     assert "+" in prefixes
-    assert "?" in prefixes
+    assert prefixes == ["+"]
 
 
 @pytest.mark.asyncio
-async def test_prefix_context_resolution_for_plus_and_question():
+async def test_prefix_context_resolution_for_configured_prefix_only():
     from src.core.bot import KyokaBot
 
     bot = KyokaBot()
     bot._connection.user = MagicMock(id=999888777)
     await bot._load_all_extensions()
+    configured_prefix = bot.guild_mgr.get_prefix(1)
+    assert bot.get_command("vctrivia") is not None
+    assert bot.get_command("reactionrace") is not None
+    assert bot.get_command("hideandseek") is not None
+    assert bot.get_command("twotruths") is not None
 
-    # Test +ping
+    # Test the configured prefix.
     msg_plus = MagicMock(spec=discord.Message)
-    msg_plus.content = "+ping"
+    msg_plus.content = f"{configured_prefix}ping"
     msg_plus.guild = MagicMock(id=1)
     msg_plus.author = MagicMock(id=2)
     msg_plus.channel = MagicMock()
@@ -787,21 +793,21 @@ async def test_prefix_context_resolution_for_plus_and_question():
     assert ctx_plus.command is not None
     assert ctx_plus.command.name == "ping"
 
-    # Test ?ping
+    # Another common prefix is rejected.
+    obsolete_prefix = "?" if configured_prefix != "?" else "+"
     msg_q = MagicMock(spec=discord.Message)
-    msg_q.content = "?ping"
+    msg_q.content = f"{obsolete_prefix}ping"
     msg_q.guild = MagicMock(id=1)
     msg_q.author = MagicMock(id=2)
     msg_q.channel = MagicMock()
 
     ctx_q = await bot.get_context(msg_q)
-    assert ctx_q.valid is True
-    assert ctx_q.command is not None
-    assert ctx_q.command.name == "ping"
+    assert ctx_q.valid is False
+    assert ctx_q.command is None
 
-    # Test +giveaway and +g
+    # Test another command with the configured prefix.
     msg_gw = MagicMock(spec=discord.Message)
-    msg_gw.content = "+giveaway"
+    msg_gw.content = f"{configured_prefix}giveaway"
     msg_gw.guild = MagicMock(id=1)
     msg_gw.author = MagicMock(id=2)
     msg_gw.channel = MagicMock()
@@ -872,20 +878,23 @@ async def test_on_message_dispatch_prefix_and_noprefix_end_to_end():
 
     bot.invoke = track_invoke
 
-    # 1. Regular user with +ping -> must dispatch
+    configured_prefix = bot.guild_mgr.get_prefix(10)
+
+    # 1. Regular user with the configured prefix -> must dispatch
     msg1 = MagicMock(spec=discord.Message)
     msg1.author.bot = False
     msg1.author.id = 999
-    msg1.content = "+ping"
+    msg1.content = f"{configured_prefix}ping"
     msg1.guild = MagicMock(id=10)
     msg1.channel = MagicMock(id=20)
     await bot.on_message(msg1)
 
-    # 2. Regular user with ?ping -> must dispatch
+    # 2. Regular user with an obsolete prefix -> must not dispatch
     msg2 = MagicMock(spec=discord.Message)
     msg2.author.bot = False
     msg2.author.id = 999
-    msg2.content = "?ping"
+    obsolete_prefix = "?" if configured_prefix != "?" else "+"
+    msg2.content = f"{obsolete_prefix}ping"
     msg2.guild = MagicMock(id=10)
     msg2.channel = MagicMock(id=20)
     await bot.on_message(msg2)
@@ -921,14 +930,13 @@ async def test_on_message_dispatch_prefix_and_noprefix_end_to_end():
     # 6. Bot message -> must be ignored
     msg6 = MagicMock(spec=discord.Message)
     msg6.author.bot = True
-    msg6.content = "+ping"
+    msg6.content = f"{configured_prefix}ping"
     await bot.on_message(msg6)
 
-    assert len(invoked) == 4
-    assert invoked[0] == ("ping", "+", 999)
-    assert invoked[1] == ("ping", "?", 999)
-    assert invoked[2] == ("ping", "", OWNER_ID)
-    assert invoked[3] == ("ping", "", 777)
+    assert len(invoked) == 3
+    assert invoked[0] == ("ping", configured_prefix, 999)
+    assert invoked[1] == ("ping", "", OWNER_ID)
+    assert invoked[2] == ("ping", "", 777)
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -1120,6 +1128,3 @@ async def test_fuck_command_validation():
     assert embed is not None
     assert "got intimately dominated by" in embed.description
     assert embed.image.url.startswith("https://")
-
-
-

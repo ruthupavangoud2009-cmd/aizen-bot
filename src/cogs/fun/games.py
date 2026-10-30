@@ -4,13 +4,13 @@ import asyncio
 import logging
 import random
 import time
-from typing import TYPE_CHECKING, Any, Dict, List, Optional
+from typing import TYPE_CHECKING, Any
 
 import discord
-from discord import app_commands
 from discord.ext import commands
 
 from src.core.context import CustomContext
+from src.managers.gif_manager import GIFManager
 
 if TYPE_CHECKING:
     from src.core.bot import KyokaBot
@@ -19,6 +19,190 @@ logger = logging.getLogger("Kyoka.Games")
 PURPLE = 0x7C3AED
 CYAN = 0x06B6D4
 GREEN = 0x10B981
+
+
+class ReactionRaceView(discord.ui.View):
+    """The first member to click after the GO signal wins."""
+
+    def __init__(self) -> None:
+        super().__init__(timeout=30)
+        self.started = False
+        self.winner_id: int | None = None
+        self.disqualified: set[int] = set()
+        self.message: discord.Message | None = None
+        self.gif_manager = GIFManager()
+
+    @discord.ui.button(label="Wait for GO…", style=discord.ButtonStyle.secondary)
+    async def race_button(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+        if not self.started:
+            self.disqualified.add(interaction.user.id)
+            await interaction.response.send_message("Too early! Wait for **GO!**", ephemeral=True)
+            return
+        if interaction.user.id in self.disqualified:
+            await interaction.response.send_message("You clicked early, so you're out of this race.", ephemeral=True)
+            return
+        if self.winner_id is not None:
+            await interaction.response.send_message("This race already has a winner.", ephemeral=True)
+            return
+
+        self.winner_id = interaction.user.id
+        for item in self.children:
+            if isinstance(item, discord.ui.Button):
+                item.disabled = True
+        embed = discord.Embed(
+            title="🏁 Reaction Race Winner!",
+            description=f"{interaction.user.mention} had the fastest reaction!",
+            color=GREEN,
+        )
+        gif_url = await self.gif_manager.get_action_gif("celebrate")
+        if gif_url:
+            embed.set_image(url=gif_url)
+        await interaction.response.edit_message(embed=embed, view=self)
+        self.stop()
+
+    async def on_timeout(self) -> None:
+        for item in self.children:
+            if isinstance(item, discord.ui.Button):
+                item.disabled = True
+        try:
+            if self.message:
+                await self.message.edit(content="⌛ Reaction race ended with no winner.", view=self)
+        except discord.HTTPException:
+            logger.exception("Could not disable expired reaction-race controls")
+
+
+class HideAndSeekView(discord.ui.View):
+    """Members race to find the one hidden item among a grid of buttons."""
+
+    def __init__(self, hidden_index: int) -> None:
+        super().__init__(timeout=60)
+        self.hidden_index = hidden_index
+        self.guessed_users: set[int] = set()
+        self.message: discord.Message | None = None
+        self.gif_manager = GIFManager()
+
+        for index in range(9):
+            button = discord.ui.Button(label="🔎 Search", style=discord.ButtonStyle.secondary)
+            button.callback = self._make_callback(index)
+            self.add_item(button)
+
+    def _make_callback(self, index: int):
+        async def callback(interaction: discord.Interaction) -> None:
+            if interaction.user.id in self.guessed_users:
+                await interaction.response.send_message("You already searched this round.", ephemeral=True)
+                return
+            self.guessed_users.add(interaction.user.id)
+
+            if index == self.hidden_index:
+                for item in self.children:
+                    if isinstance(item, discord.ui.Button):
+                        item.disabled = True
+                        item.label = "🎁 Found!" if item is self.children[index] else "🔒"
+                embed = discord.Embed(
+                    title="🏆 Scavenger Hunt Winner!",
+                    description=f"{interaction.user.mention} found the hidden treasure!",
+                    color=GREEN,
+                )
+                gif_url = await self.gif_manager.get_action_gif("celebrate")
+                if gif_url:
+                    embed.set_image(url=gif_url)
+                await interaction.response.edit_message(embed=embed, view=self)
+                self.stop()
+                return
+
+            button = self.children[index]
+            if isinstance(button, discord.ui.Button):
+                button.label = "❌ Empty"
+                button.disabled = True
+                button.style = discord.ButtonStyle.danger
+            await interaction.response.edit_message(view=self)
+            await interaction.followup.send("Nothing there—keep searching!", ephemeral=True)
+
+        return callback
+
+    async def on_timeout(self) -> None:
+        for item in self.children:
+            if isinstance(item, discord.ui.Button):
+                item.disabled = True
+        try:
+            if self.message:
+                await self.message.edit(content="⌛ The scavenger hunt ended before anyone found the treasure.", view=self)
+        except discord.HTTPException:
+            logger.exception("Could not disable expired scavenger-hunt controls")
+
+
+class TwoTruthsView(discord.ui.View):
+    """Collect anonymous guesses, then let the host reveal which statement was false."""
+
+    def __init__(self, author_id: int, statements: list[str], lie_index: int) -> None:
+        super().__init__(timeout=120)
+        self.author_id = author_id
+        self.statements = statements
+        self.lie_index = lie_index
+        self.votes: dict[int, int] = {}
+        self.message: discord.Message | None = None
+        self.gif_manager = GIFManager()
+
+        for index in range(3):
+            button = discord.ui.Button(label=f"Statement {index + 1}", style=discord.ButtonStyle.secondary)
+            button.callback = self._make_vote_callback(index)
+            self.add_item(button)
+
+        reveal = discord.ui.Button(label="Reveal the lie", style=discord.ButtonStyle.primary)
+        reveal.callback = self._reveal_callback
+        self.add_item(reveal)
+
+    def _make_vote_callback(self, index: int):
+        async def callback(interaction: discord.Interaction) -> None:
+            self.votes[interaction.user.id] = index
+            await interaction.response.send_message(
+                f"Your vote for statement {index + 1} is recorded.", ephemeral=True
+            )
+
+        return callback
+
+    async def _result_embed(self) -> discord.Embed:
+        correct_voters = [user_id for user_id, vote in self.votes.items() if vote == self.lie_index]
+        lines = [
+            f"**{index + 1}.** {discord.utils.escape_markdown(statement)}"
+            for index, statement in enumerate(self.statements)
+        ]
+        result = f"The lie was **statement {self.lie_index + 1}**."
+        if correct_voters:
+            result += "\n\n**Correct guesses:** " + ", ".join(f"<@{user_id}>" for user_id in correct_voters)
+        else:
+            result += "\n\nNo one guessed the lie correctly this time."
+
+        embed = discord.Embed(
+            title="🕵️ Two Truths and a Lie — Reveal",
+            description="\n".join(lines) + "\n\n" + result,
+            color=GREEN if correct_voters else PURPLE,
+        )
+        if correct_voters:
+            gif_url = await self.gif_manager.get_action_gif("celebrate")
+            if gif_url:
+                embed.set_image(url=gif_url)
+        return embed
+
+    async def _reveal_callback(self, interaction: discord.Interaction) -> None:
+        if interaction.user.id != self.author_id:
+            await interaction.response.send_message("Only the game host can reveal the answer.", ephemeral=True)
+            return
+        for item in self.children:
+            if isinstance(item, discord.ui.Button):
+                item.disabled = True
+        await interaction.response.edit_message(embed=await self._result_embed(), view=self)
+        self.stop()
+
+    async def on_timeout(self) -> None:
+        for item in self.children:
+            if isinstance(item, discord.ui.Button):
+                item.disabled = True
+        try:
+            if self.message:
+                await self.message.edit(embed=await self._result_embed(), view=self)
+        except discord.HTTPException:
+            logger.exception("Could not reveal expired Two Truths and a Lie round")
 
 
 # ─── TRUTH OR DARE INTERACTIVE VIEW ──────────────────────────────────────────
@@ -45,13 +229,16 @@ class TruthOrDareView(discord.ui.View):
         "Give a dramatic 2-sentence speech praising the bot owner.",
     ]
 
-    def __init__(self, author: discord.Member) -> None:
+    def __init__(self, author: discord.Member, prefix: str = "+") -> None:
         super().__init__(timeout=60.0)
         self.author = author
+        self.prefix = prefix
 
     async def interaction_check(self, interaction: discord.Interaction) -> bool:
         if interaction.user.id != self.author.id:
-            await interaction.response.send_message("Start your own game with `+tod`!", ephemeral=True)
+            await interaction.response.send_message(
+                f"Start your own game with `{self.prefix}tod`!", ephemeral=True
+            )
             return False
         return True
 
@@ -190,7 +377,7 @@ class InteractivePollView(discord.ui.View):
 
 
 class Games(commands.Cog):
-    """Interactive games: Blox Fruits trivia, Truth or Dare, interactive polls, word guessing, and daily challenges."""
+    """Interactive text and voice games."""
     category = "Games"
 
     BLOX_FRUITS_QUESTIONS = [
@@ -239,13 +426,92 @@ class Games(commands.Cog):
         "🌟 **Social Streak:** React with 🎉 to 3 different members' messages today!",
         "🔥 **Meme Master:** Share your funniest anime meme in the server's media channel.",
         "🧠 **Brain Power:** Win at least one Trivia or Guess-the-Number game today.",
-        "🌸 **Positivity Pulse:** Send a kind compliment to someone using `+compliment @user`.",
-        "⚔️ **Roleplay Duel:** Challenge a server friend to a playful duel with `+slap` or `+punch`.",
+        "🌸 **Positivity Pulse:** Send a kind compliment to someone using the compliment command.",
+        "⚔️ **Roleplay Duel:** Challenge a server friend to a playful duel using a roleplay command.",
     ]
 
     def __init__(self, bot: KyokaBot) -> None:
         self.bot = bot
+        self.gif_manager = GIFManager()
         self._active_word_games: dict[int, dict[str, Any]] = {}
+
+    @commands.command(name="games", help="List the games you can play with Kyoka.")
+    async def game_list(self, ctx: CustomContext) -> None:
+        await ctx.send(
+            embed=discord.Embed(
+                title="🎮 Kyoka Games",
+                description=(
+                    f"`{ctx.prefix}ltlvc start` — Last To Leave VC\n"
+                    f"`{ctx.prefix}vctrivia` — Voice-channel trivia battle\n"
+                    f"`{ctx.prefix}reactionrace` — Fastest-click race\n"
+                    f"`{ctx.prefix}hideandseek` — Find the hidden treasure\n"
+                    f"`{ctx.prefix}twotruths <s1> | <s2> | <s3> | <lie 1-3>` — Two Truths and a Lie\n"
+                    f"`{ctx.prefix}tod` — Truth or Dare\n"
+                    f"`{ctx.prefix}bloxfruits`, `{ctx.prefix}wordguess`, `{ctx.prefix}guessanumber` — More games"
+                ),
+                color=PURPLE,
+            )
+        )
+
+    @commands.command(name="reactionrace", aliases=["rrace"], help="Race your friends to click first after GO.")
+    @commands.guild_only()
+    async def reaction_race(self, ctx: CustomContext) -> None:
+        view = ReactionRaceView()
+        message = await ctx.send(
+            embed=discord.Embed(
+                title="🏁 Reaction Race",
+                description="Wait for **GO!**—click too early and you lose your chance.",
+                color=CYAN,
+            ),
+            view=view,
+        )
+        view.message = message
+        await asyncio.sleep(random.uniform(2.0, 4.0))
+        if view.winner_id is None:
+            view.started = True
+            button = next(item for item in view.children if isinstance(item, discord.ui.Button))
+            button.label = "GO!"
+            button.style = discord.ButtonStyle.success
+            await message.edit(view=view)
+
+    @commands.command(name="hideandseek", aliases=["scavengerhunt", "hunt"], help="Find the hidden treasure first.")
+    @commands.guild_only()
+    async def hide_and_seek(self, ctx: CustomContext) -> None:
+        view = HideAndSeekView(random.randrange(9))
+        embed = discord.Embed(
+            title="🗺️ Treasure Hunt",
+            description="One tile hides the treasure. Each player gets one search—who will find it first?",
+            color=CYAN,
+        )
+        view.message = await ctx.send(embed=embed, view=view)
+
+    @commands.command(name="twotruths", aliases=["twotruthsonelie"], help="Host Two Truths and a Lie.")
+    @commands.guild_only()
+    async def two_truths(self, ctx: CustomContext, *, statements_input: str) -> None:
+        parts = [part.strip() for part in statements_input.split("|")]
+        if (
+            len(parts) != 4
+            or any(not statement or len(statement) > 180 for statement in parts[:3])
+            or parts[3] not in {"1", "2", "3"}
+        ):
+            return await ctx.send(
+                f"Usage: `{ctx.prefix}twotruths statement 1 | statement 2 | statement 3 | lie number (1-3)`"
+            )
+
+        statements = parts[:3]
+        lie_index = int(parts[3]) - 1
+        view = TwoTruthsView(ctx.author.id, statements, lie_index)
+        embed = discord.Embed(
+            title="🕵️ Two Truths and a Lie",
+            description="\n".join(f"**{index + 1}.** {discord.utils.escape_markdown(text)}" for index, text in enumerate(statements))
+            + "\n\nVote for the statement you think is the lie. The host can reveal when everyone has voted.",
+            color=PURPLE,
+        )
+        view.message = await ctx.send(
+            embed=embed,
+            view=view,
+            allowed_mentions=discord.AllowedMentions.none(),
+        )
 
     # ─── 1. BLOX FRUITS TRIVIA ────────────────────────────────────────────────
 
@@ -269,7 +535,9 @@ class Games(commands.Cog):
             async def _make_click(ans: str):
                 async def btn_callback(interaction: discord.Interaction):
                     if interaction.user.id != ctx.author.id:
-                        return await interaction.response.send_message("Play your own round with `+bloxfruits`!", ephemeral=True)
+                        return await interaction.response.send_message(
+                            f"Play your own round with `{ctx.prefix}bloxfruits`!", ephemeral=True
+                        )
                     for child in view.children:
                         if isinstance(child, discord.ui.Button):
                             child.disabled = True
@@ -286,6 +554,10 @@ class Games(commands.Cog):
                         color = PURPLE
 
                     embed = discord.Embed(title="🏴‍☠️ Blox Fruits Trivia", description=f"**Q:** {q_data['question']}\n\n{res_text}", color=color)
+                    if ans == correct_answer:
+                        gif_url = await self.gif_manager.get_action_gif("celebrate")
+                        if gif_url:
+                            embed.set_image(url=gif_url)
                     await interaction.response.edit_message(embed=embed, view=view)
                     view.stop()
                 return btn_callback
@@ -310,7 +582,7 @@ class Games(commands.Cog):
     )
     async def tod(self, ctx: CustomContext) -> None:
         """Interactive Truth or Dare session."""
-        view = TruthOrDareView(ctx.author)
+        view = TruthOrDareView(ctx.author, ctx.prefix)
         embed = discord.Embed(
             title="🎲 Truth or Dare",
             description=(
@@ -325,7 +597,7 @@ class Games(commands.Cog):
 
     # ─── 3. INTERACTIVE POLL ──────────────────────────────────────────────────
 
-    @commands.command(name="poll", help="Create a professional button poll: ?poll Question? | Option 1 | Option 2")
+    @commands.command(name="poll", help="Create a professional button poll: Question? | Option 1 | Option 2")
     @commands.guild_only()
     async def poll(self, ctx: CustomContext, *, poll_input: str = "") -> None:
         """Create a real-time button voting poll."""
@@ -402,6 +674,9 @@ class Games(commands.Cog):
                 description=f"🎉 **{message.author.mention} solved the puzzle!** The secret word was **{game['word']}**!",
                 color=GREEN,
             )
+            gif_url = await self.gif_manager.get_action_gif("celebrate")
+            if gif_url:
+                embed.set_image(url=gif_url)
             await message.reply(embed=embed)
 
     # ─── 5. DAILY CHALLENGE ───────────────────────────────────────────────────

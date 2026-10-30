@@ -10,7 +10,7 @@ Covers:
 2. Automatic channel lock on game completion:
    - Lock triggered when someone wins (only after winner message is announced)
    - Lock triggered on game timeout
-   - Lock triggered when maximum attempts (100) are reached
+   - Number games allow more than 100 guesses without ending
    - Lock triggered on manual cancellation (?guesscancel)
    - Bot denies Send Messages for @everyone while preserving other role/user overwrites
    - Original permission overwrite is saved before locking
@@ -179,7 +179,6 @@ async def test_guess_cooldown_and_rejection_during_countdown(mock_bot):
 
     # Reaction ⏳ added, but NOT processed as an attempt
     msg.add_reaction.assert_called_with("⏳")
-    assert 101 not in cog._guess_attempts_by_channel or len(cog._guess_attempts_by_channel[101]) == 0
     # Did not reply or finish
     msg.reply.assert_not_called()
 
@@ -246,7 +245,6 @@ async def test_channel_lock_after_winner_found(mock_bot):
         "expires_at": time.time() + 1800,
         "countdown_active": False,
         "start_time": time.monotonic() - 5.0,
-        "max_attempts": 100,
     }
 
     msg = MagicMock(spec=discord.Message)
@@ -265,6 +263,12 @@ async def test_channel_lock_after_winner_found(mock_bot):
     reply_args = msg.reply.call_args[0][0]
     assert "got it!" in reply_args
     assert "The secret number was **7**" in reply_args
+    celebration = next(
+        call.kwargs["embed"]
+        for call in channel.send.await_args_list
+        if "embed" in call.kwargs and "Number Game Champion" in call.kwargs["embed"].title
+    )
+    assert celebration.image.url.startswith("https://")
 
     # Verify channel was locked: set_permissions called setting send_messages to False
     channel.set_permissions.assert_called()
@@ -279,8 +283,8 @@ async def test_channel_lock_after_winner_found(mock_bot):
 
 
 @pytest.mark.asyncio
-async def test_channel_lock_after_max_attempts(mock_bot):
-    """Verify channel locks when maximum attempts (100) are reached."""
+async def test_number_game_allows_more_than_100_guesses(mock_bot):
+    """Verify there is no guess-count cap before the game timeout."""
     cog = Fun(mock_bot)
     mock_bot._cogs["Fun"] = cog
 
@@ -292,28 +296,25 @@ async def test_channel_lock_after_max_attempts(mock_bot):
         "starter": 11111,
         "low": 1,
         "high": 1000,
-        "answer": 500,
+        "answer": 999,
         "expires_at": time.time() + 1800,
         "countdown_active": False,
         "start_time": time.monotonic() - 5.0,
-        "max_attempts": 3,  # Set small threshold for test
     }
-    cog._guess_attempts_by_channel[104] = {1, 2}
 
-    msg = MagicMock(spec=discord.Message)
-    msg.author = MagicMock(id=44444, bot=False)
-    msg.guild = guild
-    msg.channel = channel
-    msg.content = "3"
-    msg.add_reaction = AsyncMock()
-    msg.reply = AsyncMock()
+    for guess in range(1, 106):
+        msg = MagicMock(spec=discord.Message)
+        msg.author = MagicMock(id=44444, bot=False)
+        msg.guild = guild
+        msg.channel = channel
+        msg.content = str(guess)
+        msg.add_reaction = AsyncMock()
+        msg.reply = AsyncMock()
+        await cog.on_message(msg)
 
-    await cog.on_message(msg)
-
-    # 3rd attempt reached max (3)
-    channel.send.assert_any_call("🛑 **Maximum attempts reached (3)!** The game has concluded. The secret number was **500**.")
-    channel.set_permissions.assert_called()
-    assert 104 not in cog.games
+    assert 104 in cog.games
+    channel.set_permissions.assert_not_called()
+    channel.send.assert_not_called()
 
 
 @pytest.mark.asyncio
@@ -490,7 +491,6 @@ async def test_unrelated_channels_unaffected(mock_bot):
         "expires_at": time.time() + 1800,
         "countdown_active": False,
         "start_time": time.monotonic() - 5.0,
-        "max_attempts": 100,
     }
 
     msg = MagicMock(spec=discord.Message)
