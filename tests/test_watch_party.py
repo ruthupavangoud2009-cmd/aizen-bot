@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 from types import SimpleNamespace
+from unittest.mock import AsyncMock
 from urllib.parse import parse_qs, urlsplit
 
 import pytest
@@ -96,10 +97,9 @@ def test_watch_party_rejects_unsafe_youtube_urls(url: str) -> None:
     assert normalize_youtube_url(url) is None
 
 
-def test_watch_party_youtube_request_posts_link_for_discord_native_preview() -> None:
+def test_watch_party_youtube_request_uses_existing_music_player() -> None:
     async def run() -> None:
         class FakeContext:
-            author = SimpleNamespace(mention="<@123>")
             interaction = None
 
             def __init__(self) -> None:
@@ -109,18 +109,65 @@ def test_watch_party_youtube_request_posts_link_for_discord_native_preview() -> 
                 self.messages.append(content)
 
         context = FakeContext()
-        cog = WatchParty(SimpleNamespace())
+        music = object()
+        cog = WatchParty(SimpleNamespace(get_cog=lambda name: music))
+        cog._play_youtube_audio = AsyncMock()
+
         await WatchParty.watch_play.callback(cog, context, "https://youtu.be/Abcdefghijk")
 
-        assert len(context.messages) == 1
-        assert "https://www.youtube.com/watch?v=Abcdefghijk" in context.messages[0]
-        assert "Discord will show its native YouTube preview" in context.messages[0]
-        assert "cannot broadcast YouTube audio/video into a voice channel" in context.messages[0]
+        cog._play_youtube_audio.assert_awaited_once_with(
+            context, "https://www.youtube.com/watch?v=Abcdefghijk"
+        )
 
     asyncio.run(run())
 
 
-def test_watch_root_accepts_a_youtube_url() -> None:
+def test_watch_root_routes_youtube_audio_to_existing_music_player() -> None:
+    async def run() -> None:
+        class FakeContext:
+            interaction = None
+
+            def __init__(self) -> None:
+                self.messages: list[str] = []
+
+            async def send(self, content: str, *, embed: object = None) -> None:
+                self.messages.append(content)
+
+        context = FakeContext()
+        music = object()
+        cog = WatchParty(SimpleNamespace(get_cog=lambda name: music))
+        cog._play_youtube_audio = AsyncMock()
+
+        await WatchParty.watch.callback(cog, context, "https://www.youtube.com/watch?v=Abcdefghijk")
+
+        cog._play_youtube_audio.assert_awaited_once_with(
+            context, "https://www.youtube.com/watch?v=Abcdefghijk"
+        )
+
+    asyncio.run(run())
+
+
+def test_watch_audio_helper_calls_music_execute_play() -> None:
+    async def run() -> None:
+        music = object()
+        context = object()
+        cog = WatchParty(SimpleNamespace(get_cog=lambda name: music))
+        globals_dict = WatchParty._play_youtube_audio.__globals__
+        original_execute_play = globals_dict["execute_play"]
+        execute_play = AsyncMock()
+        globals_dict["execute_play"] = execute_play
+        try:
+            await cog._play_youtube_audio(context, "https://www.youtube.com/watch?v=Abcdefghijk")
+        finally:
+            globals_dict["execute_play"] = original_execute_play
+        execute_play.assert_awaited_once_with(
+            music, context, "https://www.youtube.com/watch?v=Abcdefghijk"
+        )
+
+    asyncio.run(run())
+
+
+def test_watch_share_keeps_independent_youtube_link_preview_available() -> None:
     async def run() -> None:
         class FakeContext:
             author = SimpleNamespace(mention="<@123>")
@@ -134,10 +181,11 @@ def test_watch_root_accepts_a_youtube_url() -> None:
 
         context = FakeContext()
         cog = WatchParty(SimpleNamespace())
-        await WatchParty.watch.callback(cog, context, "https://www.youtube.com/watch?v=Abcdefghijk")
+        await WatchParty.watch_share.callback(cog, context, "https://youtu.be/Abcdefghijk")
 
-        assert len(context.messages) == 1
         assert "https://www.youtube.com/watch?v=Abcdefghijk" in context.messages[0]
+        assert "each viewer controls that player" in context.messages[0].lower()
+        assert "cannot broadcast YouTube audio/video into a voice channel" in context.messages[0]
 
     asyncio.run(run())
 
@@ -148,6 +196,7 @@ def test_watch_party_and_monitor_extensions_load_without_command_collisions() ->
         try:
             await bot.load_extension("src.cogs.general.watch_party")
             await bot.load_extension("src.cogs.developer.monitor")
+            await bot.load_extension("src.cogs.moderation.fakeban")
 
             watch = bot.get_command("watch")
             assert watch is not None
@@ -157,6 +206,9 @@ def test_watch_party_and_monitor_extensions_load_without_command_collisions() ->
                 command = bot.get_command(name)
                 assert command is not None
                 assert command.cog.__class__.__module__ == "src.cogs.developer.monitor"
+            fakeban = bot.get_command("fakeban")
+            assert fakeban is not None
+            assert fakeban.cog.__class__.__module__ == "src.cogs.moderation.fakeban"
         finally:
             await bot.close()
 

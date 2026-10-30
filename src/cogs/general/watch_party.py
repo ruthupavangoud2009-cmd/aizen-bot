@@ -10,6 +10,12 @@ from discord.ext import commands
 from src.core.config import Config
 from src.core.context import CustomContext
 from src.core.bot import KyokaBot
+from src.cogs.music._commands.nowplaying import execute_nowplaying
+from src.cogs.music._commands.pause import execute_pause, execute_resume
+from src.cogs.music._commands.play import execute_play
+from src.cogs.music._commands.queue import execute_queue
+from src.cogs.music._commands.skip import execute_skip
+from src.cogs.music._commands.stop import execute_stop
 from src.watch_party import broadcast_room, new_token, player_url, token_hash, validate_media_url
 
 logger = logging.getLogger("Kyoka.WatchParty")
@@ -117,20 +123,59 @@ class WatchParty(commands.Cog):
             return None
         return room
 
-    @commands.hybrid_group(name="watch", aliases=["watchparty"], invoke_without_command=True, description="Share a YouTube embed or manage a KYOKA Watch Party.")
+    async def _play_youtube_audio(self, ctx: CustomContext, url: str) -> None:
+        music = self.bot.get_cog("Music")
+        if not music:
+            await send_reply(ctx, "The existing music player is unavailable. YouTube audio cannot be started right now.", ephemeral=True)
+            return
+        await execute_play(music, ctx, url)
+
+    async def _music_action(self, ctx: CustomContext, action: str) -> None:
+        music = self.bot.get_cog("Music")
+        if not music:
+            await send_reply(ctx, "The existing music player is unavailable.", ephemeral=True)
+            return
+        callbacks = {
+            "pause": execute_pause,
+            "resume": execute_resume,
+            "skip": execute_skip,
+            "queue": execute_queue,
+            "nowplaying": execute_nowplaying,
+            "stop": execute_stop,
+        }
+        await callbacks[action](music, ctx)
+
+    async def _has_direct_media_room(self, ctx: CustomContext) -> bool:
+        if not ctx.guild:
+            return False
+        room = await self._room(ctx.guild.id)
+        return bool(room and room.get("source_url"))
+
+    @commands.hybrid_group(name="watch", aliases=["watchparty"], invoke_without_command=True, description="Play YouTube audio or manage a KYOKA Watch Party.")
     async def watch(self, ctx: CustomContext, url: str | None = None) -> None:
         if url:
-            await self._share_youtube_link(ctx, url)
+            youtube_url = normalize_youtube_url(url)
+            if not youtube_url:
+                await send_reply(
+                    ctx,
+                    "Unsupported YouTube URL. Use a valid HTTPS youtube.com or youtu.be video, Shorts, or playlist link.",
+                    ephemeral=True,
+                )
+                return
+            await self._play_youtube_audio(ctx, youtube_url)
             return
         prefix = ctx.prefix
         embed = discord.Embed(
             title="⛩️ KYOKA WATCH PARTY",
             description=(
-                "Share a YouTube video using Discord's native video preview, or create a synchronized room for direct media.\n\n"
-                f"`{prefix}watch <youtube-url>` · Share a YouTube video or playlist in Discord\n"
+                "Play YouTube audio through KYOKA's existing music player, or create a synchronized web room for direct media.\n\n"
+                f"`{prefix}watch <youtube-url>` · Play YouTube audio through the existing music player\n"
                 f"`{prefix}watch create` · Create a room\n"
-                f"`{prefix}watch play <url>` · Share YouTube in Discord or set direct media in a room\n"
-                f"`{prefix}watch pause` / `{prefix}watch resume` · Control direct-media room playback\n"
+                f"`{prefix}watch play <url>` · Play YouTube audio or set direct media in a room\n"
+                f"`{prefix}watch share <youtube-url>` · Post a YouTube link for independent viewer playback\n"
+                f"`{prefix}watch pause` / `{prefix}watch resume` · Control room or music playback\n"
+                f"`{prefix}watch skip` / `{prefix}watch queue` · Control the music queue\n"
+                f"`{prefix}watch nowplaying` · Show the current music track\n"
                 f"`{prefix}watch seek <time>` · Seek (for example `1:23` or `00:01:23`)\n"
                 f"`{prefix}watch sync` · Synchronize direct-media room playback\n"
                 f"`{prefix}watch invite` · Rotate and display an invite\n"
@@ -141,7 +186,7 @@ class WatchParty(commands.Cog):
             ),
             color=Config.COLORS.PRIMARY,
         )
-        embed.set_footer(text="YouTube playback is handled by Discord's native preview per viewer; KYOKA cannot stream YouTube video into voice.")
+        embed.set_footer(text="YouTube audio uses KYOKA's existing music player; Discord bots cannot broadcast Go Live video.")
         await send_reply(ctx, embed=embed)
 
     async def _share_youtube_link(self, ctx: CustomContext, url: str) -> None:
@@ -160,6 +205,10 @@ class WatchParty(commands.Cog):
             "Discord will show its native YouTube preview where available. Each viewer controls that player; "
             "KYOKA cannot broadcast YouTube audio/video into a voice channel or synchronize the embed.",
         )
+
+    @watch.command(name="share", description="Post a YouTube link for each viewer to play independently.")
+    async def watch_share(self, ctx: CustomContext, url: str) -> None:
+        await self._share_youtube_link(ctx, url)
 
     @watch.command(name="create", description="Create a synchronized Watch Party room.")
     @commands.guild_only()
@@ -215,8 +264,9 @@ class WatchParty(commands.Cog):
 
     @watch.command(name="play", description="Share a YouTube embed or set direct media for an active Watch Party.")
     async def watch_play(self, ctx: CustomContext, url: str) -> None:
-        if normalize_youtube_url(url):
-            await self._share_youtube_link(ctx, url)
+        youtube_url = normalize_youtube_url(url)
+        if youtube_url:
+            await self._play_youtube_audio(ctx, youtube_url)
             return
         room = await self._host_room(ctx)
         if not room:
@@ -253,15 +303,36 @@ class WatchParty(commands.Cog):
 
     @watch.command(name="pause", description="Pause playback for all viewers.")
     async def watch_pause(self, ctx: CustomContext) -> None:
-        await self._set_status(ctx, "paused")
+        if await self._has_direct_media_room(ctx):
+            await self._set_status(ctx, "paused")
+        else:
+            await self._music_action(ctx, "pause")
 
     @watch.command(name="resume", description="Resume playback for all viewers.")
     async def watch_resume(self, ctx: CustomContext) -> None:
-        await self._set_status(ctx, "playing")
+        if await self._has_direct_media_room(ctx):
+            await self._set_status(ctx, "playing")
+        else:
+            await self._music_action(ctx, "resume")
 
     @watch.command(name="stop", description="Stop playback without closing the room.")
     async def watch_stop(self, ctx: CustomContext) -> None:
-        await self._set_status(ctx, "stopped", 0)
+        if await self._has_direct_media_room(ctx):
+            await self._set_status(ctx, "stopped", 0)
+        else:
+            await self._music_action(ctx, "stop")
+
+    @watch.command(name="skip", description="Skip the current YouTube/music track.")
+    async def watch_skip(self, ctx: CustomContext) -> None:
+        await self._music_action(ctx, "skip")
+
+    @watch.command(name="queue", description="Show the existing music queue.")
+    async def watch_queue(self, ctx: CustomContext) -> None:
+        await self._music_action(ctx, "queue")
+
+    @watch.command(name="nowplaying", aliases=["np"], description="Show the current music track.")
+    async def watch_nowplaying(self, ctx: CustomContext) -> None:
+        await self._music_action(ctx, "nowplaying")
 
     @watch.command(name="seek", description="Seek playback to a timestamp such as 1:23.")
     async def watch_seek(self, ctx: CustomContext, timestamp: str) -> None:

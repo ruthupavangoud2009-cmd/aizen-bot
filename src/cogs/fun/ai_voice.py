@@ -8,6 +8,7 @@ Coexists cleanly with Music: never disconnects or interrupts active music sessio
 from __future__ import annotations
 
 import asyncio
+import json
 import logging
 import os
 import random
@@ -334,6 +335,7 @@ class AIVoice(commands.Cog, name="AIVoice"):
         self._voice_locks: Dict[int, asyncio.Lock] = {}
         self._speech_queues: Dict[int, asyncio.Queue] = {}
         self._active_voice_trivia: dict[int, dict[str, Any]] = {}
+        self._voice_moan_cooldowns: dict[int, float] = {}
         self.gif_manager = GIFManager()
         self._http_session: Optional[aiohttp.ClientSession] = None
         for cmd in self.__cog_commands__:
@@ -519,6 +521,8 @@ class AIVoice(commands.Cog, name="AIVoice"):
                 f"• `{p}aivoice talk [vibe]` — Start a live conversation with a selected vibe\n"
                 f"• `{p}aivoice vibe [name]` — Switch conversational vibe (Aizen, Gamer, Chill, Tsundere, Cyber AI)\n"
                 f"• `{p}aivoice sfx [name]` — Live soundboard with boom, airhorn, level up, rimshot, and laser\n"
+                f"• `{p}voice moan` — Play a short, clearly comedic synthesized voice effect\n"
+                f"• `{p}voice sounds` / `{p}voice sound on|off|channel #voice` — View or configure voice effects\n"
                 f"• `{p}aivoice roast [@user]` — Deliver a hilarious verbal roast in VC with dramatic bass drop\n"
                 f"• `{p}aivoice beatbox` — Drop a vocal beatbox routine into the voice channel\n"
                 f"• `{p}aivoice trivia` — Host a live spoken trivia challenge with countdown chimes\n"
@@ -822,11 +826,169 @@ class AIVoice(commands.Cog, name="AIVoice"):
     @commands.command(
         name="voice",
         aliases=["voices", "voicelist"],
-        help="Display all available AI voices or switch voice.",
+        help="Display AI voices or manage the server's comedic voice effect.",
     )
     async def cmd_voice(self, ctx: CustomContext, *, voice_name: Optional[str] = None) -> None:
-        """Show available voices or switch voice."""
+        """Show/switch voices or manage the server's comedic voice effect."""
+        parts = (voice_name or "").split(maxsplit=2)
+        if parts and parts[0].lower() == "moan":
+            await self._play_comedic_voice_effect(ctx)
+            return
+        if parts and parts[0].lower() in {"sound", "sounds"}:
+            await self._configure_voice_effect(ctx, parts[1:])
+            return
         await self.voice_select(ctx, voice_name=voice_name)
+
+    @staticmethod
+    def _voice_effect_key(guild_id: int) -> str:
+        return f"voice_effect:{guild_id}"
+
+    async def _voice_effect_settings(self, guild_id: int) -> dict[str, Any]:
+        row = await self.bot.db.fetch_one(
+            "SELECT value FROM system_state WHERE key = ?",
+            self._voice_effect_key(guild_id),
+        )
+        if not row or not row.get("value"):
+            return {"enabled": False, "channel_id": None}
+        try:
+            settings = json.loads(row["value"])
+        except (TypeError, ValueError) as exc:
+            logger.exception("Invalid voice-effect settings for guild %s", guild_id)
+            raise RuntimeError("Stored voice-effect settings are invalid; ask an administrator to reconfigure them.") from exc
+        if not isinstance(settings, dict):
+            raise RuntimeError("Stored voice-effect settings are invalid; ask an administrator to reconfigure them.")
+        return {"enabled": bool(settings.get("enabled", False)), "channel_id": settings.get("channel_id")}
+
+    async def _save_voice_effect_settings(self, guild_id: int, settings: dict[str, Any]) -> None:
+        await self.bot.db.execute(
+            """INSERT INTO system_state (key, value) VALUES (?, ?)
+               ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value""",
+            self._voice_effect_key(guild_id),
+            json.dumps(settings, separators=(",", ":")),
+        )
+
+    async def _configure_voice_effect(self, ctx: CustomContext, args: list[str]) -> None:
+        if not ctx.guild:
+            await ctx.send_error("Voice-effect settings are available only in a server.")
+            return
+        if not args:
+            try:
+                settings = await self._voice_effect_settings(ctx.guild.id)
+            except Exception as exc:
+                logger.exception("Could not load voice-effect settings for guild %s", ctx.guild.id)
+                await ctx.send_error(f"Could not load voice-effect settings: `{exc}`")
+                return
+            channel = ctx.guild.get_channel(settings["channel_id"]) if settings["channel_id"] else None
+            await ctx.send(
+                f"**Comedic voice effect:** `{'enabled' if settings['enabled'] else 'disabled'}`\n"
+                f"**Allowed voice channel:** {channel.mention if channel else 'not configured'}\n"
+                f"Use `{ctx.prefix}voice sound on`, `off`, or `channel #voice` (Manage Server required)."
+            )
+            return
+        if not ctx.author.guild_permissions.manage_guild:
+            await ctx.send_error("Manage Server permission is required to change voice-effect settings.")
+            return
+
+        action = args[0].lower()
+        try:
+            settings = await self._voice_effect_settings(ctx.guild.id)
+            if action in {"on", "enable", "enabled"}:
+                if not settings["channel_id"]:
+                    await ctx.send_error("Set an allowed voice channel first with `voice sound channel #voice`.")
+                    return
+                settings["enabled"] = True
+                await self._save_voice_effect_settings(ctx.guild.id, settings)
+                await ctx.send_success("The comedic voice effect is enabled.")
+                return
+            if action in {"off", "disable", "disabled"}:
+                settings["enabled"] = False
+                await self._save_voice_effect_settings(ctx.guild.id, settings)
+                await ctx.send_success("The comedic voice effect is disabled.")
+                return
+            if action == "channel" and len(args) == 2:
+                channel_id_match = re.fullmatch(r"<#(\d+)>|(\d+)", args[1])
+                channel_id = int(next(value for value in channel_id_match.groups() if value)) if channel_id_match else 0
+                channel = ctx.guild.get_channel(channel_id)
+                if not isinstance(channel, (discord.VoiceChannel, discord.StageChannel)):
+                    await ctx.send_error("Choose a voice channel in this server, such as `voice sound channel #general-voice`.")
+                    return
+                settings["channel_id"] = channel.id
+                await self._save_voice_effect_settings(ctx.guild.id, settings)
+                await ctx.send_success(f"Comedic voice effects are restricted to {channel.mention}.")
+                return
+        except Exception as exc:
+            logger.exception("Could not update voice-effect settings for guild %s", ctx.guild.id)
+            await ctx.send_error(f"Could not update voice-effect settings: `{exc}`")
+            return
+        await ctx.send_error(f"Usage: `{ctx.prefix}voice sound on|off|channel #voice`.")
+
+    async def _play_comedic_voice_effect(self, ctx: CustomContext) -> None:
+        if not ctx.guild:
+            await ctx.send_error("Voice effects are available only in a server.")
+            return
+        try:
+            settings = await self._voice_effect_settings(ctx.guild.id)
+        except Exception as exc:
+            logger.exception("Could not load voice-effect settings for guild %s", ctx.guild.id)
+            await ctx.send_error(f"Could not load voice-effect settings: `{exc}`")
+            return
+        if not settings["enabled"]:
+            await ctx.send_error("This server has disabled the comedic voice effect. Ask a server manager to enable it.")
+            return
+        channel_id = settings["channel_id"]
+        member_voice = getattr(getattr(ctx.author, "voice", None), "channel", None)
+        if not channel_id or not member_voice or member_voice.id != channel_id:
+            await ctx.send_error("Join the voice channel configured for this effect before using `voice moan`.")
+            return
+        if self._is_music_active(ctx.guild):
+            await ctx.send_error("Music is active in this server. The voice effect will not interrupt the music player.")
+            return
+        vc = ctx.guild.voice_client
+        if not isinstance(vc, discord.VoiceClient) or not _is_vc_connected(vc) or not vc.channel or vc.channel.id != channel_id:
+            await ctx.send_error("KYOKA must already be connected to the configured voice channel. Use the existing voice join command first.")
+            return
+        if vc.is_playing():
+            await ctx.send_error("Voice audio is already playing. Try again when it has finished.")
+            return
+        if time.monotonic() < self._voice_moan_cooldowns.get(ctx.guild.id, 0):
+            await ctx.send_error("That voice effect is on cooldown. Please wait a few seconds.")
+            return
+
+        self._voice_moan_cooldowns[ctx.guild.id] = time.monotonic() + 10
+        fd, path = tempfile.mkstemp(suffix=".mp3")
+        os.close(fd)
+        try:
+            async with ctx.typing():
+                synthesized = await self._synthesize_audio(
+                    random.choice(
+                        (
+                            "Mmm... that plot twist was almost too dramatic!",
+                            "Mmm, a joke so good it deserves its own encore!",
+                            "Oh, the drama! Somebody cue the imaginary orchestra!",
+                        )
+                    ),
+                    self._get_voice_id(ctx.guild.id),
+                    path,
+                    lang=self._get_voice_lang(ctx.guild.id),
+                )
+            if not synthesized or not os.path.exists(path) or os.path.getsize(path) == 0:
+                await ctx.send_error("Could not synthesize the comedic voice effect. Please try again later.")
+                return
+            async with self._get_lock(ctx.guild.id):
+                if self._is_music_active(ctx.guild) or vc.is_playing():
+                    await ctx.send_error("Voice playback became busy; the effect was not played.")
+                    return
+                await self._play_audio_file(vc, path)
+            await ctx.send_success("Played a short, non-explicit comedic voice effect.")
+        except Exception as exc:
+            logger.exception("Comedic voice effect failed in guild %s", ctx.guild.id)
+            await ctx.send_error(f"Could not play the voice effect: `{exc}`")
+        finally:
+            if os.path.exists(path):
+                try:
+                    os.remove(path)
+                except OSError:
+                    logger.warning("Could not remove temporary voice-effect audio file.")
 
     @aivoice_group.command(name="stop", description="Stop current audio playback in the voice channel.")
     async def voice_stop(self, ctx: CustomContext) -> None:

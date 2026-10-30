@@ -11,6 +11,7 @@ Verifies:
 from __future__ import annotations
 
 import asyncio
+import json
 from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 import discord
@@ -147,6 +148,66 @@ async def test_voice_stop_playback(voice_cog: AIVoice, mock_voice_ctx: MagicMock
     await voice_cog.voice_stop.callback(voice_cog, mock_voice_ctx)
     vc.stop.assert_called_once()
     mock_voice_ctx.send_success.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_voice_moan_uses_comedic_tts_and_existing_voice_client() -> None:
+    bot = MagicMock()
+    bot._music_controller = None
+    bot.db.fetch_one = AsyncMock(
+        return_value={"value": json.dumps({"enabled": True, "channel_id": 321})}
+    )
+    voice_cog = AIVoice(bot)
+
+    class FakeVoiceClient:
+        channel = MagicMock(id=321)
+
+        def is_connected(self) -> bool:
+            return True
+
+        def is_playing(self) -> bool:
+            return False
+
+    voice_client = FakeVoiceClient()
+    voice_cog._play_audio_file = AsyncMock()
+
+    async def synthesize(text: str, voice_id: str, output_path: str, lang: str) -> bool:
+        assert "plot twist" in text or "joke" in text or "drama" in text
+        with open(output_path, "wb") as audio_file:
+            audio_file.write(b"generated audio")
+        return True
+
+    voice_cog._synthesize_audio = AsyncMock(side_effect=synthesize)
+    ctx = MagicMock()
+    ctx.guild.id = 321
+    ctx.guild.voice_client = voice_client
+    ctx.author.voice.channel.id = 321
+    ctx.typing.return_value.__aenter__ = AsyncMock()
+    ctx.typing.return_value.__aexit__ = AsyncMock()
+    ctx.send_success = AsyncMock()
+    ctx.send_error = AsyncMock()
+
+    with patch("src.cogs.fun.ai_voice.discord.VoiceClient", FakeVoiceClient):
+        await voice_cog.cmd_voice.callback(voice_cog, ctx, voice_name="moan")
+
+    voice_cog._synthesize_audio.assert_awaited_once()
+    voice_cog._play_audio_file.assert_awaited_once()
+    ctx.send_success.assert_awaited_once_with("Played a short, non-explicit comedic voice effect.")
+
+
+@pytest.mark.asyncio
+async def test_voice_moan_is_disabled_until_server_configures_it() -> None:
+    voice_cog = AIVoice(MagicMock())
+    voice_cog.bot.db.fetch_one = AsyncMock(return_value=None)
+    ctx = MagicMock()
+    ctx.guild.id = 321
+    ctx.send_error = AsyncMock()
+    voice_cog._synthesize_audio = AsyncMock()
+
+    await voice_cog.cmd_voice.callback(voice_cog, ctx, voice_name="moan")
+
+    ctx.send_error.assert_awaited_once()
+    voice_cog._synthesize_audio.assert_not_awaited()
 
 
 @pytest.mark.asyncio
