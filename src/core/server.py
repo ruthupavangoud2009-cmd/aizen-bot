@@ -57,6 +57,7 @@ class HealthServer:
             from dashboard_api.routes.owner_routes import register_owner_routes
             from dashboard_api.routes.system_routes import register_system_routes
             from dashboard_api.routes.ticket_routes import register_ticket_routes
+            from dashboard_api.routes.watch_routes import register_watch_routes
 
             cfg = DashboardConfig.from_env()
             self.app["config"] = cfg
@@ -75,6 +76,7 @@ class HealthServer:
             register_owner_routes(self.app)
             register_system_routes(self.app)
             register_ticket_routes(self.app)
+            register_watch_routes(self.app)
 
             async def _init_dashboard(app):
                 if "http_session" not in app or app["http_session"].closed:

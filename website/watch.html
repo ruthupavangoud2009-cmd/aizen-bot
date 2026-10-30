@@ -1,0 +1,62 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#100b19">
+  <title>KYOKA Watch Party</title>
+  <link rel="icon" type="image/svg+xml" href="/assets/logo.svg">
+  <link rel="stylesheet" href="/css/watch-party.css">
+</head>
+<body>
+  <header class="topbar">
+    <a class="brand" href="/"><span class="brand-mark">K</span><span>KYOKA <b>WATCH PARTY</b></span></a>
+    <span class="secure-label"><i></i> INVITED ROOM</span>
+  </header>
+  <main class="layout">
+    <section class="player-panel">
+      <div class="room-heading">
+        <div><p class="eyebrow">AIZEN EDITION · SHARED VIEWING</p><h1>Watch together.</h1></div>
+        <span id="status-badge" class="status-badge">CONNECTING</span>
+      </div>
+      <div class="screen">
+        <video id="video" playsinline preload="metadata"></video>
+        <div id="empty-state" class="empty-state"><span class="film-icon">▣</span><h2>Waiting for the host</h2><p>The host will choose a supported video URL to begin.</p></div>
+        <button id="audio-gate" class="audio-gate" type="button" hidden>▶ &nbsp; Enable playback &amp; audio</button>
+        <div id="screen-message" class="screen-message" role="status"></div>
+      </div>
+      <div class="controls">
+        <button id="play-btn" class="control-btn primary" type="button" disabled aria-label="Play or pause">▶</button>
+        <span id="time-label" class="time-label">00:00 / 00:00</span>
+        <input id="seek" class="seek" type="range" min="0" max="0" step="0.1" value="0" aria-label="Seek video" disabled>
+        <label class="volume"><span>♫</span><input id="volume" type="range" min="0" max="1" step="0.01" value="1" aria-label="Volume"></label>
+        <button id="fullscreen-btn" class="control-btn" type="button" aria-label="Fullscreen">⛶</button>
+      </div>
+      <div id="host-source" class="host-source" hidden>
+        <label for="source-url">Direct HTTPS video URL</label>
+        <div class="source-row"><input id="source-url" type="url" placeholder="https://media.example/video.mp4" autocomplete="url"><button id="load-btn" class="gold-btn" type="button">Load &amp; play</button></div>
+        <small>MP4, M4V, WebM, OGV and OGG media only. The source must allow browser playback.</small>
+      </div>
+      <div class="player-footer">
+        <span><b>Playback is synchronized</b><span id="connection-label">Reconnecting…</span></span>
+        <button id="stop-btn" class="text-btn" type="button" hidden>■ Stop session</button>
+      </div>
+    </section>
+    <aside class="sidebar">
+      <section class="side-card room-card">
+        <div class="card-title"><span class="title-icon">✦</span><div><p class="eyebrow">YOUR SESSION</p><h2>Room <span id="room-id">—</span></h2></div></div>
+        <div class="room-facts"><span>HOST</span><b id="host-label">KYOKA host</b><span>VIEWERS</span><b id="viewer-count">0 / 25</b></div>
+        <button id="copy-invite" class="gold-btn wide" type="button">⧉ &nbsp; Copy invitation link</button>
+        <button id="leave-btn" class="text-btn wide" type="button">Leave room</button>
+      </section>
+      <section class="side-card members-card">
+        <div class="members-heading"><div><p class="eyebrow">IN THE ROOM</p><h2>Viewers</h2></div><span id="member-count" class="count-pill">0</span></div>
+        <ul id="members" class="member-list"></ul>
+      </section>
+      <p class="disclaimer">Each viewer plays the source in their own browser. KYOKA does not stream to Discord or bypass provider restrictions. For voice chat, join your server’s voice channel separately.</p>
+    </aside>
+  </main>
+  <div id="toast" class="toast" role="status"></div>
+  <script type="module" src="/js/watch-party.js"></script>
+</body>
+</html>

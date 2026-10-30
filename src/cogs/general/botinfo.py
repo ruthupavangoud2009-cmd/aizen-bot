@@ -15,7 +15,6 @@ from src.utils.containers import KyokaContainer, send_container_response
 if TYPE_CHECKING:
     from src.core.bot import KyokaBot
 
-SUPPORT_URL = Config.SUPPORT_URL or "https://discord.gg/7q4tn6dA6V"
 OWNER_ID = 1505515188991033409
 
 
@@ -43,7 +42,7 @@ class BotInfoView(discord.ui.View):
             discord.ui.Button(
                 label="Join Support Server",
                 style=discord.ButtonStyle.link,
-                url=SUPPORT_URL,
+                url=Config.SUPPORT_URL,
             )
         )
         self.add_item(
@@ -99,6 +98,7 @@ def build_botinfo_container(bot: KyokaBot, guild_id: int | None = None) -> Kyoka
         if premium_info and premium_info.get("is_premium")
         else "Manual access; ask in the support server"
     )
+    support_url = Config.SUPPORT_URL or "https://discord.gg/7q4tn6dA6V"
 
     container = KyokaContainer()
     bio_text = branding.get("bio") if branding else "Power isn't given. It's taken. — Sosuke Aizen"
@@ -124,7 +124,7 @@ def build_botinfo_container(bot: KyokaBot, guild_id: int | None = None) -> Kyoka
         f"> **Prefix:** `{prefix}` • **Help:** `{prefix}help` or `/help`\n"
         f"> **Web Dashboard:** [aizen-bot.pages.dev](https://aizen-bot.pages.dev/)\n"
         f"> **Premium:** {premium_status}\n\n"
-        f"-# Made by Aizen • [Official Website](https://aizen-bot.pages.dev/) • [Support Server]({SUPPORT_URL})"
+        f"-# Made by Aizen • [Official Website](https://aizen-bot.pages.dev/) • [Support Server]({support_url})"
     )
     return container
 

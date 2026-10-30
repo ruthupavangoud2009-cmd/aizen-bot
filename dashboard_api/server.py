@@ -17,6 +17,7 @@ from dashboard_api.routes.owner_routes import register_owner_routes
 from dashboard_api.routes.music_routes import register_music_routes
 from dashboard_api.routes.system_routes import register_system_routes
 from dashboard_api.routes.ticket_routes import register_ticket_routes
+from dashboard_api.routes.watch_routes import register_watch_routes
 
 logger = logging.getLogger("Kyoka.Dashboard.Server")
 
@@ -94,7 +95,8 @@ async def security_headers_middleware(request: web.Request, handler) -> web.Resp
         "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; "
         "font-src 'self' https://fonts.gstatic.com; "
         "img-src 'self' data: https://cdn.discordapp.com https://images.unsplash.com; "
-        "connect-src 'self' https://discord.com;"
+        "connect-src 'self' https://discord.com https: wss:; "
+        "media-src 'self' https: blob:;"
     )
     response.headers["Content-Security-Policy"] = csp
 
@@ -255,6 +257,7 @@ def create_app(
     register_owner_routes(app)
     register_system_routes(app)
     register_ticket_routes(app)
+    register_watch_routes(app)
 
     # Mount frontend static files and pages for unified hosting and standalone deployment
     if serve_website:

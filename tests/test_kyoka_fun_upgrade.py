@@ -30,10 +30,11 @@ async def test_help_aizen_categories_coverage():
     help_cog = bot.get_cog("Help")
     assert help_cog is not None
 
-    # Check clean Aizen Edition categories are explicitly defined in Help (includes 14 categories in 3.0)
-    assert len(Help.CATEGORY_ORDER) in (11, 12, 14)
+    # Check clean Aizen Edition categories are explicitly defined in Help.
+    assert len(Help.CATEGORY_ORDER) == 15
     assert "🛡️・MODERATION" in Help.CATEGORY_ORDER
     assert "🎵・MUSIC" in Help.CATEGORY_ORDER
+    assert "🎬・WATCH PARTY" in Help.CATEGORY_ORDER
     assert "💎・PREMIUM" in Help.CATEGORY_ORDER
 
     # Mock context with primary owner (has access to all categories)

@@ -16,6 +16,12 @@ import {
   resetGuildBranding,
   fetchGuildVoice,
   updateGuildVoice,
+  fetchWatchRooms,
+  createWatchRoom,
+  updateWatchSettings,
+  closeWatchRoom,
+  createWatchInvite,
+  createWatchHostLink,
   testEventSimulation,
   showToast,
   fetchMusicPlayback,
@@ -628,6 +634,7 @@ function renderWorkspace(container, guild) {
           <button class="mobile-tab-chip" data-tab="reaction_roles"><span>🎭</span> Reaction</button>
           <button class="mobile-tab-chip" data-tab="music_studio"><span>🎧</span> Studio</button>
           <button class="mobile-tab-chip" data-tab="music"><span>🎵</span> Music</button>
+          <button class="mobile-tab-chip" data-tab="watch_party"><span>🎬</span> Watch Party</button>
           <button class="mobile-tab-chip" data-tab="ai"><span>🧠</span> AI</button>
           <button class="mobile-tab-chip" data-tab="prefix_commands"><span>⚡</span> Prefix</button>
           <button class="mobile-tab-chip" data-tab="utilities"><span>📌</span> Utilities</button>
@@ -674,6 +681,7 @@ function renderWorkspace(container, guild) {
           <div style="font-size: 0.72rem; font-weight: 800; color: var(--text-dim); text-transform: uppercase; padding: 0.75rem 0.75rem 0.4rem; margin-top: 0.25rem;">VOICE &amp; INTELLIGENCE</div>
           <button class="tab-btn" data-tab="music_studio" style="color: var(--purple-pastel); font-weight: 700;"><span>🎧</span> Music Studio (Live)</button>
           <button class="tab-btn" data-tab="music"><span>🎵</span> Music &amp; Voice Settings</button>
+          <button class="tab-btn" data-tab="watch_party"><span>🎬</span> Watch Party</button>
           <button class="tab-btn" data-tab="ai"><span>🧠</span> Neural AI Persona</button>
           <button class="tab-btn" data-tab="prefix_commands"><span>⚡</span> Prefix &amp; Commands</button>
 
@@ -729,6 +737,7 @@ function renderWorkspace(container, guild) {
           <div id="tab-reaction_roles" class="tab-panel"></div>
           <div id="tab-music_studio" class="tab-panel"></div>
           <div id="tab-music" class="tab-panel"></div>
+          <div id="tab-watch_party" class="tab-panel"></div>
           <div id="tab-ai" class="tab-panel"></div>
           <div id="tab-prefix_commands" class="tab-panel"></div>
           <div id="tab-utilities" class="tab-panel"></div>
@@ -1084,6 +1093,9 @@ function renderActiveTab(tab) {
       case 'music':
         renderMusicTab(panel, s);
         break;
+      case 'watch_party':
+        renderWatchPartyTab(panel);
+        break;
       case 'ai':
         renderAiTab(panel, s);
         break;
@@ -1139,6 +1151,143 @@ function renderActiveTab(tab) {
       renderActiveTab(tab);
     });
   }
+}
+
+function renderWatchPartyTab(panel) {
+  const guildId = state.selectedGuildId;
+  panel.innerHTML = `
+    <div style="background:linear-gradient(135deg,rgba(91,33,182,.18),rgba(17,12,24,.75));border:1px solid rgba(167,139,250,.25);border-radius:16px;padding:24px;margin-bottom:18px;">
+      <div style="display:flex;align-items:center;justify-content:space-between;gap:14px;flex-wrap:wrap;">
+        <div><p style="color:#c4b5fd;font-size:.72rem;font-weight:800;letter-spacing:.16em;margin:0 0 6px;">KYOKA · AIZEN EDITION</p><h2 style="margin:0;color:#fff;">🎬 Watch Party</h2><p style="color:var(--text-dim);margin:7px 0 0;">Manage browser-based synchronized video rooms. Playback is hosted in each viewer’s browser, not broadcast by Discord.</p></div>
+        <button id="watch-create" class="btn btn-primary">＋ Create Room</button>
+      </div>
+    </div>
+    <div style="display:grid;grid-template-columns:minmax(0,1.4fr) minmax(250px,.8fr);gap:16px;align-items:start;">
+      <section style="background:rgba(15,10,22,.72);border:1px solid var(--border-subtle);border-radius:14px;padding:18px;">
+        <h3 style="margin:0 0 14px;color:#fff;">Active rooms &amp; history</h3>
+        <div id="watch-room-list" style="color:var(--text-dim);font-size:.9rem;">Loading rooms…</div>
+      </section>
+      <section style="background:rgba(15,10,22,.72);border:1px solid var(--border-subtle);border-radius:14px;padding:18px;">
+        <h3 style="margin:0 0 6px;color:#fff;">Room settings</h3>
+        <label for="watch-max-members" style="display:block;color:var(--text-dim);font-size:.82rem;margin:14px 0 6px;">Maximum room members (2–100)</label>
+        <input id="watch-max-members" type="number" min="2" max="100" value="25" class="form-input" style="width:100%;">
+        <div style="padding:12px;margin:14px 0;background:rgba(124,58,237,.1);border:1px solid rgba(124,58,237,.2);border-radius:10px;font-size:.8rem;color:var(--text-dim);"><b style="color:#ddd0f1;">Playback permissions</b><br>Only the host can control playback. Server managers can create or close rooms.</div>
+        <button id="watch-save-settings" class="btn btn-secondary" style="width:100%;">Save Room Settings</button>
+      </section>
+    </div>
+  `;
+
+  const listNode = panel.querySelector('#watch-room-list');
+  const createButton = panel.querySelector('#watch-create');
+  const maxInput = panel.querySelector('#watch-max-members');
+
+  const loadRooms = async () => {
+    try {
+      const data = await fetchWatchRooms(guildId);
+      if (!panel.isConnected) return;
+      maxInput.value = String(data.maxMembers || 25);
+      listNode.replaceChildren();
+      const rooms = data.rooms || [];
+      if (!rooms.length) {
+        listNode.textContent = 'No Watch Party rooms have been created for this server yet.';
+      }
+      const active = rooms.some((room) => room.status !== 'closed');
+      createButton.disabled = active;
+      createButton.textContent = active ? 'An active room already exists' : '＋ Create Room';
+      rooms.forEach((room) => {
+        const row = document.createElement('article');
+        row.style.cssText = 'padding:13px 0;border-top:1px solid var(--border-subtle);display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;';
+        const details = document.createElement('div');
+        const title = document.createElement('b');
+        title.style.color = '#eee5f7';
+        title.textContent = `Room ${room.roomId}`;
+        const status = document.createElement('div');
+        status.style.cssText = 'color:var(--text-dim);font-size:.78rem;margin-top:3px;';
+        status.textContent = `${room.status} · ${room.memberCount}/${room.maxMembers} viewers · host ${room.hostId}`;
+        details.append(title, status);
+        row.append(details);
+        const actions = document.createElement('div');
+        actions.style.cssText = 'display:flex;gap:8px;align-items:center;';
+        if (room.status !== 'closed') {
+          const hostLink = document.createElement('button');
+          hostLink.className = 'btn btn-secondary btn-sm';
+          hostLink.textContent = 'Take Host Controls';
+          hostLink.addEventListener('click', async () => {
+            if (!confirm('Transfer playback control to your dashboard account? This revokes the existing host link.')) return;
+            hostLink.disabled = true;
+            const hostWindow = window.open('about:blank', '_blank');
+            try {
+              const result = await createWatchHostLink(guildId, room.roomId);
+              if (hostWindow) {
+                hostWindow.opener = null;
+                hostWindow.location = result.hostUrl;
+              } else {
+                window.location.assign(result.hostUrl);
+              }
+              showToast('Host controls transferred. Keep the new private link secure.', 'success');
+            } catch (error) {
+              hostWindow?.close();
+              showToast(error.message || 'Could not generate the host link.', 'error');
+            } finally { hostLink.disabled = false; }
+          });
+          actions.append(hostLink);
+          const copy = document.createElement('button');
+          copy.className = 'btn btn-outline btn-sm';
+          copy.textContent = 'Copy Invite';
+          copy.addEventListener('click', async () => {
+            copy.disabled = true;
+            try {
+              const result = await createWatchInvite(guildId, room.roomId);
+              await navigator.clipboard.writeText(result.inviteUrl);
+              showToast('Watch Party invitation copied. A previous invite link no longer works.', 'success');
+            } catch (error) {
+              showToast(error.message || 'Could not create an invitation.', 'error');
+            } finally { copy.disabled = false; }
+          });
+          actions.append(copy);
+          const close = document.createElement('button');
+          close.className = 'btn btn-outline btn-sm';
+          close.textContent = 'Close';
+          close.addEventListener('click', async () => {
+            if (!confirm(`Close Watch Party room ${room.roomId}?`)) return;
+            try {
+              await closeWatchRoom(guildId, room.roomId);
+              showToast('Watch Party room closed.', 'success');
+              await loadRooms();
+            } catch (error) { showToast(error.message || 'Could not close the room.', 'error'); }
+          });
+          actions.append(close);
+        }
+        row.append(actions);
+        listNode.append(row);
+      });
+    } catch (error) {
+      if (panel.isConnected) listNode.textContent = error.message || 'Could not load Watch Party rooms.';
+    }
+  };
+
+  createButton.addEventListener('click', async () => {
+    createButton.disabled = true;
+    try {
+      const room = await createWatchRoom(guildId);
+      showToast(room.discordPosted
+        ? 'Watch Party created and posted to the server. Generate a private host link below.'
+        : 'Watch Party created. No writable Discord text channel was available to post the invite.', room.discordPosted ? 'success' : 'warning');
+      await loadRooms();
+    } catch (error) {
+      showToast(error.message || 'Could not create the room.', 'error');
+      await loadRooms();
+    }
+  });
+  panel.querySelector('#watch-save-settings').addEventListener('click', async () => {
+    try {
+      const result = await updateWatchSettings(guildId, Number(maxInput.value));
+      maxInput.value = String(result.maxMembers);
+      showToast('Watch Party settings saved.', 'success');
+      await loadRooms();
+    } catch (error) { showToast(error.message || 'Could not save room settings.', 'error'); }
+  });
+  loadRooms();
 }
 
 // 1. Overview & Setup Progress

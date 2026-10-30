@@ -252,11 +252,11 @@ def test_music_control_view_dj_role_and_voice_check():
     assert err is None  # DJ bypasses voice channel requirement for controls
 
 
-# ─── 5. TEST 12 HELP CATEGORIES & DEDICATED AI MODULE ─────────────────────────
+# ─── 5. TEST 15 HELP CATEGORIES & DEDICATED AI MODULE ─────────────────────────
 
-def test_help_category_order_has_14_categories_including_music():
-    """Verify Help.CATEGORY_ORDER contains all 14 designated categories."""
-    assert len(Help.CATEGORY_ORDER) == 14
+def test_help_category_order_has_15_categories_including_watch_party():
+    """Verify Help.CATEGORY_ORDER contains all 15 designated categories."""
+    assert len(Help.CATEGORY_ORDER) == 15
     expected = [
         "🏠・GETTING STARTED",
         "🤖・ARTIFICIAL INTELLIGENCE",
@@ -267,6 +267,7 @@ def test_help_category_order_has_14_categories_including_music():
         "⭐・LEVELS & COMMUNITY",
         "🖼️・IMAGES & AVATARS",
         "🎵・MUSIC",
+        "🎬・WATCH PARTY",
         "💬・SOCIAL & FUN",
         "💎・PREMIUM",
         "⚙️・SERVER ADMINISTRATION",

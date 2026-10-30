@@ -17,7 +17,6 @@ from src.security.owner import is_primary_owner
 from src.security.adult_guard import authorize_adult
 from src.managers.gif_manager import GIFManager
 
-SUPPORT_URL = Config.SUPPORT_URL or "https://discord.gg/7q4tn6dA6V"
 logger = logging.getLogger("Kyoka.Fun")
 
 

@@ -63,8 +63,8 @@ def test_help_is_hybrid_command(help_cog: Help):
 
 
 def test_help_category_order_complete():
-    """Verify all 14 categories are present in CATEGORY_ORDER."""
-    assert len(Help.CATEGORY_ORDER) == 14
+    """Verify all 15 categories are present in CATEGORY_ORDER."""
+    assert len(Help.CATEGORY_ORDER) == 15
     expected = [
         "🏠・GETTING STARTED",
         "🤖・ARTIFICIAL INTELLIGENCE",
@@ -75,6 +75,7 @@ def test_help_category_order_complete():
         "⭐・LEVELS & COMMUNITY",
         "🖼️・IMAGES & AVATARS",
         "🎵・MUSIC",
+        "🎬・WATCH PARTY",
         "💬・SOCIAL & FUN",
         "💎・PREMIUM",
         "⚙️・SERVER ADMINISTRATION",

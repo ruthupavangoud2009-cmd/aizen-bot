@@ -108,13 +108,22 @@ CATEGORIES: list[CategoryMeta] = [
         priority=9,
     ),
     CategoryMeta(
+        id="watch_party",
+        name="Watch Party",
+        tag="🎬・WATCH PARTY",
+        emoji="🎬",
+        description="Create invited web watch rooms with synchronized browser video playback",
+        image_key="music",
+        priority=10,
+    ),
+    CategoryMeta(
         id="afk",
         name="AFK",
         tag="💤・AFK",
         emoji="💤",
         description="Away from keyboard notices, mention triggers, and auto-return logs",
         image_key="afk",
-        priority=10,
+        priority=11,
     ),
     CategoryMeta(
         id="vouches",
@@ -123,7 +132,7 @@ CATEGORIES: list[CategoryMeta] = [
         emoji="⭐",
         description="Verified member trust profiles, Blox Fruits transaction vouches, and leaderboards",
         image_key="vouches",
-        priority=11,
+        priority=12,
     ),
     CategoryMeta(
         id="service_bills",
@@ -132,7 +141,7 @@ CATEGORIES: list[CategoryMeta] = [
         emoji="🧾",
         description="Blox Fruits service receipts, itemized invoices, proof verification, and payments",
         image_key="service_bills",
-        priority=12,
+        priority=13,
     ),
     CategoryMeta(
         id="blox_fruits",
@@ -141,7 +150,7 @@ CATEGORIES: list[CategoryMeta] = [
         emoji="🍎",
         description="Specialized Blox Fruits companion, fruit values, trade calculation, builds & notifier",
         image_key="blox_fruits",
-        priority=13,
+        priority=14,
     ),
     CategoryMeta(
         id="ai",
@@ -150,7 +159,7 @@ CATEGORIES: list[CategoryMeta] = [
         emoji="🤖",
         description="Aizen Gemini AI engine, chat companions, neural TTS, and voice channel interaction",
         image_key="ai",
-        priority=14,
+        priority=15,
     ),
     CategoryMeta(
         id="leveling",
@@ -159,7 +168,7 @@ CATEGORIES: list[CategoryMeta] = [
         emoji="⭐",
         description="Optional member XP progression (disabled by default), custom rank cards & leaderboards",
         image_key="leveling",
-        priority=15,
+        priority=16,
     ),
     CategoryMeta(
         id="images",
@@ -168,7 +177,7 @@ CATEGORIES: list[CategoryMeta] = [
         emoji="🖼️",
         description="Anime actions, expressions, avatar lookups, and visual tools",
         image_key="reaction_roles",
-        priority=16,
+        priority=17,
     ),
     CategoryMeta(
         id="premium",
@@ -177,7 +186,7 @@ CATEGORIES: list[CategoryMeta] = [
         emoji="💎",
         description="Kyoka Prime licenses, high-resolution AI, and exclusive server perks",
         image_key="premium",
-        priority=17,
+        priority=18,
     ),
     CategoryMeta(
         id="config",
@@ -186,7 +195,7 @@ CATEGORIES: list[CategoryMeta] = [
         emoji="⚙️",
         description="Custom prefixes, logging channels, module toggles, and server administration",
         image_key="config",
-        priority=18,
+        priority=19,
     ),
     CategoryMeta(
         id="utility",
@@ -195,7 +204,7 @@ CATEGORIES: list[CategoryMeta] = [
         emoji="🔧",
         description="Calculators, reminders, server stats, translator, and everyday tools",
         image_key="general",
-        priority=19,
+        priority=20,
     ),
     CategoryMeta(
         id="social",
@@ -204,7 +213,7 @@ CATEGORIES: list[CategoryMeta] = [
         emoji="💬",
         description="Mini-games, truth-or-dare, relationship stats, reaction GIFs, and fun",
         image_key="general",
-        priority=20,
+        priority=21,
     ),
     CategoryMeta(
         id="staff_applications",
@@ -213,7 +222,7 @@ CATEGORIES: list[CategoryMeta] = [
         emoji="📝",
         description="Appy-style staff recruitment panels, applicant submissions & reviewer dashboard",
         image_key="staff_applications",
-        priority=21,
+        priority=22,
     ),
     CategoryMeta(
         id="owner",
@@ -222,7 +231,7 @@ CATEGORIES: list[CategoryMeta] = [
         emoji="👑",
         description="Core bot diagnostics, database status, extension reloading & maintenance",
         image_key="owner",
-        priority=22,
+        priority=23,
     ),
 ]
 
@@ -251,6 +260,8 @@ CATEGORY_SEARCH_ALIASES: dict[str, str] = {
     "giveaway": "giveaways", "giveaways": "giveaways", "gstart": "giveaways", "events": "giveaways",
     # Music
     "music": "music", "song": "music", "audio": "music", "radio": "music", "player": "music",
+    # Watch Party
+    "watch": "watch_party", "watchparty": "watch_party", "watch party": "watch_party", "watch_party": "watch_party",
     # AFK
     "afk": "afk", "away": "afk",
     # Vouches
@@ -281,15 +292,17 @@ CATEGORY_SEARCH_ALIASES: dict[str, str] = {
     # KDC Shop & Stock & Reviews
     "stock": "service_bills", "kdc": "service_bills", "shop": "service_bills", "store": "service_bills", "kdcshop": "service_bills", "review": "service_bills", "reviews": "service_bills",
     # Owner & Developer
-    "owner": "owner", "dev": "owner", "developer": "owner", "system": "owner", "eval": "owner",
+    "owner": "owner", "dev": "owner", "developer": "owner", "system": "owner", "eval": "owner", "globalsupport": "owner", "setsupport": "owner",
 }
 
 
 # Cog class names / qualified names strongly mapped to categories
 COG_MAPPINGS: dict[str, str] = {
     "kdcshop": "service_bills",
+    "globalsupport": "owner",
     # Music (STRICT: only the real music cog)
     "music": "music",
+    "watchparty": "watch_party",
 
     # AI & Voice (STRICT)
     "aivoice": "ai",

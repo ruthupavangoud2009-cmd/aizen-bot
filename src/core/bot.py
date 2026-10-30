@@ -436,6 +436,14 @@ class KyokaBot(commands.Bot):
         except Exception as e:
             logger.debug(f"Notice loading custom status: {e}")
 
+        try:
+            support_row = await self.db.fetch_one("SELECT value FROM system_state WHERE key = 'support_url';")
+            if support_row and support_row.get("value"):
+                Config.SUPPORT_URL = support_row["value"]
+                logger.info("Loaded persisted global support-server URL.")
+        except Exception as e:
+            logger.warning("Could not load persisted global support-server URL: %s", e)
+
         # load Error Handler
         await self.load_extension("src.errors.handler")
 

@@ -389,10 +389,10 @@ def test_reminders_duration_parser():
     assert parse_time_duration("invalid") is None
 
 
-# ─── 6. TEST 14 HELP CATEGORIES & OWNER ACCESS RESTRICTION ────────────────────
+# ─── 6. TEST 15 HELP CATEGORIES & OWNER ACCESS RESTRICTION ────────────────────
 
-def test_help_category_order_has_14_categories():
-    assert len(Help.CATEGORY_ORDER) == 14
+def test_help_category_order_has_15_categories():
+    assert len(Help.CATEGORY_ORDER) == 15
     expected = [
         "🏠・GETTING STARTED",
         "🤖・ARTIFICIAL INTELLIGENCE",
@@ -403,6 +403,7 @@ def test_help_category_order_has_14_categories():
         "⭐・LEVELS & COMMUNITY",
         "🖼️・IMAGES & AVATARS",
         "🎵・MUSIC",
+        "🎬・WATCH PARTY",
         "💬・SOCIAL & FUN",
         "💎・PREMIUM",
         "⚙️・SERVER ADMINISTRATION",

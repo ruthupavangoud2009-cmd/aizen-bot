@@ -13,6 +13,15 @@ export function getApiBase() {
   return '/api';
 }
 
+export function getRealtimeApiBase() {
+  if (typeof window !== 'undefined') {
+    const configured = window.KYOKA_API_BASE || localStorage.getItem('kyoka_api_base');
+    if (configured) return configured.replace(/\/+$/, '');
+    if (location.hostname.endsWith('.pages.dev')) return 'https://aizen-bot-uty6.onrender.com/api';
+  }
+  return getApiBase();
+}
+
 export function setApiBase(url) {
   if (typeof window !== 'undefined') {
     if (url) {
@@ -262,6 +271,32 @@ export async function updateGuildVoice(guildId, voiceKey) {
   });
 }
 
+export async function fetchWatchRooms(guildId) {
+  return await apiFetch(`/guilds/${guildId}/watch/rooms`);
+}
+
+export async function createWatchRoom(guildId) {
+  return await apiFetch(`/guilds/${guildId}/watch/rooms`, { method: 'POST', body: {} });
+}
+
+export async function updateWatchSettings(guildId, maxMembers) {
+  return await apiFetch(`/guilds/${guildId}/watch/settings`, {
+    method: 'PATCH',
+    body: { maxMembers },
+  });
+}
+
+export async function closeWatchRoom(guildId, roomId) {
+  return await apiFetch(`/guilds/${guildId}/watch/rooms/${encodeURIComponent(roomId)}`, { method: 'DELETE' });
+}
+
+export async function createWatchInvite(guildId, roomId) {
+  return await apiFetch(`/guilds/${guildId}/watch/rooms/${encodeURIComponent(roomId)}/invite`, { method: 'POST', body: {} });
+}
+
+export async function createWatchHostLink(guildId, roomId) {
+  return await apiFetch(`/guilds/${guildId}/watch/rooms/${encodeURIComponent(roomId)}/host`, { method: 'POST', body: {} });
+}
 
 /**
  * Public bot statistics for landing page
@@ -710,4 +745,3 @@ export function showToast(message, type = 'info', duration = 3500) {
     setTimeout(() => toast.remove(), 300);
   }, duration);
 }
-

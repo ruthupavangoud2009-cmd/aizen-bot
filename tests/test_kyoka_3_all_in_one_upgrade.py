@@ -3,7 +3,7 @@ Comprehensive Test Suite for KYOKA 3.0 Ultimate All-In-One Upgrade
 Validates:
 1. Low-Ping Optimization & Performance Instrumentation (Diagnostics, Event loop lag, bounded telemetry)
 2. Presence & Activity (Online status, 'KYOKA | The Ultimate Bot' game activity, zero 'Listening to ?help')
-3. Redesigned Help Dashboard & Dynamic Category Discovery (Aizen dark violet, interaction lock, all 22 categories)
+3. Redesigned Help Dashboard & Dynamic Category Discovery (Aizen dark violet, interaction lock, all 23 categories)
 4. Consistent Asset System & Resilient Fallbacks
 5. Automatic Help on Bot Mention (Structured detection, plain-text immunity, anti-spam cooldowns, command bypass)
 6. Appy-Style Staff Application Engine (Persistence, open/closed gating, cooldowns, review transitions, notes, stats)
@@ -157,11 +157,12 @@ async def test_diagnostics_command_permissions_and_output():
 # 3. HELP UI & DYNAMIC CATEGORIES TESTS
 # ─────────────────────────────────────────────────────────────────────────────
 
-def test_all_22_categories_registered_including_staff_applications():
+def test_all_23_categories_registered_including_watch_party_and_staff_applications():
     """Verify dynamic category catalog contains all required categories without empty gaps."""
     cat_tags = [c.tag for c in CATEGORIES]
-    assert len(cat_tags) == 22
+    assert len(cat_tags) == 23
     assert "📝・STAFF APPLICATIONS" in cat_tags
+    assert "🎬・WATCH PARTY" in cat_tags
 
     # Route verification for staff application commands
     mock_app_cmd = MagicMock(qualified_name="top app", cog_name="TopAIManager")

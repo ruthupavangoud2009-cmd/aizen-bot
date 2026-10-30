@@ -57,6 +57,7 @@ UNICODE_CATEGORY_EMOJIS: dict[str, str] = {
     "🎉・GIVEAWAYS & EVENTS": "🎉",
     "⭐・LEVELS & COMMUNITY": "⭐",
     "🎵・MUSIC": "🎵",
+    "🎬・WATCH PARTY": "🎬",
     "💤・AFK": "💤",
     "⭐・VOUCHES & REPUTATION": "⭐",
     "🧾・BLOX FRUITS SERVICE BILLS": "🧾",
@@ -87,6 +88,7 @@ CATEGORY_DESCRIPTIONS: dict[str, str] = {
     "🎉・GIVEAWAYS & EVENTS": "Giveaway creation, requirement validation, timers & winner rerolls",
     "⭐・LEVELS & COMMUNITY": "Optional XP progression (disabled by default), custom rank cards & leaderboards",
     "🎵・MUSIC": "High-fidelity audio playback, queues, volume, filters & 24/7 radio",
+    "🎬・WATCH PARTY": "Invited web rooms with synchronized browser video and host-controlled playback",
     "💤・AFK": "Status notices, AFK reason tracking, mentions & return alerts",
     "⭐・VOUCHES & REPUTATION": "Verified member vouches, Blox Fruits trust profiles & leaderboards",
     "🧾・BLOX FRUITS SERVICE BILLS": "Blox Fruits service invoices, itemized receipts, fruits & Robux payment",
@@ -101,7 +103,7 @@ CATEGORY_DESCRIPTIONS: dict[str, str] = {
     "⚙️・SERVER CONFIGURATION": "Prefix management, server wizards, custom help & diagnostics",
     "🔧・UTILITIES": "Handy server utilities, calculators, reminders & diagnostics",
     "📝・STAFF APPLICATIONS": "Appy-style staff recruitment panels, applicant submissions & reviewer dashboard",
-    "👑・OWNER & DEVELOPER": "Core bot diagnostics, database status, extension reload & maintenance",
+    "👑・OWNER & DEVELOPER": "Core bot diagnostics, database status, extension reload, global support link & maintenance",
 }
 
 
@@ -684,7 +686,7 @@ class HCAView(discord.ui.View):
 
 
 class Help(commands.Cog):
-    """Enterprise SaaS Help & Module Console with dynamic 14-category permission filtering."""
+    """Enterprise SaaS Help & Module Console with dynamic 15-category permission filtering."""
     category: str = "General"
 
     CATEGORY_ORDER = [
@@ -697,6 +699,7 @@ class Help(commands.Cog):
         "⭐・LEVELS & COMMUNITY",
         "🖼️・IMAGES & AVATARS",
         "🎵・MUSIC",
+        "🎬・WATCH PARTY",
         "💬・SOCIAL & FUN",
         "💎・PREMIUM",
         "⚙️・SERVER ADMINISTRATION",
@@ -752,7 +755,7 @@ class Help(commands.Cog):
                 "guesshostadd", "guesshostremove", "guesshosts",
                 "eval", "exec", "restart", "shutdown", "sync", "leaveserver", "blacklist",
                 "whitelistuser", "errors", "validateconfig", "maintenance", "systemstatus",
-                "dbstatus", "extstatus",
+                "dbstatus", "extstatus", "globalsupport", "setsupport",
             }
             if cmd_name in owner_only and not is_primary_owner(author_id):
                 return False
