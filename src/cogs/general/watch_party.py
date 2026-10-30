@@ -156,7 +156,7 @@ class WatchParty(commands.Cog):
             await send_reply(ctx, "Unsupported URL. Provide a direct HTTPS URL ending in MP4, M4V, WebM, OGV, or OGG.", ephemeral=True)
             return
         await self.bot.db.execute(
-            "UPDATE watch_party_rooms SET source_url = ?, current_time = 0, status = 'playing', playback_updated_at = NOW(), last_activity = NOW() WHERE room_id = ?",
+            "UPDATE watch_party_rooms SET source_url = ?, playback_position = 0, status = 'playing', playback_updated_at = NOW(), last_activity = NOW() WHERE room_id = ?",
             url.strip(), room["room_id"],
         )
         await broadcast_room(room["room_id"], {"type": "state", "source": url.strip(), "currentTime": 0, "status": "playing"})
@@ -176,10 +176,10 @@ class WatchParty(commands.Cog):
             )
         else:
             await self.bot.db.execute(
-                "UPDATE watch_party_rooms SET current_time = ?, status = ?, playback_updated_at = NOW(), last_activity = NOW() WHERE room_id = ?",
+                "UPDATE watch_party_rooms SET playback_position = ?, status = ?, playback_updated_at = NOW(), last_activity = NOW() WHERE room_id = ?",
                 position, status, room["room_id"],
             )
-        await broadcast_room(room["room_id"], {"type": "state", "source": room.get("source_url"), "currentTime": position if position is not None else room.get("current_time", 0), "status": status})
+        await broadcast_room(room["room_id"], {"type": "state", "source": room.get("source_url"), "currentTime": position if position is not None else room.get("playback_position", 0), "status": status})
         await send_reply(ctx, f"Watch Party playback set to **{status}**.", ephemeral=True)
 
     @watch.command(name="pause", description="Pause playback for all viewers.")
@@ -210,7 +210,7 @@ class WatchParty(commands.Cog):
         room = await self._host_room(ctx)
         if not room:
             return
-        current_time = float(room.get("current_time") or 0)
+        current_time = float(room.get("playback_position") or 0)
         if room["status"] == "playing" and room.get("playback_updated_at"):
             current_time += max(
                 0,

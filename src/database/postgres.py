@@ -6,6 +6,7 @@ from typing import Any
 import asyncpg
 
 from src.database.base import BaseDatabase
+from src.watch_party import WATCH_PARTY_POSITION_MIGRATION
 
 logger = logging.getLogger("Kyoka.Database.Postgres")
 
@@ -1353,7 +1354,7 @@ class PostgresDatabase(BaseDatabase):
                 guild_id BIGINT NOT NULL,
                 host_id BIGINT NOT NULL,
                 source_url TEXT,
-                current_time DOUBLE PRECISION NOT NULL DEFAULT 0,
+                playback_position DOUBLE PRECISION NOT NULL DEFAULT 0,
                 status VARCHAR(16) NOT NULL DEFAULT 'idle',
                 playback_updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
                 invite_hash CHAR(64) NOT NULL,
@@ -1364,6 +1365,7 @@ class PostgresDatabase(BaseDatabase):
                 closed_at TIMESTAMPTZ
             );
             """,
+            WATCH_PARTY_POSITION_MIGRATION,
             "CREATE UNIQUE INDEX IF NOT EXISTS watch_party_one_open_room_per_guild ON watch_party_rooms (guild_id) WHERE status <> 'closed';",
             """
             CREATE TABLE IF NOT EXISTS watch_party_members (

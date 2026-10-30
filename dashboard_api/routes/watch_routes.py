@@ -15,7 +15,14 @@ import discord
 from aiohttp import WSMsgType, web
 
 from dashboard_api.routes.guild_routes import get_authenticated_session, verify_guild_access
-from src.watch_party import ROOM_SOCKETS, broadcast_room, new_token, token_hash, validate_media_url
+from src.watch_party import (
+    ROOM_SOCKETS,
+    WATCH_PARTY_POSITION_MIGRATION,
+    broadcast_room,
+    new_token,
+    token_hash,
+    validate_media_url,
+)
 
 logger = logging.getLogger("Kyoka.Dashboard.WatchParty")
 ROOM_TTL_HOURS = 24
@@ -71,7 +78,7 @@ async def _ensure_tables(app: web.Application) -> None:
         await conn.execute("""
             CREATE TABLE IF NOT EXISTS watch_party_rooms (
                 room_id TEXT PRIMARY KEY, guild_id BIGINT NOT NULL, host_id BIGINT NOT NULL,
-                source_url TEXT, current_time DOUBLE PRECISION NOT NULL DEFAULT 0,
+                source_url TEXT, playback_position DOUBLE PRECISION NOT NULL DEFAULT 0,
                 status VARCHAR(16) NOT NULL DEFAULT 'idle',
                 playback_updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
                 invite_hash CHAR(64) NOT NULL, host_hash CHAR(64) NOT NULL,
@@ -93,6 +100,7 @@ async def _ensure_tables(app: web.Application) -> None:
                 updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
             );
         """)
+        await conn.execute(WATCH_PARTY_POSITION_MIGRATION)
 
 
 async def _active_room(request: web.Request, room_id: str) -> dict[str, Any]:
@@ -122,7 +130,7 @@ async def _public_room(request: web.Request, room: dict[str, Any]) -> dict[str, 
         "SELECT member_key, display_name FROM watch_party_members WHERE room_id = $1 ORDER BY joined_at",
         room["room_id"],
     )
-    position = float(room.get("current_time") or 0)
+    position = float(room.get("playback_position") or 0)
     updated = room.get("playback_updated_at")
     if room["status"] == "playing" and updated:
         position += max(0, (datetime.now(timezone.utc) - updated).total_seconds())
@@ -230,7 +238,7 @@ async def _list_dashboard_rooms(request: web.Request) -> web.Response:
         await broadcast_room(row["room_id"], {"type": "closed"})
     rows = await _fetch_all(
         request,
-        """SELECT room_id, host_id, source_url, status, current_time, max_members, created_at, last_activity
+        """SELECT room_id, host_id, source_url, status, playback_position, max_members, created_at, last_activity
            FROM watch_party_rooms WHERE guild_id = $1
            ORDER BY created_at DESC LIMIT 50""",
         guild_id,
@@ -240,7 +248,7 @@ async def _list_dashboard_rooms(request: web.Request) -> web.Response:
         members = await _fetch_one(request, "SELECT COUNT(*) AS count FROM watch_party_members WHERE room_id = $1", row["room_id"])
         rooms.append({
             "roomId": row["room_id"], "hostId": str(row["host_id"]), "source": row.get("source_url"),
-            "status": row["status"], "currentTime": row["current_time"], "maxMembers": row["max_members"],
+            "status": row["status"], "currentTime": row["playback_position"], "maxMembers": row["max_members"],
             "memberCount": int(members["count"]) if members else 0,
             "createdAt": row["created_at"].isoformat() if row.get("created_at") else None,
             "lastActivity": row["last_activity"].isoformat() if row.get("last_activity") else None,
@@ -425,15 +433,15 @@ async def _room_websocket(request: web.Request) -> web.StreamResponse:
                 if not math.isfinite(current_time) or not 0 <= current_time <= 86_400:
                     continue
                 if action == "play" and source:
-                    await _execute(request, "UPDATE watch_party_rooms SET source_url = $1, current_time = $2, status = 'playing', playback_updated_at = NOW(), last_activity = NOW() WHERE room_id = $3", source, current_time, room_id)
+                    await _execute(request, "UPDATE watch_party_rooms SET source_url = $1, playback_position = $2, status = 'playing', playback_updated_at = NOW(), last_activity = NOW() WHERE room_id = $3", source, current_time, room_id)
                 elif action == "stop":
                     current_time = 0
-                    await _execute(request, "UPDATE watch_party_rooms SET current_time = 0, status = 'stopped', playback_updated_at = NOW(), last_activity = NOW() WHERE room_id = $1", room_id)
+                    await _execute(request, "UPDATE watch_party_rooms SET playback_position = 0, status = 'stopped', playback_updated_at = NOW(), last_activity = NOW() WHERE room_id = $1", room_id)
                 elif action == "tick":
-                    await _execute(request, "UPDATE watch_party_rooms SET current_time = $1, playback_updated_at = NOW(), last_activity = NOW() WHERE room_id = $2", current_time, room_id)
+                    await _execute(request, "UPDATE watch_party_rooms SET playback_position = $1, playback_updated_at = NOW(), last_activity = NOW() WHERE room_id = $2", current_time, room_id)
                 else:
                     status = "paused" if action == "pause" else ("playing" if action == "play" else room["status"])
-                    await _execute(request, "UPDATE watch_party_rooms SET current_time = $1, status = $2, playback_updated_at = NOW(), last_activity = NOW() WHERE room_id = $3", current_time, status, room_id)
+                    await _execute(request, "UPDATE watch_party_rooms SET playback_position = $1, status = $2, playback_updated_at = NOW(), last_activity = NOW() WHERE room_id = $3", current_time, status, room_id)
                 state = await _fetch_one(request, "SELECT * FROM watch_party_rooms WHERE room_id = $1", room_id)
                 await broadcast_room(room_id, {"type": "state", **(await _public_room(request, state))})
             elif message.type in {WSMsgType.ERROR, WSMsgType.CLOSE, WSMsgType.CLOSED}:

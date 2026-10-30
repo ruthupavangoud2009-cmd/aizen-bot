@@ -10,6 +10,33 @@ from aiohttp import web
 
 SUPPORTED_MEDIA_EXTENSIONS = {".mp4", ".m4v", ".webm", ".ogv", ".ogg"}
 ROOM_SOCKETS: dict[str, set[web.WebSocketResponse]] = {}
+WATCH_PARTY_POSITION_MIGRATION = """
+DO $migration$
+DECLARE
+    old_column_exists BOOLEAN;
+    new_column_exists BOOLEAN;
+BEGIN
+    SELECT EXISTS (
+        SELECT 1 FROM information_schema.columns
+        WHERE table_schema = current_schema()
+          AND table_name = 'watch_party_rooms'
+          AND column_name = 'current_time'
+    ) INTO old_column_exists;
+    SELECT EXISTS (
+        SELECT 1 FROM information_schema.columns
+        WHERE table_schema = current_schema()
+          AND table_name = 'watch_party_rooms'
+          AND column_name = 'playback_position'
+    ) INTO new_column_exists;
+
+    IF old_column_exists AND NOT new_column_exists THEN
+        ALTER TABLE watch_party_rooms RENAME COLUMN "current_time" TO playback_position;
+    ELSIF old_column_exists AND new_column_exists THEN
+        UPDATE watch_party_rooms SET playback_position = "current_time";
+    END IF;
+END
+$migration$;
+"""
 
 
 def new_token() -> str:
