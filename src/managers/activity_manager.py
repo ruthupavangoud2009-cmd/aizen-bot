@@ -123,6 +123,28 @@ class ActivityManager:
             "min_length": min_length,
         }
 
+    def should_record_message(
+        self,
+        guild_id: int,
+        user_id: int,
+        channel_id: int,
+        content_length: int,
+    ) -> bool:
+        """Check cached activity filters before scheduling background work."""
+        if self.is_opted_out(user_id):
+            return False
+
+        config = self.get_guild_config(guild_id)
+        if (
+            not config["enabled"]
+            or channel_id in config["excluded_channels"]
+            or content_length < config["min_length"]
+        ):
+            return False
+
+        last_t = self._cooldowns.get((guild_id, user_id), 0.0)
+        return time.monotonic() - last_t >= config["cooldown"]
+
     async def record_message(
         self,
         guild_id: int,
@@ -136,26 +158,11 @@ class ActivityManager:
         minimum message length, and per-user message cooldown.
         Returns True if counted, False if filtered out.
         """
-        if self.is_opted_out(user_id):
+        if not self.should_record_message(guild_id, user_id, channel_id, content_length):
             return False
 
-        config = self.get_guild_config(guild_id)
-        if not config["enabled"]:
-            return False
-
-        if channel_id in config["excluded_channels"]:
-            return False
-
-        if content_length < config["min_length"]:
-            return False
-
-        now = time.monotonic()
         key = (guild_id, user_id)
-        last_t = self._cooldowns.get(key, 0.0)
-        if now - last_t < config["cooldown"]:
-            return False
-
-        self._cooldowns[key] = now
+        self._cooldowns[key] = time.monotonic()
 
         try:
             # Upsert into member_activity (calendar day based)

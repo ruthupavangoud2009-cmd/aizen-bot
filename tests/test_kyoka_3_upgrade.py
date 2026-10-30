@@ -350,11 +350,16 @@ async def test_activity_tracking_and_privacy_controls():
         min_length=3,
     )
 
+    assert act_mgr.should_record_message(123, 555, 1000, 15) is True
+    assert act_mgr.should_record_message(123, 777, 9999, 20) is False
+    assert act_mgr.should_record_message(123, 888, 1000, 2) is False
+
     # 1. Normal message should count
     counted = await act_mgr.record_message(123, 555, 1000, 15)
     assert counted is True
 
     # 2. Rapid message within cooldown (cooldown=5s) should be filtered
+    assert act_mgr.should_record_message(123, 555, 1000, 15) is False
     spam = await act_mgr.record_message(123, 555, 1000, 15)
     assert spam is False
 
@@ -1115,7 +1120,6 @@ async def test_fuck_command_validation():
     assert embed is not None
     assert "got intimately dominated by" in embed.description
     assert embed.image.url.startswith("https://")
-
 
 
 

@@ -29,6 +29,66 @@ class Announcement(commands.Cog):
         self.bot = bot
 
     @commands.command(
+        name="send",
+        description="Send a message to a channel and delete the command message.",
+    )
+    @commands.guild_only()
+    @commands.has_permissions(manage_messages=True)
+    async def send_message(
+        self,
+        ctx: CustomContext,
+        channel: discord.TextChannel,
+        *,
+        message: str,
+    ) -> None:
+        """Send a plain-text message, then remove the invoking command."""
+        if not ctx.guild or channel.guild.id != ctx.guild.id:
+            return await ctx.send_error("Choose a text channel in this server.")
+
+        content = message.strip()
+        if not content:
+            return await ctx.send_error("Message cannot be empty.")
+
+        bot_member = ctx.guild.me
+        if not bot_member:
+            return await ctx.send_error("I could not verify my permissions in this server.")
+        command_permissions = ctx.channel.permissions_for(bot_member)
+        if not command_permissions.manage_messages:
+            return await ctx.send_error("I need Manage Messages here to delete your command message.")
+        channel_permissions = channel.permissions_for(bot_member)
+        if not channel_permissions.view_channel or not channel_permissions.send_messages:
+            return await ctx.send_error(f"I cannot send messages in {channel.mention}.")
+
+        author = ctx.author
+        is_staff = is_owner_or_staff(author.id)
+        allowed_mentions = discord.AllowedMentions(
+            everyone=author.guild_permissions.mention_everyone or is_staff,
+            roles=author.guild_permissions.mention_everyone or is_staff,
+            users=True,
+            replied_user=False,
+        )
+
+        try:
+            await channel.send(content, allowed_mentions=allowed_mentions)
+        except discord.Forbidden:
+            return await ctx.send_error(f"I do not have permission to send messages in {channel.mention}.")
+        except discord.HTTPException:
+            logger.exception("Could not send message to channel %s in guild %s", channel.id, ctx.guild.id)
+            return await ctx.send_error(f"Discord could not deliver the message to {channel.mention}.")
+
+        try:
+            await ctx.message.delete()
+        except discord.Forbidden:
+            await ctx.send_error(
+                f"Message sent to {channel.mention}, but I need Manage Messages here to delete your command."
+            )
+        except discord.HTTPException:
+            logger.exception("Could not delete send command in guild %s", ctx.guild.id)
+            await ctx.send_error(
+                f"Message sent to {channel.mention}, but Discord would not let me delete your command."
+            )
+
+    @commands.command(
         name="announce",
         description="Broadcast an announcement to a target channel.",
     )

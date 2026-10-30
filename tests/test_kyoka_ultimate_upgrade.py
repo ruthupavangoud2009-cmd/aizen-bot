@@ -351,6 +351,58 @@ async def test_announcement_plain_text_delivery():
     assert call_kwargs["allowed_mentions"].everyone is True
 
 
+@pytest.mark.asyncio
+async def test_send_command_posts_message_then_deletes_invocation():
+    cog = Announcement(MagicMock())
+    ctx = MagicMock()
+    ctx.guild.id = 123
+    ctx.guild.me = MagicMock()
+    ctx.author.id = OWNER_ID
+    ctx.author.guild_permissions.mention_everyone = True
+    ctx.channel.permissions_for.return_value.manage_messages = True
+    ctx.message.delete = AsyncMock()
+    ctx.send_error = AsyncMock()
+
+    channel = MagicMock(spec=discord.TextChannel)
+    channel.id = 456
+    channel.guild.id = ctx.guild.id
+    channel.mention = "<#456>"
+    channel.permissions_for.return_value = MagicMock(view_channel=True, send_messages=True)
+    channel.send = AsyncMock()
+
+    await cog.send_message.callback(cog, ctx, channel, message="hello @everyone")
+
+    channel.send.assert_awaited_once()
+    assert channel.send.await_args.args[0] == "hello @everyone"
+    assert channel.send.await_args.kwargs["allowed_mentions"].everyone is True
+    ctx.message.delete.assert_awaited_once()
+    ctx.send_error.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_send_command_does_not_delete_invocation_when_delivery_fails():
+    cog = Announcement(MagicMock())
+    ctx = MagicMock()
+    ctx.guild.id = 123
+    ctx.guild.me = MagicMock()
+    ctx.author.id = OWNER_ID
+    ctx.author.guild_permissions.mention_everyone = False
+    ctx.message.delete = AsyncMock()
+    ctx.send_error = AsyncMock()
+
+    channel = MagicMock(spec=discord.TextChannel)
+    channel.id = 456
+    channel.guild.id = ctx.guild.id
+    channel.mention = "<#456>"
+    channel.permissions_for.return_value = MagicMock(view_channel=True, send_messages=True)
+    channel.send = AsyncMock(side_effect=discord.Forbidden(MagicMock(), "forbidden"))
+
+    await cog.send_message.callback(cog, ctx, channel, message="hello")
+
+    ctx.message.delete.assert_not_awaited()
+    ctx.send_error.assert_awaited_once()
+
+
 # ─────────────────────────────────────────────────────────────────────────────
 # 6. OWNER-ONLY SPAM COMMAND TESTS
 # ─────────────────────────────────────────────────────────────────────────────

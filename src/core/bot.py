@@ -308,7 +308,15 @@ class KyokaBot(commands.Bot):
 
         # Record qualifying message activity & progression in background (non-blocking & fail-safe)
         if message.guild:
-            if hasattr(self, "activity_mgr"):
+            if (
+                hasattr(self, "activity_mgr")
+                and self.activity_mgr.should_record_message(
+                    message.guild.id,
+                    message.author.id,
+                    message.channel.id,
+                    len(message.content),
+                )
+            ):
                 try:
                     asyncio.create_task(
                         self.activity_mgr.record_message(
