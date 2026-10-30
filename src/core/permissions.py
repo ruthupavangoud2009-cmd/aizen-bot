@@ -8,6 +8,7 @@ from __future__ import annotations
 import logging
 from typing import Callable, Optional, Tuple, TypeVar
 import discord
+from discord import app_commands
 from discord.ext import commands
 
 from src.security.owner import OWNER_ID, is_primary_owner, is_bot_staff, is_owner_or_staff
@@ -15,6 +16,62 @@ from src.security.owner import OWNER_ID, is_primary_owner, is_bot_staff, is_owne
 logger = logging.getLogger("Kyoka.Core.Permissions")
 
 T = TypeVar("T")
+_staff_permission_overrides_installed = False
+
+
+def install_bot_staff_permission_overrides() -> None:
+    """Let registered bot staff pass ordinary server permission decorators."""
+    global _staff_permission_overrides_installed
+    if _staff_permission_overrides_installed:
+        return
+
+    native_has_permissions = commands.has_permissions
+    native_has_guild_permissions = commands.has_guild_permissions
+    native_app_has_permissions = app_commands.checks.has_permissions
+
+    def has_permissions(**perms: bool):
+        native_check = native_has_permissions(**perms)
+        native_predicate = native_check.predicate
+
+        async def predicate(ctx: commands.Context) -> bool:
+            if ctx.guild and is_bot_staff(getattr(ctx.author, "id", None)):
+                return True
+            return await discord.utils.maybe_coroutine(native_predicate, ctx)
+
+        return commands.check(predicate)
+
+    def has_guild_permissions(**perms: bool):
+        native_check = native_has_guild_permissions(**perms)
+        native_predicate = native_check.predicate
+
+        async def predicate(ctx: commands.Context) -> bool:
+            if ctx.guild and is_bot_staff(getattr(ctx.author, "id", None)):
+                return True
+            return await discord.utils.maybe_coroutine(native_predicate, ctx)
+
+        return commands.check(predicate)
+
+    def app_has_permissions(**perms: bool):
+        native_app_has_permissions(**perms)
+
+        async def predicate(interaction: discord.Interaction) -> bool:
+            if interaction.guild_id and is_bot_staff(getattr(interaction.user, "id", None)):
+                return True
+            missing = [
+                permission
+                for permission, value in perms.items()
+                if getattr(interaction.permissions, permission) != value
+            ]
+            if missing:
+                raise app_commands.MissingPermissions(missing)
+            return True
+
+        return app_commands.check(predicate)
+
+    commands.has_permissions = has_permissions
+    commands.has_guild_permissions = has_guild_permissions
+    app_commands.checks.has_permissions = app_has_permissions
+    _staff_permission_overrides_installed = True
 
 
 def is_bot_owner(user_id: int | None) -> bool:

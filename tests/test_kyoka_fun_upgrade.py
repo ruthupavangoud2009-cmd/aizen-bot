@@ -278,6 +278,7 @@ async def test_ai_channel_on_message_listener_flow():
     mock_bot.ai_mgr.generate_persona_reply.return_value = "Hello darling, I missed you! 💖"
     mock_bot.session = MagicMock()
     mock_bot.session.closed = False
+    mock_bot.get_cog.return_value = None
 
     cog = CompanionAI(mock_bot)
     cog._channel_configs[77777] = {
@@ -321,6 +322,77 @@ async def test_ai_channel_on_message_listener_flow():
     user_msg.reply.assert_called_once()
 
 
+@pytest.mark.asyncio
+async def test_ai_listener_stays_silent_outside_enabled_channels():
+    from src.cogs.fun.companion_ai import CompanionAI
+
+    mock_bot = MagicMock()
+    mock_bot.user = MagicMock(id=99999)
+    mock_bot.ai_mgr = AsyncMock()
+    mock_bot.get_context = AsyncMock()
+    cog = CompanionAI(mock_bot)
+    cog._channel_configs[3] = {"enabled": False}
+
+    for guild, channel_id in ((MagicMock(id=10), 1), (None, 2), (MagicMock(id=10), 3)):
+        message = MagicMock(spec=discord.Message)
+        message.author = MagicMock(id=55555, bot=False)
+        message.webhook_id = None
+        message.content = "Hey Kyoka, can you help?"
+        message.guild = guild
+        message.channel = MagicMock(id=channel_id)
+        message.mentions = [mock_bot.user]
+        message.reference = None
+        message.reply = AsyncMock()
+
+        await cog.on_message(message)
+
+        message.reply.assert_not_called()
+
+    mock_bot.get_context.assert_not_called()
+    mock_bot.ai_mgr.generate_persona_reply.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_ai_chat_yields_to_active_voice_conversation():
+    from src.cogs.fun.companion_ai import CompanionAI
+    from src.managers.voice_conversation_manager import VoiceConversationSession
+
+    mock_bot = MagicMock()
+    mock_bot.user = MagicMock(id=99999)
+    mock_bot.ai_mgr = AsyncMock()
+    mock_bot.get_context = AsyncMock()
+    voice_session = VoiceConversationSession(
+        guild_id=88888,
+        channel_id=888,
+        channel_name="Voice",
+        text_channel_id=77777,
+        started_by_id=11111,
+        started_by_name="Host",
+    )
+    voice_cog = SimpleNamespace(conv_mgr=MagicMock())
+    voice_cog.conv_mgr.get_session.return_value = voice_session
+    mock_bot.get_cog.return_value = voice_cog
+
+    cog = CompanionAI(mock_bot)
+    cog._channel_configs[77777] = {"enabled": True, "mention_only": False}
+    message = MagicMock(spec=discord.Message)
+    message.author = MagicMock(id=55555, bot=False)
+    message.author.voice.channel.id = voice_session.channel_id
+    message.webhook_id = None
+    message.content = "What do you think?"
+    message.guild.id = 88888
+    message.channel.id = voice_session.text_channel_id
+    message.mentions = []
+    message.reference = None
+    message.reply = AsyncMock()
+
+    await cog.on_message(message)
+
+    message.reply.assert_not_called()
+    mock_bot.get_context.assert_not_called()
+    mock_bot.ai_mgr.generate_persona_reply.assert_not_called()
+
+
 # ─── 9. TEST GEMINI CONNECTIVITY DIAGNOSTICS ─────────────────────────────────
 
 @pytest.mark.asyncio
@@ -355,5 +427,3 @@ def test_bot_default_allowed_mentions_protection():
     assert bot.allowed_mentions.everyone is False
     assert bot.allowed_mentions.roles is False
     assert bot.allowed_mentions.users is True
-
-

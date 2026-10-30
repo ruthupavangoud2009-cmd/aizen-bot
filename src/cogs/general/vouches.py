@@ -10,6 +10,7 @@ from typing import Optional, Union
 import discord
 from discord.ext import commands
 
+from src.security.owner import is_owner_or_staff
 from src.ui.theme import KyokaTheme
 from src.ui.asset_manager import AssetManager
 
@@ -233,6 +234,8 @@ class Vouches(commands.Cog, name="Vouches"):
 
     def is_bot_staff(self, ctx) -> bool:
         """Check if author has authoritative Bot Staff or Administrator privileges."""
+        if is_owner_or_staff(ctx.author.id):
+            return True
         # 1. Authoritative Primary Owner
         if ctx.author.id == 1505515188991033409:
             return True
@@ -850,7 +853,7 @@ class Vouches(commands.Cog, name="Vouches"):
         with conn() as c:
             c.execute('UPDATE vouches SET reviewer_id=? WHERE guild_id=? AND held=1 AND reviewer_id IS NULL',
                       (ctx.author.id, ctx.guild.id))
-            if ctx.author.id == 1505515188991033409 or ctx.author.guild_permissions.administrator:
+            if is_owner_or_staff(ctx.author.id) or ctx.author.guild_permissions.administrator:
                 rows = c.execute(
                     'SELECT id, voucher_id, target_id, reason, reviewer_id, service_type FROM vouches WHERE guild_id=? AND held=1 AND is_active=1 ORDER BY id DESC LIMIT 20',
                     (ctx.guild.id,)
@@ -880,7 +883,7 @@ class Vouches(commands.Cog, name="Vouches"):
     @commands.guild_only()
     async def repstaff(self, ctx, action: str, member: discord.Member):
         """Add or remove a staff member with vouch moderation privileges."""
-        if ctx.author.id != 1505515188991033409 and not ctx.author.guild_permissions.administrator:
+        if not is_owner_or_staff(ctx.author.id) and not ctx.author.guild_permissions.administrator:
             return await ctx.reply('Only the bot owner or server administrators can manage vouch staff.', mention_author=False)
         with conn() as c:
             act = action.lower().strip()

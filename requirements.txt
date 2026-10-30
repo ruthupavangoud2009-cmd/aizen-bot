@@ -1,5 +1,6 @@
 # Discord core and voice support
 discord.py[voice]>=2.4.0
+discord-ext-voice_recv>=0.5.2a179
 aiohttp>=3.9.0
 asyncpg>=0.29.0
 wavelink>=3.5.2

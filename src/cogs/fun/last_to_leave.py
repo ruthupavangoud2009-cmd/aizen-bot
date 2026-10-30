@@ -10,6 +10,7 @@ import discord
 from discord.ext import commands
 
 from src.core.context import CustomContext
+from src.security.owner import is_owner_or_staff
 
 if TYPE_CHECKING:
     from src.core.bot import KyokaBot
@@ -282,7 +283,8 @@ class LastToLeaveVC(commands.Cog):
         # Permissions check: host, manage_channels, or administrator
         is_host = ctx.author.id == game.host_id
         is_mod = (
-            ctx.author.guild_permissions.manage_channels
+            is_owner_or_staff(ctx.author.id)
+            or ctx.author.guild_permissions.manage_channels
             or ctx.author.guild_permissions.administrator
             or ctx.author.guild_permissions.manage_guild
         )

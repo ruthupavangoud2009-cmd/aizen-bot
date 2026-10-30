@@ -9,7 +9,7 @@ from typing import TYPE_CHECKING
 import discord
 from discord.ext import commands, tasks
 from src.core.config import Config
-from src.security.owner import OWNER_ID, audit, authorize_owner, is_primary_owner
+from src.security.owner import audit, authorize_owner, is_owner_or_staff
 from src.managers.premium_service import PremiumService, parse_duration
 
 if TYPE_CHECKING:
@@ -264,28 +264,28 @@ class OwnerSystem(commands.Cog):
     @commands.command(name="grantpremium", aliases=["addpremium", "serverpremium"], hidden=True)
     async def top_grant_premium(self, ctx, scope: str, target_id: str, duration: str = "30d", tier: str = "premium", *, note: str = ""):
         """Owner command to quickly grant server or user premium: +grantpremium server <guild_id> [duration] [tier]"""
-        if not is_primary_owner(ctx.author.id):
+        if not is_owner_or_staff(ctx.author.id):
             return
         await self.premium_grant(ctx, scope, target_id, tier, duration, note=note)
 
     @commands.command(name="revokepremium", aliases=["removepremium"], hidden=True)
     async def top_revoke_premium(self, ctx, scope: str, target_id: str, *, note: str = ""):
         """Owner command to revoke premium: +revokepremium server <guild_id>"""
-        if not is_primary_owner(ctx.author.id):
+        if not is_owner_or_staff(ctx.author.id):
             return
         await self.premium_revoke(ctx, scope, target_id, note=note)
 
     @commands.command(name="checkpremium", aliases=["premiumcheck"], hidden=True)
     async def top_check_premium(self, ctx, scope: str, target_id: str):
         """Owner command to check premium status: +checkpremium server <guild_id>"""
-        if not is_primary_owner(ctx.author.id):
+        if not is_owner_or_staff(ctx.author.id):
             return
         await self.premium_check(ctx, scope, target_id)
 
     @commands.command(name="extendpremium", hidden=True)
     async def top_extend_premium(self, ctx, scope: str, target_id: str, duration: str):
         """Owner command to extend existing premium: +extendpremium server <guild_id> 30d"""
-        if not is_primary_owner(ctx.author.id):
+        if not is_owner_or_staff(ctx.author.id):
             return
         await self.premium_extend(ctx, scope, target_id, duration)
 

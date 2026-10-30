@@ -11,6 +11,7 @@ from discord import app_commands
 from discord.ext import commands, tasks
 
 from src.core.context import CustomContext
+from src.security.owner import is_owner_or_staff
 from src.managers.dev_pulse_manager import CATEGORY_BADGES, DevPulseStory
 from src.utils.containers import (
     KyokaContainer,
@@ -242,7 +243,7 @@ class DevSetupChannelView(discord.ui.View):
         self.add_item(self.continue_button)
 
     async def interaction_check(self, interaction: discord.Interaction) -> bool:
-        if not (
+        if not is_owner_or_staff(interaction.user.id) and not (
             interaction.user.guild_permissions.manage_guild
             if isinstance(interaction.user, discord.Member)
             else False
@@ -396,7 +397,7 @@ class DevSetupModulesView(discord.ui.View):
         return container
 
     async def interaction_check(self, interaction: discord.Interaction) -> bool:
-        if not (
+        if not is_owner_or_staff(interaction.user.id) and not (
             interaction.user.guild_permissions.manage_guild
             if isinstance(interaction.user, discord.Member)
             else False
@@ -623,7 +624,7 @@ class DevCadenceView(discord.ui.View):
         return container
 
     async def interaction_check(self, interaction: discord.Interaction) -> bool:
-        if not (
+        if not is_owner_or_staff(interaction.user.id) and not (
             interaction.user.guild_permissions.manage_guild
             if isinstance(interaction.user, discord.Member)
             else False
@@ -717,7 +718,7 @@ class DevStatusView(discord.ui.View):
             self.add_item(self.setup_button)
 
     async def interaction_check(self, interaction: discord.Interaction) -> bool:
-        if not (
+        if not is_owner_or_staff(interaction.user.id) and not (
             interaction.user.guild_permissions.manage_guild
             if isinstance(interaction.user, discord.Member)
             else False

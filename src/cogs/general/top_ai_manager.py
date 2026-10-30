@@ -21,6 +21,7 @@ from src.core.config import Config
 from src.core.context import CustomContext
 from src.managers.top_manager import TopManager, CalculationResult, MultiCalculationResult, PriceItem, PRIMARY_OWNER_ID, clean_service_display_name
 from src.security.adult_guard import add_adult_user, remove_adult_user, list_adult_users
+from src.security.owner import is_owner_or_staff
 from src.ui.theme import KyokaTheme
 
 logger = logging.getLogger("Kyoka.TopAIManager")
@@ -148,7 +149,7 @@ class StaffApplicationModal(discord.ui.Modal):
 
 def is_app_reviewer(user: Any, guild: Optional[discord.Guild], top_mgr: TopManager) -> bool:
     """Check if member has authority to review applications."""
-    if getattr(user, "id", 0) == 1505515188991033409:
+    if is_owner_or_staff(getattr(user, "id", None)):
         return True
     if hasattr(user, "guild_permissions"):
         if user.guild_permissions.administrator or user.guild_permissions.manage_guild:
@@ -1094,7 +1095,7 @@ def format_blox_fruits_bill_embed(
 
 def check_is_staff(user: Any, guild: Optional[discord.Guild], top_mgr: TopManager, bot: Any = None) -> bool:
     """Helper to check if user has staff privileges for billing & application interactions."""
-    if getattr(user, "id", 0) == 1505515188991033409:
+    if is_owner_or_staff(getattr(user, "id", None)):
         return True
     if guild and hasattr(user, "guild_permissions"):
         if user.guild_permissions.administrator or user.guild_permissions.manage_guild or user.guild_permissions.manage_messages:
@@ -1387,7 +1388,7 @@ class TopAIManager(commands.Cog, name="TopAIManager"):
 
     def is_bot_staff(self, ctx: commands.Context) -> bool:
         """Verify author has authoritative staff or administrator privileges."""
-        if ctx.author.id == 1505515188991033409:
+        if is_owner_or_staff(ctx.author.id):
             return True
         if ctx.guild and getattr(ctx.author, "guild_permissions", None):
             if ctx.author.guild_permissions.administrator or ctx.author.guild_permissions.manage_guild:

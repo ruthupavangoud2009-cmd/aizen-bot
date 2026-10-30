@@ -13,6 +13,7 @@ from discord.ext import commands, tasks
 
 from src.core.config import Config
 from src.security.owner import is_primary_owner
+from src.core.permissions import install_bot_staff_permission_overrides
 from src.core.context import CustomContext
 from src.database.base import BaseDatabase
 from src.database.postgres import PostgresDatabase
@@ -88,6 +89,7 @@ class KyokaBot(commands.Bot):
     """Production-grade custom Discord bot class for Kyoka."""
 
     def __init__(self, proxy: Any = _DEFAULT_PROXY_SENTINEL) -> None:
+        install_bot_staff_permission_overrides()
         intents = discord.Intents.default()
         intents.message_content = True
         intents.members = True

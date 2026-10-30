@@ -106,14 +106,22 @@ async def authorize_owner(ctx: Any, action: str = "owner-command") -> bool:
     if actor_id is None:
         actor_id = getattr(getattr(ctx, "user", None), "id", None)
 
-    # SPAM COMMAND is strictly reserved for the primary owner! Staff CANNOT spam.
+    # Spam count and owner-targeting restrictions are enforced by the spam command itself.
     if action == "spam":
-        if is_primary_owner(actor_id):
-            return True
-        return False
+        return is_owner_or_staff(actor_id)
 
-    # All other bot commands: bot staff have every permission of the bot!
-    if is_primary_owner(actor_id) or is_bot_staff(actor_id):
+    # Staff may manage premium entitlements, but global owner controls remain owner-only.
+    staff_actions = {
+        "premium-help",
+        "premium-grant",
+        "premium-revoke",
+        "premium-check",
+        "premium-list",
+        "premium-extend",
+        "premium-info",
+        "premium-servers",
+    }
+    if is_primary_owner(actor_id) or (is_bot_staff(actor_id) and action in staff_actions):
         return True
 
     now_mono = time.monotonic()

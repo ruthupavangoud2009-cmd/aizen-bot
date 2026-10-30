@@ -8,6 +8,7 @@ from typing import Optional, Union
 import discord
 from discord.ext import commands
 
+from src.security.owner import is_owner_or_staff
 from src.ui.theme import KyokaTheme
 from src.ui.asset_manager import AssetManager
 
@@ -104,6 +105,8 @@ class Bills(commands.Cog, name="Bills"):
 
     def is_staff(self, ctx) -> bool:
         """Check if author is an authorized staff member for invoice creation and payment processing."""
+        if is_owner_or_staff(ctx.author.id):
+            return True
         # 1. Authoritative Primary Owner
         if ctx.author.id == 1505515188991033409:
             return True

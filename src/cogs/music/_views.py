@@ -5,6 +5,7 @@ from typing import TYPE_CHECKING, Optional, Any
 import discord
 
 from src.utils.containers import KyokaContainer, KyroContainer, send_container_response
+from src.security.owner import is_owner_or_staff
 
 if TYPE_CHECKING:
     from src.core.bot import KyokaBot, KyroBot
@@ -109,7 +110,7 @@ class MusicControlView(discord.ui.View):
             role.name.lower() in ("dj", "music dj", "kyoka dj", "kyro dj")
             for role in getattr(member, "roles", [])
         )
-        if member.guild_permissions.administrator or member.guild_permissions.manage_guild or has_dj:
+        if is_owner_or_staff(member.id) or member.guild_permissions.administrator or member.guild_permissions.manage_guild or has_dj:
             return None
 
         voice_state = getattr(member, "voice", None)

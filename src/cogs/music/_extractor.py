@@ -1027,6 +1027,19 @@ class NativeExtractor:
         )
 
     @classmethod
+    async def extract_youtube_fallback(
+        cls,
+        query: str,
+        requester: str,
+        is_autoplay: bool = False,
+    ) -> Optional[Track]:
+        """Run the blocking yt-dlp fallback without stalling the bot event loop."""
+        return await asyncio.wait_for(
+            asyncio.to_thread(cls._extract_youtube_fallback, query, requester, is_autoplay),
+            timeout=15.0,
+        )
+
+    @classmethod
     def _sync_yt_dlp_smart_search(cls, query: str) -> Optional[Dict[str, Any]]:
         """Search top 5 YouTube entries, score them to avoid remixes/lofi, and extract the winning stream."""
         ydl_flat = {

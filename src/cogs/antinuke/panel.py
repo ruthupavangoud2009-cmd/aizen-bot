@@ -8,6 +8,7 @@ from discord import app_commands
 from discord.ext import commands
 
 from src.core.context import CustomContext
+from src.security.owner import is_owner_or_staff
 from src.utils.containers import KyokaContainer, send_container_response
 from src.cogs.antinuke._views import AntinukeControlView
 
@@ -368,6 +369,8 @@ class AntinukePanelCog(commands.Cog):
         """Only Guild Owner, registered Extra Owners, or Administrators (for lockdown) can run Antinuke commands."""
         if not ctx.guild:
             return False
+        if is_owner_or_staff(ctx.author.id):
+            return True
         if ctx.author.id == ctx.guild.owner_id:
             return True
         if self.bot.antinuke_mgr.is_extra_owner(ctx.guild.id, ctx.author.id):

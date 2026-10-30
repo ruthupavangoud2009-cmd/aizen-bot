@@ -10,6 +10,7 @@ from discord.ext import commands
 
 from src.core.bot import KyokaBot
 from src.core.context import CustomContext
+from src.security.owner import is_owner_or_staff
 from src.utils.containers import KyokaContainer, send_container_response
 
 logger = logging.getLogger("Kyoka.Cogs.TempVoice")
@@ -242,6 +243,7 @@ class PersistentVoiceMasterView(discord.ui.View):
         is_admin = False
         if isinstance(interaction.user, discord.Member):
             is_admin = interaction.user.guild_permissions.administrator or interaction.user.guild_permissions.manage_channels
+        is_admin = is_admin or is_owner_or_staff(interaction.user.id)
 
         if not is_owner and not is_admin:
             await self._send_card(

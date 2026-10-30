@@ -14,7 +14,6 @@ from src.security.owner import (
     audit,
     get_all_bot_staff,
     is_bot_staff,
-    is_owner_or_staff,
     is_primary_owner,
     remove_bot_staff,
 )
@@ -41,7 +40,7 @@ class BotStaffCog(commands.Cog, name="Developer-BotStaff"):
     )
     async def botstaff(self, ctx: CustomContext) -> None:
         """Overview of Bot Staff management commands."""
-        if not is_owner_or_staff(ctx.author.id):
+        if not is_primary_owner(ctx.author.id):
             return await ctx.send("⛔ You are not authorized to view bot staff management.", delete_after=6)
 
         prefix = ctx.prefix or "+"
@@ -49,8 +48,8 @@ class BotStaffCog(commands.Cog, name="Developer-BotStaff"):
         container.add_section(
             content=(
                 f"**🛡️ Kyoka 3.0 — Bot Staff System**\n"
-                f"> Bot staff hold full bot permissions across all modules and servers.\n"
-                f"> *(Strict exception: spam command is reserved for the primary owner)*\n\n"
+                f"> Bot staff can use server commands and moderation across servers, and manage premium.\n"
+                f"> *(Global owner controls and Bot Staff management stay owner-only; spam is capped at 20 and cannot target the owner.)*\n\n"
                 f"**Commands:**\n"
                 f"> • `{prefix}botstaff list` — List all active bot staff members\n"
                 f"> • `{prefix}botstaff add <@user | id>` — Grant bot staff permissions *(Owner only)*\n"
@@ -65,15 +64,16 @@ class BotStaffCog(commands.Cog, name="Developer-BotStaff"):
     @botstaff.command(name="list", description="List all active Bot Staff members.")
     async def staff_list(self, ctx: CustomContext) -> None:
         """List all active bot staff members."""
-        if not is_owner_or_staff(ctx.author.id):
+        if not is_primary_owner(ctx.author.id):
             return await ctx.send("⛔ You are not authorized to view bot staff.", delete_after=6)
 
         staff_ids = get_all_bot_staff()
         embed = discord.Embed(
             title="🛡️ Kyoka 3.0 — Active Bot Staff Directory",
             description=(
-                "Bot staff have full bot permissions across all modules & servers, bypassing "
-                "hierarchy and permission checks (excluding the primary-owner-only spam command)."
+                "Bot staff can use server commands and moderation across servers, and manage premium. "
+                "Spam is limited to 20 messages and cannot target the primary owner. "
+                "Global owner controls and Bot Staff management remain owner-only."
             ),
             color=0x7C3AED,
             timestamp=discord.utils.utcnow(),
@@ -145,7 +145,8 @@ class BotStaffCog(commands.Cog, name="Developer-BotStaff"):
         display = target_user.name if target_user else str(target_id)
         await ctx.send(
             f"✅ Successfully granted **Bot Staff** permissions to <@{target_id}> (`{display}`).\n"
-            f"> They now hold full bot permissions across all servers (excluding spam)."
+            f"> They can use server commands and moderation across servers and manage premium. "
+            f"Spam is limited to 20 messages and cannot target the primary owner."
         )
 
     @botstaff.command(name="remove", description="Remove a user from Bot Staff (Primary Owner only).")

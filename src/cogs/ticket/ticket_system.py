@@ -17,7 +17,7 @@ from discord.ext import commands
 
 from src.core.bot import KyokaBot
 from src.core.context import CustomContext
-from src.security.owner import OWNER_ID, is_primary_owner
+from src.security.owner import OWNER_ID, is_owner_or_staff, is_primary_owner
 from src.utils.containers import KyokaContainer, send_container_response, edit_container_response, build_container_payload
 from src.utils.transcript import generate_html_transcript
 from src.cogs.utility.embed_builder import ContainerDraft
@@ -81,7 +81,7 @@ class TicketInsideControlsView(discord.ui.View):
 
         panel = await self.cog.bot.ticket_mgr.get_panel_by_id(ticket.get("panel_id", 0)) if ticket else None
         is_creator = bool(ticket and interaction.user.id == ticket.get("user_id"))
-        is_staff = interaction.user.guild_permissions.manage_channels or interaction.user.guild_permissions.administrator
+        is_staff = is_owner_or_staff(interaction.user.id) or interaction.user.guild_permissions.manage_channels or interaction.user.guild_permissions.administrator
         if panel and panel.get("support_role_id"):
             s_role = interaction.guild.get_role(panel["support_role_id"]) if interaction.guild else None
             if s_role and s_role in getattr(interaction.user, "roles", []):
@@ -112,7 +112,7 @@ class TicketInsideControlsView(discord.ui.View):
 
         # Check if staff permissions or panel support role
         panel = await self.cog.bot.ticket_mgr.get_panel_by_id(ticket.get("panel_id", 0))
-        is_staff = interaction.user.guild_permissions.manage_channels or interaction.user.guild_permissions.administrator
+        is_staff = is_owner_or_staff(interaction.user.id) or interaction.user.guild_permissions.manage_channels or interaction.user.guild_permissions.administrator
         if panel and panel.get("support_role_id"):
             s_role = interaction.guild.get_role(panel["support_role_id"]) if interaction.guild else None
             if s_role and s_role in getattr(interaction.user, "roles", []):
@@ -154,7 +154,7 @@ class TicketInsideControlsView(discord.ui.View):
         ticket = await self.cog.bot.ticket_mgr.get_ticket(interaction.channel_id)
         panel = await self.cog.bot.ticket_mgr.get_panel_by_id(ticket.get("panel_id", 0)) if ticket else None
         is_creator = bool(ticket and interaction.user.id == ticket.get("user_id"))
-        is_staff = interaction.user.guild_permissions.manage_channels or interaction.user.guild_permissions.administrator
+        is_staff = is_owner_or_staff(interaction.user.id) or interaction.user.guild_permissions.manage_channels or interaction.user.guild_permissions.administrator
         if panel and panel.get("support_role_id"):
             s_role = interaction.guild.get_role(panel["support_role_id"]) if interaction.guild else None
             if s_role and s_role in getattr(interaction.user, "roles", []):
@@ -202,7 +202,7 @@ class TicketClosedControlsView(discord.ui.View):
         if ticket:
             panel = await self.cog.bot.ticket_mgr.get_panel_by_id(ticket.get("panel_id", 0)) if ticket else None
             is_creator = bool(ticket and interaction.user.id == ticket.get("user_id"))
-            is_staff = interaction.user.guild_permissions.manage_channels or interaction.user.guild_permissions.administrator
+            is_staff = is_owner_or_staff(interaction.user.id) or interaction.user.guild_permissions.manage_channels or interaction.user.guild_permissions.administrator
             if panel and panel.get("support_role_id"):
                 s_role = interaction.guild.get_role(panel["support_role_id"]) if interaction.guild else None
                 if s_role and s_role in getattr(interaction.user, "roles", []):
@@ -227,7 +227,7 @@ class TicketClosedControlsView(discord.ui.View):
         if ticket:
             panel = await self.cog.bot.ticket_mgr.get_panel_by_id(ticket.get("panel_id", 0)) if ticket else None
             is_creator = bool(ticket and interaction.user.id == ticket.get("user_id"))
-            is_staff = interaction.user.guild_permissions.manage_channels or interaction.user.guild_permissions.administrator
+            is_staff = is_owner_or_staff(interaction.user.id) or interaction.user.guild_permissions.manage_channels or interaction.user.guild_permissions.administrator
             if panel and panel.get("support_role_id"):
                 s_role = interaction.guild.get_role(panel["support_role_id"]) if interaction.guild else None
                 if s_role and s_role in getattr(interaction.user, "roles", []):
@@ -249,7 +249,11 @@ class TicketClosedControlsView(discord.ui.View):
         row=0,
     )
     async def btn_delete(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
-        if not (interaction.user.guild_permissions.manage_channels or interaction.user.guild_permissions.administrator):
+        if not (
+            is_owner_or_staff(interaction.user.id)
+            or interaction.user.guild_permissions.manage_channels
+            or interaction.user.guild_permissions.administrator
+        ):
             return await interaction.response.send_message("Only staff members with Manage Channels can delete tickets.", ephemeral=True)
         del_card = KyokaContainer(accent_color=15548997)
         del_card.add_section(content="**Deleting Ticket**\n> This ticket channel will be permanently deleted in 5 seconds...")

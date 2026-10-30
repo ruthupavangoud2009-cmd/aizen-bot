@@ -595,6 +595,21 @@ async def execute_play(cog: Music, ctx: commands.Context, query: Optional[str] =
             except Exception as e:
                 logger.debug(f"JioSaavn final fallback notice: {e}")
 
+        # Last resort: resolve a direct YouTube audio stream with yt-dlp.
+        if not track:
+            try:
+                track = await NativeExtractor.extract_youtube_fallback(
+                    lookup_target,
+                    requester=ctx.author.display_name,
+                )
+                if track:
+                    track.requester_id = ctx.author.id
+                    track.query = query
+            except asyncio.TimeoutError:
+                logger.warning("yt-dlp fallback timed out for query '%s'", query)
+            except Exception:
+                logger.exception("yt-dlp fallback failed for query '%s'", query)
+
         # If still no track found, edit the searching message to inform user
         if not track:
             err_container = KyokaContainer(accent_color=None)
@@ -675,4 +690,3 @@ async def execute_play(cog: Music, ctx: commands.Context, query: Optional[str] =
                 pass
         await send_container_response(ctx, err_card)
         return
-

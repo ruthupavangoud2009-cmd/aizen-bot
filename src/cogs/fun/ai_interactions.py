@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import os
+import tempfile
 import time
 from collections import defaultdict, deque
 from typing import Any, Dict, List, Optional
@@ -228,6 +229,57 @@ class AIInteractions(commands.Cog):
                 return await ctx.send("🟣 The connection to the AI service failed. Please try again shortly.")
         for start in range(0, len(answer), 1900):
             await ctx.reply(answer[start:start + 1900], mention_author=False, allowed_mentions=discord.AllowedMentions.none())
+        if ctx.guild and isinstance(ctx.author, discord.Member):
+            asyncio.create_task(self._speak_configured_reply(ctx.guild, ctx.author, answer))
+
+    async def _speak_configured_reply(
+        self,
+        guild: discord.Guild,
+        member: discord.Member,
+        text: str,
+    ) -> None:
+        """Speak configured AI replies only when the user and bot share voice."""
+        voice_cog = self.bot.get_cog("AIVoice")
+        voice_client = guild.voice_client
+        member_channel = getattr(getattr(member, "voice", None), "channel", None)
+        bot_channel = getattr(voice_client, "channel", None)
+        if (
+            not voice_cog
+            or not isinstance(voice_client, discord.VoiceClient)
+            or not member_channel
+            or not bot_channel
+            or member_channel.id != bot_channel.id
+            or voice_cog.conv_mgr.is_active(guild.id)
+            or voice_cog._is_music_active(guild)
+        ):
+            return
+
+        temp_path = None
+        try:
+            fd, temp_path = tempfile.mkstemp(suffix=".mp3")
+            os.close(fd)
+            spoken_text = text[:400]
+            synthesized = await voice_cog._synthesize_audio(
+                spoken_text,
+                voice_cog._get_voice_id(guild.id),
+                temp_path,
+                lang=voice_cog._get_voice_lang(guild.id),
+            )
+            if not synthesized:
+                log.warning("Could not synthesize configured AI voice reply in guild %s", guild.id)
+                return
+
+            async with voice_cog._get_lock(guild.id):
+                if voice_client.is_connected() and voice_client.channel.id == member_channel.id:
+                    await voice_cog._play_audio_file(voice_client, temp_path)
+        except Exception as exc:
+            log.warning("Configured AI voice reply failed in guild %s: %s", guild.id, exc)
+        finally:
+            if temp_path and os.path.exists(temp_path):
+                try:
+                    os.remove(temp_path)
+                except OSError as exc:
+                    log.warning("Could not remove configured AI voice audio in guild %s: %s", guild.id, exc)
 
     # ─── SLASH COMMAND GROUP (6 SUBCOMMANDS) ────────────────────────────────
 
@@ -242,7 +294,7 @@ class AIInteractions(commands.Cog):
         embed = discord.Embed(
             title="🤖 KYOKA AI Configuration Suite",
             description=(
-                f"• `{p}ai setup <#channel|off>` — Set AI chat channel\n"
+                f"• `{p}ai setup <#channel|off>` — Opt in to automatic AI chat in one channel, or turn it off\n"
                 f"• `{p}ai personality <preset>` — Set AI personality preset\n"
                 f"• `{p}ai config` — View server AI settings\n"
                 f"• `{p}ai test <prompt>` — Test AI response\n"
@@ -337,7 +389,7 @@ class AIInteractions(commands.Cog):
 
     # ─── LEGACY PREFIX COMMANDS PRESERVED ────────────────────────────────────
 
-    @commands.command(name="aisetup", help="Admin: configure automatic AI replies in a channel, or turn them off.")
+    @commands.command(name="aisetup", help="Admin: opt in to automatic AI replies in one channel, or turn them off.")
     @commands.guild_only()
     @commands.has_guild_permissions(manage_guild=True)
     async def aisetup(self, ctx: CustomContext, channel: discord.TextChannel | str):
@@ -347,6 +399,10 @@ class AIInteractions(commands.Cog):
         if not isinstance(channel, discord.TextChannel):
             return await ctx.send(f"Usage: `{ctx.prefix}aisetup #channel` or `{ctx.prefix}aisetup off`.")
         await self.bot.db.execute("INSERT INTO kyoka_ai_settings (guild_id, channel_id, updated_by) VALUES (?, ?, ?) ON CONFLICT (guild_id) DO UPDATE SET channel_id = EXCLUDED.channel_id, updated_by = EXCLUDED.updated_by, updated_at = CURRENT_TIMESTAMP;", ctx.guild.id, channel.id, ctx.author.id)
+        await ctx.send(
+            f"🟣 Automatic AI chat is enabled only in {channel.mention}. "
+            f"Use `{ctx.prefix}aisetup off` to disable it."
+        )
     @commands.command(name="aipersonality", aliases=["aipreset", "setpersonality"], help="Admin: Set the server's AI personality preset.")
     @commands.guild_only()
     @commands.has_guild_permissions(manage_guild=True)
@@ -470,6 +526,15 @@ class AIInteractions(commands.Cog):
             return
         if not row or not row.get("channel_id") or int(row["channel_id"]) != message.channel.id:
             return
+        voice_cog = self.bot.get_cog("AIVoice")
+        conv_mgr = getattr(voice_cog, "conv_mgr", None)
+        voice_session = conv_mgr.get_session(message.guild.id) if conv_mgr else None
+        author_voice = getattr(getattr(message.author, "voice", None), "channel", None)
+        voice_channel_id = author_voice.id if author_voice else None
+        if voice_session and voice_session.handles_text_message(
+            message.channel.id, message.author.id, voice_channel_id
+        ):
+            return
         if len(message.content) > 4000:
             return
         guild_id = message.guild.id
@@ -489,6 +554,7 @@ class AIInteractions(commands.Cog):
                     mention_author=False, allowed_mentions=discord.AllowedMentions.none()
                 )
         await message.reply(answer[:1900], mention_author=False, allowed_mentions=discord.AllowedMentions.none())
+        asyncio.create_task(self._speak_configured_reply(message.guild, message.author, answer))
 
     @commands.command(name="guesshostadd", help="Owner-only: authorize a number-game host in this server.")
     @commands.guild_only()

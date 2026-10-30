@@ -12,6 +12,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 
 from src.cogs.music._extractor import YDL_OPTIONS
+from src.cogs.music._extractor import NativeExtractor
 from src.cogs.music._models import Track
 from src.cogs.music._player import GuildPlayer
 from src.cogs.music.music import Music
@@ -107,6 +108,21 @@ def test_direct_stream_url_detection():
 
 
 @pytest.mark.asyncio
+async def test_youtube_fallback_runs_in_worker_thread():
+    expected = Track(
+        title="Fallback Track",
+        url="https://youtube.com/watch?v=abcdefghijk",
+        stream_url="https://rr.example.googlevideo.com/videoplayback",
+        author="Artist",
+    )
+    with patch.object(NativeExtractor, "_extract_youtube_fallback", return_value=expected) as fallback:
+        result = await NativeExtractor.extract_youtube_fallback("fallback song", "Tester")
+
+    assert result is expected
+    fallback.assert_called_once_with("fallback song", "Tester", False)
+
+
+@pytest.mark.asyncio
 async def test_resolve_playable_with_attached_playable():
     """Verify _resolve_playable_cascade returns pre-attached _playable immediately."""
     bot = MagicMock()
@@ -119,4 +135,3 @@ async def test_resolve_playable_with_attached_playable():
 
     resolved = await player._resolve_playable_cascade(track)
     assert resolved is dummy_playable
-

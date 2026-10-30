@@ -25,7 +25,7 @@ from discord.ext import commands
 
 from src.core.config import Config
 from src.core.context import CustomContext
-from src.security.owner import is_primary_owner
+from src.security.owner import is_owner_or_staff
 from src.utils.containers import KyokaContainer, send_container_response
 
 if TYPE_CHECKING:
@@ -46,7 +46,11 @@ class SetupResetConfirmView(discord.ui.View):
 
     @discord.ui.button(label="Confirm Reset", style=discord.ButtonStyle.danger, emoji="⚠️")
     async def confirm(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
-        if interaction.user.id != self.user_id and not interaction.user.guild_permissions.administrator:
+        if (
+            interaction.user.id != self.user_id
+            and not interaction.user.guild_permissions.administrator
+            and not is_owner_or_staff(interaction.user.id)
+        ):
             return await interaction.response.send_message("Only the command author or a server administrator can confirm this.", ephemeral=True)
 
         gid = self.guild_id

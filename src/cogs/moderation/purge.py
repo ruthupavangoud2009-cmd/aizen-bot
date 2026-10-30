@@ -28,8 +28,8 @@ def can_execute_purge():
         author_id = ctx.author.id
         bot = ctx.bot
         # Only the configured primary owner receives bot-owner bypass.
-        from src.security.owner import is_primary_owner
-        if is_primary_owner(author_id):
+        from src.security.owner import is_owner_or_staff
+        if is_owner_or_staff(author_id):
             return True
         # server Owner & Administrators bypass
         if ctx.guild.owner_id == author_id:

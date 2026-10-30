@@ -13,7 +13,7 @@ import discord
 from discord.ext import commands
 
 from src.core.context import CustomContext
-from src.security.owner import is_primary_owner
+from src.security.owner import is_owner_or_staff
 
 if TYPE_CHECKING:
     from src.core.bot import KyokaBot
@@ -50,9 +50,9 @@ class Announcement(commands.Cog):
 
         # Authorization check: primary owner or staff with manage_messages / administrator
         author = ctx.author
-        is_owner = is_primary_owner(author.id)
+        is_staff = is_owner_or_staff(author.id)
         has_perm = author.guild_permissions.manage_messages or author.guild_permissions.administrator
-        if not (is_owner or has_perm):
+        if not (is_staff or has_perm):
             return await ctx.send_error("You do not have permission to use the announce command.")
 
         # Validate target channel permissions
@@ -66,7 +66,7 @@ class Announcement(commands.Cog):
             return await ctx.send_error("Announcement message cannot be empty.")
 
         # Safe mention controls: prevent accidental mass mentions unless authorized
-        can_mass_mention = author.guild_permissions.mention_everyone or is_owner
+        can_mass_mention = author.guild_permissions.mention_everyone or is_staff
         allowed_mentions = discord.AllowedMentions(
             everyone=can_mass_mention,
             roles=can_mass_mention,

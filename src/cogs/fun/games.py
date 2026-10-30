@@ -122,8 +122,27 @@ class InteractivePollView(discord.ui.View):
         self._emojis = ["🇦", "🇧", "🇨", "🇩", "🇪"]
 
         for i, opt in enumerate(options):
-            label = f"{self._emojis[i]} Option {i+1}"
-            btn = discord.ui.Button(label=label, style=discord.ButtonStyle.secondary, custom_id=f"poll_vote:{i}")
+            normalized_option = opt.strip().lower()
+            emoji = (
+                "✅"
+                if normalized_option in {"yes", "y"}
+                else "❌"
+                if normalized_option in {"no", "n"}
+                else self._emojis[i]
+            )
+            style = (
+                discord.ButtonStyle.success
+                if normalized_option in {"yes", "y"}
+                else discord.ButtonStyle.danger
+                if normalized_option in {"no", "n"}
+                else discord.ButtonStyle.secondary
+            )
+            btn = discord.ui.Button(
+                label=opt[:80],
+                style=style,
+                emoji=emoji,
+                custom_id=f"poll_vote:{i}",
+            )
             btn.callback = self._make_callback(i)
             self.add_item(btn)
 
@@ -154,7 +173,8 @@ class InteractivePollView(discord.ui.View):
     def build_embed(self) -> discord.Embed:
         total_votes = sum(len(v) for v in self.votes.values())
         embed = discord.Embed(
-            title=f"📊 Poll: {self.question}",
+            title=f"🗳️ {self.question}",
+            description="Select an option below to vote. You can change your vote at any time.",
             color=PURPLE,
         )
         lines = []
@@ -162,9 +182,9 @@ class InteractivePollView(discord.ui.View):
             count = len(self.votes[i])
             pct = round((count / total_votes) * 100) if total_votes > 0 else 0
             bar = "🟩" * (pct // 10) + "⬜" * (10 - pct // 10)
-            lines.append(f"**{self._emojis[i]} {opt}**\n{bar} `{count}` vote(s) ({pct}%)")
+            lines.append(f"**{opt}**\n{bar} `{count}` vote(s) · `{pct}%`")
 
-        embed.description = "\n\n".join(lines)
+        embed.description += "\n\n" + "\n\n".join(lines)
         embed.set_footer(text=f"Total Votes: {total_votes} • Poll created by {self.author.display_name}")
         return embed
 
@@ -305,18 +325,26 @@ class Games(commands.Cog):
 
     # ─── 3. INTERACTIVE POLL ──────────────────────────────────────────────────
 
-    @commands.command(name="poll", help="Create an interactive voting poll: ?poll Question? | Option 1 | Option 2 | Option 3")
+    @commands.command(name="poll", help="Create a professional button poll: ?poll Question? | Option 1 | Option 2")
     @commands.guild_only()
     async def poll(self, ctx: CustomContext, *, poll_input: str = "") -> None:
         """Create a real-time button voting poll."""
         parts = [p.strip() for p in poll_input.split("|") if p.strip()]
-        if len(parts) < 3:
+        if len(parts) < 3 or len(parts[0]) > 256 or any(len(option) > 80 for option in parts[1:]):
             return await ctx.send(
-                f"Usage: `{ctx.prefix}poll Question? | Option 1 | Option 2 | Option 3` (minimum 2 options, maximum 5)"
+                f"Usage: `{ctx.prefix}poll Question? | Option 1 | Option 2` (2–5 options; each option must fit a button)"
             )
         question = parts[0]
         options = parts[1:6]
 
+        await self._send_poll(ctx, question, options)
+
+    @commands.command(name="legit", aliases=["legitpoll"], help="Create an interactive Yes/No poll asking if the server is legit.")
+    @commands.guild_only()
+    async def legit_poll(self, ctx: CustomContext) -> None:
+        await self._send_poll(ctx, "Are we legit?", ["Yes", "No"])
+
+    async def _send_poll(self, ctx: CustomContext, question: str, options: list[str]) -> None:
         view = InteractivePollView(question, options, ctx.author)
         embed = view.build_embed()
         view.message = await ctx.send(embed=embed, view=view)

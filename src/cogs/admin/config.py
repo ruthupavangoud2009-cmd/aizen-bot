@@ -9,6 +9,7 @@ from discord.ext import commands
 
 from src.cogs.utility.giveaway import is_giveaway_authorized
 from src.core.context import CustomContext
+from src.security.owner import is_owner_or_staff
 from src.utils.containers import KyokaContainer, send_container_response
 
 if TYPE_CHECKING:
@@ -237,7 +238,7 @@ class ServerConfig(commands.Cog):
         interaction: discord.Interaction,
         access_level: app_commands.Choice[str],
     ) -> None:
-        if not interaction.user.guild_permissions.administrator and not is_primary_owner(interaction.user.id):
+        if not interaction.user.guild_permissions.administrator and not is_owner_or_staff(interaction.user.id):
             return await interaction.response.send_message("Only server administrators can modify access permissions.", ephemeral=True)
 
         # If admin_only is chosen, remove the manager role binding
@@ -404,7 +405,7 @@ class ServerConfig(commands.Cog):
         interaction: discord.Interaction,
         scope: app_commands.Choice[str],
     ) -> None:
-        if not interaction.user.guild_permissions.administrator and not is_primary_owner(interaction.user.id):
+        if not interaction.user.guild_permissions.administrator and not is_owner_or_staff(interaction.user.id):
             return await interaction.response.send_message("Only server administrators can reset configurations.", ephemeral=True)
 
         view = ConfirmResetView(self.bot, interaction.guild.id, interaction.user.id, scope.value)

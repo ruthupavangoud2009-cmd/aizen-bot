@@ -16,7 +16,7 @@ from src.core.context import CustomContext
 from src.managers.ai_manager import AI_PERSONAS, resolve_persona
 from src.managers.gif_manager import GIFManager
 from src.security.adult_guard import authorize_adult, is_adult_authorized
-from src.security.owner import is_primary_owner
+from src.security.owner import is_owner_or_staff, is_primary_owner
 
 if TYPE_CHECKING:
     from src.core.bot import KyokaBot
@@ -127,7 +127,7 @@ class CompanionAI(commands.Cog):
     # ─── PERMISSION & ACCESS HELPERS ─────────────────────────────────────────
 
     def _is_admin_or_owner(self, member_or_user: discord.Member | discord.User, guild: discord.Guild | None) -> bool:
-        if is_primary_owner(member_or_user.id):
+        if is_owner_or_staff(member_or_user.id):
             return True
         if isinstance(member_or_user, discord.Member):
             return member_or_user.guild_permissions.administrator or member_or_user.guild_permissions.manage_guild
@@ -365,8 +365,7 @@ class CompanionAI(commands.Cog):
     @commands.Cog.listener()
     async def on_message(self, message: discord.Message) -> None:
         """
-        Listens to ordinary messages in configured channels or when mentioned/replied to,
-        and replies naturally like a real person without requiring 'hey' or any formal wake words.
+        Reply automatically only in channels explicitly configured by a server admin.
         """
         # 1. Ignore bots, webhooks, empty messages
         if message.author.bot or message.webhook_id or not message.content.strip():
@@ -376,7 +375,23 @@ class CompanionAI(commands.Cog):
         if self.bot.user and message.author.id == self.bot.user.id:
             return
 
-        # 3. Check if in DMs, mentioned, replied to, addressed by name, or if channel is configured
+        # Automatic replies are opt-in per channel; direct AI commands remain available everywhere.
+        channel_id = message.channel.id
+        config = self._channel_configs.get(channel_id) if message.guild else None
+        if not config or not config.get("enabled", True):
+            return
+
+        voice_cog = self.bot.get_cog("AIVoice") if message.guild else None
+        conv_mgr = getattr(voice_cog, "conv_mgr", None)
+        voice_session = conv_mgr.get_session(message.guild.id) if conv_mgr else None
+        author_voice = getattr(getattr(message.author, "voice", None), "channel", None)
+        voice_channel_id = author_voice.id if author_voice else None
+        if voice_session and voice_session.handles_text_message(
+            channel_id, message.author.id, voice_channel_id
+        ):
+            return
+
+        # 3. Check explicit triggers for mention-only channel configurations
         is_dm = message.guild is None
         is_mentioned = bool(self.bot.user and (
             self.bot.user in message.mentions 
@@ -391,14 +406,6 @@ class CompanionAI(commands.Cog):
         clean_start = message.content.strip().lower()
         starts_with_bot_name = any(clean_start.startswith(p) for p in ("kyoka ", "kyoka,", "kyoka:", "aizen ", "aizen,", "aizen:"))
 
-        channel_id = message.channel.id
-        config = self._channel_configs.get(channel_id) if message.guild else None
-        is_configured_channel = bool(config and config.get("enabled", True))
-
-        # Drop message if neither in DM, nor mentioned, nor replied to bot, nor directly addressed, nor in configured channel
-        if not (is_dm or is_mentioned or is_reply_to_bot or starts_with_bot_name or is_configured_channel):
-            return
-
         # 4. Skip command messages
         try:
             ctx = await self.bot.get_context(message)
@@ -407,18 +414,13 @@ class CompanionAI(commands.Cog):
         except Exception:
             pass
 
-        # 5. Determine settings: configured channel settings or natural human fallback
-        if is_configured_channel and config:
-            mention_only = config.get("mention_only", False)
-            if mention_only and not (is_dm or is_mentioned or is_reply_to_bot or starts_with_bot_name):
-                return
-            persona_key = config.get("persona", "normal")
-            send_gifs = config.get("send_gifs", True)
-            cooldown_sec = config.get("cooldown_seconds", 2)
-        else:
-            persona_key = "normal"
-            send_gifs = False
-            cooldown_sec = 2
+        # 5. Apply the configured channel's trigger and persona settings.
+        mention_only = config.get("mention_only", False)
+        if mention_only and not (is_dm or is_mentioned or is_reply_to_bot or starts_with_bot_name):
+            return
+        persona_key = config.get("persona", "normal")
+        send_gifs = config.get("send_gifs", True)
+        cooldown_sec = config.get("cooldown_seconds", 2)
 
         p_def = resolve_persona(persona_key)
 

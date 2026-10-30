@@ -13,7 +13,7 @@ from discord.ext import commands, tasks
 
 from src.cogs.moderation._helpers import resolve_role
 from src.core.context import CustomContext
-from src.security.owner import is_primary_owner
+from src.security.owner import is_owner_or_staff, is_primary_owner
 from src.utils.containers import (
     KyokaContainer,
     edit_container_response,
@@ -62,7 +62,7 @@ async def is_giveaway_authorized(
     guild: Optional[discord.Guild] = None,
 ) -> bool:
     """Check if member has permission to manage giveaways in this server."""
-    if is_primary_owner(user.id):
+    if is_owner_or_staff(user.id):
         return True
     if guild is None and isinstance(user, discord.Member):
         guild = user.guild

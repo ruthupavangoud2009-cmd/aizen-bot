@@ -511,7 +511,8 @@ class AIVoice(commands.Cog, name="AIVoice"):
             title="🎙️ KYOKA AI Voice & Meeting Intelligence Hub",
             description=(
                 "> Natural-sounding neural voice synthesis, 7 conversational vibes, live soundboard, and meeting intelligence.\n\n"
-                f"• `{p}aivoice talk [vibe]` — Live 2-way human voice conversation with Cyberpunk HUD\n"
+                f"• `{p}aivoice join` — Join voice and answer spoken prompts automatically\n"
+                f"• `{p}aivoice talk [vibe]` — Start a live conversation with a selected vibe\n"
                 f"• `{p}aivoice vibe [name]` — Switch conversational vibe (Aizen, Gamer, Chill, Tsundere, Cyber AI)\n"
                 f"• `{p}aivoice sfx [name]` — Live soundboard with boom, airhorn, level up, rimshot, and laser\n"
                 f"• `{p}aivoice roast [@user]` — Deliver a hilarious verbal roast in VC with dramatic bass drop\n"
@@ -536,46 +537,8 @@ class AIVoice(commands.Cog, name="AIVoice"):
 
     @aivoice_group.command(name="join", aliases=["connect"], description="Connect KYOKA to your current voice channel.")
     async def voice_join(self, ctx: CustomContext) -> None:
-        """Join user's voice channel."""
-        if not ctx.guild:
-            return await ctx.send_error("This command can only be used in a server.")
-
-        author_voice = getattr(ctx.author, "voice", None)
-        target_channel = getattr(author_voice, "channel", None) if author_voice else None
-        if not author_voice or not target_channel or not getattr(target_channel, "id", None):
-            return await ctx.send_error("You must be connected to a voice channel first!")
-
-        me = ctx.guild.me or (ctx.guild.get_member(self.bot.user.id) if (self.bot and self.bot.user) else None)
-        if me:
-            perms = target_channel.permissions_for(me)
-            if not perms.connect or not perms.speak:
-                return await ctx.send_error(f"I need **Connect** and **Speak** permissions in {target_channel.mention}!")
-
-        # Check if voice client exists
-        if self._is_music_active(ctx.guild):
-            return await ctx.send_error(
-                "A Music session is currently active in this server. "
-                "Stop music with `+stop` before connecting AI Voice."
-            )
-
-        vc = ctx.guild.voice_client
-        if _is_vc_connected(vc):
-            if isinstance(vc, wavelink.Player):
-                return await ctx.send_error(
-                    "A Music player is currently in voice. Use `+stop` or `+leave` before using AI Voice."
-                )
-            vc_ch = getattr(vc, "channel", None)
-            if vc_ch and getattr(vc_ch, "id", None) == target_channel.id:
-                return await ctx.send_success(f"Already connected to {target_channel.mention}!")
-            await vc.move_to(target_channel)
-            return await ctx.send_success(f"Moved to {target_channel.mention}!")
-
-        try:
-            await self._connect_voice(target_channel)
-            await ctx.send_success(f"Connected to **{target_channel.name}**! Type `{ctx.prefix}aivoice speak <text>` or `{ctx.prefix}aivoice listen` to begin.")
-        except Exception as e:
-            logger.error(f"Failed to connect to voice in {ctx.guild.id}: {e}")
-            await ctx.send_error(f"Failed to connect to voice channel: `{e}`")
+        """Join the voice channel and start listening for regular spoken AI prompts."""
+        await self._start_voice_conversation(ctx, "open")
 
     @aivoice_group.command(name="leave", aliases=["disconnect", "dc"], description="Disconnect KYOKA from the voice channel.")
     async def voice_leave(self, ctx: CustomContext) -> None:
@@ -922,9 +885,16 @@ class AIVoice(commands.Cog, name="AIVoice"):
         description="Start real-time 2-way voice conversation where AI listens and talks back like a real human.",
     )
     async def voice_talk(self, ctx: CustomContext, mode: str = "open") -> None:
+        await self._start_voice_conversation(ctx, mode)
+
+    async def _start_voice_conversation(self, ctx: CustomContext, mode: str = "open") -> None:
         """Start real-time voice conversation where AI listens and talks like a real human."""
         if not ctx.guild:
             return await ctx.send_error("This command can only be used in a server.")
+        if not HAS_VOICE_RECV:
+            return await ctx.send_error(
+                "Live voice conversations are unavailable because `discord-ext-voice_recv` is not installed."
+            )
 
         author_voice = getattr(ctx.author, "voice", None)
         target_channel = getattr(author_voice, "channel", None) if author_voice else None
@@ -1982,26 +1952,25 @@ class AIVoice(commands.Cog, name="AIVoice"):
 
         conv_session = self.conv_mgr.get_session(message.guild.id)
         if conv_session and conv_session.active:
-            if message.channel.id in (conv_session.channel_id, conv_session.text_channel_id):
+            author_voice = getattr(getattr(message.author, "voice", None), "channel", None)
+            voice_channel_id = author_voice.id if author_voice else None
+            if conv_session.handles_text_message(message.channel.id, message.author.id, voice_channel_id):
                 prefixes = ("+", "?", "!", "/", "$")
                 clean_content = message.content.strip()
                 if not clean_content or any(clean_content.startswith(p) for p in prefixes):
                     return
 
-                author_vc = getattr(message.author.voice, "channel", None) if getattr(message.author, "voice", None) else None
-                in_same_vc = author_vc and author_vc.id == conv_session.channel_id
-                if in_same_vc or message.author.id == conv_session.started_by_id:
-                    async def _speak_chat_reply() -> None:
-                        reply = await self.conv_mgr.handle_text_utterance(
-                            conv_session, self, message.author, clean_content
-                        )
-                        if reply:
-                            try:
-                                await message.reply(f"🎙️ *\"{reply}\"*", mention_author=False)
-                            except Exception:
-                                pass
+                async def _speak_chat_reply() -> None:
+                    reply = await self.conv_mgr.handle_text_utterance(
+                        conv_session, self, message.author, clean_content
+                    )
+                    if reply:
+                        try:
+                            await message.reply(f"🎙️ *\"{reply}\"*", mention_author=False)
+                        except Exception:
+                            pass
 
-                    asyncio.create_task(_speak_chat_reply())
+                asyncio.create_task(_speak_chat_reply())
 
     @commands.Cog.listener()
     async def on_voice_state_update(

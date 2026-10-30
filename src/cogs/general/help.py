@@ -736,7 +736,11 @@ class Help(commands.Cog):
 
         # Owner/developer internals check
         if cog_cat in {"owner", "developer"}:
-            if not is_primary_owner(author_id):
+            is_staff_premium = (
+                is_owner_or_staff(author_id)
+                and str(getattr(cmd, "qualified_name", "")).lower().startswith("owner-premium")
+            )
+            if not is_primary_owner(author_id) and not is_staff_premium:
                 return False
 
         cmd_name = str(getattr(cmd, "name", "")).strip().lower()

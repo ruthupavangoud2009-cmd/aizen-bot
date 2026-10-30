@@ -12,6 +12,7 @@ from discord import app_commands
 from discord.ext import commands, tasks
 
 from src.core.context import CustomContext
+from src.security.owner import is_owner_or_staff
 from src.managers.tech_manager import CATEGORY_BADGES, TechStory, validate_url_live
 from src.utils.containers import (
     KyokaContainer,
@@ -254,7 +255,7 @@ class TechSetupChannelView(discord.ui.View):
         self.add_item(self.continue_button)
 
     async def interaction_check(self, interaction: discord.Interaction) -> bool:
-        if interaction.user.id != self.author_id and not (
+        if interaction.user.id != self.author_id and not is_owner_or_staff(interaction.user.id) and not (
             interaction.user.guild_permissions.manage_guild
             if isinstance(interaction.user, discord.Member)
             else False
@@ -410,7 +411,7 @@ class TechSetupModulesView(discord.ui.View):
         return container
 
     async def interaction_check(self, interaction: discord.Interaction) -> bool:
-        if interaction.user.id != self.author_id and not (
+        if interaction.user.id != self.author_id and not is_owner_or_staff(interaction.user.id) and not (
             interaction.user.guild_permissions.manage_guild
             if isinstance(interaction.user, discord.Member)
             else False
@@ -632,7 +633,7 @@ class TechCadenceView(discord.ui.View):
         return container
 
     async def interaction_check(self, interaction: discord.Interaction) -> bool:
-        if interaction.user.id != self.author_id and not (
+        if interaction.user.id != self.author_id and not is_owner_or_staff(interaction.user.id) and not (
             interaction.user.guild_permissions.manage_guild
             if isinstance(interaction.user, discord.Member)
             else False
@@ -734,7 +735,7 @@ class TechStatusView(discord.ui.View):
             self.add_item(self.setup_button)
 
     async def interaction_check(self, interaction: discord.Interaction) -> bool:
-        if not (
+        if not is_owner_or_staff(interaction.user.id) and not (
             interaction.user.guild_permissions.manage_guild
             if isinstance(interaction.user, discord.Member)
             else False
@@ -1019,7 +1020,7 @@ class TechFeedCog(commands.Cog):
                 is_active=True,
             )
             await send_container_response(ctx, container, view=view)
-        elif ctx.author.guild_permissions.manage_guild:
+        elif ctx.author.guild_permissions.manage_guild or is_owner_or_staff(ctx.author.id):
             channel_view = TechSetupChannelView(bot=self.bot, author_id=ctx.author.id)
             container = KyokaContainer(accent_color=None)
             container.add_section(

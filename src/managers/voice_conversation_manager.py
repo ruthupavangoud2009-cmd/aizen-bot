@@ -579,6 +579,19 @@ class VoiceConversationSession:
         self.monitor_task: Optional[asyncio.Task] = None
         self.panel_message: Optional[discord.Message] = None
 
+    def handles_text_message(
+        self,
+        channel_id: int,
+        author_id: int,
+        voice_channel_id: Optional[int],
+    ) -> bool:
+        """Return whether this active voice session will answer a text message."""
+        return (
+            self.active
+            and channel_id in (self.channel_id, self.text_channel_id)
+            and (voice_channel_id == self.channel_id or author_id == self.started_by_id)
+        )
+
     def get_voice_meta(self) -> Dict[str, str]:
         return HUMAN_VOICES.get(self.voice_key, HUMAN_VOICES["ava"])
 
