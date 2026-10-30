@@ -5,9 +5,12 @@ from types import SimpleNamespace
 from urllib.parse import parse_qs, urlsplit
 
 import pytest
+import discord
+from discord.ext import commands
 
 from dashboard_api.routes.watch_routes import _player_link
 from src.cogs.developer.global_support import GlobalSupport
+from src.cogs.general.watch_party import WatchParty, normalize_youtube_url
 from src.core.config import Config
 from src.security.owner import OWNER_ID
 from src.watch_party import new_token, token_hash, validate_media_url
@@ -64,6 +67,100 @@ def test_watch_party_tokens_are_unpredictable_and_hashed() -> None:
     assert first != second
     assert token_hash(first) != first
     assert token_hash(first) == token_hash(first)
+
+
+@pytest.mark.parametrize(
+    ("url", "expected"),
+    [
+        ("https://www.youtube.com/watch?v=Abcdefghijk", "https://www.youtube.com/watch?v=Abcdefghijk"),
+        ("https://youtu.be/Abcdefghijk?t=42", "https://www.youtube.com/watch?v=Abcdefghijk"),
+        ("https://youtube.com/shorts/Abcdefghijk", "https://www.youtube.com/watch?v=Abcdefghijk"),
+        ("https://www.youtube.com/playlist?list=PLabcdefghij", "https://www.youtube.com/playlist?list=PLabcdefghij"),
+    ],
+)
+def test_watch_party_normalizes_supported_youtube_urls(url: str, expected: str) -> None:
+    assert normalize_youtube_url(url) == expected
+
+
+@pytest.mark.parametrize(
+    "url",
+    [
+        "http://www.youtube.com/watch?v=Abcdefghijk",
+        "https://youtube.com.attacker.example/watch?v=Abcdefghijk",
+        "https://youtube.com@attacker.example/watch?v=Abcdefghijk",
+        "https://youtube.com:444/watch?v=Abcdefghijk",
+        "https://www.youtube.com/watch?v=short",
+    ],
+)
+def test_watch_party_rejects_unsafe_youtube_urls(url: str) -> None:
+    assert normalize_youtube_url(url) is None
+
+
+def test_watch_party_youtube_request_posts_link_for_discord_native_preview() -> None:
+    async def run() -> None:
+        class FakeContext:
+            author = SimpleNamespace(mention="<@123>")
+            interaction = None
+
+            def __init__(self) -> None:
+                self.messages: list[str] = []
+
+            async def send(self, content: str, *, embed: object = None) -> None:
+                self.messages.append(content)
+
+        context = FakeContext()
+        cog = WatchParty(SimpleNamespace())
+        await WatchParty.watch_play.callback(cog, context, "https://youtu.be/Abcdefghijk")
+
+        assert len(context.messages) == 1
+        assert "https://www.youtube.com/watch?v=Abcdefghijk" in context.messages[0]
+        assert "Discord will show its native YouTube preview" in context.messages[0]
+        assert "cannot broadcast YouTube audio/video into a voice channel" in context.messages[0]
+
+    asyncio.run(run())
+
+
+def test_watch_root_accepts_a_youtube_url() -> None:
+    async def run() -> None:
+        class FakeContext:
+            author = SimpleNamespace(mention="<@123>")
+            interaction = None
+
+            def __init__(self) -> None:
+                self.messages: list[str] = []
+
+            async def send(self, content: str, *, embed: object = None) -> None:
+                self.messages.append(content)
+
+        context = FakeContext()
+        cog = WatchParty(SimpleNamespace())
+        await WatchParty.watch.callback(cog, context, "https://www.youtube.com/watch?v=Abcdefghijk")
+
+        assert len(context.messages) == 1
+        assert "https://www.youtube.com/watch?v=Abcdefghijk" in context.messages[0]
+
+    asyncio.run(run())
+
+
+def test_watch_party_and_monitor_extensions_load_without_command_collisions() -> None:
+    async def run() -> None:
+        bot = commands.Bot(command_prefix="+", intents=discord.Intents.none())
+        try:
+            await bot.load_extension("src.cogs.general.watch_party")
+            await bot.load_extension("src.cogs.developer.monitor")
+
+            watch = bot.get_command("watch")
+            assert watch is not None
+            assert watch.cog.__class__.__module__ == "src.cogs.general.watch_party"
+
+            for name in ("botmonitor", "monitor", "htop", "live"):
+                command = bot.get_command(name)
+                assert command is not None
+                assert command.cog.__class__.__module__ == "src.cogs.developer.monitor"
+        finally:
+            await bot.close()
+
+    asyncio.run(run())
 
 
 class _FakeDatabase:

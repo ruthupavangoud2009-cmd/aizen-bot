@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import logging
+import re
+from urllib.parse import parse_qs, urlencode, urlsplit
 
 import discord
 from discord.ext import commands
@@ -11,6 +13,9 @@ from src.core.bot import KyokaBot
 from src.watch_party import broadcast_room, new_token, player_url, token_hash, validate_media_url
 
 logger = logging.getLogger("Kyoka.WatchParty")
+YOUTUBE_HOSTS = {"youtube.com", "www.youtube.com", "m.youtube.com", "music.youtube.com", "youtu.be", "www.youtu.be"}
+YOUTUBE_VIDEO_ID = re.compile(r"^[A-Za-z0-9_-]{11}$")
+YOUTUBE_PLAYLIST_ID = re.compile(r"^[A-Za-z0-9_-]{10,128}$")
 
 
 async def send_reply(ctx: CustomContext, content: str | None = None, *, embed: discord.Embed | None = None, ephemeral: bool = False) -> None:
@@ -34,6 +39,47 @@ def parse_timestamp(value: str) -> float | None:
         return float(total) if total < 86_400 else None
     except ValueError:
         return None
+
+
+def normalize_youtube_url(value: str) -> str | None:
+    """Return a canonical public YouTube video/playlist URL, rejecting lookalike hosts."""
+    try:
+        raw_url = value.strip()
+        if raw_url.startswith("<") and raw_url.endswith(">"):
+            raw_url = raw_url[1:-1].strip()
+        parsed = urlsplit(raw_url)
+        host = (parsed.hostname or "").rstrip(".").lower()
+        if (
+            parsed.scheme != "https"
+            or host not in YOUTUBE_HOSTS
+            or parsed.username
+            or parsed.password
+            or parsed.port not in (None, 443)
+        ):
+            return None
+
+        query = parse_qs(parsed.query)
+        video_values = query.get("v", [])
+        video_id = video_values[0] if len(video_values) == 1 else None
+        path_parts = [part for part in parsed.path.split("/") if part]
+        if host.endswith("youtu.be") and len(path_parts) == 1:
+            video_id = path_parts[0]
+        elif len(path_parts) == 2 and path_parts[0] in {"shorts", "live", "embed"}:
+            video_id = path_parts[1]
+
+        if video_id and YOUTUBE_VIDEO_ID.fullmatch(video_id):
+            return f"https://www.youtube.com/watch?{urlencode({'v': video_id})}"
+
+        playlist_values = query.get("list", [])
+        playlist_id = playlist_values[0] if len(playlist_values) == 1 else None
+        if (
+            parsed.path.rstrip("/") == "/playlist"
+            or (parsed.path.rstrip("/") == "/watch" and not video_id)
+        ) and playlist_id and YOUTUBE_PLAYLIST_ID.fullmatch(playlist_id):
+            return f"https://www.youtube.com/playlist?{urlencode({'list': playlist_id})}"
+    except (AttributeError, TypeError, ValueError):
+        return None
+    return None
 
 
 class WatchParty(commands.Cog):
@@ -71,19 +117,22 @@ class WatchParty(commands.Cog):
             return None
         return room
 
-    @commands.hybrid_group(name="watch", aliases=["watchparty"], invoke_without_command=True, description="Manage synchronized KYOKA Watch Parties.")
-    async def watch(self, ctx: CustomContext) -> None:
+    @commands.hybrid_group(name="watch", aliases=["watchparty"], invoke_without_command=True, description="Share a YouTube embed or manage a KYOKA Watch Party.")
+    async def watch(self, ctx: CustomContext, url: str | None = None) -> None:
+        if url:
+            await self._share_youtube_link(ctx, url)
+            return
         prefix = ctx.prefix
         embed = discord.Embed(
             title="⛩️ KYOKA WATCH PARTY",
             description=(
-                "Watch browser-playable video together with synchronized playback. "
-                "The bot manages the room; each member plays the media in their own browser.\n\n"
+                "Share a YouTube video using Discord's native video preview, or create a synchronized room for direct media.\n\n"
+                f"`{prefix}watch <youtube-url>` · Share a YouTube video or playlist in Discord\n"
                 f"`{prefix}watch create` · Create a room\n"
-                f"`{prefix}watch play <https-url>` · Set and play a direct video URL\n"
-                f"`{prefix}watch pause` / `{prefix}watch resume` · Control playback\n"
+                f"`{prefix}watch play <url>` · Share YouTube in Discord or set direct media in a room\n"
+                f"`{prefix}watch pause` / `{prefix}watch resume` · Control direct-media room playback\n"
                 f"`{prefix}watch seek <time>` · Seek (for example `1:23` or `00:01:23`)\n"
-                f"`{prefix}watch sync` · Broadcast the current state\n"
+                f"`{prefix}watch sync` · Synchronize direct-media room playback\n"
                 f"`{prefix}watch invite` · Rotate and display an invite\n"
                 f"`{prefix}watch info` · Show room details\n"
                 f"`{prefix}watch stop` / `{prefix}watch close` · Stop or close the room\n"
@@ -92,8 +141,25 @@ class WatchParty(commands.Cog):
             ),
             color=Config.COLORS.PRIMARY,
         )
-        embed.set_footer(text="Direct HTTPS MP4, M4V, WebM, OGV and OGG media URLs only. No DRM bypass or Discord Go Live.")
+        embed.set_footer(text="YouTube playback is handled by Discord's native preview per viewer; KYOKA cannot stream YouTube video into voice.")
         await send_reply(ctx, embed=embed)
+
+    async def _share_youtube_link(self, ctx: CustomContext, url: str) -> None:
+        canonical_url = normalize_youtube_url(url)
+        if not canonical_url:
+            await send_reply(
+                ctx,
+                "Unsupported YouTube URL. Use a valid HTTPS youtube.com or youtu.be video, Shorts, or playlist link.",
+                ephemeral=True,
+            )
+            return
+        label = "playlist" if "/playlist?" in canonical_url else "video"
+        await send_reply(
+            ctx,
+            f"🎬 {ctx.author.mention} shared a YouTube {label}:\n{canonical_url}\n"
+            "Discord will show its native YouTube preview where available. Each viewer controls that player; "
+            "KYOKA cannot broadcast YouTube audio/video into a voice channel or synchronize the embed.",
+        )
 
     @watch.command(name="create", description="Create a synchronized Watch Party room.")
     @commands.guild_only()
@@ -147,8 +213,11 @@ class WatchParty(commands.Cog):
         except discord.Forbidden:
             await send_reply(ctx, "I couldn't DM your private host controls. You can still control playback with the `watch` Discord commands.", ephemeral=True)
 
-    @watch.command(name="play", description="Play a supported direct HTTPS video URL.")
+    @watch.command(name="play", description="Share a YouTube embed or set direct media for an active Watch Party.")
     async def watch_play(self, ctx: CustomContext, url: str) -> None:
+        if normalize_youtube_url(url):
+            await self._share_youtube_link(ctx, url)
+            return
         room = await self._host_room(ctx)
         if not room:
             return

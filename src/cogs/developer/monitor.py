@@ -36,14 +36,16 @@ class MonitorCog(commands.Cog, name="Developer-Monitor"):
     def __init__(self, bot: KyokaBot) -> None:
         self.bot = bot
 
-    @commands.command(name="live", aliases=["monitor", "htop", "watch"])
+    @commands.command(name="botmonitor", aliases=["monitor", "htop", "live"])
     @is_owner()
     async def live_monitor(self, ctx: CustomContext) -> None:
         """
         Stream live real-time server telemetry directly in Discord chat.
         Usage:
-          ?live
+          ?botmonitor
           ?monitor
+          ?htop
+          ?live
         """
         container = KyokaContainer(accent_color=None)
         container.add_section(content="```yaml\ninitializing live telemetry stream...\n```")
