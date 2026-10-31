@@ -91,13 +91,9 @@ class KyokaWavelinkPlayer(wavelink.Player):
         if "voice" not in self._voice_state or not isinstance(self._voice_state["voice"], dict):
             self._voice_state["voice"] = {}
 
-        endpoint = data.get("endpoint")
-        # Strip port if included
-        if endpoint and ":" in endpoint:
-            endpoint = endpoint.split(":")[0]
-
+        # Preserve the exact endpoint string provided by Discord
         self._voice_state["voice"]["token"] = data.get("token")
-        self._voice_state["voice"]["endpoint"] = endpoint
+        self._voice_state["voice"]["endpoint"] = data.get("endpoint")
 
         await self._dispatch_voice_update()
 

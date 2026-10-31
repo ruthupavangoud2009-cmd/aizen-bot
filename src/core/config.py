@@ -151,14 +151,14 @@ class Config:
         return pool
 
     # Lavalink / Audio Settings
-    LAVALINK_URI: str = os.getenv("LAVALINK_URI", "https://lavalink.jirayu.net:443").strip()
-    LAVALINK_PASSWORD: str = os.getenv("LAVALINK_PASSWORD", "youshallnotpass").strip()
+    LAVALINK_URI: str = os.getenv("LAVALINK_URI", "https://lavalinkv4.serenetia.com:443").strip()
+    LAVALINK_PASSWORD: str = os.getenv("LAVALINK_PASSWORD", "https://seretia.link/discord").strip()
     LAVALINK_FALLBACK_URIS: str = os.getenv(
         "LAVALINK_FALLBACK_URIS",
-        "http://lavalink.jirayu.net:13592|youshallnotpass,"
         "https://lava-v4.millohost.my.id:443|https://discord.gg/mjS5J2K3ep,"
-        "http://lava2.kasawa.pro:2334|youshallnotpass,"
-        "https://lavalinkv4.serenetia.com:443|https://seretia.link/discord"
+        "https://lavalink.jirayu.net:443|youshallnotpass,"
+        "http://lavalink.jirayu.net:13592|youshallnotpass,"
+        "http://lava2.kasawa.pro:2334|youshallnotpass"
     ).strip()
     LAVALINK_AUTO_DISCOVER: bool = os.getenv("LAVALINK_AUTO_DISCOVER", "1").lower() in ("1", "true", "yes")
     LAVALINK_PUBLIC_LIST_URL: str = os.getenv(
