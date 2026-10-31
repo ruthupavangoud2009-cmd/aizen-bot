@@ -43,7 +43,7 @@ class InviteView(discord.ui.View):
 
 class Invite(commands.Cog):
     """Bot invitation, official links, and community support."""
-    category: str = "Moderation"
+    category: str = "General"
 
     def __init__(self, bot: KyokaBot) -> None:
         self.bot = bot

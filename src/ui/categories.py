@@ -446,6 +446,8 @@ COG_MAPPINGS: dict[str, str] = {
     "general-userinfo": "general",
     "general-membercount": "general",
     "invite": "general",
+    "promo": "general",
+    "promocog": "general",
     "suggestions": "general",
     "tempvoice": "general",
     "embedbuilder": "general",
