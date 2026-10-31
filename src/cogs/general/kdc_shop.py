@@ -387,7 +387,14 @@ class KDCItemSelect(Select):
     def __init__(self, items: list[ShopItem], current_item_id: Optional[str] = None):
         options = []
         for item in items[:25]:  # Discord limit: 25 items
-            cat_emoji = "🚀" if item.category == "boosts" else ("💎" if item.category == "nitro" else "🤖")
+            if item.category == "members":
+                cat_emoji = "👥"
+            elif item.category == "boosts":
+                cat_emoji = "🚀"
+            elif item.category == "nitro":
+                cat_emoji = "💎"
+            else:
+                cat_emoji = "🤖"
             price_text = f"₹{int(item.price_inr)} / ${item.price_usd:.2f}"
             options.append(
                 discord.SelectOption(
@@ -443,10 +450,17 @@ class KDCShopView(View):
         embed = discord.Embed(
             title="🏪 KDC SHOP • OFFICIAL DISCORD MARKETPLACE",
             description=(
-                "> **Welcome to KDC Shop!** High-speed Discord Server Boosts, Nitro Subscriptions, "
+                "> **Welcome to KDC Shop!** High-speed Discord Server Boosts, Member Growth, Nitro Subscriptions, "
                 "and Instant Auto-Delivered Discord Bots.\n"
                 "> 💳 **Payment:** Scan official UPI QR (**₹ INR**). ❌ *USD payments are currently unavailable.*\n"
                 "> Select any product from the dropdown below to order or generate a verified bill.\n\n"
+                "**👥 DISCORD MEMBER GROWTH (Instant & Non-Drop Guarantee)**\n"
+                "• **100 Offline Members** — **`₹20`** *(Super Budget • Social Proof)* ⚡\n"
+                "• **100 Online Members** — **`₹40`** *(Active Green Status • Real Profiles)* 🔥\n"
+                "• **500 Offline Members** — **`₹95`** *(Save ₹5)*\n"
+                "• **500 Online Members** — **`₹190`** *(Save ₹10)*\n"
+                "• **1,000 Offline Members** — **`₹180`** *(Save ₹20 • 1K Milestone)*\n"
+                "• **1,000 Online Members** — **`₹360`** *(Save ₹40 • Max Activity)*\n\n"
                 "**🚀 DISCORD SERVER BOOSTS (Warranty Protected)**\n"
                 "• **2 Boosts** — `₹200` *(~$2.00 USD - Unavailable)*\n"
                 "• **4 Boosts** — `₹380` *(~$3.80 USD - Unavailable)*\n"
@@ -470,13 +484,20 @@ class KDCShopView(View):
             color=0x7C3AED,
             timestamp=discord.utils.utcnow(),
         )
-        embed.set_footer(text="KDC Shop • Type 'stock' or 'scanner' anytime • UPI & Blox Fruits Accepted")
+        embed.set_footer(text="KDC Shop • Type 'stock', 'shop', or 'members' anytime • UPI & Blox Fruits Accepted")
         embed.set_thumbnail(url="https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?w=400&q=80")
         return embed
 
     def generate_item_embed(self, item: ShopItem) -> discord.Embed:
         """Itemized detail view embed."""
-        cat_title = "Discord Server Boosts" if item.category == "boosts" else ("Discord Nitro" if item.category == "nitro" else "Discord Bot Software")
+        if item.category == "members":
+            cat_title = "Discord Member Growth"
+        elif item.category == "boosts":
+            cat_title = "Discord Server Boosts"
+        elif item.category == "nitro":
+            cat_title = "Discord Nitro"
+        else:
+            cat_title = "Discord Bot Software"
         embed = discord.Embed(
             title=f"🛒 {item.name}",
             description=f"> {item.description}\n\n**Category:** `{cat_title}`\n**Stock Status:** `🟢 Available ({item.stock_qty} in stock)`",
@@ -675,6 +696,117 @@ class KDCShopView(View):
             await interaction.response.send_message(embed=bill_embed, ephemeral=True)
 
 
+class MemberGrowthView(View):
+    """Super cool interactive Discord view for purchasing Discord Members (100 Offline: ₹20 / 100 Online: ₹40)."""
+
+    def __init__(self, shop_mgr: KDCShopManager, cog: "KDCShop"):
+        super().__init__(timeout=None)
+        self.shop_mgr = shop_mgr
+        self.cog = cog
+
+    @discord.ui.button(
+        label="Buy 100 Offline (₹20)",
+        style=discord.ButtonStyle.primary,
+        emoji="👥",
+        custom_id="kdc_buy_100_offline_btn",
+        row=0,
+    )
+    async def buy_100_offline(self, interaction: discord.Interaction, button: Button):
+        await self._buy_item(interaction, "members_100_offline")
+
+    @discord.ui.button(
+        label="Buy 100 Online (₹40)",
+        style=discord.ButtonStyle.success,
+        emoji="🟢",
+        custom_id="kdc_buy_100_online_btn",
+        row=0,
+    )
+    async def buy_100_online(self, interaction: discord.Interaction, button: Button):
+        await self._buy_item(interaction, "members_100_online")
+
+    @discord.ui.button(
+        label="💳 UPI Scanner",
+        style=discord.ButtonStyle.secondary,
+        emoji="💳",
+        custom_id="kdc_members_scanner_btn",
+        row=1,
+    )
+    async def view_scanner(self, interaction: discord.Interaction, button: Button):
+        await self.cog.send_scanner_embed(interaction)
+
+    @discord.ui.button(
+        label="🏪 Open Full Shop",
+        style=discord.ButtonStyle.secondary,
+        emoji="🏪",
+        custom_id="kdc_members_open_shop_btn",
+        row=1,
+    )
+    async def open_full_shop(self, interaction: discord.Interaction, button: Button):
+        view = KDCShopView(self.shop_mgr, self.cog)
+        embed = view.generate_overview_embed()
+        await interaction.response.send_message(embed=embed, view=view, ephemeral=True)
+
+    async def _buy_item(self, interaction: discord.Interaction, item_id: str):
+        item = self.shop_mgr.get_item(item_id)
+        if not item:
+            return await interaction.response.send_message("❌ Product not found.", ephemeral=True)
+
+        guild_id = interaction.guild_id or 0
+        bill = self.shop_mgr.create_bill(
+            guild_id=guild_id,
+            customer_id=interaction.user.id,
+            customer_name=str(interaction.user),
+            item_id=item.id,
+            currency="INR",
+            quantity=1,
+        )
+
+        amount_str = f"₹{int(bill.total)}"
+        bill_embed = discord.Embed(
+            title=f"🧾 MEMBER GROWTH INVOICE • `#{bill.id}`",
+            description=(
+                f"**Customer:** {interaction.user.mention} (`{interaction.user.name}`)\n"
+                f"**Package:** `{bill.item_name}`\n"
+                f"**Total Due:** `₹ {amount_str} INR`\n"
+                f"**Status:** `🟡 PENDING PAYMENT`\n\n"
+                f"**How to Pay & Receive Members:**\n"
+                f"`1️⃣` Scan the official **UPI QR code** below using GPay, PhonePe, Paytm, or FamPay.\n"
+                f"`2️⃣` Send `₹{int(bill.total)}` with note/ref `{bill.id}`.\n"
+                f"`3️⃣` Send your permanent Discord Server Invite link in this channel or ticket.\n"
+                f"`4️⃣` Click **'⚡ Verify Payment & Claim'** below and enter your UTR / Ref Number!\n\n"
+                f"🛡️ *Non-Drop Guarantee • Safe Delivery • Real Profile Pictures*"
+            ),
+            color=0x10B981 if "online" in item_id else 0x3B82F6,
+            timestamp=discord.utils.utcnow(),
+        )
+        bill_embed.set_footer(text=f"Invoice ID: {bill.id} • KDC Shop • Member Growth")
+
+        verify_view = View(timeout=None)
+        verify_btn = Button(
+            label="⚡ Verify Payment & Claim",
+            style=discord.ButtonStyle.success,
+            emoji="⚡",
+            custom_id=f"kdc_vfy_btn_{bill.id}",
+        )
+
+        async def verify_cb(v_inter: discord.Interaction):
+            modal = TransactionVerifyModal(self.shop_mgr, bill, self.cog)
+            await v_inter.response.send_modal(modal)
+
+        verify_btn.callback = verify_cb
+        verify_view.add_item(verify_btn)
+
+        qr_file_path = Path("assets/kdc_payment_qr.png")
+        if qr_file_path.exists():
+            file = discord.File(qr_file_path, filename="kdc_payment_qr.png")
+            bill_embed.set_image(url="attachment://kdc_payment_qr.png")
+            await interaction.response.send_message(embed=bill_embed, file=file, view=verify_view, ephemeral=True)
+        else:
+            qr_url = f"https://api.qrserver.com/v1/create-qr-code/?size=250x250&data=upi://pay?pa={self.shop_mgr.upi_id}%26pn=KDC_Shop%26am={bill.total}%26cu=INR%26tn={bill.id}"
+            bill_embed.set_image(url=qr_url)
+            await interaction.response.send_message(embed=bill_embed, view=verify_view, ephemeral=True)
+
+
 # ─────────────────────────────────────────────────────────────────────────────
 # MAIN KDC SHOP COG
 # ─────────────────────────────────────────────────────────────────────────────
@@ -686,20 +818,25 @@ class KDCShop(commands.Cog, name="KDCShop"):
         self.bot = bot
         self.shop_mgr = KDCShopManager()
 
-    # ── Universal Trigger: typing 'stock' or 'scanner' anywhere ──
+    # ── Universal Trigger: typing 'stock', 'shop', 'members' anywhere ──
     @commands.Cog.listener()
     async def on_message(self, message: discord.Message) -> None:
         if message.author.bot:
             return
 
         clean = message.content.strip().lower()
-        # Trigger on exact keywords: "stock", "kdc stock", "kdc shop", "kdc"
-        if clean in ("stock", "kdc stock", "kdc shop", "kdc"):
+        # Trigger on exact keywords: "stock", "kdc stock", "kdc shop", "kdc", "shop"
+        if clean in ("stock", "kdc stock", "kdc shop", "kdc", "shop"):
             ctx = await self.bot.get_context(message)
             if ctx.valid and ctx.command is not None:
                 # Bot command dispatcher will invoke this command; don't execute twice!
                 return
             await self.open_shop(ctx)
+        elif clean in ("members", "member", "buymembers", "offline members", "online members", "member growth"):
+            ctx = await self.bot.get_context(message)
+            if ctx.valid and ctx.command is not None:
+                return
+            await self.show_members_menu(ctx)
         elif clean in ("scanner", "qr", "kdc scanner", "kdc qr", "upi scanner", "payqr"):
             ctx = await self.bot.get_context(message)
             if ctx.valid and ctx.command is not None:
@@ -712,6 +849,49 @@ class KDCShop(commands.Cog, name="KDCShop"):
             embed = self.generate_reviews_embed()
             view = ReviewsView(self.shop_mgr, self)
             await ctx.send(embed=embed, view=view)
+
+    # ── Dedicated Super Cool Member Growth Command: +members / /members ──
+    @commands.hybrid_command(
+        name="members",
+        aliases=["buymembers", "membergrowth", "offlinemembers", "onlinemembers", "membershop"],
+        description="View & purchase Discord Members (100 Offline: ₹20 / 100 Online: ₹40).",
+    )
+    async def members_command(self, ctx: CustomContext) -> None:
+        """Display the dedicated, super cool Discord Member Growth pricing menu."""
+        await self.show_members_menu(ctx)
+
+    async def show_members_menu(self, ctx: Union[CustomContext, commands.Context]) -> None:
+        """Render the super cool Discord Member Growth embed and interactive buttons."""
+        embed = discord.Embed(
+            title="👥 KDC DISCORD MEMBER GROWTH • OFFICIAL CATALOG",
+            description=(
+                "> **Supercharge your Discord Server with Instant Member Growth!**\n"
+                "> Expand your member count, boost social proof, and enhance server authority safely.\n\n"
+                "**👥 OFFLINE DISCORD MEMBERS (Instant Social Proof)**\n"
+                "• **100 Offline Members** — **`₹20`** *(₹0.20 / member)* ⚡\n"
+                "• **500 Offline Members** — **`₹95`** *(Save ₹5)*\n"
+                "• **1,000 Offline Members** — **`₹180`** *(Save ₹20 • 1K Milestone)*\n\n"
+                "**🟢 REALISTIC ONLINE MEMBERS (Green Online Status & Bios)**\n"
+                "• **100 Online Members** — **`₹40`** *(₹0.40 / member)* 🔥\n"
+                "• **500 Online Members** — **`₹190`** *(Save ₹10)*\n"
+                "• **1,000 Online Members** — **`₹360`** *(Save ₹40 • High Activity)*\n\n"
+                "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+                "**✨ WHY CHOOSE KDC MEMBER GROWTH?**\n"
+                "• `🛡️` **100% Ban Safe** — Delivered via standard organic invite protocol\n"
+                "• `👤` **Authentic Profiles** — Real usernames, anime/gaming avatars & custom bios\n"
+                "• `🟢` **Live Online Presence** — 24/7 active green status for online packages\n"
+                "• `⚡` **Lightning Fulfillment** — Starts within 5-10 minutes\n"
+                "• `💎` **30-Day Non-Drop Guarantee** — Free instant replacement if members drop\n\n"
+                "-# Click a button below to generate your invoice and payment scanner instantly!"
+            ),
+            color=0x7C3AED,
+            timestamp=discord.utils.utcnow(),
+        )
+        embed.set_thumbnail(url="https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?w=400&q=80")
+        embed.set_footer(text="KDC Shop • 100 Offline: ₹20 | 100 Online: ₹40 • Instant Delivery")
+
+        view = MemberGrowthView(self.shop_mgr, self)
+        await ctx.send(embed=embed, view=view)
 
     # ── Command: +stock / +kdc / +shop ──
     @commands.group(name="stock", aliases=["kdc", "shop", "kdcshop", "store"], invoke_without_command=True)

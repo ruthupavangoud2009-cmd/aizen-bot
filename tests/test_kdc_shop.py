@@ -92,6 +92,15 @@ def test_kdc_shop_exact_pricing_seed(temp_shop: KDCShopManager):
     assert item_map["bot_antinuke"].price_usd == 1.5
     assert item_map["bot_antinuke"].is_auto_deliver is True
 
+    # 4. Discord Member Growth
+    assert "members_100_offline" in item_map
+    assert item_map["members_100_offline"].price_inr == 20.0
+    assert item_map["members_100_offline"].price_usd == 0.25
+
+    assert "members_100_online" in item_map
+    assert item_map["members_100_online"].price_inr == 40.0
+    assert item_map["members_100_online"].price_usd == 0.50
+
 
 def test_bot_zip_archives_generated_on_disk(temp_shop: KDCShopManager):
     """Verify that ready-to-run bot zip packages are physically generated in warehouse."""

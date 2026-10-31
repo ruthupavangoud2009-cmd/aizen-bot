@@ -66,6 +66,114 @@ class ShopBill:
 
 # User's exact baseline prices and catalog definitions
 DEFAULT_ITEMS: list[ShopItem] = [
+    # ── Discord Member Growth (Offline & Online Members) ──
+    ShopItem(
+        id="members_100_offline",
+        category="members",
+        name="100 Offline Members",
+        description="100x High-Quality Offline Discord Members for instant server member count boost & social proof.",
+        price_inr=20.0,
+        price_usd=0.25,
+        stock_qty=999,
+        is_auto_deliver=False,
+        badge="SUPER BUDGET 👥",
+        features=[
+            "100x High-Quality Discord Offline Members",
+            "Delivered safely via permanent server invite link",
+            "Realistic names, tags, and profile pictures",
+            "Zero kick / Safe anti-drop fulfillment",
+            "Instant server member count & authority expansion",
+            "100% Ban-safe protocol guarantee",
+        ],
+    ),
+    ShopItem(
+        id="members_100_online",
+        category="members",
+        name="100 Online Members",
+        description="100x Realistic Online Discord Members with green online status, custom activity & profile avatars.",
+        price_inr=40.0,
+        price_usd=0.50,
+        stock_qty=999,
+        is_auto_deliver=False,
+        badge="ACTIVE LOOK 🟢",
+        features=[
+            "100x Realistic Online Discord Members (Green Status)",
+            "Rich profiles with custom status, bio & gaming activity",
+            "Makes your server look lively, buzzing, and active 24/7",
+            "Delivered safely via permanent server invite link",
+            "30-day non-drop replacement warranty",
+            "Fast priority staff fulfillment (5-15 mins)",
+        ],
+    ),
+    ShopItem(
+        id="members_500_offline",
+        category="members",
+        name="500 Offline Members",
+        description="500x High-Quality Offline Discord Members package for fast community scaling.",
+        price_inr=95.0,
+        price_usd=1.15,
+        stock_qty=999,
+        is_auto_deliver=False,
+        badge="POPULAR PACK 👥",
+        features=[
+            "500x High-Quality Discord Offline Members",
+            "Instant social proof & authority boost",
+            "Safe staggered join speed to mimic organic growth",
+            "Non-drop guarantee with free replacement",
+        ],
+    ),
+    ShopItem(
+        id="members_500_online",
+        category="members",
+        name="500 Online Members",
+        description="500x Active Online Discord Members with online statuses & rich gaming activity.",
+        price_inr=190.0,
+        price_usd=2.30,
+        stock_qty=999,
+        is_auto_deliver=False,
+        badge="PRO SCALE 🟢",
+        features=[
+            "500x Active Online Discord Members",
+            "24/7 active online presence & custom statuses",
+            "Boosts server discovery ranking & impressions",
+            "High stability with 30-day warranty",
+        ],
+    ),
+    ShopItem(
+        id="members_1000_offline",
+        category="members",
+        name="1,000 Offline Members",
+        description="1,000x Mega Server Expansion pack for reaching community milestones (1K+).",
+        price_inr=180.0,
+        price_usd=2.20,
+        stock_qty=999,
+        is_auto_deliver=False,
+        badge="1K MILESTONE 👑",
+        features=[
+            "1,000x High-Quality Offline Members",
+            "Instantly reach 1,000+ member server milestone",
+            "Unlocks prestige and high-volume social credibility",
+            "Anti-drop protection & full warranty coverage",
+        ],
+    ),
+    ShopItem(
+        id="members_1000_online",
+        category="members",
+        name="1,000 Online Members",
+        description="1,000x Ultimate Active Online Discord Members suite for high-energy servers.",
+        price_inr=360.0,
+        price_usd=4.40,
+        stock_qty=999,
+        is_auto_deliver=False,
+        badge="ULTIMATE ONLINE 👑",
+        features=[
+            "1,000x Active Online Discord Members",
+            "Maximum online activity & member list dominance",
+            "Unlocks massive social proof for partnerships & ads",
+            "Top-tier priority fulfillment & 30-day warranty",
+        ],
+    ),
+
     # ── Discord Server Boosts ──
     ShopItem(
         id="boost_2",
@@ -366,23 +474,30 @@ class KDCShopManager:
                 );
             """)
 
-            # Seed default items if table is empty
+            # Seed and sync all default items
             cur = conn.cursor()
-            cur.execute("SELECT COUNT(*) AS c FROM kdc_items")
-            row = cur.fetchone()
-            if row and row["c"] == 0:
-                for item in DEFAULT_ITEMS:
-                    cur.execute("""
-                        INSERT INTO kdc_items (
-                            id, category, name, description, price_inr, price_usd,
-                            stock_qty, is_auto_deliver, file_filename, features_json, badge, active
-                        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                    """, (
-                        item.id, item.category, item.name, item.description,
-                        item.price_inr, item.price_usd, item.stock_qty,
-                        1 if item.is_auto_deliver else 0,
-                        item.file_filename, json.dumps(item.features), item.badge, 1
-                    ))
+            for item in DEFAULT_ITEMS:
+                cur.execute("""
+                    INSERT INTO kdc_items (
+                        id, category, name, description, price_inr, price_usd,
+                        stock_qty, is_auto_deliver, file_filename, features_json, badge, active
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    ON CONFLICT(id) DO UPDATE SET
+                        category=excluded.category,
+                        name=excluded.name,
+                        description=excluded.description,
+                        price_inr=excluded.price_inr,
+                        price_usd=excluded.price_usd,
+                        stock_qty=excluded.stock_qty,
+                        features_json=excluded.features_json,
+                        badge=excluded.badge,
+                        active=excluded.active
+                """, (
+                    item.id, item.category, item.name, item.description,
+                    item.price_inr, item.price_usd, item.stock_qty,
+                    1 if item.is_auto_deliver else 0,
+                    item.file_filename, json.dumps(item.features), item.badge, 1
+                ))
 
             # Seed default verified reviews if table is empty
             cur.execute("SELECT COUNT(*) AS c FROM kdc_reviews")
