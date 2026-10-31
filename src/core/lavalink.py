@@ -380,8 +380,18 @@ async def check_websocket(
             async with session.ws_connect(
                 _ws_url(uri),
                 headers=headers,
-            ):
-                return True, "websocket handshake ok"
+            ) as ws:
+                # Fast verification that node sends ready and does not drop connection
+                msg = await asyncio.wait_for(ws.receive(), timeout=min(timeout, 3.5))
+                if msg.type is not aiohttp.WSMsgType.TEXT:
+                    return False, "websocket closed before sending 'ready'"
+                try:
+                    payload = json.loads(msg.data)
+                    if payload.get("op") != "ready":
+                        return False, f"websocket sent '{payload.get('op')}' instead of 'ready'"
+                except Exception:
+                    pass
+                return True, "websocket handshake and ready ok"
     except aiohttp.WSServerHandshakeError as e:
         return False, f"websocket rejected with HTTP {e.status}"
     except asyncio.TimeoutError:

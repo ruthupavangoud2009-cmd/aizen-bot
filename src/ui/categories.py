@@ -594,7 +594,7 @@ def resolve_command_category(cmd: Any) -> CategoryMeta:
         "ban", "unban", "kick", "mute", "unmute", "warn", "unwarn", "warnings",
         "clearwarnings", "delwarn", "purge", "lock", "unlock", "hide", "unhide",
         "slowmode", "timeout", "untimeout", "softban", "modlogs", "modlog", "case",
-        "admins", "mods", "bots", "listroles",
+        "admins", "mods", "bots", "listroles", "fakeban", "antiping", "aprole", "blockping",
     ):
         return CATEGORY_BY_ID["moderation"]
 

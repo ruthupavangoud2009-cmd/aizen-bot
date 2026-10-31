@@ -151,11 +151,10 @@ class Config:
         return pool
 
     # Lavalink / Audio Settings
-    LAVALINK_URI: str = os.getenv("LAVALINK_URI", "https://lavalink.nazha.online:443").strip()
-    LAVALINK_PASSWORD: str = os.getenv("LAVALINK_PASSWORD", "nazhafreelava").strip()
+    LAVALINK_URI: str = os.getenv("LAVALINK_URI", "https://lavalink.jirayu.net:443").strip()
+    LAVALINK_PASSWORD: str = os.getenv("LAVALINK_PASSWORD", "youshallnotpass").strip()
     LAVALINK_FALLBACK_URIS: str = os.getenv(
         "LAVALINK_FALLBACK_URIS",
-        "https://lavalink.jirayu.net:443|youshallnotpass,"
         "http://lavalink.jirayu.net:13592|youshallnotpass,"
         "https://lava-v4.millohost.my.id:443|https://discord.gg/mjS5J2K3ep,"
         "http://lava2.kasawa.pro:2334|youshallnotpass,"

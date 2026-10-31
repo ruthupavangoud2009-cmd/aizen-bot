@@ -3,20 +3,22 @@ from __future__ import annotations
 import json
 import logging
 import time
-from typing import Any
+from typing import Any, Optional
 
 import discord
+from discord import app_commands
 from discord.ext import commands
 
 from src.core.context import CustomContext
 from src.security.owner import OWNER_ID
+from src.utils.containers import KyokaContainer, send_container_response
 
 logger = logging.getLogger("Kyoka.Moderation.FakeBan")
-SIMULATION_COOLDOWN_SECONDS = 15
+SIMULATION_COOLDOWN_SECONDS = 10
 
 
 class FakeBan(commands.Cog):
-    """Clearly labeled, simulation-only ban pranks; this cog never moderates members."""
+    """Realistic fake-ban prank module that mimics authentic moderation bans."""
 
     category = "🛡️・MODERATION"
 
@@ -34,15 +36,18 @@ class FakeBan(commands.Cog):
             self._state_key(guild_id),
         )
         if not row or not row.get("value"):
-            return {"enabled": True, "channel_id": None}
+            return {"enabled": True, "channel_id": None, "send_dm": True}
         try:
             data = json.loads(row["value"])
-        except (TypeError, ValueError) as exc:
-            logger.exception("Invalid fake-ban settings for guild %s", guild_id)
-            raise RuntimeError("Stored simulation settings are invalid; ask an administrator to reconfigure them.") from exc
-        if not isinstance(data, dict):
-            raise RuntimeError("Stored simulation settings are invalid; ask an administrator to reconfigure them.")
-        return {"enabled": bool(data.get("enabled", True)), "channel_id": data.get("channel_id")}
+            if isinstance(data, dict):
+                return {
+                    "enabled": bool(data.get("enabled", True)),
+                    "channel_id": data.get("channel_id"),
+                    "send_dm": bool(data.get("send_dm", True)),
+                }
+        except (TypeError, ValueError):
+            pass
+        return {"enabled": True, "channel_id": None, "send_dm": True}
 
     async def _save_settings(self, guild_id: int, settings: dict[str, Any]) -> None:
         await self.bot.db.execute(
@@ -52,88 +57,129 @@ class FakeBan(commands.Cog):
             json.dumps(settings, separators=(",", ":")),
         )
 
-    @staticmethod
-    def _simulation_embed(target: discord.abc.User, reason: str, actor: discord.abc.User) -> discord.Embed:
-        embed = discord.Embed(
-            title="🎭 FAKE BAN SIMULATION — NOT A REAL BAN",
-            description="This is a prank simulation only. No moderation action was taken, and the member remains in the server.",
-            color=0xE0A72E,
-        )
-        embed.add_field(name="Simulated target", value=f"{target.mention} (`{target.id}`)", inline=False)
-        embed.add_field(name="Pretend reason", value=discord.utils.escape_markdown(reason[:500]), inline=False)
-        embed.set_footer(text=f"Simulation requested by {actor}")
-        return embed
+    def _render_real_ban_card(
+        self, target: discord.abc.User | discord.Member, actor: discord.abc.User, reason: str
+    ) -> KyokaContainer:
+        """Create a 100% authentic Kyoka ban announcement card matching the real ban system."""
+        e_reg = getattr(self.bot, "custom_emojis", None)
+        dot = e_reg.get("heart_dot", "-") if e_reg else "•"
+        target_name = getattr(target, "display_name", getattr(target, "name", str(target)))
+        actor_name = getattr(actor, "display_name", getattr(actor, "name", str(actor)))
 
-    async def _simulate(
+        container = KyokaContainer(accent_color=None)
+        container.add_section(content="**Member Banned**")
+        container.add_separator(divider=True)
+        container.add_text(
+            f"{dot} **Target:** **{target_name}** `「{target.id}」`\n"
+            f"{dot} **Moderator:** **{actor_name}**\n"
+            f"{dot} **Reason:** `{reason}`"
+        )
+        return container
+
+    def _render_ban_dm(
+        self, guild_name: str, actor: discord.abc.User, reason: str
+    ) -> KyokaContainer:
+        """Create a 100% authentic DM notice matching the real ban system."""
+        dm_container = KyokaContainer(accent_color=None)
+        dm_container.add_section(
+            content=(
+                f"**You were banned from {guild_name}**\n"
+                f"> Moderator: **{actor}**\n"
+                f"> Reason: `{reason}`"
+            )
+        )
+        return dm_container
+
+    async def _execute_fakeban(
         self,
         ctx: CustomContext,
         target: discord.Member,
         reason: str,
         *,
-        send_dm: bool = False,
+        send_dm: bool = True,
     ) -> None:
         guild = ctx.guild
         if not guild:
-            await ctx.send_error("Fake-ban simulations are available only in a server.")
-            return
-        if target.id in {OWNER_ID, guild.owner_id, getattr(self.bot.user, "id", None)}:
-            await ctx.send_error("The bot owner, server owner, and bot itself are protected from fake-ban simulations.")
-            return
-        if not ctx.author.guild_permissions.ban_members:
-            await ctx.send_error("Ban Members permission is required to run a fake-ban simulation.")
+            await ctx.send_error("Fake-ban commands are available only in a server.")
             return
 
-        try:
-            settings = await self._settings(guild.id)
-        except Exception as exc:
-            logger.exception("Could not load fake-ban settings for guild %s", guild.id)
-            await ctx.send_error(f"Could not load simulation settings: `{exc}`")
+        bot_id = getattr(self.bot.user, "id", None)
+        if target.id in {OWNER_ID, guild.owner_id, bot_id}:
+            container = KyokaContainer(accent_color=None)
+            container.add_section(content="**Cannot Moderate Member**\n> You cannot fake ban the server owner or bot.")
+            await send_container_response(ctx, container)
             return
+
+        if not (ctx.author.guild_permissions.ban_members or ctx.author.guild_permissions.administrator):
+            container = KyokaContainer(accent_color=None)
+            container.add_section(content="**Permission Denied**\n> Ban Members permission is required to run fake ban.")
+            await send_container_response(ctx, container)
+            return
+
+        settings = await self._settings(guild.id)
         if not settings["enabled"]:
-            await ctx.send_error("Fake-ban simulations are disabled in this server.")
+            await ctx.send_error("Fake-ban simulations are disabled in this server. An admin can re-enable with `+fakeban enable`.")
             return
 
-        channel = guild.get_channel(settings["channel_id"]) if settings["channel_id"] else ctx.channel
-        if not isinstance(channel, (discord.TextChannel, discord.Thread)):
-            await ctx.send_error("The configured simulation log channel is unavailable. Reconfigure it with `fakeban setup #channel`.")
-            return
+        target_channel = guild.get_channel(settings["channel_id"]) if settings["channel_id"] else ctx.channel
+        if not isinstance(target_channel, (discord.TextChannel, discord.Thread)):
+            target_channel = ctx.channel
 
-        now = time.monotonic()
-        if now < self._cooldowns.get(guild.id, 0):
-            await ctx.send_error("A fake-ban simulation was used recently. Please wait before trying again.")
-            return
-        cooldown_until = now + SIMULATION_COOLDOWN_SECONDS
-        self._cooldowns[guild.id] = cooldown_until
+        clean_reason = reason.strip() or "Violating server rules and guidelines"
 
-        embed = self._simulation_embed(target, reason.strip() or "Just a harmless joke.", ctx.author)
-        try:
-            await channel.send(embed=embed, allowed_mentions=discord.AllowedMentions.none())
-        except (discord.Forbidden, discord.HTTPException) as exc:
-            if self._cooldowns.get(guild.id) == cooldown_until:
-                del self._cooldowns[guild.id]
-            logger.warning("Fake-ban simulation could not be posted in guild %s: %s", guild.id, exc)
-            await ctx.send_error(f"Could not post the simulation notice in {channel.mention}: `{exc}`")
-            return
+        # 1. Deliver DM to target if enabled (identical to real ban)
+        should_dm = send_dm and settings.get("send_dm", True)
+        if should_dm:
+            try:
+                dm_card = self._render_ban_dm(guild.name, ctx.author, clean_reason)
+                await send_container_response(target, dm_card)
+            except Exception:
+                pass
+
+        # 2. Render and send authentic ban announcement into the channel
+        ban_card = self._render_real_ban_card(target, ctx.author, clean_reason)
+
+        if ctx.interaction:
+            # If triggered via slash command in the target channel, respond directly
+            if ctx.channel.id == target_channel.id:
+                await send_container_response(ctx, ban_card)
+                # Send private secret ephemeral reassurance to mod
+                try:
+                    await ctx.interaction.followup.send(
+                        f"-# 🤫 *[Prank Active: {target.mention} was not actually banned. Use `+fakeban reveal @{target.name}` when ready!]*",
+                        ephemeral=True,
+                    )
+                except Exception:
+                    pass
+            else:
+                await send_container_response(target_channel, ban_card)
+                await ctx.send_success(f"Fake ban card posted in {target_channel.mention}.")
+        else:
+            # Prefix invocation: post realistic card directly to channel
+            await send_container_response(target_channel, ban_card)
+            # If command was invoked in a different channel than target_channel
+            if target_channel.id != ctx.channel.id:
+                try:
+                    await ctx.message.delete()
+                except Exception:
+                    pass
 
         logger.info(
-            "Fake-ban simulation only: guild=%s actor=%s target=%s dm=%s",
+            "Fake-ban realistic execution: guild=%s actor=%s target=%s dm=%s",
             guild.id,
             ctx.author.id,
             target.id,
-            send_dm,
+            should_dm,
         )
-        if send_dm:
-            try:
-                await target.send(embed=embed, allowed_mentions=discord.AllowedMentions.none())
-            except (discord.Forbidden, discord.HTTPException) as exc:
-                await ctx.send_warning(f"Simulation was logged, but Discord could not DM {target.mention}: `{exc}`")
-                return
-        await ctx.send_success("Simulation notice posted. No ban or other moderation action was performed.")
 
     @commands.hybrid_group(
         name="fakeban",
         invoke_without_command=True,
-        description="Run a clearly labeled fake-ban simulation; never bans or removes anyone.",
+        description="Trigger an authentic-looking fake ban prank (does not actually ban).",
+    )
+    @app_commands.describe(
+        member="Target member to fake ban",
+        reason="Reason for the fake ban",
     )
     @commands.guild_only()
     async def fakeban(
@@ -141,85 +187,99 @@ class FakeBan(commands.Cog):
         ctx: CustomContext,
         member: discord.Member | None = None,
         *,
-        reason: str = "Just a harmless joke.",
+        reason: str = "Violating server rules and guidelines",
     ) -> None:
+        """Trigger an authentic-looking fake ban announcement without actually banning the member."""
         if not member:
-            await ctx.send(
-                f"**Simulation only:** `{ctx.prefix}fakeban @member [reason]`\n"
-                f"Settings: `{ctx.prefix}fakeban setup #channel`, `{ctx.prefix}fakeban enable|disable`, "
-                f"`{ctx.prefix}fakeban preview`, `{ctx.prefix}fakeban dm @member [reason]`."
+            p = ctx.prefix
+            container = KyokaContainer(accent_color=None)
+            container.add_section(content="**🎭 Fake Ban System**")
+            container.add_separator(divider=True)
+            container.add_text(
+                f"Create authentic-looking ban announcements and DMs to prank your friends without touching their server membership!\n\n"
+                f"• `{p}fakeban @member [reason]` — Post authentic ban announcement\n"
+                f"• `{p}fakeban dm @member [reason]` — Post ban card and send realistic ban DM\n"
+                f"• `{p}fakeban reveal @member` — Reveal that the ban was a prank\n"
+                f"• `{p}fakeban setup #channel` — Set dedicated ban announcement channel\n"
+                f"• `{p}fakeban enable / disable` — Toggle the prank module\n"
+                f"• `{p}fakeban preview` — Preview the authentic ban card"
             )
+            await send_container_response(ctx, container)
             return
-        await self._simulate(ctx, member, reason)
 
-    @fakeban.command(name="dm", description="Post a simulation notice and send it to the target by DM.")
+        await self._execute_fakeban(ctx, member, reason, send_dm=False)
+
+    @fakeban.command(name="dm", description="Post authentic ban notice and dispatch a realistic ban DM to the member.")
+    @app_commands.describe(member="Member to fake ban", reason="Reason for the ban")
     @commands.has_permissions(ban_members=True)
     async def fakeban_dm(
         self,
         ctx: CustomContext,
         member: discord.Member,
         *,
-        reason: str = "Just a harmless joke.",
+        reason: str = "Violating server rules and guidelines",
     ) -> None:
-        await self._simulate(ctx, member, reason, send_dm=True)
+        """Post a realistic ban card and send an authentic ban notice directly to the member's DMs."""
+        await self._execute_fakeban(ctx, member, reason, send_dm=True)
 
-    @fakeban.command(name="setup", description="Choose the channel used for fake-ban simulation notices.")
+    @fakeban.command(name="reveal", aliases=["unmask", "prank"], description="Reveal that a previous ban on a member was just a harmless prank.")
+    @app_commands.describe(member="Member to reveal the prank for")
+    @commands.has_permissions(ban_members=True)
+    async def fakeban_reveal(self, ctx: CustomContext, member: discord.Member) -> None:
+        """Reveal that the ban on the specified member was a prank simulation."""
+        container = KyokaContainer(accent_color=None)
+        container.add_section(content="**🎭 Prank Revealed!**")
+        container.add_separator(divider=True)
+        container.add_text(
+            f"**Relax everyone!** {member.mention} was **never** actually banned from the server!\n"
+            f"> The previous ban notice was a harmless simulation prank orchestrated by **{ctx.author.display_name}**."
+        )
+        await send_container_response(ctx, container)
+
+    @fakeban.command(name="setup", description="Configure the channel where fake ban notices are broadcast.")
+    @app_commands.describe(channel="Channel for fake ban announcements")
     @commands.has_permissions(manage_guild=True)
     async def fakeban_setup(self, ctx: CustomContext, channel: discord.TextChannel) -> None:
+        """Choose the channel used for fake-ban announcements."""
         if not ctx.guild:
             return
-        try:
-            settings = await self._settings(ctx.guild.id)
-            settings.update({"enabled": True, "channel_id": channel.id})
-            await self._save_settings(ctx.guild.id, settings)
-        except Exception as exc:
-            logger.exception("Could not save fake-ban settings for guild %s", ctx.guild.id)
-            await ctx.send_error(f"Could not save simulation settings: `{exc}`")
-            return
-        await ctx.send_success(f"Fake-ban simulation notices will be posted in {channel.mention}.")
+        settings = await self._settings(ctx.guild.id)
+        settings.update({"enabled": True, "channel_id": channel.id})
+        await self._save_settings(ctx.guild.id, settings)
+        await ctx.send_success(f"Fake-ban announcements will now be posted in {channel.mention}.")
 
-    @fakeban.command(name="enable", description="Enable fake-ban simulations in this server.")
+    @fakeban.command(name="enable", description="Enable fake-ban announcements in this server.")
     @commands.has_permissions(manage_guild=True)
     async def fakeban_enable(self, ctx: CustomContext) -> None:
+        """Enable fake-ban prank commands in this server."""
         if not ctx.guild:
             return
-        try:
-            settings = await self._settings(ctx.guild.id)
-            settings["enabled"] = True
-            await self._save_settings(ctx.guild.id, settings)
-        except Exception as exc:
-            logger.exception("Could not enable fake-ban simulations for guild %s", ctx.guild.id)
-            await ctx.send_error(f"Could not enable simulations: `{exc}`")
-            return
-        await ctx.send_success("Fake-ban simulations are enabled. They never perform real moderation actions.")
+        settings = await self._settings(ctx.guild.id)
+        settings["enabled"] = True
+        await self._save_settings(ctx.guild.id, settings)
+        await ctx.send_success("Fake-ban commands are now **enabled** in this server.")
 
-    @fakeban.command(name="disable", description="Disable fake-ban simulations in this server.")
+    @fakeban.command(name="disable", description="Disable fake-ban announcements in this server.")
     @commands.has_permissions(manage_guild=True)
     async def fakeban_disable(self, ctx: CustomContext) -> None:
+        """Disable fake-ban prank commands in this server."""
         if not ctx.guild:
             return
-        try:
-            settings = await self._settings(ctx.guild.id)
-            settings["enabled"] = False
-            await self._save_settings(ctx.guild.id, settings)
-        except Exception as exc:
-            logger.exception("Could not disable fake-ban simulations for guild %s", ctx.guild.id)
-            await ctx.send_error(f"Could not disable simulations: `{exc}`")
-            return
-        await ctx.send_success("Fake-ban simulations are disabled.")
+        settings = await self._settings(ctx.guild.id)
+        settings["enabled"] = False
+        await self._save_settings(ctx.guild.id, settings)
+        await ctx.send_success("Fake-ban commands are now **disabled**.")
 
-    @fakeban.command(name="preview", description="Preview the simulation notice without targeting a member.")
-    @commands.has_permissions(manage_guild=True)
+    @fakeban.command(name="preview", description="Preview what the authentic ban announcement looks like.")
+    @commands.has_permissions(ban_members=True)
     async def fakeban_preview(self, ctx: CustomContext) -> None:
-        if not ctx.guild:
-            return
-        embed = discord.Embed(
-            title="🎭 FAKE BAN SIMULATION PREVIEW — NOT A REAL BAN",
-            description="This is only a preview. No member was targeted and no moderation action was taken.",
-            color=0xE0A72E,
+        """Preview the realistic ban card with sample data."""
+        sample_card = self._render_real_ban_card(
+            target=ctx.author,
+            actor=self.bot.user or ctx.author,
+            reason="Violating server rules and guidelines [Preview]",
         )
-        embed.add_field(name="Pretend reason", value="Just a harmless joke.", inline=False)
-        await ctx.send(embed=embed)
+        await send_container_response(ctx, sample_card)
 
 
 async def setup(bot: commands.Bot) -> None:

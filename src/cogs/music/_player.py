@@ -41,13 +41,9 @@ class KyokaWavelinkPlayer(wavelink.Player):
     Hardened Wavelink 3.x Player for Kyoka.
 
     Eliminates the Discord voice gateway packet-ordering race condition where
-    VOICE_SERVER_UPDATE lands before VOICE_STATE_UPDATE. Standard Wavelink only
-    dispatches on server update; if state update lands later, Wavelink never
-    dispatches the credentials to Lavalink, causing channel.connect() to hang
-    for 20 seconds and disconnect itself.
-
-    Also guards against stale null-channel VOICE_STATE_UPDATE packets tearing
-    down active voice sessions when the bot is still present in the channel.
+    VOICE_SERVER_UPDATE lands before VOICE_STATE_UPDATE or vice-versa.
+    Guards against stale null-channel updates and handles Lavalink player
+    registration failures without locking up channel.connect() for 20s.
     """
 
     def __init__(self, *args, **kwargs) -> None:
@@ -82,12 +78,97 @@ class KyokaWavelinkPlayer(wavelink.Player):
         if self.client and hasattr(self.client, "get_channel"):
             self.channel = self.client.get_channel(int(channel_id))
 
-        # Bidirectional dispatch: if VOICE_SERVER_UPDATE arrived first, dispatch now!
+        # Bidirectional dispatch: if VOICE_SERVER_UPDATE already arrived, dispatch now!
         if (
             self._voice_state["voice"].get("token")
             and self._voice_state["voice"].get("endpoint")
         ):
             await self._dispatch_voice_update()
+
+    async def on_voice_server_update(self, data: Any, /) -> None:
+        """Handle Discord's VOICE_SERVER_UPDATE packet containing the voice token and media endpoint."""
+        logger.debug("Guild %s received VOICE_SERVER_UPDATE (endpoint=%s)", getattr(self.guild, "id", None), data.get("endpoint"))
+        if "voice" not in self._voice_state or not isinstance(self._voice_state["voice"], dict):
+            self._voice_state["voice"] = {}
+
+        endpoint = data.get("endpoint")
+        # Strip port if included
+        if endpoint and ":" in endpoint:
+            endpoint = endpoint.split(":")[0]
+
+        self._voice_state["voice"]["token"] = data.get("token")
+        self._voice_state["voice"]["endpoint"] = endpoint
+
+        await self._dispatch_voice_update()
+
+    async def _dispatch_voice_update(self) -> None:
+        """Forward Discord voice credentials (session_id, token, endpoint) to the Lavalink node."""
+        if not self.guild:
+            return
+        data = self._voice_state["voice"]
+
+        session_id = data.get("session_id")
+        token = data.get("token")
+        endpoint = data.get("endpoint")
+        channel_id = self._voice_state.get("channel_id")
+
+        if not session_id or not token or not endpoint:
+            logger.debug(
+                f"Guild {self.guild.id}: Incomplete voice credentials "
+                f"(session_id={bool(session_id)}, token={bool(token)}, endpoint={bool(endpoint)})"
+            )
+            return
+
+        request = {
+            "voice": {"sessionId": session_id, "token": token, "endpoint": endpoint, "channelId": channel_id}
+        }
+
+        try:
+            await self.node._update_player(self.guild.id, data=request)
+            self._connected = True
+            self._connection_event.set()
+            logger.info(f"Guild {self.guild.id}: Voice gateway update successfully delivered to Lavalink.")
+        except Exception as e:
+            logger.error(f"Guild {self.guild.id}: Failed to deliver voice credentials to Lavalink node: {e}")
+            self._connection_event.set()
+            raise
+
+    async def connect(
+        self,
+        *,
+        timeout: float = 12.0,
+        reconnect: bool = True,
+        self_deaf: bool = False,
+        self_mute: bool = False,
+    ) -> None:
+        """Connect to voice channel with gateway packet loss recovery and fast failover."""
+        if self.channel is discord.utils.MISSING:
+            raise wavelink.InvalidChannelStateException("Player tried to connect without a valid channel.")
+
+        if not self._guild:
+            self._guild = getattr(self.channel, "guild", None)
+
+        self.node._players[self._guild.id] = self
+        self._connection_event.clear()
+
+        # Send initial voice state update to Discord gateway
+        assert self.guild is not None
+        await self.guild.change_voice_state(channel=self.channel, self_mute=self_mute, self_deaf=self_deaf)
+
+        try:
+            await asyncio.wait_for(self._connection_event.wait(), timeout=timeout)
+        except (asyncio.TimeoutError, asyncio.CancelledError):
+            logger.warning(
+                f"Guild {self.guild.id}: Voice handshake pending after {timeout:.1f}s, "
+                "re-dispatching gateway change_voice_state to recover dropped packet..."
+            )
+            try:
+                # Re-send gateway packet to prompt Discord to re-send VOICE_SERVER_UPDATE
+                await self.guild.change_voice_state(channel=self.channel, self_mute=self_mute, self_deaf=self_deaf)
+                await asyncio.wait_for(self._connection_event.wait(), timeout=5.0)
+            except Exception:
+                msg = f"Unable to connect to {self.channel} as it exceeded the timeout of {timeout} seconds."
+                raise wavelink.ChannelTimeoutException(msg)
 
 
 def shorten_artist(artist: str, max_len: int = 30) -> str:
@@ -287,11 +368,22 @@ class GuildPlayer:
                         pass
                     self.voice_client = None
 
-                # Purge any lingering voice client cache so the next handshake starts clean.
+                # Purge any lingering voice client cache and gateway state so the next handshake starts clean.
                 try:
                     self.bot._connection._remove_voice_client(self.guild.id)
                 except Exception:
                     pass
+
+                me = self.guild.me
+                if me and getattr(me, "voice", None) and getattr(me.voice, "channel", None):
+                    if not self.voice_client or not getattr(self.voice_client, "connected", False):
+                        logger.info(f"Guild {self.guild.id}: Resetting stale Discord gateway voice state before connection...")
+                        self._disconnect_expected_until = time.monotonic() + 10.0
+                        try:
+                            await self.guild.change_voice_state(channel=None)
+                            await asyncio.sleep(0.4)
+                        except Exception:
+                            pass
 
                 # Ensure Wavelink node is alive and connected before connecting player
                 node = None
@@ -352,7 +444,7 @@ class GuildPlayer:
                 last_error: Optional[BaseException] = None
                 for attempt in range(3):
                     try:
-                        self.voice_client = await channel.connect(cls=KyokaWavelinkPlayer, self_deaf=True, timeout=20.0)
+                        self.voice_client = await channel.connect(cls=KyokaWavelinkPlayer, self_deaf=True, timeout=15.0)
                         if self.voice_client:
                             self.voice_client.autoplay = wavelink.AutoPlayMode.disabled
                         last_error = None
