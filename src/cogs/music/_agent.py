@@ -52,6 +52,10 @@ class MusicAgent:
         self._last_heal_time: dict[int, float] = {}  # guild_id -> unix timestamp
         self._heal_cooldown: float = 3.0  # seconds minimum between heals per guild
 
+        # Exponential Backoff for Lavalink Node Reconnects
+        self._reconnect_attempts: int = 0
+        self._next_reconnect_time: float = 0.0
+
         # Telemetry & Metrics
         self._metrics: dict[str, int] = {
             "voice_heals": 0,
@@ -181,6 +185,12 @@ class MusicAgent:
         except Exception:
             pass
 
+        # Check exponential backoff window unless explicitly forced
+        now = time.time()
+        if not force and now < self._next_reconnect_time:
+            remaining = int(self._next_reconnect_time - now)
+            return False, f"Lavalink reconnect throttled by exponential backoff ({remaining}s remaining)."
+
         # Check if another coroutine is already actively healing the node
         if self._node_is_healing and self._node_heal_event is not None:
             logger.debug("MusicAgent: Single-flight in progress. Awaiting existing node heal...")
@@ -202,25 +212,82 @@ class MusicAgent:
                 # Jittered brief delay to allow network socket to settle
                 await asyncio.sleep(random.uniform(0.1, 0.4))
 
-                # Close every dead socket in the pool. `Pool.nodes` returns a copy,
-                # so the pool is cleaned through close_pool_nodes() instead of the
-                # no-op `Pool.nodes.clear()`.
+                # Snapshot active player states before closing nodes for restoration
+                active_sessions = []
+                controller = getattr(self.music, "controller", None)
+                if controller and hasattr(controller, "players"):
+                    for gid, plyr in list(controller.players.items()):
+                        vc = getattr(plyr, "voice_client", None)
+                        ch_id = None
+                        if vc and getattr(vc, "channel", None):
+                            ch_id = getattr(vc.channel, "id", None)
+                        elif getattr(plyr, "voice_channel_id", None):
+                            ch_id = plyr.voice_channel_id
+                        active_sessions.append({
+                            "guild_id": gid,
+                            "channel_id": ch_id,
+                            "text_channel": getattr(plyr, "text_channel", None),
+                            "current": getattr(plyr, "current", None),
+                            "volume": getattr(plyr, "volume", 100),
+                            "loop_mode": getattr(plyr, "loop_mode", "off"),
+                            "is_247": getattr(plyr, "is_247", False),
+                            "autoplay": getattr(plyr, "autoplay", False),
+                        })
+
+                # Close dead sockets in the pool.
                 await close_pool_nodes()
 
-                # Connect to the primary node, falling back to any configured
-                # alternatives when it is unreachable.
+                # Connect to the primary node, falling back to any configured alternatives.
                 new_node = await connect_lavalink_node(
                     self.bot,
                     inactive_player_timeout=300,
                 )
 
                 self._metrics["node_reconnects"] += 1
+                self._reconnect_attempts = 0
+                self._next_reconnect_time = 0.0
                 logger.info("MusicAgent: Lavalink node pool re-established successfully.")
+
+                # Restore players and 24/7 sessions where supported
+                if active_sessions and controller:
+                    for s_data in active_sessions:
+                        gid = s_data["guild_id"]
+                        ch_id = s_data["channel_id"]
+                        if not ch_id:
+                            continue
+                        guild = self.bot.get_guild(gid)
+                        if not guild:
+                            continue
+                        channel = guild.get_channel(ch_id)
+                        if not channel or not isinstance(channel, (discord.VoiceChannel, discord.StageChannel)):
+                            continue
+                        try:
+                            player = controller.get_player(gid)
+                            if player:
+                                await player.connect_voice(channel)
+                                if s_data.get("volume"):
+                                    player.volume = s_data["volume"]
+                                if s_data.get("is_247"):
+                                    player.is_247 = True
+                                if s_data.get("loop_mode"):
+                                    player.loop_mode = s_data["loop_mode"]
+                                if s_data.get("autoplay"):
+                                    player.autoplay = s_data["autoplay"]
+                                if s_data.get("current") and not player.is_playing:
+                                    await player.play(s_data["current"])
+                                logger.info(f"MusicAgent: Restored music session for guild '{guild.name}' ({gid}).")
+                        except Exception as r_err:
+                            logger.debug(f"MusicAgent: Player restoration notice for guild {gid}: {r_err}")
+
                 return True, f"Lavalink node reconnected ({new_node.uri})."
 
             except Exception as e:
+                self._reconnect_attempts += 1
+                # Exponential backoff with jitter: 15s, 27s, 48s, 87s, 157s, 283s, cap 300s
+                backoff = min(300.0, 15.0 * (1.8 ** min(self._reconnect_attempts - 1, 5))) + random.uniform(1.0, 4.0)
+                self._next_reconnect_time = time.time() + backoff
                 logger.error(
-                    f"MusicAgent: Failed during single-flight node heal: {err_text(e)}",
+                    f"MusicAgent: Failed during single-flight node heal (attempt {self._reconnect_attempts}, next retry in {backoff:.1f}s): {err_text(e)}",
                     exc_info=True,
                 )
                 return False, err_text(e)
@@ -433,14 +500,25 @@ class MusicAgent:
             except Exception:
                 node = None
             
-            node_healthy = bool(
+            node_connected = bool(
                 node is not None
                 and getattr(node, "status", None) == wavelink.NodeStatus.CONNECTED
-                and await probe_node(node, timeout=3.5)
             )
-            if not node_healthy:
-                logger.warning("MusicAgent Watchdog: Lavalink node unseated or unresponsive. Proactively healing...")
-                await self.heal_node(force=True)
+            if node_connected:
+                if await probe_node(node, timeout=3.5):
+                    # Node is healthy and responsive! Reset backoff
+                    self._reconnect_attempts = 0
+                    self._next_reconnect_time = 0.0
+                else:
+                    logger.warning("MusicAgent Watchdog: Lavalink node reports CONNECTED but REST probe failed. Proactively healing...")
+                    await self.heal_node(force=True)
+            else:
+                if now >= self._next_reconnect_time:
+                    logger.warning("MusicAgent Watchdog: Lavalink node unseated or unresponsive. Proactively healing...")
+                    await self.heal_node(force=False)
+                else:
+                    rem = int(self._next_reconnect_time - now)
+                    logger.debug(f"MusicAgent Watchdog: Node unseated; exponential backoff active ({rem}s remaining).")
         except Exception as node_sweep_err:
             logger.debug(f"MusicAgent Watchdog error: {node_sweep_err}")
 

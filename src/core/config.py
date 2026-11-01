@@ -151,8 +151,19 @@ class Config:
         return pool
 
     # Lavalink / Audio Settings
-    LAVALINK_URI: str = os.getenv("LAVALINK_URI", "https://lavalinkv4.serenetia.com:443").strip()
-    LAVALINK_PASSWORD: str = os.getenv("LAVALINK_PASSWORD", "https://seretia.link/discord").strip()
+    LAVALINK_HOST: str = os.getenv("LAVALINK_HOST", "").strip()
+    LAVALINK_PORT: int = int(os.getenv("LAVALINK_PORT", "443").strip() or 443)
+    LAVALINK_SECURE: bool = os.getenv("LAVALINK_SECURE", "true").lower() in ("true", "1", "yes")
+    LAVALINK_IDENTIFIER: str = os.getenv("LAVALINK_IDENTIFIER", "lavalinkv4.serenetia.com").strip()
+    LAVALINK_PASSWORD: str = os.getenv("LAVALINK_PASSWORD", "https://dsc.gg/ajidevserver").strip()
+
+    # If LAVALINK_HOST is set, dynamically build LAVALINK_URI; otherwise use LAVALINK_URI env var or default
+    if LAVALINK_HOST:
+        _scheme = "https" if LAVALINK_SECURE else "http"
+        LAVALINK_URI: str = f"{_scheme}://{LAVALINK_HOST}:{LAVALINK_PORT}"
+    else:
+        LAVALINK_URI: str = os.getenv("LAVALINK_URI", "https://lavalinkv4.serenetia.com:443").strip()
+
     LAVALINK_FALLBACK_URIS: str = os.getenv(
         "LAVALINK_FALLBACK_URIS",
         "https://lava-v4.millohost.my.id:443|https://discord.gg/mjS5J2K3ep,"
@@ -161,7 +172,7 @@ class Config:
         "http://lava2.kasawa.pro:2334|youshallnotpass,"
         "http://lavalink.triniumhost.com:4333|youshallnotpass,"
         "http://lavalink.triniumhost.com:2333|youshallnotpass,"
-        "http://lavalinkv4.serenetia.com:80|https://seretia.link/discord"
+        "http://lavalinkv4.serenetia.com:80|https://dsc.gg/ajidevserver"
     ).strip()
     LAVALINK_AUTO_DISCOVER: bool = os.getenv("LAVALINK_AUTO_DISCOVER", "1").lower() in ("1", "true", "yes")
     LAVALINK_PUBLIC_LIST_URL: str = os.getenv(

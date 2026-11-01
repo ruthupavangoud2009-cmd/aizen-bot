@@ -546,6 +546,10 @@ class AIVoice(commands.Cog, name="AIVoice"):
     @aivoice_group.command(name="join", aliases=["connect"], description="Connect KYOKA to your current voice channel.")
     async def voice_join(self, ctx: CustomContext) -> None:
         """Join the voice channel and start listening for regular spoken AI prompts."""
+        if not ctx.guild:
+            return
+        if self._is_music_active(ctx.guild):
+            return await ctx.send_error("A Music session is currently active in this server. Use music commands or stop music first.")
         await self._start_voice_conversation(ctx, "open")
 
     @aivoice_group.command(name="leave", aliases=["disconnect", "dc"], description="Disconnect KYOKA from the voice channel.")

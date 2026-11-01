@@ -127,15 +127,21 @@ def create_lavalink_node(
     uri: str,
     password: str,
     *,
+    identifier: Optional[str] = None,
     inactive_player_timeout: int = 300,
+    retries: int = 1,
 ) -> wavelink.Node:
     """Create a Wavelink node whose HTTP transport can never block for minutes."""
+    from src.core.config import Config
+    node_id = identifier or getattr(Config, "LAVALINK_IDENTIFIER", None) or "lavalinkv4.serenetia.com"
     session = aiohttp.ClientSession(timeout=LAVALINK_HTTP_TIMEOUT)
     return wavelink.Node(
         uri=uri,
         password=password,
+        identifier=node_id,
         session=session,
         inactive_player_timeout=inactive_player_timeout,
+        retries=retries,
     )
 
 
@@ -391,9 +397,14 @@ async def check_websocket(
                 _ws_url(uri),
                 headers=headers,
             ) as ws:
-                # Fast verification that node sends ready and does not drop connection
                 msg = await asyncio.wait_for(ws.receive(), timeout=min(timeout, 3.5))
                 if msg.type is not aiohttp.WSMsgType.TEXT:
+                    code = getattr(ws, "close_code", None) or getattr(msg, "data", None)
+                    reason = getattr(msg, "extra", None) or ""
+                    if reason:
+                        return False, f"websocket closed ({code}): {reason}"
+                    if code:
+                        return False, f"websocket closed with code {code}"
                     return False, "websocket closed before sending 'ready'"
                 try:
                     payload = json.loads(msg.data)
@@ -438,6 +449,12 @@ async def probe_candidate_node(
                 async with session.ws_connect(_ws_url(uri), headers=headers) as ws:
                     msg = await asyncio.wait_for(ws.receive(), timeout=timeout)
                     if msg.type is not aiohttp.WSMsgType.TEXT:
+                        code = getattr(ws, "close_code", None) or getattr(msg, "data", None)
+                        reason = getattr(msg, "extra", None) or ""
+                        if reason:
+                            return False, f"websocket closed ({code}): {reason}"
+                        if code:
+                            return False, f"websocket closed with code {code}"
                         return False, "websocket closed before the 'ready' op"
                     try:
                         payload = json.loads(msg.data)
@@ -506,6 +523,21 @@ async def connect_lavalink_node(
         except Exception:
             bot = None
 
+    effective_bot = bot
+    if effective_bot is None or getattr(effective_bot, "user", None) is None:
+        class _UserAdapter:
+            id = int(_default_user_id())
+            name = "Kyoka"
+        class _ClientAdapter:
+            def __init__(self, target: Any):
+                self._target = target
+                self.user = _UserAdapter()
+            def __getattr__(self, name: str) -> Any:
+                if self._target is not None:
+                    return getattr(self._target, name)
+                raise AttributeError(name)
+        effective_bot = _ClientAdapter(bot)
+
     failures: list[str] = []
     tried: set[str] = set()
 
@@ -523,15 +555,18 @@ async def connect_lavalink_node(
             logger.warning(f"Lavalink node {uri} unusable: {ws_reason}")
             return None
 
+        from src.core.config import Config
+        node_id = getattr(Config, "LAVALINK_IDENTIFIER", None) or "lavalinkv4.serenetia.com"
         node = create_lavalink_node(
             uri,
             password,
+            identifier=node_id,
             inactive_player_timeout=inactive_player_timeout,
         )
         reason: Optional[str] = None
         try:
             await asyncio.wait_for(
-                wavelink.Pool.connect(nodes=[node], client=bot),
+                wavelink.Pool.connect(nodes=[node], client=effective_bot),
                 timeout=LAVALINK_CONNECT_TIMEOUT,
             )
         except Exception as e:
