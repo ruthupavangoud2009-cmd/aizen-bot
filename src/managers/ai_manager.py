@@ -315,7 +315,7 @@ class AIManager:
     - Asynchronous memory-safe cooldown tracking
     """
     DEFAULT_MODEL = "gemini-flash-lite-latest"
-    FALLBACK_MODELS = ("gemini-flash-lite-latest", "gemini-3.8-flash", "gemini-2.5-flash", "gemini-flash-latest")
+    FALLBACK_MODELS = ("gemini-flash-lite-latest", "gemini-flash-latest", "gemini-3.8-flash")
 
     def __init__(self, db: PostgresDatabase) -> None:
         self.db = db
@@ -618,7 +618,7 @@ class AIManager:
         for m in self.FALLBACK_MODELS:
             if m not in candidate_models:
                 candidate_models.append(m)
-        for safe_m in ("gemini-1.5-flash", "gemini-2.0-flash", "gemini-1.5-pro"):
+        for safe_m in ("gemini-flash-lite-latest", "gemini-flash-latest", "gemini-3.8-flash"):
             if safe_m not in candidate_models:
                 candidate_models.append(safe_m)
 

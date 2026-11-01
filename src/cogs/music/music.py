@@ -70,14 +70,36 @@ class Music(commands.Cog):
             logger.error(f"Failed to connect to Lavalink node: {e}")
 
     async def _load_247_cache(self) -> None:
-        """Load persistent 24/7 guild state from database."""
+        """Load persistent 24/7 guild state from database and restore voice connections if needed."""
         while not self.bot.is_ready():
             await asyncio.sleep(1)
         if hasattr(self.bot, "db") and self.bot.db:
             try:
-                rows = await self.bot.db.fetch_all("SELECT guild_id FROM guild_music_247 WHERE is_247 = TRUE;")
+                rows = await self.bot.db.fetch_all("SELECT guild_id, voice_channel_id, text_channel_id FROM guild_music_247 WHERE is_247 = TRUE;")
                 self.controller._247_cache = {int(r["guild_id"]) for r in rows}
                 logger.info(f"Loaded {len(self.controller._247_cache)} 24/7 music guild(s) into memory.")
+
+                # Proactively recover voice connections for 24/7 guilds
+                for r in rows:
+                    guild_id = int(r["guild_id"])
+                    vc_id = r.get("voice_channel_id")
+                    if not vc_id:
+                        continue
+                    guild = self.bot.get_guild(guild_id)
+                    if not guild:
+                        continue
+                    channel = guild.get_channel(int(vc_id))
+                    if not channel or not isinstance(channel, (discord.VoiceChannel, discord.StageChannel)):
+                        continue
+                    player = self.controller.get_or_create_player(guild)
+                    player.is_247 = True
+                    player.autoplay = True
+                    if not player.is_connected:
+                        try:
+                            await player.connect_voice(channel)
+                            logger.info(f"Auto-restored 24/7 voice connection in '{guild.name}' ({channel.name}).")
+                        except Exception as vc_err:
+                            logger.debug(f"Notice auto-connecting 24/7 voice in {guild.name}: {vc_err}")
             except Exception as e:
                 logger.debug(f"Notice loading 24/7 music state: {e}")
 

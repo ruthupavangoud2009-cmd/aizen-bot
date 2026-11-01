@@ -22,6 +22,48 @@ export async function onRequest(context) {
     });
   }
 
+  // Handle direct auth requests at Edge first to prevent 404/homepage HTML loops
+  if (url.pathname === '/api/auth/login') {
+    const clientId = (env.DISCORD_CLIENT_ID || env.CLIENT_ID || '1562505487214321714').trim();
+    const destinationOrigin = url.origin.includes('localhost') ? url.origin : 'https://aizen-bot.pages.dev';
+    const redirectUri = `${destinationOrigin}/api/auth/callback`;
+    const array = new Uint8Array(32);
+    crypto.getRandomValues(array);
+    const state = Array.from(array, (b) => b.toString(16).padStart(2, '0')).join('');
+    const params = new URLSearchParams({
+      client_id: clientId,
+      response_type: 'code',
+      redirect_uri: redirectUri,
+      scope: 'identify guilds',
+      state: state,
+      prompt: 'consent',
+    });
+    const discordAuthUrl = `https://discord.com/api/oauth2/authorize?${params.toString()}`;
+    const isHttps = url.protocol === 'https:' || !url.hostname.includes('localhost');
+    const stateCookie = `kyoka_oauth_state=${state}; Path=/; Max-Age=600; SameSite=Lax${isHttps ? '; Secure' : ''}; HttpOnly`;
+
+    const acceptHeader = request.headers.get('Accept') || '';
+    if (url.searchParams.get('format') === 'json' || acceptHeader.includes('application/json')) {
+      return new Response(JSON.stringify({ auth_url: discordAuthUrl, state: state }), {
+        status: 200,
+        headers: {
+          'Content-Type': 'application/json',
+          'Set-Cookie': stateCookie,
+          'Access-Control-Allow-Origin': url.origin,
+          'Access-Control-Allow-Credentials': 'true',
+        },
+      });
+    }
+    return new Response(null, {
+      status: 302,
+      headers: {
+        'Location': discordAuthUrl,
+        'Set-Cookie': stateCookie,
+        'Cache-Control': 'no-cache, no-store, must-revalidate',
+      },
+    });
+  }
+
   // Read backend base URL from request header, query params, cookie, or environment
   const customHeader = request.headers.get('X-Backend-URL');
   const queryBackend = url.searchParams.get('backend_url') || url.searchParams.get('api_url');
@@ -35,7 +77,7 @@ export async function onRequest(context) {
     cookieBackend ||
     env.BACKEND_URL ||
     env.KYOKA_BACKEND_URL ||
-    'https://kyokasugisetsu.onrender.com'
+    'https://aizen-bot-uty6.onrender.com'
   ).replace(/\/+$/, '');
 
   if (backendBase) {

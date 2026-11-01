@@ -17,11 +17,14 @@ class PostgresDatabase(BaseDatabase):
     def __init__(self, dsn: str) -> None:
         self.dsn = dsn
         self.pool: asyncpg.Pool | None = None
+        self._connected_once: bool = False
         self._lock = asyncio.Lock()
 
     async def _heal_pool(self) -> None:
         """Self-healing connection pool reconnector with exponential backoff."""
         async with self._lock:
+            if not self._connected_once:
+                raise ConnectionError("Database pool is not connected (connect() was not called).")
             if self.pool and not self.pool._closed:
                 try:
                     async with self.pool.acquire(timeout=3) as conn:
@@ -36,7 +39,7 @@ class PostgresDatabase(BaseDatabase):
                     self.pool = None
 
             clean_dsn = self.dsn.replace("postgresql+asyncpg://", "postgresql://")
-            delays = [0.5, 1.0, 2.0, 4.0]
+            delays = [0.25, 0.5]
             for attempt, delay in enumerate(delays, 1):
                 try:
                     logger.info(f"Self-healing database pool reconnecting (attempt {attempt}/{len(delays)})...")
@@ -122,6 +125,7 @@ class PostgresDatabase(BaseDatabase):
         try:
             clean_dsn = self.dsn.replace("postgresql+asyncpg://", "postgresql://")
             self.pool = await self._create_pool(clean_dsn)
+            self._connected_once = True
             logger.info("Connected to PostgreSQL / Supabase cloud database pool.")
             await self.initialize_tables()
         except Exception as e:
@@ -725,8 +729,14 @@ class PostgresDatabase(BaseDatabase):
             """
             CREATE TABLE IF NOT EXISTS guild_music_247 (
                 guild_id BIGINT PRIMARY KEY,
-                is_247 BOOLEAN DEFAULT FALSE
+                is_247 BOOLEAN DEFAULT FALSE,
+                voice_channel_id BIGINT,
+                text_channel_id BIGINT
             );
+            """,
+            """
+            ALTER TABLE guild_music_247 ADD COLUMN IF NOT EXISTS voice_channel_id BIGINT;
+            ALTER TABLE guild_music_247 ADD COLUMN IF NOT EXISTS text_channel_id BIGINT;
             """,
             # Guild Ghost-Ping Settings table
             """
@@ -1566,8 +1576,10 @@ class PostgresDatabase(BaseDatabase):
 
     async def execute(self, query: str, *args: Any) -> None:
         """Execute a query with automatic connection recovery and exponential retry."""
+        if not self._connected_once:
+            return
         pg_query = self._convert_query(query)
-        delays = [0.2, 0.5, 1.5]
+        delays = [0.2, 0.5]
         for attempt, delay in enumerate(delays):
             try:
                 if not self.pool or self.pool._closed:
@@ -1578,7 +1590,6 @@ class PostgresDatabase(BaseDatabase):
             except (asyncpg.PostgresConnectionError, asyncpg.InterfaceError, asyncio.TimeoutError, ConnectionResetError, OSError) as e:
                 logger.warning(f"Database transient error on execute (attempt {attempt+1}): {e}. Retrying in {delay}s...")
                 await asyncio.sleep(delay)
-                await self._heal_pool()
 
         # Final attempt
         if not self.pool or self.pool._closed:
@@ -1588,8 +1599,10 @@ class PostgresDatabase(BaseDatabase):
 
     async def fetch_one(self, query: str, *args: Any) -> dict[str, Any] | None:
         """Fetch a single record with self-healing retry resilience."""
+        if not self._connected_once:
+            return None
         pg_query = self._convert_query(query)
-        delays = [0.2, 0.5, 1.5]
+        delays = [0.2, 0.5]
         for attempt, delay in enumerate(delays):
             try:
                 if not self.pool or self.pool._closed:
@@ -1600,7 +1613,6 @@ class PostgresDatabase(BaseDatabase):
             except (asyncpg.PostgresConnectionError, asyncpg.InterfaceError, asyncio.TimeoutError, ConnectionResetError, OSError) as e:
                 logger.warning(f"Database transient error on fetch_one (attempt {attempt+1}): {e}. Retrying in {delay}s...")
                 await asyncio.sleep(delay)
-                await self._heal_pool()
 
         # Final attempt
         if not self.pool or self.pool._closed:
@@ -1611,8 +1623,10 @@ class PostgresDatabase(BaseDatabase):
 
     async def fetch_all(self, query: str, *args: Any) -> list[dict[str, Any]]:
         """Fetch multiple records with self-healing retry resilience."""
+        if not self._connected_once:
+            return []
         pg_query = self._convert_query(query)
-        delays = [0.2, 0.5, 1.5]
+        delays = [0.2, 0.5]
         for attempt, delay in enumerate(delays):
             try:
                 if not self.pool or self.pool._closed:
@@ -1623,7 +1637,6 @@ class PostgresDatabase(BaseDatabase):
             except (asyncpg.PostgresConnectionError, asyncpg.InterfaceError, asyncio.TimeoutError, ConnectionResetError, OSError) as e:
                 logger.warning(f"Database transient error on fetch_all (attempt {attempt+1}): {e}. Retrying in {delay}s...")
                 await asyncio.sleep(delay)
-                await self._heal_pool()
 
         # Final attempt
         if not self.pool or self.pool._closed:

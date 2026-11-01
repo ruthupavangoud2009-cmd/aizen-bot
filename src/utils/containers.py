@@ -445,10 +445,21 @@ async def send_container_response(
             channel_id = obj.id
             bot_instance = getattr(obj, "bot", getattr(obj, "_state", None))
             http_client = getattr(bot_instance, "http", None) or getattr(getattr(obj, "_state", None), "http", None)
-        elif hasattr(obj, "channel"):
+        elif hasattr(obj, "channel") and getattr(obj.channel, "id", None) is not None:
             channel_id = obj.channel.id
             bot_instance = getattr(obj, "bot", getattr(obj, "_state", None))
             http_client = getattr(bot_instance, "http", None) or getattr(getattr(obj, "_state", None), "http", None)
+        elif hasattr(obj, "send") and callable(obj.send):
+            primary = container if isinstance(container, KyokaContainer) else container[0]
+            embed = primary.to_embed(content=content)
+            text_to_send = content or embed.description or "Message"
+            try:
+                return await obj.send(text_to_send, embed=embed, view=view)
+            except TypeError:
+                try:
+                    return await obj.send(text_to_send, embed=embed)
+                except TypeError:
+                    return await obj.send(text_to_send)
         else:
             channel_id = int(obj)
             bot_instance = getattr(obj, "bot", getattr(obj, "_state", None))

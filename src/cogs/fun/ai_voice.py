@@ -548,6 +548,8 @@ class AIVoice(commands.Cog, name="AIVoice"):
         """Join the voice channel and start listening for regular spoken AI prompts."""
         if not ctx.guild:
             return
+        if not ctx.author.voice or not ctx.author.voice.channel:
+            return await ctx.send_error("You must be connected to a voice channel first!")
         if self._is_music_active(ctx.guild):
             return await ctx.send_error("A Music session is currently active in this server. Use music commands or stop music first.")
         await self._start_voice_conversation(ctx, "open")
@@ -1937,7 +1939,7 @@ class AIVoice(commands.Cog, name="AIVoice"):
 
     @commands.command(
         name="voiceagent",
-        aliases=["va", "talk", "agent", "call", "voicechat"],
+        aliases=["va", "agent", "call", "voicechat"],
         help="The Ultimate AI Voice Agent: joins voice channel and converses in real-time like a human.",
     )
     async def cmd_voiceagent(self, ctx: CustomContext, vibe: str = "normal") -> None:

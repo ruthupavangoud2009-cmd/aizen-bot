@@ -261,17 +261,24 @@ async def execute_stay(cog: Music, ctx: commands.Context) -> None:
     # Persist in database
     if hasattr(cog.bot, "db") and cog.bot.db and getattr(cog.bot.db, "pool", None):
         try:
+            vc_id = (ctx.author.voice.channel.id if (ctx.author.voice and ctx.author.voice.channel) else None) if player.is_247 else None
+            txt_id = ctx.channel.id if player.is_247 else None
             await cog.bot.db.execute(
                 """
-                INSERT INTO guild_music_247 (guild_id, is_247)
-                VALUES ($1, $2)
-                ON CONFLICT(guild_id) DO UPDATE SET is_247 = EXCLUDED.is_247;
+                INSERT INTO guild_music_247 (guild_id, is_247, voice_channel_id, text_channel_id)
+                VALUES ($1, $2, $3, $4)
+                ON CONFLICT(guild_id) DO UPDATE SET 
+                    is_247 = EXCLUDED.is_247,
+                    voice_channel_id = EXCLUDED.voice_channel_id,
+                    text_channel_id = EXCLUDED.text_channel_id;
                 """,
                 ctx.guild.id,
                 player.is_247,
+                vc_id,
+                txt_id,
             )
-        except Exception:
-            pass
+        except Exception as db_err:
+            logger.debug(f"Could not persist 24/7 state to db: {db_err}")
 
     state_str = "ENABLED" if player.is_247 else "DISABLED"
     container = KyokaContainer(accent_color=None)

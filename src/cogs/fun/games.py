@@ -474,7 +474,7 @@ class Games(commands.Cog):
             button.style = discord.ButtonStyle.success
             await message.edit(view=view)
 
-    @commands.command(name="hideandseek", aliases=["scavengerhunt", "hunt"], help="Find the hidden treasure first.")
+    @commands.command(name="hideandseek", aliases=["scavengerhunt", "hns"], help="Find the hidden treasure first.")
     @commands.guild_only()
     async def hide_and_seek(self, ctx: CustomContext) -> None:
         view = HideAndSeekView(random.randrange(9))

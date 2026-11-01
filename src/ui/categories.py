@@ -615,7 +615,10 @@ def resolve_command_category(cmd: Any) -> CategoryMeta:
         "aistatus", "aisetup", "aipersonality", "aiconfig", "aitest", "aiclear",
         "aimodel", "aidebug", "companion", "setaichannel", "setcompanionchannel",
         "setvoice", "botvoice", "changevoice", "voice", "voices", "voicelist",
-    ) or root_name.startswith("aivoice"):
+        "voiceagent", "vctalk", "endvctalk", "vcleave", "vcask", "vcsfx", "vcvibe",
+        "vcroast", "vcbeatbox", "vctrivia", "vc20q", "vcstory", "vclisten", "vcsummary",
+        "vcnote", "vcsessions",
+    ) or root_name.startswith("aivoice") or root_name.startswith("vc"):
         return CATEGORY_BY_ID["ai"]
 
     # Blox Fruits AI (Strict check)

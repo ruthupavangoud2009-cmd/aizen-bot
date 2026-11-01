@@ -75,7 +75,7 @@ class GlobalSupport(commands.Cog):
         description="View or change KYOKA's official support server invite directly from Discord.",
     )
     @app_commands.describe(url="The new Discord invite URL (e.g. discord.gg/example or invite code)")
-    async def global_support(self, ctx: CustomContext, *, url: str | None = None) -> None:
+    async def global_support(self, ctx: CustomContext, url: str | None = None) -> None:
         """Display or update KYOKA's global support-server invite URL."""
         current_url = Config.SUPPORT_URL or "https://discord.gg/7q4tn6dA6V"
 
@@ -113,7 +113,7 @@ class GlobalSupport(commands.Cog):
             container.add_section(
                 content=(
                     "**Unauthorized**\n"
-                    "> Only the bot owner or registered staff can change the global support server link."
+                    "> Only the primary bot owner or registered staff can change the global support server link."
                 )
             )
             if ctx.interaction:

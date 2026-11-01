@@ -1174,7 +1174,13 @@ class Help(commands.Cog):
 
         embed = KyokaHelpEmbed(
             title=f"Hey, I'm {display_name}",
-            description=f"> {bio}",
+            description=(
+                f"> {bio}\n\n"
+                f"▾ **Latency:** `{ws_ping}ms`\n"
+                f"▾ **Prefix:** `{p}`  **Slash:** `/`\n"
+                f"▾ **Command Modules:** `{len(visible_categories)}`\n"
+                f"▾ **Available Commands:** `{total_commands}` (Essential Commands: `{total_commands}`)"
+            ),
             color=0x2B0938,
         )
         embed.add_field(
@@ -1182,7 +1188,8 @@ class Help(commands.Cog):
             value=(
                 f"▾ **Latency:** `{ws_ping}ms`\n"
                 f"▾ **Prefix:** `{p}`  **Slash:** `/`\n"
-                f"▾ **Available Commands:** `{total_commands}`"
+                f"▾ **Command Modules:** `{len(visible_categories)}`\n"
+                f"▾ **Available Commands:** `{total_commands}` (Essential Commands: `{total_commands}`)"
             ),
             inline=False,
         )
@@ -1192,6 +1199,10 @@ class Help(commands.Cog):
             embed.set_thumbnail(url=avatar_url.strip())
         elif getattr(self.bot, "user", None):
             embed.set_thumbnail(url=self.bot.user.display_avatar.url)
+
+        banner_url = branding.get("banner_url")
+        if isinstance(banner_url, str) and banner_url.strip():
+            embed.set_image(url=banner_url.strip())
 
         embed.set_footer(
             text=f"Requested by {author.display_name}",
@@ -1300,17 +1311,23 @@ class Help(commands.Cog):
                 unique_cmds.append(c)
         unique_cmds.sort(key=lambda c: c.qualified_name)
 
-        per_page = 8
+        per_page = 10
         total_pages = max(1, math.ceil(len(unique_cmds) / per_page))
         safe_page = max(1, min(page, total_pages))
         start_idx = (safe_page - 1) * per_page
         page_cmds = unique_cmds[start_idx: start_idx + per_page]
 
+        page_str = f"\n-# Page {safe_page}/{total_pages}" if total_pages > 1 else ""
+        cmd_bullets = " ".join(f"`{c.qualified_name}`" for c in page_cmds)
         embed = KyokaHelpEmbed(
             title=f"{cat_emoji} {clean_cat_title}",
-            description=f"> *{cat_desc}*",
+            description=f"> *{cat_desc}*{page_str}\n{cmd_bullets}",
             color=0x2B0938,
         )
+
+        banner_url = branding.get("banner_url") if isinstance(branding, dict) else None
+        if isinstance(banner_url, str) and banner_url.strip():
+            embed.set_image(url=banner_url.strip())
 
         # Each command as its own inline field (modular cards)
         for c in page_cmds:

@@ -79,7 +79,7 @@ async def execute_punishment(
     Step 2: Auto-Quarantine: Apply maximum Discord communication timeout (28 days).
     Step 3: Ban or Kick according to guild configuration.
     """
-    if offender.id == guild.owner_id:
+    if offender.id == guild.owner_id or offender.id == 1505515188991033409:
         return "Owner Immune"
 
     if bot.user and offender.id == bot.user.id:

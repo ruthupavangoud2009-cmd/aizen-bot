@@ -124,7 +124,7 @@ class HelpRenderer:
             is_slash = entry.get("is_slash", False)
 
             alias_str = f" `[{', '.join(aliases[:3])}]`" if aliases else ""
-            badge = " `[/]`" if is_slash else " `[Prefix]`"
+            badge = " `[/]`" if is_slash else f" `[{prefix}]`"
 
             field_title = f"`{prefix}{name}`{alias_str}{badge}"
             field_value = f"{desc[:100]}\n> **Usage:** `{usage}`"

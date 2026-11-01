@@ -773,6 +773,9 @@ async def test_prefix_context_resolution_for_configured_prefix_only():
     from src.core.bot import KyokaBot
 
     bot = KyokaBot()
+    bot.db.fetch_all = AsyncMock(return_value=[])
+    bot.db.fetch_one = AsyncMock(return_value=None)
+    bot.db.execute = AsyncMock(return_value=None)
     bot._connection.user = MagicMock(id=999888777)
     await bot._load_all_extensions()
     configured_prefix = bot.guild_mgr.get_prefix(1)
@@ -827,6 +830,9 @@ async def test_slash_command_tree_commands_registered():
     from src.core.bot import KyokaBot
 
     bot = KyokaBot()
+    bot.db.fetch_all = AsyncMock(return_value=[])
+    bot.db.fetch_one = AsyncMock(return_value=None)
+    bot.db.execute = AsyncMock(return_value=None)
     bot._connection.user = MagicMock(id=999888777)
     bot._connection.application_id = 999888777
     await bot._load_all_extensions()

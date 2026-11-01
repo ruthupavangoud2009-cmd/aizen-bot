@@ -531,7 +531,7 @@ class CompanionAI(commands.Cog):
 
     @commands.group(
         name="ai",
-        aliases=["chat", "ask", "askai", "aizenai"],
+        aliases=["chat", "ask", "askai", "aizenai", "talk"],
         invoke_without_command=True,
         help="Converse with KYOKA like a normal friend, or manage the AI system.",
     )
