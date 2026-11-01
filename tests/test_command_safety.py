@@ -78,7 +78,9 @@ class FakeMessage:
     def __init__(self, channel_id, guess, user_id=7):
         self.author = SimpleNamespace(bot=False, id=user_id, mention=f"<@{user_id}>")
         self.guild = object()
-        self.channel = SimpleNamespace(id=channel_id, sent=[])
+        async def _send(*args, **kwargs):
+            self.channel.sent.append((args, kwargs))
+        self.channel = SimpleNamespace(id=channel_id, sent=[], send=_send)
         self.content = str(guess)
         self.reactions = []
         self.replies = []

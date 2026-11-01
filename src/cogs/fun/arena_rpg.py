@@ -887,12 +887,12 @@ class ArenaRPG(commands.Cog):
     # ─── 1. WORLD BOSS RAIDS ──────────────────────────────────────────────────
 
     @commands.command(
-        name="raid",
-        aliases=["boss", "worldboss"],
+        name="arenaraid",
+        aliases=["araid"],
         help="Launch a multiplayer World Boss Raid lobby for up to 5 players.",
     )
     @commands.guild_only()
-    async def raid(self, ctx: CustomContext) -> None:
+    async def arenaraid(self, ctx: CustomContext) -> None:
         """Launch an interactive World Boss Raid lobby."""
         boss_data = random.choice(BOSS_ROSTER)
         lobby_view = RaidLobbyView(self, ctx.author, boss_data)
@@ -902,11 +902,11 @@ class ArenaRPG(commands.Cog):
     # ─── 2. CASINO BLACKJACK ──────────────────────────────────────────────────
 
     @commands.command(
-        name="blackjack",
-        aliases=["bj", "21"],
-        help="Play high-stakes Casino Blackjack with interactive buttons and ASCII cards: +bj [bet]",
+        name="arenablackjack",
+        aliases=["abj"],
+        help="Play high-stakes Casino Blackjack with interactive buttons and ASCII cards: +abj [bet]",
     )
-    async def blackjack(self, ctx: CustomContext, bet: int = 100) -> None:
+    async def arenablackjack(self, ctx: CustomContext, bet: int = 100) -> None:
         """Play interactive Blackjack against the bot."""
         if bet <= 0:
             return await ctx.send("Bet must be a positive integer!")
@@ -970,11 +970,11 @@ class ArenaRPG(commands.Cog):
     # ─── 4. HERO PROFILE & INVENTORY ──────────────────────────────────────────
 
     @commands.command(
-        name="profile",
-        aliases=["hero", "stats", "gear"],
+        name="arenaprofile",
+        aliases=["aprofile", "herostats"],
         help="View your Arena Hero Profile, stats, and equipped loadout.",
     )
-    async def profile(self, ctx: CustomContext, target: Optional[discord.Member] = None) -> None:
+    async def arenaprofile(self, ctx: CustomContext, target: Optional[discord.Member] = None) -> None:
         """View hero RPG stats and loadout."""
         member = target or ctx.author
         u = get_or_create_user(member)
@@ -994,15 +994,15 @@ class ArenaRPG(commands.Cog):
             color=ARENA_PURPLE,
         )
         embed.set_thumbnail(url=member.display_avatar.url)
-        embed.set_footer(text=f"Use '{ctx.prefix}inventory' to view your acquired items.")
+        embed.set_footer(text=f"Use '{ctx.prefix}arenainventory' to view your acquired items.")
         await ctx.send(embed=embed)
 
     @commands.command(
-        name="inventory",
-        aliases=["inv", "bag"],
-        help="View all unlocked weapons and armor in your inventory.",
+        name="arenainventory",
+        aliases=["ainv", "vault"],
+        help="View all unlocked weapons and armor in your arena inventory.",
     )
-    async def inventory(self, ctx: CustomContext) -> None:
+    async def arenainventory(self, ctx: CustomContext) -> None:
         """List user's item inventory."""
         conn = get_db_connection()
         try:
@@ -1064,11 +1064,11 @@ class ArenaRPG(commands.Cog):
     # ─── 5. DAILY REWARDS ─────────────────────────────────────────────────────
 
     @commands.command(
-        name="daily",
-        aliases=["claim"],
-        help="Claim your daily 300 Gold and 150 XP.",
+        name="arenadaily",
+        aliases=["adaily", "claimarena"],
+        help="Claim your arena daily 300 Gold and 150 XP.",
     )
-    async def daily(self, ctx: CustomContext) -> None:
+    async def arenadaily(self, ctx: CustomContext) -> None:
         """Claim daily gold and XP reward."""
         u = get_or_create_user(ctx.author)
         now = time.time()

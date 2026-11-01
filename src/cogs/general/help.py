@@ -73,6 +73,14 @@ UNICODE_CATEGORY_EMOJIS: dict[str, str] = {
     "🔧・UTILITIES": "🔧",
     "📝・STAFF APPLICATIONS": "📝",
     "👑・OWNER & DEVELOPER": "👑",
+    "🪙・ECONOMY": "🪙",
+    "🏹・HUNTING & ANIMALS": "🏹",
+    "🐾・PETS & COLLECTION": "🐾",
+    "⚔️・ADVENTURE & RPG": "⚔️",
+    "🎰・CASINO & GAMBLING": "🎰",
+    "🎮・MULTIPLAYER GAMES": "🎮",
+    "🎉・SOCIAL & PARTY GAMES": "🎉",
+    "📜・QUESTS & ACHIEVEMENTS": "📜",
 }
 
 CATEGORY_DESCRIPTIONS: dict[str, str] = {
@@ -104,6 +112,14 @@ CATEGORY_DESCRIPTIONS: dict[str, str] = {
     "🔧・UTILITIES": "Handy server utilities, calculators, reminders & diagnostics",
     "📝・STAFF APPLICATIONS": "Appy-style staff recruitment panels, applicant submissions & reviewer dashboard",
     "👑・OWNER & DEVELOPER": "Core bot diagnostics, database status, extension reload, global support link & maintenance",
+    "🪙・ECONOMY": "OwO-style economy, cash, daily rewards, work, crime, shop, inventory & transfers",
+    "🏹・HUNTING & ANIMALS": "Hunt wild creatures, catch drops, rarity tiers, drop rates & expeditions",
+    "🐾・PETS & COLLECTION": "Manage pets, zoo collection, feeding, trading, equipment upgrades & progress",
+    "⚔️・ADVENTURE & RPG": "Procedural dungeons, raids, world bosses, mining, fishing & exploration",
+    "🎰・CASINO & GAMBLING": "Slots, coinflip, blackjack, roulette, dice, higher-lower & lottery",
+    "🎮・MULTIPLAYER GAMES": "Connect4, TicTacToe, Battleship, Chess, Wordle, Hangman & 2048",
+    "🎉・SOCIAL & PARTY GAMES": "Truth or Dare, Would You Rather, Ship compatibility, Love & RPS",
+    "📜・QUESTS & ACHIEVEMENTS": "Daily challenges, quest milestones & achievement badges",
 }
 
 

@@ -204,6 +204,159 @@ class PostgresDatabase(BaseDatabase):
                 PRIMARY KEY (user_id, guild_id)
             );
             """,
+            # Alter user_profiles for advanced economy stats and cooldowns
+            "ALTER TABLE user_profiles ADD COLUMN IF NOT EXISTS last_daily TIMESTAMPTZ;",
+            "ALTER TABLE user_profiles ADD COLUMN IF NOT EXISTS last_weekly TIMESTAMPTZ;",
+            "ALTER TABLE user_profiles ADD COLUMN IF NOT EXISTS last_work TIMESTAMPTZ;",
+            "ALTER TABLE user_profiles ADD COLUMN IF NOT EXISTS last_crime TIMESTAMPTZ;",
+            "ALTER TABLE user_profiles ADD COLUMN IF NOT EXISTS last_rob TIMESTAMPTZ;",
+            "ALTER TABLE user_profiles ADD COLUMN IF NOT EXISTS daily_streak INT DEFAULT 0;",
+            "ALTER TABLE user_profiles ADD COLUMN IF NOT EXISTS weekly_streak INT DEFAULT 0;",
+            "ALTER TABLE user_profiles ADD COLUMN IF NOT EXISTS total_earned BIGINT DEFAULT 0;",
+            "ALTER TABLE user_profiles ADD COLUMN IF NOT EXISTS total_spent BIGINT DEFAULT 0;",
+            "CREATE INDEX IF NOT EXISTS idx_user_profiles_bal ON user_profiles (guild_id, balance DESC);",
+            "CREATE INDEX IF NOT EXISTS idx_user_profiles_bank ON user_profiles (guild_id, bank DESC);",
+
+            # Guild Economy Custom Settings table
+            """
+            CREATE TABLE IF NOT EXISTS economy_guild_settings (
+                guild_id BIGINT PRIMARY KEY,
+                currency_name VARCHAR(50) DEFAULT 'KYOKA Coins',
+                currency_emoji VARCHAR(50) DEFAULT '🪙',
+                starting_balance BIGINT DEFAULT 1000,
+                daily_reward BIGINT DEFAULT 500,
+                weekly_reward BIGINT DEFAULT 2500,
+                work_min BIGINT DEFAULT 100,
+                work_max BIGINT DEFAULT 400,
+                crime_min BIGINT DEFAULT 200,
+                crime_max BIGINT DEFAULT 800,
+                robbing_enabled BOOLEAN DEFAULT TRUE,
+                gamble_limit BIGINT DEFAULT 50000,
+                event_multiplier NUMERIC(4, 2) DEFAULT 1.0,
+                created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
+            );
+            """,
+
+            # Item Shop Catalog table
+            """
+            CREATE TABLE IF NOT EXISTS economy_items (
+                item_id VARCHAR(64) PRIMARY KEY,
+                name VARCHAR(100) NOT NULL,
+                category VARCHAR(32) NOT NULL,
+                price BIGINT NOT NULL,
+                sell_price BIGINT NOT NULL,
+                rarity VARCHAR(20) DEFAULT 'common',
+                emoji VARCHAR(32) DEFAULT '📦',
+                description TEXT
+            );
+            """,
+
+            # User Inventory table
+            """
+            CREATE TABLE IF NOT EXISTS economy_inventory (
+                id BIGSERIAL PRIMARY KEY,
+                guild_id BIGINT NOT NULL,
+                user_id BIGINT NOT NULL,
+                item_id VARCHAR(64) NOT NULL,
+                quantity BIGINT NOT NULL DEFAULT 1,
+                equipped BOOLEAN DEFAULT FALSE,
+                updated_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
+                UNIQUE (guild_id, user_id, item_id)
+            );
+            """,
+            "CREATE INDEX IF NOT EXISTS idx_economy_inventory_user ON economy_inventory(guild_id, user_id);",
+
+            # Hunting Creatures Catalog table
+            """
+            CREATE TABLE IF NOT EXISTS hunting_creatures (
+                creature_id VARCHAR(64) PRIMARY KEY,
+                name VARCHAR(100) NOT NULL,
+                rarity VARCHAR(32) NOT NULL,
+                emoji VARCHAR(32) NOT NULL,
+                drop_rate NUMERIC(6, 4) NOT NULL,
+                base_hp INT DEFAULT 100,
+                base_atk INT DEFAULT 20,
+                base_def INT DEFAULT 10,
+                description TEXT
+            );
+            """,
+
+            # User Zoo & Pets Collection table
+            """
+            CREATE TABLE IF NOT EXISTS user_zoo (
+                id BIGSERIAL PRIMARY KEY,
+                guild_id BIGINT NOT NULL,
+                user_id BIGINT NOT NULL,
+                creature_id VARCHAR(64) NOT NULL,
+                count BIGINT DEFAULT 1,
+                level INT DEFAULT 1,
+                exp INT DEFAULT 0,
+                affection INT DEFAULT 50,
+                is_favorite BOOLEAN DEFAULT FALSE,
+                equipped_pet BOOLEAN DEFAULT FALSE,
+                caught_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
+                UNIQUE (guild_id, user_id, creature_id)
+            );
+            """,
+            "CREATE INDEX IF NOT EXISTS idx_user_zoo_owner ON user_zoo(guild_id, user_id);",
+
+            # Economy Atomic Transactions History table
+            """
+            CREATE TABLE IF NOT EXISTS economy_transactions (
+                tx_id BIGSERIAL PRIMARY KEY,
+                guild_id BIGINT NOT NULL,
+                sender_id BIGINT NOT NULL,
+                receiver_id BIGINT,
+                amount BIGINT NOT NULL,
+                tx_type VARCHAR(32) NOT NULL,
+                metadata TEXT,
+                created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
+            );
+            """,
+            "CREATE INDEX IF NOT EXISTS idx_eco_tx_guild ON economy_transactions(guild_id, sender_id);",
+
+            # Server Lottery Pool table
+            """
+            CREATE TABLE IF NOT EXISTS economy_lottery (
+                lottery_id BIGSERIAL PRIMARY KEY,
+                guild_id BIGINT NOT NULL,
+                ticket_price BIGINT DEFAULT 100,
+                pot BIGINT DEFAULT 0,
+                ends_at TIMESTAMPTZ NOT NULL,
+                status VARCHAR(16) DEFAULT 'active',
+                winner_id BIGINT
+            );
+            """,
+
+            # Lottery Tickets Purchases table
+            """
+            CREATE TABLE IF NOT EXISTS economy_lottery_tickets (
+                id BIGSERIAL PRIMARY KEY,
+                lottery_id BIGINT NOT NULL,
+                guild_id BIGINT NOT NULL,
+                user_id BIGINT NOT NULL,
+                tickets INT DEFAULT 1,
+                created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
+            );
+            """,
+
+            # User Quests and Achievements table
+            """
+            CREATE TABLE IF NOT EXISTS user_quests (
+                id BIGSERIAL PRIMARY KEY,
+                guild_id BIGINT NOT NULL,
+                user_id BIGINT NOT NULL,
+                quest_type VARCHAR(32) NOT NULL,
+                target_count INT NOT NULL,
+                current_count INT DEFAULT 0,
+                reward_cash BIGINT NOT NULL,
+                completed BOOLEAN DEFAULT FALSE,
+                claimed BOOLEAN DEFAULT FALSE,
+                expires_at TIMESTAMPTZ NOT NULL,
+                created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
+            );
+            """,
+            "CREATE INDEX IF NOT EXISTS idx_user_quests_active ON user_quests(guild_id, user_id, completed, claimed);",
             # Server modular audit logging channels
             """
             CREATE TABLE IF NOT EXISTS guild_logs (

@@ -18,6 +18,7 @@ from dashboard_api.routes.music_routes import register_music_routes
 from dashboard_api.routes.system_routes import register_system_routes
 from dashboard_api.routes.ticket_routes import register_ticket_routes
 from dashboard_api.routes.watch_routes import register_watch_routes
+from dashboard_api.routes.economy_routes import register_economy_routes
 
 logger = logging.getLogger("Kyoka.Dashboard.Server")
 
@@ -258,6 +259,7 @@ def create_app(
     register_system_routes(app)
     register_ticket_routes(app)
     register_watch_routes(app)
+    register_economy_routes(app)
 
     # Mount frontend static files and pages for unified hosting and standalone deployment
     if serve_website:

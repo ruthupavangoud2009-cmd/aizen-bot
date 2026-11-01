@@ -233,6 +233,78 @@ CATEGORIES: list[CategoryMeta] = [
         image_key="owner",
         priority=23,
     ),
+    CategoryMeta(
+        id="economy",
+        name="Economy",
+        tag="🪙・ECONOMY",
+        emoji="🪙",
+        description="OwO-style economy, cash, daily rewards, work, crime, shop, inventory & transfers",
+        image_key="general",
+        priority=24,
+    ),
+    CategoryMeta(
+        id="hunting",
+        name="Hunting & Animals",
+        tag="🏹・HUNTING & ANIMALS",
+        emoji="🏹",
+        description="Hunt creatures, capture drops, animal rarity rolls, drop rates & wilderness expeditions",
+        image_key="general",
+        priority=25,
+    ),
+    CategoryMeta(
+        id="pets",
+        name="Pets & Collection",
+        tag="🐾・PETS & COLLECTION",
+        emoji="🐾",
+        description="Manage pets, zoo collection, feeding, trading, equipment upgrades & collection progress",
+        image_key="general",
+        priority=26,
+    ),
+    CategoryMeta(
+        id="rpg",
+        name="Adventure & RPG",
+        tag="⚔️・ADVENTURE & RPG",
+        emoji="⚔️",
+        description="Procedural dungeons, raids, world bosses, mining, fishing, quests & treasure exploration",
+        image_key="general",
+        priority=27,
+    ),
+    CategoryMeta(
+        id="casino",
+        name="Casino",
+        tag="🎰・CASINO & GAMBLING",
+        emoji="🎰",
+        description="Slots, coinflip, blackjack, roulette, dice, higher-lower, wheel of fortune & scratch cards",
+        image_key="general",
+        priority=28,
+    ),
+    CategoryMeta(
+        id="multiplayer",
+        name="Multiplayer Games",
+        tag="🎮・MULTIPLAYER GAMES",
+        emoji="🎮",
+        description="Connect4, TicTacToe, Battleship, Chess, Wordle, Hangman, 2048 & typing challenges",
+        image_key="general",
+        priority=29,
+    ),
+    CategoryMeta(
+        id="social_games",
+        name="Social Games",
+        tag="🎉・SOCIAL & PARTY GAMES",
+        emoji="🎉",
+        description="Truth or Dare, Would You Rather, Ship compatibility, Love calculation, RPS & compliments",
+        image_key="general",
+        priority=30,
+    ),
+    CategoryMeta(
+        id="quests",
+        name="Quests & Achievements",
+        tag="📜・QUESTS & ACHIEVEMENTS",
+        emoji="📜",
+        description="Daily challenges, milestones, quest completion tracking & achievement badges",
+        image_key="general",
+        priority=31,
+    ),
 ]
 
 CATEGORY_BY_ID: dict[str, CategoryMeta] = {c.id: c for c in CATEGORIES}
@@ -293,6 +365,15 @@ CATEGORY_SEARCH_ALIASES: dict[str, str] = {
     "stock": "service_bills", "kdc": "service_bills", "shop": "service_bills", "store": "service_bills", "kdcshop": "service_bills", "review": "service_bills", "reviews": "service_bills",
     # Owner & Developer
     "owner": "owner", "dev": "owner", "developer": "owner", "system": "owner", "eval": "owner", "globalsupport": "owner", "setsupport": "owner",
+    # Economy, Hunting & Games
+    "economy": "economy", "eco": "economy", "cash": "economy", "money": "economy", "bank": "economy",
+    "hunting": "hunting", "hunt": "hunting", "animals": "hunting", "catch": "hunting",
+    "pets": "pets", "pet": "pets", "zoo": "pets", "collection": "pets",
+    "rpg": "rpg", "adventure": "rpg", "dungeon": "rpg", "raid": "rpg", "boss": "rpg",
+    "casino": "casino", "gamble": "casino", "slots": "casino", "blackjack": "casino",
+    "multiplayer": "multiplayer", "mp": "multiplayer", "boardgames": "multiplayer",
+    "social_games": "social_games", "socialgames": "social_games", "party": "social_games",
+    "quests": "quests", "quest": "quests", "achievements": "quests",
 }
 
 
@@ -460,6 +541,16 @@ COG_MAPPINGS: dict[str, str] = {
     "requirements": "general",
     "steal": "general",
     "sticky": "general",
+
+    # Economy, Hunting & Games
+    "economy": "economy",
+    "hunting": "hunting",
+    "pets": "pets",
+    "adventurerpg": "rpg",
+    "casino": "casino",
+    "multiplayergames": "multiplayer",
+    "socialgames": "social_games",
+    "questssystem": "quests",
 }
 
 

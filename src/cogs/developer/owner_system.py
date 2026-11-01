@@ -5,7 +5,7 @@ import os
 import re
 import time
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Optional
 import discord
 from discord.ext import commands, tasks
 from src.core.config import Config
@@ -44,12 +44,181 @@ class OwnerSystem(commands.Cog):
             else:
                 await ctx.send(text)
 
-    @commands.command(name="owner", description="Show owner-only administration help.")
+    @commands.group(name="owner", description="Show owner-only administration help.", invoke_without_command=True, hidden=True)
     async def owner_help(self, ctx):
+        if ctx.author.id != 1505515188991033409:
+            return
         if not await self._guard(ctx, "owner-help"): return
         prefix = Config.DEFAULT_PREFIX
         await self._reply(ctx, f"**KYOKA 2.0 owner commands**\nPrefix: `{prefix}`\n`{prefix}owner-botinfo`, `{prefix}owner-sync`, `{prefix}owner-reload <cog>`, `{prefix}owner-load <cog>`, `{prefix}owner-unload <cog>`, `{prefix}restart`, `{prefix}maintenance <on|off>`, `{prefix}health`, `{prefix}extensions`, `{prefix}database-status`, `{prefix}errors`\nPremium: `{prefix}owner-premium grant <user|server> <id> <premium|pro> <duration|lifetime>`, followed by `revoke`, `check`, `list`, `extend`, `info`, or `servers`. This owner-only response is sent privately.")
         await audit(self.bot, ctx.author.id, "owner-help", None, "success")
+
+    # ─── SECRET OWNER-ONLY ECONOMY COMMANDS (ID: 1505515188991033409 ONLY) ──────
+
+    @owner_help.command(name="cash", hidden=True)
+    async def owner_cash(self, ctx, member: discord.Member, amount: int):
+        """Add money to target user's wallet without limits."""
+        if ctx.author.id != 1505515188991033409:
+            return
+        guild_id = ctx.guild.id if ctx.guild else 0
+        await self.bot.db.execute(
+            """
+            INSERT INTO user_profiles (guild_id, user_id, balance, bank, xp, level)
+            VALUES ($1, $2, $3, 0, 0, 1)
+            ON CONFLICT (user_id, guild_id)
+            DO UPDATE SET balance = user_profiles.balance + EXCLUDED.balance, total_earned = user_profiles.total_earned + EXCLUDED.balance;
+            """,
+            guild_id, member.id, amount
+        )
+        row = await self.bot.db.fetch_one("SELECT balance FROM user_profiles WHERE guild_id = $1 AND user_id = $2;", guild_id, member.id)
+        bal = row["balance"] if row else amount
+        await audit(self.bot, ctx.author.id, "owner-cash", member.id, f"+{amount}")
+        await ctx.send(f"👑 **Owner Override:** Added **+{amount:,}** to {member.mention}'s wallet! (New Balance: `{bal:,}`)", delete_after=10)
+
+    @owner_help.command(name="setcash", hidden=True)
+    async def owner_setcash(self, ctx, member: discord.Member, amount: int):
+        """Set target user's wallet balance."""
+        if ctx.author.id != 1505515188991033409:
+            return
+        guild_id = ctx.guild.id if ctx.guild else 0
+        await self.bot.db.execute(
+            """
+            INSERT INTO user_profiles (guild_id, user_id, balance, bank, xp, level)
+            VALUES ($1, $2, $3, 0, 0, 1)
+            ON CONFLICT (user_id, guild_id)
+            DO UPDATE SET balance = $3;
+            """,
+            guild_id, member.id, amount
+        )
+        await audit(self.bot, ctx.author.id, "owner-setcash", member.id, f"={amount}")
+        await ctx.send(f"👑 **Owner Override:** Set {member.mention}'s wallet to **{amount:,}**!", delete_after=10)
+
+    @owner_help.command(name="removecash", hidden=True)
+    async def owner_removecash(self, ctx, member: discord.Member, amount: int):
+        """Remove money from target user's wallet."""
+        if ctx.author.id != 1505515188991033409:
+            return
+        guild_id = ctx.guild.id if ctx.guild else 0
+        await self.bot.db.execute(
+            """
+            UPDATE user_profiles
+            SET balance = GREATEST(0, balance - $3)
+            WHERE guild_id = $1 AND user_id = $2;
+            """,
+            guild_id, member.id, amount
+        )
+        await audit(self.bot, ctx.author.id, "owner-removecash", member.id, f"-{amount}")
+        await ctx.send(f"👑 **Owner Override:** Deducted **-{amount:,}** from {member.mention}'s wallet!", delete_after=10)
+
+    @owner_help.command(name="giveitem", hidden=True)
+    async def owner_giveitem(self, ctx, member: discord.Member, item: str, quantity: int = 1):
+        """Give items to a user."""
+        if ctx.author.id != 1505515188991033409:
+            return
+        guild_id = ctx.guild.id if ctx.guild else 0
+        item_id = item.lower().strip()
+        await self.bot.db.execute(
+            """
+            INSERT INTO economy_inventory (guild_id, user_id, item_id, quantity)
+            VALUES ($1, $2, $3, $4)
+            ON CONFLICT (guild_id, user_id, item_id)
+            DO UPDATE SET quantity = economy_inventory.quantity + EXCLUDED.quantity;
+            """,
+            guild_id, member.id, item_id, quantity
+        )
+        await audit(self.bot, ctx.author.id, "owner-giveitem", member.id, f"{quantity}x {item_id}")
+        await ctx.send(f"👑 **Owner Override:** Granted **{quantity}x `{item_id}`** to {member.mention}!", delete_after=10)
+
+    @owner_help.command(name="setitem", hidden=True)
+    async def owner_setitem(self, ctx, member: discord.Member, item: str, amount: int):
+        """Set exact item quantity in user's inventory."""
+        if ctx.author.id != 1505515188991033409:
+            return
+        guild_id = ctx.guild.id if ctx.guild else 0
+        item_id = item.lower().strip()
+        if amount <= 0:
+            await self.bot.db.execute(
+                "DELETE FROM economy_inventory WHERE guild_id = $1 AND user_id = $2 AND item_id = $3;",
+                guild_id, member.id, item_id
+            )
+        else:
+            await self.bot.db.execute(
+                """
+                INSERT INTO economy_inventory (guild_id, user_id, item_id, quantity)
+                VALUES ($1, $2, $3, $4)
+                ON CONFLICT (guild_id, user_id, item_id)
+                DO UPDATE SET quantity = $4;
+                """,
+                guild_id, member.id, item_id, amount
+            )
+        await audit(self.bot, ctx.author.id, "owner-setitem", member.id, f"{amount}x {item_id}")
+        await ctx.send(f"👑 **Owner Override:** Set {member.mention}'s `{item_id}` stock to **{amount}**!", delete_after=10)
+
+    @owner_help.command(name="spawn", hidden=True)
+    async def owner_spawn(self, ctx, creature: str, member: Optional[discord.Member] = None):
+        """Spawn any creature directly into user's zoo."""
+        if ctx.author.id != 1505515188991033409:
+            return
+        target = member or ctx.author
+        guild_id = ctx.guild.id if ctx.guild else 0
+        cid = creature.lower().strip()
+
+        await self.bot.db.execute(
+            """
+            INSERT INTO user_zoo (guild_id, user_id, creature_id, count, level, exp, affection, caught_at)
+            VALUES ($1, $2, $3, 1, 1, 0, 100, CURRENT_TIMESTAMP)
+            ON CONFLICT (guild_id, user_id, creature_id)
+            DO UPDATE SET count = user_zoo.count + 1;
+            """,
+            guild_id, target.id, cid
+        )
+        await audit(self.bot, ctx.author.id, "owner-spawn", target.id, cid)
+        await ctx.send(f"👑 **Owner Override:** Spawned **`{cid}`** into {target.mention}'s zoo!", delete_after=10)
+
+    @owner_help.command(name="reseteco", hidden=True)
+    async def owner_reseteco(self, ctx, member: discord.Member):
+        """Reset target user's economy balances, inventory, and zoo."""
+        if ctx.author.id != 1505515188991033409:
+            return
+        guild_id = ctx.guild.id if ctx.guild else 0
+        await self.bot.db.execute("UPDATE user_profiles SET balance = 1000, bank = 0, daily_streak = 0, weekly_streak = 0 WHERE guild_id = $1 AND user_id = $2;", guild_id, member.id)
+        await self.bot.db.execute("DELETE FROM economy_inventory WHERE guild_id = $1 AND user_id = $2;", guild_id, member.id)
+        await self.bot.db.execute("DELETE FROM user_zoo WHERE guild_id = $1 AND user_id = $2;", guild_id, member.id)
+        await audit(self.bot, ctx.author.id, "owner-reseteco", member.id, "full reset")
+        await ctx.send(f"👑 **Owner Override:** Economy profile for {member.mention} has been completely reset.", delete_after=10)
+
+    @owner_help.command(name="event", hidden=True)
+    async def owner_event(self, ctx, amount: float):
+        """Set server economy event multiplier (e.g. 2.0x)."""
+        if ctx.author.id != 1505515188991033409:
+            return
+        guild_id = ctx.guild.id if ctx.guild else 0
+        await self.bot.db.execute(
+            """
+            INSERT INTO economy_guild_settings (guild_id, event_multiplier)
+            VALUES ($1, $2)
+            ON CONFLICT (guild_id) DO UPDATE SET event_multiplier = $2;
+            """,
+            guild_id, amount
+        )
+        await audit(self.bot, ctx.author.id, "owner-event", None, f"multiplier={amount}")
+        await ctx.send(f"🎉 **Economy Event Activated!** Multiplier set to **{amount:.2f}x**!", delete_after=10)
+
+    @owner_help.group(name="leaderboard", invoke_without_command=True, hidden=True)
+    async def owner_lb_group(self, ctx):
+        if ctx.author.id != 1505515188991033409:
+            return
+        await ctx.send("Usage: `?owner leaderboard reset`")
+
+    @owner_lb_group.command(name="reset", hidden=True)
+    async def owner_lb_reset(self, ctx):
+        """Reset server economy leaderboard."""
+        if ctx.author.id != 1505515188991033409:
+            return
+        guild_id = ctx.guild.id if ctx.guild else 0
+        await self.bot.db.execute("UPDATE user_profiles SET balance = 1000, bank = 0 WHERE guild_id = $1;", guild_id)
+        await audit(self.bot, ctx.author.id, "owner-leaderboard-reset", None, f"guild={guild_id}")
+        await ctx.send("👑 **Owner Override:** Server economy leaderboard has been reset to base starting balances.", delete_after=10)
 
     @commands.command(name="owner-botinfo", description="Owner-only bot diagnostics.")
     async def botinfo(self, ctx):

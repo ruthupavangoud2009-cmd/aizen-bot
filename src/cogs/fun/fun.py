@@ -849,7 +849,7 @@ class Fun(commands.Cog):
         quotes = ["The truth is rarely as simple as it appears.", "Patience is a weapon when used deliberately.", "A plan is only as strong as the assumptions beneath it.", "The most convincing illusion is the one you never think to question."]
         await ctx.send(f"🟣 *“{random.choice(quotes)}”*\n— KYŌKA")
 
-    @commands.command(name="wyr", help="Get a safe would-you-rather prompt.")
+    @commands.command(name="wyr", aliases=["wouldyourather"], help="Get a safe would-you-rather prompt.")
     async def wyr(self, ctx: CustomContext):
         prompts = [("always know when someone is lying", "always know when someone is joking"), ("teleport anywhere once a day", "pause time for ten seconds once a day"), ("master every instrument", "speak every language")]
         a, b = random.choice(prompts)
