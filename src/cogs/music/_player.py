@@ -613,12 +613,16 @@ class GuildPlayer:
                 if agent:
                     await agent.heal_node(force=True)
                 await asyncio.sleep(0.5)
-                await asyncio.wait_for(
-                    self.voice_client.play(playable, volume=vol_int, paused=False),
-                    timeout=LAVALINK_PLAY_TIMEOUT,
-                )
-                recovered = True
-                logger.info(f"Guild {self.guild.id}: Re-stream recovered successfully for '{track.title}'")
+                target_ch = getattr(self.guild.me.voice, "channel", None) if self.guild.me and self.guild.me.voice else None
+                if target_ch and (not self.voice_client or not self.voice_client.connected):
+                    await self.connect_voice(target_ch)
+                if self.voice_client and self.voice_client.connected:
+                    await asyncio.wait_for(
+                        self.voice_client.play(playable, volume=vol_int, paused=False),
+                        timeout=LAVALINK_PLAY_TIMEOUT,
+                    )
+                    recovered = True
+                    logger.info(f"Guild {self.guild.id}: Re-stream recovered successfully for '{track.title}'")
             except Exception as retry_err:
                 logger.error(f"Guild {self.guild.id}: Re-stream retry failed: {retry_err}")
 

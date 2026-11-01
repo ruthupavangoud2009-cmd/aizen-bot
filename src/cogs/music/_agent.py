@@ -413,15 +413,36 @@ class MusicAgent:
 
     # ── High-Volume Background Sweeper & Memory Pruner ──
 
-    @tasks.loop(seconds=60.0)
+    @tasks.loop(seconds=30.0)
     async def _background_sweeper(self) -> None:
         """
-        Runs every 60s to ensure memory scaling across 1,000+ servers:
-        1. Prunes stale per-guild locks and debounce timestamps.
-        2. Sweeps zombie players (disconnected from voice for >180s without 24/7).
-        3. Staggered iteration to prevent asyncio event-loop lag.
+        Runs every 30s to ensure high reliability and memory scaling across 1,000+ servers:
+        1. Proactively verifies Lavalink node connectivity & REST API health; heals immediately if down.
+        2. Prunes stale per-guild locks and debounce timestamps.
+        3. Sweeps zombie players (disconnected from voice for >180s without 24/7).
+        4. Staggered iteration to prevent asyncio event-loop lag.
         """
         now = time.time()
+
+        # 0. Proactive Lavalink node watchdog (guarantees music never stays down)
+        try:
+            import wavelink
+            node = None
+            try:
+                node = wavelink.Pool.get_node()
+            except Exception:
+                node = None
+            
+            node_healthy = bool(
+                node is not None
+                and getattr(node, "status", None) == wavelink.NodeStatus.CONNECTED
+                and await probe_node(node, timeout=3.5)
+            )
+            if not node_healthy:
+                logger.warning("MusicAgent Watchdog: Lavalink node unseated or unresponsive. Proactively healing...")
+                await self.heal_node(force=True)
+        except Exception as node_sweep_err:
+            logger.debug(f"MusicAgent Watchdog error: {node_sweep_err}")
 
         # 1. Prune debounce timestamps older than 600s
         stale_guilds = [gid for gid, ts in self._last_heal_time.items() if now - ts > 600.0]

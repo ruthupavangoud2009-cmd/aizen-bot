@@ -414,6 +414,17 @@ class NativeExtractor:
 
         import wavelink
 
+        # Ensure node is alive before searching
+        try:
+            current_node = wavelink.Pool.get_node()
+            if not current_node or current_node.status != wavelink.NodeStatus.CONNECTED:
+                from src.main import get_current_bot
+                bot = get_current_bot()
+                if bot and hasattr(bot, "_music_agent") and bot._music_agent:
+                    await bot._music_agent.heal_node()
+        except Exception:
+            pass
+
         # direct YouTube URL Handling
         yt_match = YOUTUBE_URL_REGEX.search(raw_q)
         orig_yt_url = None

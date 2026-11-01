@@ -158,7 +158,10 @@ class Config:
         "https://lava-v4.millohost.my.id:443|https://discord.gg/mjS5J2K3ep,"
         "https://lavalink.jirayu.net:443|youshallnotpass,"
         "http://lavalink.jirayu.net:13592|youshallnotpass,"
-        "http://lava2.kasawa.pro:2334|youshallnotpass"
+        "http://lava2.kasawa.pro:2334|youshallnotpass,"
+        "http://lavalink.triniumhost.com:4333|youshallnotpass,"
+        "http://lavalink.triniumhost.com:2333|youshallnotpass,"
+        "http://lavalinkv4.serenetia.com:80|https://seretia.link/discord"
     ).strip()
     LAVALINK_AUTO_DISCOVER: bool = os.getenv("LAVALINK_AUTO_DISCOVER", "1").lower() in ("1", "true", "yes")
     LAVALINK_PUBLIC_LIST_URL: str = os.getenv(

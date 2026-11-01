@@ -347,3 +347,12 @@ Legacy `+` prefix commands (`+gstart`, `+gend`, `+greroll`, `+glist`, `+ai`, `+p
 | `src/cogs/fun/ai_interactions.py` | `aipersonality` | — | Select from 10 personality presets or configure custom persona instructions. |
 | `src/cogs/fun/ai_interactions.py` | `aiconfig` | — | View active server AI configuration, channel restrictions, and tone. |
 | `src/cogs/fun/ai_interactions.py` | `aitest` | — | Test sample prompt output against the active server personality. |
+| `src/cogs/fun/arena_rpg.py` | `raid` | boss, worldboss | Launch an interactive multiplayer World Boss Raid lobby with custom boss phases and loot drops. |
+| `src/cogs/fun/arena_rpg.py` | `blackjack` | bj, 21 | High-Roller Casino Blackjack with ASCII card rendering, hit/stand/double controls, and soft-17 rules. |
+| `src/cogs/fun/arena_rpg.py` | `summon` | gacha, crate, box | Summon Mythic weapons, shields, and armor from the Cyber Crucible with 6 rarity tiers. |
+| `src/cogs/fun/arena_rpg.py` | `profile` | hero, stats, gear | Inspect your RPG Hero Profile, stats (HP, ATK, DEF, CRIT), level, and equipped loadout. |
+| `src/cogs/fun/arena_rpg.py` | `inventory` | inv, bag | View all unlocked and acquired weapons and armor in your backpack. |
+| `src/cogs/fun/arena_rpg.py` | `equip` | — | Equip a weapon or armor from your inventory: `+equip <item name>`. |
+| `src/cogs/fun/arena_rpg.py` | `daily` | claim | Claim daily 350 Gold and 150 XP bonus reward. |
+| `src/cogs/fun/arena_rpg.py` | `arenatop` | gamelb, topraids | View global and server Hall of Fame for top raid kills and wealthiest tycoons. |
+

@@ -263,16 +263,16 @@ async def fetch_public_nodes(limit: int = 30) -> list[tuple[str, str]]:
     return nodes[:limit]
 
 
-async def discover_working_node(timeout: float = 20.0) -> Optional[tuple[str, str]]:
+async def discover_working_nodes(timeout: float = 20.0) -> list[tuple[str, str]]:
     """
-    Find a public Lavalink node that actually works right now.
+    Find all public Lavalink nodes that actually work right now.
 
     Every candidate is probed in parallel, so the whole scan costs about as much
     as the slowest single probe instead of the sum of all of them.
     """
     nodes = await fetch_public_nodes()
     if not nodes:
-        return None
+        return []
 
     async def _probe(uri: str, password: str) -> Optional[str]:
         ok, _ = await probe_candidate_node(uri, password, timeout=min(timeout, 9.0))
@@ -283,13 +283,23 @@ async def discover_working_node(timeout: float = 20.0) -> Optional[tuple[str, st
         return_exceptions=True,
     )
 
+    working: list[tuple[str, str]] = []
+    nodes_dict = dict(nodes)
     for (uri, _), result in zip(nodes, results):
-        if isinstance(result, str):
-            logger.info(f"Discovered a working public Lavalink node: {uri}")
-            return uri, dict(nodes)[uri]
+        if isinstance(result, str) and result in nodes_dict:
+            working.append((result, nodes_dict[result]))
 
-    logger.warning("No public Lavalink node passed the full health check.")
-    return None
+    if working:
+        logger.info(f"Discovered {len(working)} working public Lavalink node(s).")
+    else:
+        logger.warning("No public Lavalink node passed the full health check.")
+    return working
+
+
+async def discover_working_node(timeout: float = 20.0) -> Optional[tuple[str, str]]:
+    """Find a single public Lavalink node that actually works right now."""
+    working = await discover_working_nodes(timeout=timeout)
+    return working[0] if working else None
 
 
 async def probe_node(
@@ -555,9 +565,9 @@ async def connect_lavalink_node(
 
     # 3: community directory - only when it is enabled and no configured node worked
     if allow_discovery and getattr(Config, "LAVALINK_AUTO_DISCOVER", True):
-        discovered = await discover_working_node()
-        if discovered is not None:
-            node = await _try(*discovered)
+        discovered_nodes = await discover_working_nodes()
+        for disc_uri, disc_pw in discovered_nodes:
+            node = await _try(disc_uri, disc_pw)
             if node is not None:
                 return node
 
