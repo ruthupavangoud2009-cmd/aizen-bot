@@ -261,6 +261,8 @@ Legacy `+` prefix commands (`+gstart`, `+gend`, `+greroll`, `+glist`, `+ai`, `+p
 | `src/cogs/ticket/ticket_system.py` | `transcript` | — | Generate and download the secure HTML transcript of this ticket channel. |
 | `src/cogs/ticket/ticket_system.py` | `list` | — | List all active ticket panels configured in this server. |
 | `src/cogs/ticket/ticket_system.py` | `delete` | — | Delete a configured ticket panel. Usage: +ticket delete <panel_name> |
+| `src/cogs/ticket/ticket_system.py` | `category` | topic, topics, cat, categories | Configure custom ticket topics/categories with custom names, emojis, and descriptions. |
+| `src/cogs/utility/youtube_pinger.py` | `ytlive` | youtubelive, ytpinger, ytping | Real-time YouTube live stream monitoring, auto-pinger, and announcement broadcast system. |
 | `src/cogs/utility/afk.py` | `afk` | — | Set your AFK status with an optional reason. |
 | `src/cogs/utility/dev_pulse.py` | `dev` | devpulse, opportunities, bounties, devjobs | Autonomous Developer Opportunities & Career Dashboard. |
 | `src/cogs/utility/embed_builder.py` | `embed` | embedbuilder, container, card | Design, customize, preview, save, edit, and post Components V2 container cards. |

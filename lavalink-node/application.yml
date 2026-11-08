@@ -30,6 +30,13 @@ lavalink:
       vimeo: true
       http: true
       local: false
+    bufferDurationMs: 5000
+    frameBufferDurationMs: 5000
+    opusEncodingQuality: 10
+    resamplingQuality: HIGH
+    trackStuckThresholdMs: 10000
+    useSeekGhosting: true
+    playerUpdateInterval: 5
 
   plugins:
     youtube:

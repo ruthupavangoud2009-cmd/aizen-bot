@@ -266,20 +266,259 @@ class TicketClosedControlsView(discord.ui.View):
 
 
 
+# ─── TOPICS CONFIGURATION MODALS & VIEWS ────────────────────────────────────
+
+class AddTopicModal(discord.ui.Modal, title="Add Custom Ticket Topic"):
+    """Modal to define any custom ticket topic / category."""
+    topic_name = discord.ui.TextInput(
+        label="Topic Name",
+        placeholder="e.g. Bug Report, Billing, Game Support, etc.",
+        min_length=2,
+        max_length=50,
+        required=True,
+    )
+    topic_emoji = discord.ui.TextInput(
+        label="Topic Emoji",
+        placeholder="e.g. 🎫, 🐛, 💳, ⚡, 💎",
+        min_length=1,
+        max_length=10,
+        required=False,
+        default="🎫",
+    )
+    topic_description = discord.ui.TextInput(
+        label="Topic Description",
+        placeholder="Short description of this inquiry topic",
+        max_length=100,
+        required=False,
+    )
+    topic_welcome = discord.ui.TextInput(
+        label="Custom Welcome Message (Optional)",
+        placeholder="Custom greeting message shown in ticket for this topic",
+        style=discord.TextStyle.paragraph,
+        max_length=500,
+        required=False,
+    )
+
+    def __init__(self, wizard: "TicketSetupWizard") -> None:
+        super().__init__()
+        self.wizard = wizard
+
+    async def on_submit(self, interaction: discord.Interaction) -> None:
+        name = self.topic_name.value.strip()
+        emoji = self.topic_emoji.value.strip() or "🎫"
+        desc = self.topic_description.value.strip() or f"{name} inquiries"
+        welcome = self.topic_welcome.value.strip()
+
+        # Update or add topic
+        existing = [t for t in self.wizard.custom_topics if t["name"].lower() == name.lower()]
+        if existing:
+            existing[0]["emoji"] = emoji
+            existing[0]["description"] = desc
+            existing[0]["welcome_message"] = welcome
+        else:
+            self.wizard.custom_topics.append({
+                "name": name,
+                "emoji": emoji,
+                "description": desc,
+                "welcome_message": welcome,
+            })
+
+        self.wizard._build_components_for_slide()
+        await edit_container_response(
+            interaction,
+            self.wizard.get_dashboard_container(interaction.guild),
+            view=self.wizard,
+        )
+
+
+class ManageTopicsView(discord.ui.View):
+    """View allowing server admins to view, remove, reset, or add custom topics."""
+
+    def __init__(self, wizard: "TicketSetupWizard") -> None:
+        super().__init__(timeout=300)
+        self.wizard = wizard
+        self._build_components()
+
+    def _build_components(self) -> None:
+        self.clear_items()
+        if self.wizard.custom_topics:
+            opts = [
+                discord.SelectOption(
+                    label=t["name"][:100],
+                    value=t["name"][:100],
+                    description=t.get("description", "")[:100],
+                    emoji=t.get("emoji", "🎫"),
+                )
+                for t in self.wizard.custom_topics[:25]
+            ]
+            remove_select = discord.ui.Select(
+                placeholder="Select a topic to remove...",
+                options=opts,
+                custom_id="manage_topic_remove_select",
+                row=0,
+            )
+            remove_select.callback = self._on_remove_selected
+            self.add_item(remove_select)
+
+        btn_add = discord.ui.Button(
+            label="Add Topic",
+            emoji="➕",
+            style=discord.ButtonStyle.success,
+            custom_id="manage_topic_btn_add",
+            row=1,
+        )
+        btn_add.callback = self._on_add_clicked
+        self.add_item(btn_add)
+
+        btn_reset = discord.ui.Button(
+            label="Reset Defaults",
+            emoji="🔄",
+            style=discord.ButtonStyle.secondary,
+            custom_id="manage_topic_btn_reset",
+            row=1,
+        )
+        btn_reset.callback = self._on_reset_clicked
+        self.add_item(btn_reset)
+
+        btn_done = discord.ui.Button(
+            label="Done / Back to Wizard",
+            emoji="↩️",
+            style=discord.ButtonStyle.primary,
+            custom_id="manage_topic_btn_done",
+            row=1,
+        )
+        btn_done.callback = self._on_done_clicked
+        self.add_item(btn_done)
+
+    def get_container(self) -> KyokaContainer:
+        c = KyokaContainer(accent_color=0x7C3AED)
+        arrow = self.wizard.bot.custom_emojis.get("icons_rightarrow", "›")
+        c.add_section(
+            content=(
+                "**Ticket Topics Manager**\n"
+                "> Configure what the topics in tickets should be for this panel.\n"
+                "> You can create, customize, or remove any topic you want."
+            )
+        )
+        c.add_separator(divider=True)
+        if self.wizard.custom_topics:
+            lines = []
+            for t in self.wizard.custom_topics:
+                lines.append(f"{arrow} {t.get('emoji', '🎫')} **{t['name']}** — *{t.get('description', 'No description')}*")
+            c.add_text("\n".join(lines))
+        else:
+            c.add_text("⚠️ *No custom topics defined. Standard support will be used.*")
+        c.add_separator(divider=True)
+        c.add_text("-# Use dropdown to delete a topic, or click Add Topic to create a new one.")
+        return c
+
+    async def _on_remove_selected(self, interaction: discord.Interaction) -> None:
+        values = interaction.data.get("values", [])
+        if values:
+            rem = values[0].lower()
+            self.wizard.custom_topics = [t for t in self.wizard.custom_topics if t["name"].lower() != rem]
+        self._build_components()
+        await edit_container_response(interaction, self.get_container(), view=self)
+
+    async def _on_add_clicked(self, interaction: discord.Interaction) -> None:
+        await interaction.response.send_modal(AddTopicModal(self.wizard))
+
+    async def _on_reset_clicked(self, interaction: discord.Interaction) -> None:
+        self.wizard.custom_topics = [
+            {"name": "General Support", "emoji": "🎫", "description": "General server assistance and inquiries"},
+            {"name": "Billing / Orders", "emoji": "💳", "description": "Purchases, orders, and payment inquiries"},
+            {"name": "Bug Report", "emoji": "🐛", "description": "Report technical issues and server bugs"},
+            {"name": "Staff Application", "emoji": "📋", "description": "Apply for server moderation and staff roles"},
+        ]
+        self._build_components()
+        await edit_container_response(interaction, self.get_container(), view=self)
+
+    async def _on_done_clicked(self, interaction: discord.Interaction) -> None:
+        self.wizard._build_components_for_slide()
+        await edit_container_response(interaction, self.wizard.get_dashboard_container(interaction.guild), view=self.wizard)
+
+
+# ─── TICKET AI AUTO-REPLY VIEW ───────────────────────────────────────────────
+
+class TicketAIReplyView(discord.ui.View):
+    """View attached to AI auto-responses allowing 1-click solve or human staff escalation."""
+
+    def __init__(self, cog: "TicketSystem", ticket_data: dict[str, Any]) -> None:
+        super().__init__(timeout=None)
+        self.cog = cog
+        self.ticket_data = ticket_data
+        ticket_id = ticket_data.get("id", 0)
+        self.btn_solved.custom_id = f"ticket_ai_solved_{ticket_id}"
+        self.btn_staff.custom_id = f"ticket_ai_staff_{ticket_id}"
+
+    @discord.ui.button(
+        label="Solved My Issue",
+        style=discord.ButtonStyle.success,
+        emoji="✅",
+        custom_id="ticket_ai_btn_solved",
+    )
+    async def btn_solved(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+        is_creator = interaction.user.id == self.ticket_data.get("user_id")
+        perms = getattr(interaction.user, "guild_permissions", None)
+        is_staff = bool(perms and (perms.manage_channels or perms.administrator))
+        if not (is_creator or is_staff):
+            return await interaction.response.send_message("Only the ticket creator or staff can mark this resolved.", ephemeral=True)
+
+        for item in self.children:
+            item.disabled = True
+        try:
+            await interaction.response.edit_message(view=self)
+        except Exception:
+            pass
+
+        sol_card = KyokaContainer(accent_color=5763719)
+        sol_card.add_section(
+            content=(
+                "**Ticket Resolved by AI Assistant**\n"
+                f"> Glad we could solve your inquiry, {interaction.user.mention}!\n"
+                "> This ticket will be archived in 5 seconds..."
+            )
+        )
+        await send_container_response(interaction.channel, sol_card)
+        await asyncio.sleep(5)
+        await self.cog.execute_ticket_close(interaction, self.ticket_data, reason="Resolved by Kyoka AI Assistant")
+
+    @discord.ui.button(
+        label="Need Staff Help",
+        style=discord.ButtonStyle.danger,
+        emoji="🔔",
+        custom_id="ticket_ai_btn_staff",
+    )
+    async def btn_staff(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+        for item in self.children:
+            item.disabled = True
+        try:
+            await interaction.response.edit_message(view=self)
+        except Exception:
+            pass
+
+        await self.cog.summon_ticket_staff(
+            channel=interaction.channel,
+            ticket=self.ticket_data,
+            requested_by=interaction.user,
+            reason="AI solution was insufficient; user requested human staff",
+        )
+
+
 # ─── SLIDE-BASED TICKET DASHBOARD SETUP WIZARD ───────────────────────────────
 
 class TicketSetupWizard(discord.ui.View):
     """
     Slide-Based Wizard for ?ticket setup:
     Slide 1: Embed Select Template + Continue >
-    Slide 2: Support Role & Target Category + < Back + Continue >
+    Slide 2: Support Role, Category & Custom Topics + < Back + Continue >
     Slide 3: Log Channel & Naming Format + < Back + Continue >
     Slide 4: Target Channel & Deploy Panel Action
     """
 
     SLIDES = [
         ("embed", "Step 1: Select Embed Template", "Choose a saved embed from the Embed Builder to use as the visual card for your ticket panel."),
-        ("roles", "Step 2: Support Role & Category", "Select the support role allowed to manage tickets and the category where private channels are created."),
+        ("roles", "Step 2: Support Role, Category & Topics", "Select the support role, channel category, and configure what topics in tickets should be."),
         ("logs", "Step 3: Logs & Settings", "Configure where transcripts and audit logs are sent, and set your ticket naming convention."),
         ("deploy", "Step 4: Target Channel & Deploy", "Choose which text channel to post this ticket panel to and deploy it live."),
     ]
@@ -306,6 +545,11 @@ class TicketSetupWizard(discord.ui.View):
         self.selected_target_channel_id: int | None = None
         self.naming_format: str = "ticket-{count}"
         self.button_label: str = "Create Ticket"
+        self.custom_topics: list[dict[str, Any]] = [
+            {"name": "General Support", "emoji": "🎫", "description": "General server assistance and inquiries"},
+            {"name": "Billing / Orders", "emoji": "💳", "description": "Purchases, orders, and payment inquiries"},
+            {"name": "Bug Report", "emoji": "🐛", "description": "Report technical issues and server bugs"},
+        ]
 
         self._build_components_for_slide()
 
@@ -377,7 +621,7 @@ class TicketSetupWizard(discord.ui.View):
             self.add_item(btn_continue)
 
         elif slide_key == "roles":
-            # Slide 2: Role Select & Category Select
+            # Slide 2: Role Select, Category Select, & Ticket Topics Options
             role_select = discord.ui.RoleSelect(
                 placeholder="Select a Support Staff Role (Optional)...",
                 custom_id="wiz_select_role",
@@ -399,11 +643,32 @@ class TicketSetupWizard(discord.ui.View):
             cat_select.callback = self._on_category_selected
             self.add_item(cat_select)
 
+            # Ticket Topics / Categories Management Buttons
+            btn_manage_topics = discord.ui.Button(
+                label=f"Topics ({len(self.custom_topics)})",
+                emoji="📑",
+                style=discord.ButtonStyle.primary,
+                custom_id="wiz_btn_topics",
+                row=2,
+            )
+            btn_manage_topics.callback = self._on_manage_topics_clicked
+            self.add_item(btn_manage_topics)
+
+            btn_add_topic = discord.ui.Button(
+                label="Add Custom Topic",
+                emoji="➕",
+                style=discord.ButtonStyle.success,
+                custom_id="wiz_btn_add_topic",
+                row=2,
+            )
+            btn_add_topic.callback = self._on_add_topic_clicked
+            self.add_item(btn_add_topic)
+
             btn_back = discord.ui.Button(
                 label="Back",
                 style=discord.ButtonStyle.secondary,
                 custom_id="wiz_btn_back",
-                row=2,
+                row=3,
             )
             btn_back.callback = self._on_back_clicked
             self.add_item(btn_back)
@@ -412,7 +677,7 @@ class TicketSetupWizard(discord.ui.View):
                 label="Continue",
                 style=discord.ButtonStyle.secondary,
                 custom_id="wiz_btn_continue",
-                row=2,
+                row=3,
             )
             btn_continue.callback = self._on_continue_clicked
             self.add_item(btn_continue)
@@ -511,10 +776,17 @@ class TicketSetupWizard(discord.ui.View):
         l_disp = f"<#{self.selected_log_channel_id}>" if self.selected_log_channel_id else "`None (Direct DM)`"
         t_disp = f"<#{self.selected_target_channel_id}>" if self.selected_target_channel_id else "`Not Selected`"
 
+        topics_summary = ", ".join([f"{t.get('emoji', '🎫')} {t['name']}" for t in self.custom_topics[:4]])
+        if len(self.custom_topics) > 4:
+            topics_summary += f" +{len(self.custom_topics) - 4} more"
+        if not topics_summary:
+            topics_summary = "None (Standard Support)"
+
         container.add_text(
             f"{arrow} **Selected Embed:** {e_disp}\n"
             f"{arrow} **Support Role:** {r_disp}\n"
             f"{arrow} **Target Category:** {c_disp}\n"
+            f"{arrow} **Ticket Topics:** `{topics_summary}`\n"
             f"{arrow} **Log Channel:** {l_disp}\n"
             f"{arrow} **Naming Format:** `{self.naming_format}`\n"
             f"{arrow} **Deploy Target:** {t_disp}"
@@ -523,6 +795,13 @@ class TicketSetupWizard(discord.ui.View):
         container.add_text(f"-# Step {self.current_slide_idx + 1}/4 • Setup Session for {self.author.display_name}")
 
         return container
+
+    async def _on_manage_topics_clicked(self, interaction: discord.Interaction) -> None:
+        view = ManageTopicsView(self)
+        await edit_container_response(interaction, view.get_container(), view=view)
+
+    async def _on_add_topic_clicked(self, interaction: discord.Interaction) -> None:
+        await interaction.response.send_modal(AddTopicModal(self))
 
     async def _on_embed_selected(self, interaction: discord.Interaction) -> None:
         select: discord.ui.Select = interaction.data.get("values", [])  # type: ignore
@@ -635,6 +914,20 @@ class TicketSetupWizard(discord.ui.View):
         )
         panel_id = temp_row.get("id", 1)
 
+        # Persist custom topics configured in wizard into database and cache for this panel
+        if self.custom_topics:
+            for t in self.custom_topics:
+                await self.bot.ticket_mgr.add_category(
+                    guild_id=interaction.guild.id,
+                    name=t["name"],
+                    description=t.get("description", ""),
+                    emoji=t.get("emoji", "🎫"),
+                    staff_role_id=self.selected_role_id,
+                    category_channel_id=self.selected_category_id,
+                    welcome_message=t.get("welcome_message", ""),
+                    panel_name=panel_name,
+                )
+
         # Attach interactive category select dropdown
         custom_cats = await self.bot.ticket_mgr.list_categories(interaction.guild.id, panel_name=panel_name)
         cat_options = [
@@ -736,6 +1029,8 @@ class TicketSystem(commands.Cog):
         self.bot = bot
         # Concurrency protection tracking in-flight ticket creations per (guild_id, user_id)
         self._creating_tickets: set[tuple[int, int]] = set()
+        self._staff_summoned_tickets: set[int] = set()
+        self._ai_processing_tickets: set[int] = set()
         # Register persistent inside-ticket views (active and closed controls)
         self.bot.add_view(TicketInsideControlsView(self))
         self.bot.add_view(TicketClosedControlsView(self))
@@ -749,6 +1044,11 @@ class TicketSystem(commands.Cog):
             return
 
         custom_id = interaction.data.get("custom_id", "")
+        if custom_id.startswith("ticket_ai_solved_"):
+            return await self._handle_ai_solved(interaction)
+        if custom_id.startswith("ticket_ai_staff_"):
+            return await self._handle_ai_staff(interaction)
+
         if not (custom_id.startswith("ticket_open_") or custom_id.startswith("ticket_select_")):
             return
 
@@ -972,8 +1272,20 @@ class TicketSystem(commands.Cog):
                 ticket_channel,
                 welcome_container,
                 view=TicketInsideControlsView(self),
-                content=f"{interaction.user.mention} {f'<@&{support_role_id}>' if support_role_id else ''}",
+                content=f"{interaction.user.mention}",
             )
+
+            # Kyoka AI Support Assistant Introduction
+            ai_intro = KyokaContainer(accent_color=0x7C3AED)
+            ai_intro.add_section(
+                content=(
+                    f"🤖 **Kyoka AI Support Assistant is active!**\n"
+                    f"> Hello {interaction.user.mention}! I'm your automated assistant for **{chosen_category}**.\n"
+                    f"> Please explain what you need help with below. I will attempt to resolve your ticket immediately!\n"
+                    f"> If my solution doesn't work, don't worry—you can click **Need Staff Help** at any time to ping our human staff team."
+                )
+            )
+            await send_container_response(ticket_channel, ai_intro)
 
             # Log ticket creation in log channel if configured
             log_channel_id = panel.get("log_channel_id")
@@ -1007,6 +1319,172 @@ class TicketSystem(commands.Cog):
             )
         finally:
             self._creating_tickets.discard(lock_key)
+
+    # ─── TICKET AI AUTO-REPLY HANDLERS & STAFF SUMMON ─────────────────────────
+
+    async def _handle_ai_solved(self, interaction: discord.Interaction) -> None:
+        """Handle user clicking 'Solved My Issue' on an AI auto-reply."""
+        if not interaction.channel or not isinstance(interaction.channel, (discord.TextChannel, discord.Thread)):
+            return
+        ticket = await self.bot.ticket_mgr.get_ticket(interaction.channel.id)
+        if not ticket:
+            return await interaction.response.send_message("Ticket record not found.", ephemeral=True)
+
+        is_creator = interaction.user.id == ticket.get("user_id")
+        perms = getattr(interaction.user, "guild_permissions", None)
+        is_staff = bool(perms and (perms.manage_channels or perms.administrator))
+        if not (is_creator or is_staff):
+            return await interaction.response.send_message("Only the ticket creator or staff can mark this ticket resolved.", ephemeral=True)
+
+        await interaction.response.defer()
+        c = KyokaContainer(accent_color=5763719)  # Green
+        c.add_section(
+            content=(
+                "**Ticket Marked as Solved**\n"
+                f"> Thank you for confirming, {interaction.user.mention}!\n"
+                "> Kyoka AI resolved this inquiry. Closing ticket in 5 seconds..."
+            )
+        )
+        await send_container_response(interaction.channel, c)
+        await asyncio.sleep(5)
+        await self.execute_ticket_close(interaction, ticket, reason="Resolved by Kyoka AI Assistant")
+
+    async def _handle_ai_staff(self, interaction: discord.Interaction) -> None:
+        """Handle user clicking 'Need Staff Help' on an AI auto-reply."""
+        if not interaction.channel or not isinstance(interaction.channel, (discord.TextChannel, discord.Thread)):
+            return
+        ticket = await self.bot.ticket_mgr.get_ticket(interaction.channel.id)
+        if not ticket:
+            return await interaction.response.send_message("Ticket record not found.", ephemeral=True)
+
+        await interaction.response.defer()
+        await self.summon_ticket_staff(
+            channel=interaction.channel,
+            ticket=ticket,
+            requested_by=interaction.user,
+            reason="User indicated AI solution was insufficient and requested human staff",
+        )
+
+    async def summon_ticket_staff(
+        self,
+        channel: discord.TextChannel | discord.Thread,
+        ticket: dict[str, Any],
+        requested_by: discord.Member | discord.User,
+        reason: str = "User requested staff assistance",
+    ) -> None:
+        """Ping the configured support staff role and disable AI auto-replies for this ticket."""
+        self._staff_summoned_tickets.add(channel.id)
+        panel = await self.bot.ticket_mgr.get_panel_by_id(ticket.get("panel_id", 0)) if ticket else None
+        support_role_id = panel.get("support_role_id") if panel else None
+        support_role = channel.guild.get_role(support_role_id) if (support_role_id and channel.guild) else None
+
+        role_ping = support_role.mention if support_role else "@here"
+        arrow = self.bot.custom_emojis.get("icons_rightarrow", "›")
+
+        staff_card = KyokaContainer(accent_color=0xF59E0B)  # Amber
+        staff_card.add_section(
+            content=(
+                "🔔 **Support Staff Summoned**\n"
+                f"> {role_ping} — A staff member is needed to assist {requested_by.mention}.\n\n"
+                f"{arrow} **Reason:** *{reason}*\n"
+                f"{arrow} **Ticket:** `#{ticket.get('ticket_number', 0):04d}` • `{ticket.get('category', 'Support')}`\n"
+                f"> *Our staff team has been alerted and will respond shortly!*"
+            )
+        )
+        await send_container_response(channel, staff_card, content=f"{role_ping}")
+
+    async def generate_ticket_solution(
+        self,
+        query: str,
+        category: str,
+        guild: discord.Guild,
+        user: discord.User | discord.Member,
+    ) -> str:
+        """Generate an AI solution via Gemini API / AIManager or smart fallback knowledge base."""
+        # 1. Try Gemini via ai_mgr or direct Gemini call
+        ai_mgr = getattr(self.bot, "ai_mgr", None)
+        if ai_mgr and hasattr(ai_mgr, "generate_response"):
+            try:
+                session = getattr(self.bot, "session", None)
+                if session and not session.closed:
+                    prompt = (
+                        f"You are Kyoka AI Support Assistant for the Discord server '{guild.name}'. "
+                        f"The user '{user.display_name}' has opened a ticket under the category '{category}'. "
+                        f"Their inquiry is: '{query}'. "
+                        f"Provide a clear, helpful, polite step-by-step solution to their issue. "
+                        f"Keep it under 600 characters and format nicely with bullet points."
+                    )
+                    res = await ai_mgr.generate_response(
+                        session=session,
+                        guild_id=guild.id,
+                        channel_id=0,
+                        user_id=user.id,
+                        prompt=prompt,
+                        server_name=guild.name,
+                    )
+                    if res and len(res.strip()) > 10:
+                        return res.strip()
+            except Exception as e:
+                logger.debug(f"AI Manager ticket solution exception: {e}")
+
+        # 2. Smart Knowledge Base Fallback Engine
+        q_low = query.lower()
+        cat_low = category.lower()
+
+        if any(w in q_low or w in cat_low for w in ("bug", "glitch", "error", "crash", "broken")):
+            return (
+                "Here are immediate troubleshooting steps for technical issues:\n"
+                "1. **Restart your client:** Close and restart Discord / Roblox to clear cached state.\n"
+                "2. **Check connection:** Ensure your network or DNS is stable.\n"
+                "3. **Provide details:** Please reply with your exact device/OS, error screenshot, and steps to reproduce.\n"
+                "If this is a server bug, click **Need Staff Help** below so our dev team can investigate!"
+            )
+        elif any(w in q_low or w in cat_low for w in ("buy", "order", "purchase", "billing", "payment", "shop", "price")):
+            return (
+                "For purchases, orders, and billing:\n"
+                "1. **Payment Methods:** We accept standard server payment methods.\n"
+                "2. **Proof of Payment:** Please upload your transaction ID or receipt screenshot in this channel.\n"
+                "3. **Delivery:** Orders are manually verified by staff for security.\n"
+                "Click **Need Staff Help** below to complete your transaction with an authorized staff member!"
+            )
+        elif any(w in q_low or w in cat_low for w in ("trial", "race v4", "awakening", "v4", "mirage", "gear")):
+            return (
+                "For Race V4 Trials & Mirage Island:\n"
+                "1. **Full Moon:** Ensure you are in a Third Sea server with a Full Moon active.\n"
+                "2. **Mirage Island:** Look at the highest peak with your mirror fractal during Full Moon.\n"
+                "3. **Trials Room:** 3 players with different races must activate abilities simultaneously at the Temple of Time.\n"
+                "Click **Need Staff Help** if you need a carry or carry team assistance!"
+            )
+        elif any(w in q_low or w in cat_low for w in ("raid", "chip", "fragments", "advance raid", "order")):
+            return (
+                "For Raids & Fragment Farming:\n"
+                "1. **Requirements:** Level 1100+ to purchase microchips at the Raid Laboratory.\n"
+                "2. **Carry Rules:** Stay in the starting zone or protect the carry player.\n"
+                "3. **Advance Raids:** Dough / Phoenix require special chip unlocks.\n"
+                "Click **Need Staff Help** below to squad up with our verified raid carries!"
+            )
+        elif any(w in q_low or w in cat_low for w in ("role", "verify", "permission", "access", "rank")):
+            return (
+                "For Roles & Server Permissions:\n"
+                "1. **Verification:** Check the `#verification` channel and complete the prompt.\n"
+                "2. **Reaction Roles:** Visit `#roles` to select your ping and game roles.\n"
+                "3. **Level Roles:** Level up your activity in chat to unlock higher privileges.\n"
+                "If your roles did not update automatically, click **Need Staff Help** below."
+            )
+        elif any(w in q_low or w in cat_low for w in ("rule", "ban", "warn", "mute", "appeal")):
+            return (
+                "For Moderation Appeals & Inquiries:\n"
+                "1. Please provide your User ID and the reason for your penalty.\n"
+                "2. Be respectful and describe what happened honestly.\n"
+                "3. Click **Need Staff Help** below so a Moderator or Administrator can review your case."
+            )
+        else:
+            return (
+                f"Thank you for contacting support regarding **{category}**.\n"
+                "1. Please describe your inquiry with as much detail as possible.\n"
+                "2. If applicable, attach relevant screenshots or transaction links.\n"
+                "3. If you'd like a human team member to review this right away, click **Need Staff Help** below!"
+            )
 
     # ─── TICKET CLOSE EXECUTION ───────────────────────────────────────────────
 
@@ -1558,13 +2036,13 @@ class TicketSystem(commands.Cog):
         status = "Unlimited" if limit == 0 else str(limit)
         await ctx.send_success(f"Ticket limit for panel `{clean_name}` set to **{status}** per user.")
 
-    @ticket_group.group(name="category", aliases=["cat", "categories"], invoke_without_command=True)
+    @ticket_group.group(name="category", aliases=["cat", "categories", "topic", "topics"], invoke_without_command=True)
     @commands.has_permissions(manage_channels=True)
     async def ticket_category_group(self, ctx: CustomContext) -> None:
-        """Manage custom ticket categories for this server."""
+        """Manage custom ticket categories / topics for this server."""
         await ctx.invoke(self.ticket_category_list_cmd)
 
-    @ticket_category_group.command(name="list", description="List all configured ticket categories.")
+    @ticket_category_group.command(name="list", description="List all configured ticket topics / categories.")
     @commands.has_permissions(manage_channels=True)
     async def ticket_category_list_cmd(self, ctx: CustomContext, panel_name: str = "") -> None:
         """List all ticket categories."""
@@ -1579,11 +2057,11 @@ class TicketSystem(commands.Cog):
 
         container = KyokaContainer()
         container.add_section(
-            content=f"🎫 **Ticket Categories • {ctx.guild.name}**\n\n" + "\n".join(lines)
+            content=f"🎫 **Ticket Topics / Categories • {ctx.guild.name}**\n\n" + "\n".join(lines)
         )
         await send_container_response(ctx, container)
 
-    @ticket_category_group.command(name="add", description="Add a new custom ticket category. Usage: ?ticket category add <name> [emoji] [description]")
+    @ticket_category_group.command(name="add", description="Add any custom ticket topic / category. Usage: ?ticket topic add <name> [emoji] [description]")
     @commands.has_permissions(manage_channels=True)
     async def ticket_category_add_cmd(
         self,
@@ -1593,7 +2071,7 @@ class TicketSystem(commands.Cog):
         *,
         description: str = "Inquiry & services",
     ) -> None:
-        """Add a custom ticket category."""
+        """Add a custom ticket category / topic."""
         clean_name = name.strip()[:100]
         await self.bot.ticket_mgr.add_category(
             guild_id=ctx.guild.id,
@@ -1601,22 +2079,83 @@ class TicketSystem(commands.Cog):
             description=description[:250],
             emoji=emoji,
         )
-        await ctx.send_success(f"Ticket category **{emoji} {clean_name}** added successfully!")
+        await ctx.send_success(f"Ticket topic **{emoji} {clean_name}** added successfully!")
 
-    @ticket_category_group.command(name="delete", aliases=["remove"], description="Delete a ticket category.")
+    @ticket_category_group.command(name="delete", aliases=["remove"], description="Delete a ticket topic / category.")
     @commands.has_permissions(manage_channels=True)
     async def ticket_category_delete_cmd(self, ctx: CustomContext, *, name: str) -> None:
-        """Delete a ticket category."""
+        """Delete a ticket topic / category."""
         clean_name = name.strip()
         deleted = await self.bot.ticket_mgr.delete_category(ctx.guild.id, clean_name)
         if deleted:
-            await ctx.send_success(f"Ticket category **{clean_name}** deleted.")
+            await ctx.send_success(f"Ticket topic **{clean_name}** deleted.")
         else:
-            await ctx.send_error(f"Category **{clean_name}** not found.")
+            await ctx.send_error(f"Topic **{clean_name}** not found.")
 
     @commands.Cog.listener()
     async def on_message(self, message: discord.Message) -> None:
-        """Synchronize staff messages from Discord ticket threads into website tickets."""
+        """Handle Ticket Reply AI auto-resolution and sync website ticket threads."""
+        if not message.guild or message.author.bot:
+            return
+
+        # 1. Handle Active Ticket Channel AI Reply
+        try:
+            ticket = await self.bot.ticket_mgr.get_ticket(message.channel.id)
+            if ticket and ticket.get("status") == "open":
+                msg_clean = message.clean_content.strip()
+                msg_low = msg_clean.lower()
+
+                # User requested staff directly
+                if any(p in msg_low for p in ("talk to staff", "call staff", "ping staff", "need staff", "human staff", "admin help", "human please", "not working", "didn't help")):
+                    if message.channel.id not in self._staff_summoned_tickets:
+                        await self.summon_ticket_staff(
+                            message.channel,
+                            ticket,
+                            requested_by=message.author,
+                            reason="User requested human staff in chat",
+                        )
+                        return
+
+                # AI auto-response if message from ticket creator & staff not yet summoned & ticket not claimed
+                if (
+                    message.author.id == ticket.get("user_id")
+                    and message.channel.id not in self._staff_summoned_tickets
+                    and not ticket.get("claimed_by")
+                    and len(msg_clean) >= 3
+                ):
+                    if message.channel.id not in self._ai_processing_tickets:
+                        self._ai_processing_tickets.add(message.channel.id)
+                        try:
+                            async with message.channel.typing():
+                                await asyncio.sleep(0.5)
+                                sol = await self.generate_ticket_solution(
+                                    query=msg_clean,
+                                    category=ticket.get("category", "General Support"),
+                                    guild=message.guild,
+                                    user=message.author,
+                                )
+                                c = KyokaContainer(accent_color=0x7C3AED)
+                                c.add_section(
+                                    content=(
+                                        "🤖 **Kyoka AI Support Solution**\n"
+                                        f"> {sol}"
+                                    )
+                                )
+                                c.add_separator(divider=True)
+                                c.add_text("💡 *Did this solve your problem? If not, click below to summon human staff.*")
+                                await send_container_response(
+                                    message.channel,
+                                    c,
+                                    view=TicketAIReplyView(self, ticket),
+                                )
+                        except Exception as ai_e:
+                            logger.debug(f"AI ticket reply notice: {ai_e}")
+                        finally:
+                            self._ai_processing_tickets.discard(message.channel.id)
+        except Exception as e:
+            logger.debug(f"Ticket on_message AI handler notice: {e}")
+
+        # 2. Synchronize staff messages from Discord ticket threads into website tickets
         if not message.guild or message.author.bot:
             return
 

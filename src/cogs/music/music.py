@@ -174,12 +174,25 @@ class Music(commands.Cog):
 
     @commands.Cog.listener()
     async def on_wavelink_track_stuck(self, payload: Any) -> None:
-        """Invoked when Lavalink player is stuck."""
+        """Invoked when Lavalink player encounters a buffer stall."""
         track = getattr(payload, "track", None)
         title = getattr(track, "title", "Unknown")
-        logger.warning(f"Lavalink Track Stuck for '{title}'")
+        threshold_ms = getattr(payload, "threshold", 10000)
+        logger.warning(f"Lavalink Track Stuck event for '{title}' (threshold={threshold_ms}ms)")
         player_obj = getattr(payload, "player", None)
         guild_id = player_obj.guild.id if player_obj and player_obj.guild else None
+
+        # First attempt a soft buffer unpause to allow recovery without cutting track
+        if player_obj and hasattr(player_obj, "pause"):
+            try:
+                await player_obj.pause(False)
+                await asyncio.sleep(1.0)
+                if getattr(player_obj, "playing", False):
+                    logger.info(f"Lavalink Track '{title}' recovered smoothly from buffer stall.")
+                    return
+            except Exception:
+                pass
+
         if hasattr(self.bot, "sentinel") and self.bot.sentinel:
             from src.sentinel.models import SubsystemType, IncidentSeverity
             self.bot.sentinel.record_incident(
@@ -194,7 +207,8 @@ class Music(commands.Cog):
         if player_obj and player_obj.guild:
             player = self.controller.get_player(player_obj.guild.id)
             if player and hasattr(player, "on_track_end"):
-                await player.on_track_end(reason="loadFailed")
+                logger.warning(f"Advancing queue past unrecoverable stuck track '{title}'")
+                await player.on_track_end(reason="stuck")
 
     @commands.Cog.listener()
     async def on_wavelink_node_closed(self, node: Any, disconnected: Any) -> None:

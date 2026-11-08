@@ -55,6 +55,7 @@ class MusicAgent:
         # Exponential Backoff for Lavalink Node Reconnects
         self._reconnect_attempts: int = 0
         self._next_reconnect_time: float = 0.0
+        self._consecutive_probe_failures: int = 0
 
         # Telemetry & Metrics
         self._metrics: dict[str, int] = {
@@ -505,14 +506,33 @@ class MusicAgent:
                 and getattr(node, "status", None) == wavelink.NodeStatus.CONNECTED
             )
             if node_connected:
-                if await probe_node(node, timeout=3.5):
-                    # Node is healthy and responsive! Reset backoff
+                if await probe_node(node, timeout=8.0):
+                    # Node is healthy and responsive! Reset backoff & failure counter
                     self._reconnect_attempts = 0
                     self._next_reconnect_time = 0.0
+                    self._consecutive_probe_failures = 0
                 else:
-                    logger.warning("MusicAgent Watchdog: Lavalink node reports CONNECTED but REST probe failed. Proactively healing...")
-                    await self.heal_node(force=True)
+                    self._consecutive_probe_failures += 1
+                    logger.warning(
+                        f"MusicAgent Watchdog: Lavalink node probe failed ({self._consecutive_probe_failures}/3)."
+                    )
+                    # Check if any player is actively streaming audio to listeners
+                    controller = getattr(self.music, "controller", None)
+                    any_playing = False
+                    if controller and hasattr(controller, "players"):
+                        any_playing = any(
+                            getattr(p, "is_playing", False)
+                            for p in controller.players.values()
+                        )
+                    # If players are actively streaming, never aggressively tear down the pool mid-song
+                    if any_playing and self._consecutive_probe_failures < 3:
+                        logger.debug("MusicAgent Watchdog: Skipping aggressive pool reset because players are currently streaming.")
+                    elif self._consecutive_probe_failures >= 3:
+                        logger.warning("MusicAgent Watchdog: Lavalink node failed 3 consecutive probes. Proactively healing...")
+                        self._consecutive_probe_failures = 0
+                        await self.heal_node(force=True)
             else:
+                self._consecutive_probe_failures = 0
                 if now >= self._next_reconnect_time:
                     logger.warning("MusicAgent Watchdog: Lavalink node unseated or unresponsive. Proactively healing...")
                     await self.heal_node(force=False)
