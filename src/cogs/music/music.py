@@ -480,6 +480,9 @@ class Music(commands.Cog):
     )
     async def join(self, ctx: CustomContext) -> None:
         """Connect to voice channel with smart moving support."""
+        if ctx.interaction and not ctx.interaction.response.is_done():
+            await ctx.interaction.response.defer()
+
         if not ctx.guild or not getattr(ctx.guild, "id", None):
             container = KyokaContainer(accent_color=None)
             container.add_text("**This command can only be used in a server.**")
@@ -589,6 +592,8 @@ class Music(commands.Cog):
     )
     async def pause(self, ctx: CustomContext) -> None:
         """Pause playback."""
+        if ctx.interaction and not ctx.interaction.response.is_done():
+            await ctx.interaction.response.defer()
         await execute_pause(self, ctx)
 
     @commands.hybrid_command(
@@ -598,6 +603,8 @@ class Music(commands.Cog):
     )
     async def resume(self, ctx: CustomContext) -> None:
         """Resume playback."""
+        if ctx.interaction and not ctx.interaction.response.is_done():
+            await ctx.interaction.response.defer()
         await execute_resume(self, ctx)
 
     @commands.hybrid_command(
@@ -607,6 +614,8 @@ class Music(commands.Cog):
     )
     async def skip(self, ctx: CustomContext) -> None:
         """Skip currently playing track."""
+        if ctx.interaction and not ctx.interaction.response.is_done():
+            await ctx.interaction.response.defer()
         await execute_skip(self, ctx)
 
     @commands.hybrid_command(
@@ -616,6 +625,8 @@ class Music(commands.Cog):
     )
     async def previous(self, ctx: CustomContext) -> None:
         """Replay the previously played song."""
+        if ctx.interaction and not ctx.interaction.response.is_done():
+            await ctx.interaction.response.defer()
         if not ctx.guild:
             return
         player = self.controller.get_player(ctx.guild.id)
@@ -640,6 +651,8 @@ class Music(commands.Cog):
     )
     async def stop(self, ctx: CustomContext) -> None:
         """Stop music, clear queue and leave voice."""
+        if ctx.interaction and not ctx.interaction.response.is_done():
+            await ctx.interaction.response.defer()
         await execute_stop(self, ctx)
 
     @commands.hybrid_command(
@@ -650,6 +663,8 @@ class Music(commands.Cog):
     @app_commands.describe(page="Queue page number (e.g. 1) or 'clear' to empty upcoming tracks")
     async def queue(self, ctx: CustomContext, page: Optional[str] = "1") -> None:
         """Show current song queue or clear it with 'queue clear'."""
+        if ctx.interaction and not ctx.interaction.response.is_done():
+            await ctx.interaction.response.defer()
         await execute_queue(self, ctx, page or "1")
 
     @commands.hybrid_command(
@@ -659,6 +674,8 @@ class Music(commands.Cog):
     )
     async def nowplaying(self, ctx: CustomContext) -> None:
         """Show currently playing song details."""
+        if ctx.interaction and not ctx.interaction.response.is_done():
+            await ctx.interaction.response.defer()
         await execute_nowplaying(self, ctx)
 
     @commands.command(
@@ -694,6 +711,8 @@ class Music(commands.Cog):
     @app_commands.describe(volume="Volume percentage from 0 to 200")
     async def volume(self, ctx: CustomContext, volume: int = 100) -> None:
         """Adjust playback volume."""
+        if ctx.interaction and not ctx.interaction.response.is_done():
+            await ctx.interaction.response.defer()
         await execute_volume(self, ctx, volume)
 
     @commands.command(
@@ -813,6 +832,8 @@ class Music(commands.Cog):
     )
     async def stay_247(self, ctx: CustomContext) -> None:
         """Toggle 24/7 voice stay & music mode."""
+        if ctx.interaction and not ctx.interaction.response.is_done():
+            await ctx.interaction.response.defer()
         from src.security.owner import is_owner_or_staff
         has_perm = is_owner_or_staff(ctx.author.id) or (ctx.guild and ctx.author.guild_permissions.manage_guild)
         if not has_perm:
@@ -1123,7 +1144,29 @@ class Music(commands.Cog):
         if hasattr(self, "agent") and self.agent:
             handled = await self.agent.handle_command_error(interaction, orig_err)
         if not handled:
-            raise error
+            logger.error(
+                "Music cog unhandled app command error (guild_id=%s, command=%s): %s",
+                interaction.guild_id,
+                getattr(interaction.command, "qualified_name", "unknown"),
+                orig_err,
+                exc_info=orig_err,
+            )
+            msg = (
+                f"⚠️ **Music System Notice:** `{type(orig_err).__name__}: {str(orig_err)[:150] or 'Playback subsystem encountered an issue'}`\n"
+                f"> *The audio engine has logged this event. Please retry in a few moments.*"
+            )
+            try:
+                if not interaction.response.is_done():
+                    await interaction.response.send_message(msg, ephemeral=True)
+                else:
+                    await interaction.followup.send(msg, ephemeral=True)
+            except Exception as send_err:
+                logger.warning(f"Could not send music app command error fallback: {send_err}")
+                if interaction.channel and hasattr(interaction.channel, "send"):
+                    try:
+                        await interaction.channel.send(msg)
+                    except Exception:
+                        pass
 
 
 async def setup(bot: KyokaBot | KyroBot) -> None:

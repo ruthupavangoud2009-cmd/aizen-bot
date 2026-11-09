@@ -101,7 +101,7 @@ def candidates() -> list[tuple[str, str]]:
 
     result: list[tuple[str, str]] = []
     primary = (getattr(Config, "LAVALINK_URI", "") or "").strip()
-    password = getattr(Config, "LAVALINK_PASSWORD", "youshallnotpass") or "youshallnotpass"
+    password = getattr(Config, "LAVALINK_PASSWORD", "onlyforkyoka") or "onlyforkyoka"
     if primary:
         result.append((primary, password))
 
@@ -563,7 +563,7 @@ async def connect_lavalink_node(
             return None
 
         from src.core.config import Config
-        node_id = getattr(Config, "LAVALINK_IDENTIFIER", None) or "lavalinkv4.serenetia.com"
+        node_id = getattr(Config, "LAVALINK_IDENTIFIER", None) or "kyoka-lavalink-v4"
         node = create_lavalink_node(
             uri,
             password,

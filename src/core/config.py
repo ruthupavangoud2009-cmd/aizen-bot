@@ -150,19 +150,27 @@ class Config:
         # explicitly in the hosting environment when a trusted proxy is required.
         return pool
 
-    # Lavalink / Audio Settings
-    LAVALINK_HOST: str = os.getenv("LAVALINK_HOST", "kyoka-lavalink.onrender.com").strip()
-    LAVALINK_PORT: int = int(os.getenv("LAVALINK_PORT", "443").strip() or 443)
+    # Lavalink / Audio Settings (Sanitizes protocol or trailing port if entered in env vars)
+    _raw_lavalink_host = os.getenv("LAVALINK_HOST", "kyoka-lavalink.onrender.com").strip()
+    if "://" in _raw_lavalink_host:
+        _raw_lavalink_host = _raw_lavalink_host.split("://", 1)[1]
+    _raw_lavalink_host = _raw_lavalink_host.rstrip("/")
+    if ":" in _raw_lavalink_host:
+        _host_part, _port_from_host = _raw_lavalink_host.split(":", 1)
+        _raw_lavalink_host = _host_part
+        _inferred_port = _port_from_host
+    else:
+        _inferred_port = "443"
+
+    LAVALINK_HOST: str = _raw_lavalink_host or "kyoka-lavalink.onrender.com"
+    LAVALINK_PORT: int = int((os.getenv("LAVALINK_PORT", "").strip() or _inferred_port).strip() or 443)
     LAVALINK_SECURE: bool = os.getenv("LAVALINK_SECURE", "true").lower() in ("true", "1", "yes")
     LAVALINK_IDENTIFIER: str = os.getenv("LAVALINK_IDENTIFIER", "kyoka-lavalink-v4").strip()
     LAVALINK_PASSWORD: str = os.getenv("LAVALINK_PASSWORD", "onlyforkyoka").strip()
 
-    # If LAVALINK_HOST is set, dynamically build LAVALINK_URI; otherwise use LAVALINK_URI env var or default
-    if LAVALINK_HOST:
-        _scheme = "https" if LAVALINK_SECURE else "http"
-        LAVALINK_URI: str = f"{_scheme}://{LAVALINK_HOST}:{LAVALINK_PORT}"
-    else:
-        LAVALINK_URI: str = os.getenv("LAVALINK_URI", "https://kyoka-lavalink.onrender.com:443").strip()
+    # Dynamically build canonical LAVALINK_URI
+    _scheme = "https" if LAVALINK_SECURE else "http"
+    LAVALINK_URI: str = f"{_scheme}://{LAVALINK_HOST}:{LAVALINK_PORT}"
 
     LAVALINK_FALLBACK_URIS: str = (
         os.getenv("LAVALINK_FALLBACK_URIS") if os.getenv("LAVALINK_FALLBACK_URIS") is not None

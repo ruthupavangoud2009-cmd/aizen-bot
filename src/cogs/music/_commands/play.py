@@ -88,11 +88,6 @@ async def execute_play(cog: Music, ctx: commands.Context, query: Optional[str] =
         logger.warning(f"Voice connect error in guild {ctx.guild.id}: {e}")
         from src.core.lavalink import LavalinkUnavailable
         agent = getattr(cog, "agent", None)
-        if isinstance(e, (RuntimeError, ValueError)):
-            container = KyokaContainer(accent_color=None)
-            container.add_text(f"**Voice Connection Error:** {e}")
-            await send_container_response(ctx, container)
-            return
 
         if isinstance(e, LavalinkUnavailable):
             if agent:
@@ -107,6 +102,12 @@ async def execute_play(cog: Music, ctx: commands.Context, query: Optional[str] =
                 container = KyokaContainer(accent_color=None)
                 container.add_text(f"⚠️ **Audio Streaming Engine Offline:** `{e}`\n> Reconnecting cluster nodes...")
                 await send_container_response(ctx, container)
+            return
+
+        if isinstance(e, (RuntimeError, ValueError)):
+            container = KyokaContainer(accent_color=None)
+            container.add_text(f"**Voice Connection Error:** {e}")
+            await send_container_response(ctx, container)
             return
 
         if agent:

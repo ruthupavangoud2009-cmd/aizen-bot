@@ -244,6 +244,11 @@ class ErrorHandler(commands.Cog, name="ErrorHandler"):
                 "Could not deliver slash error card (incident_id=%s command=%s): %s",
                 incident_id, command_name, type(send_err).__name__,
             )
+            if interaction.channel and hasattr(interaction.channel, "send"):
+                try:
+                    await interaction.channel.send(msg)
+                except Exception:
+                    pass
         except Exception as send_err:
             logger.exception(
                 "Slash error response failed (incident_id=%s command=%s); "

@@ -414,24 +414,40 @@ async def send_container_response(
                     fallback_view = link_view
 
             embed = primary.to_embed(content=content)
-            if interaction.response.is_done():
-                return await interaction.followup.send(
-                    content=content,
-                    embed=embed,
-                    view=fallback_view,
-                    ephemeral=ephemeral,
-                    files=file_list or None,
-                    allowed_mentions=allowed_mentions or discord.AllowedMentions(users=True),
-                )
-            else:
-                return await interaction.response.send_message(
-                    content=content,
-                    embed=embed,
-                    view=fallback_view,
-                    ephemeral=ephemeral,
-                    files=file_list or None,
-                    allowed_mentions=allowed_mentions or discord.AllowedMentions(users=True),
-                )
+            try:
+                if interaction.response.is_done():
+                    return await interaction.followup.send(
+                        content=content,
+                        embed=embed,
+                        view=fallback_view,
+                        ephemeral=ephemeral,
+                        files=file_list or None,
+                        allowed_mentions=allowed_mentions or discord.AllowedMentions(users=True),
+                    )
+                else:
+                    return await interaction.response.send_message(
+                        content=content,
+                        embed=embed,
+                        view=fallback_view,
+                        ephemeral=ephemeral,
+                        files=file_list or None,
+                        allowed_mentions=allowed_mentions or discord.AllowedMentions(users=True),
+                    )
+            except discord.HTTPException as fallback_err:
+                logger.warning(f"Standard interaction fallback failed ({fallback_err}), attempting channel send fallback...")
+                channel = getattr(interaction, "channel", None)
+                if channel and hasattr(channel, "send"):
+                    try:
+                        return await channel.send(
+                            content=content,
+                            embed=embed,
+                            view=fallback_view,
+                            files=file_list or None,
+                            allowed_mentions=allowed_mentions or discord.AllowedMentions(users=True),
+                        )
+                    except Exception as ch_err:
+                        logger.warning(f"Channel send fallback failed: {ch_err}")
+                raise
     else:
         obj = target
 
