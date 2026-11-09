@@ -660,9 +660,9 @@ class GuildPlayer:
         if not url or not url.startswith(("http://", "https://")):
             return False
         u_low = url.lower()
-        if any(cdn in u_low for cdn in ("saavncdn.com", "googlevideo.com", "sndcdn.com", "stream.zeno.fm", "icecast", "shoutcast")):
+        if any(cdn in u_low for cdn in ("saavncdn.com", "googlevideo.com", "sndcdn.com", "soundcloud.cloud", "stream.zeno.fm", "icecast", "shoutcast")):
             return True
-        if any(u_low.endswith(ext) or f"{ext}?" in u_low for ext in (".mp4", ".m4a", ".mp3", ".aac", ".ogg", ".flac", ".opus", "videoplayback")):
+        if any(u_low.endswith(ext) or f"{ext}?" in u_low for ext in (".mp4", ".m4a", ".mp3", ".aac", ".ogg", ".flac", ".opus", ".m3u8", "videoplayback")):
             return True
         return False
 
@@ -824,20 +824,41 @@ class GuildPlayer:
                     logger.debug(f"Search error for '{query}' source={source}: {e}")
                     break  # non-timeout error — skip retry, try next strategy
 
-        # ── Priority 4: JioSaavn HD Audio Engine Fallback ──
-        if not url.startswith(("http://", "https://")):
-            try:
-                from src.cogs.music._extractor import NativeExtractor
+        # ── Priority 4: JioSaavn HD Audio Engine Fallback (Unblocked 320kbps CDN stream) ──
+        try:
+            from src.cogs.music._extractor import NativeExtractor
+            saavn_query = full_query or clean_title or track.title or ""
+            if saavn_query:
                 saavn_t = await asyncio.wait_for(
-                    NativeExtractor._extract_jiosaavn(full_query or track.title, requester=track.requester, is_autoplay=track.is_autoplay),
+                    NativeExtractor._extract_jiosaavn(saavn_query, requester=track.requester, is_autoplay=track.is_autoplay),
                     timeout=5.0
                 )
                 if saavn_t and saavn_t.stream_url:
                     s_res = await asyncio.wait_for(wavelink.Playable.search(saavn_t.stream_url), timeout=6.0)
                     if s_res:
+                        track.stream_url = saavn_t.stream_url
+                        logger.info(f"Resolved '{track.title}' via JioSaavn HD Audio Engine direct stream.")
                         return s_res[0] if isinstance(s_res, list) else s_res.tracks[0]
-            except Exception as e:
-                logger.debug(f"JioSaavn playable cascade fallback notice: {e}")
+        except Exception as e:
+            logger.debug(f"JioSaavn playable cascade fallback notice: {e}")
+
+        # ── Priority 5: SoundCloud Direct Engine Fallback (Unblocked worldwide stream) ──
+        try:
+            from src.cogs.music._extractor import NativeExtractor
+            sc_query = full_query or clean_title or track.title or ""
+            if sc_query:
+                sc_t = await asyncio.wait_for(
+                    NativeExtractor._extract_soundcloud(sc_query, requester=track.requester, is_autoplay=track.is_autoplay),
+                    timeout=5.0
+                )
+                if sc_t and sc_t.stream_url:
+                    sc_res = await asyncio.wait_for(wavelink.Playable.search(sc_t.stream_url), timeout=6.0)
+                    if sc_res:
+                        track.stream_url = sc_t.stream_url
+                        logger.info(f"Resolved '{track.title}' via SoundCloud Direct Engine stream.")
+                        return sc_res[0] if isinstance(sc_res, list) else sc_res.tracks[0]
+        except Exception as e:
+            logger.debug(f"SoundCloud playable cascade fallback notice: {e}")
 
         logger.warning(f"All resolution strategies exhausted for '{track.title}' (queries tried: {[s[0] for s in strategies]})")
         return None
@@ -1011,23 +1032,73 @@ class GuildPlayer:
                 logger.info(f"Guild {self.guild.id}: Proactively attempting alternative stream recovery for '{failed_title}'...")
                 query_fallback = f"{failed_track.title} {failed_track.author}".strip() or getattr(failed_track, "query", "")
                 recovered_playable = None
-                for src in (wavelink.TrackSource.YouTube, None):
+                # Stage 1: JioSaavn 320kbps HD Audio Engine (0% cloud block)
+                if not recovered_playable:
                     try:
-                        res = await asyncio.wait_for(
-                            wavelink.Playable.search(query_fallback, source=src) if src else wavelink.Playable.search(query_fallback),
-                            timeout=6.0,
+                        from src.cogs.music._extractor import NativeExtractor
+                        saavn_t = await asyncio.wait_for(
+                            NativeExtractor._extract_jiosaavn(
+                                query_fallback or failed_title,
+                                requester=getattr(failed_track, "requester", "DJ"),
+                                is_autoplay=getattr(failed_track, "is_autoplay", False),
+                            ),
+                            timeout=5.0,
                         )
-                        if res and not isinstance(res, wavelink.Playlist):
-                            tracks = res if isinstance(res, list) else res.tracks
-                            failed_id = getattr(getattr(failed_track, "_playable", None), "identifier", None)
-                            for candidate in tracks[:5]:
-                                if getattr(candidate, "identifier", None) != failed_id:
-                                    recovered_playable = candidate
+                        if saavn_t and saavn_t.stream_url:
+                            s_res = await asyncio.wait_for(
+                                wavelink.Playable.search(saavn_t.stream_url),
+                                timeout=5.0,
+                            )
+                            if s_res:
+                                recovered_playable = s_res[0] if isinstance(s_res, list) else s_res.tracks[0]
+                                failed_track.stream_url = saavn_t.stream_url
+                                logger.info(f"Guild {self.guild.id}: Recovered '{failed_title}' via JioSaavn HD Audio Engine.")
+                    except Exception as saavn_err:
+                        logger.debug(f"Recovery JioSaavn notice: {saavn_err}")
+
+                # Stage 2: SoundCloud Direct Engine (0% cloud block)
+                if not recovered_playable:
+                    try:
+                        from src.cogs.music._extractor import NativeExtractor
+                        sc_t = await asyncio.wait_for(
+                            NativeExtractor._extract_soundcloud(
+                                query_fallback or failed_title,
+                                requester=getattr(failed_track, "requester", "DJ"),
+                                is_autoplay=getattr(failed_track, "is_autoplay", False),
+                            ),
+                            timeout=5.0,
+                        )
+                        if sc_t and sc_t.stream_url:
+                            sc_res = await asyncio.wait_for(
+                                wavelink.Playable.search(sc_t.stream_url),
+                                timeout=5.0,
+                            )
+                            if sc_res:
+                                recovered_playable = sc_res[0] if isinstance(sc_res, list) else sc_res.tracks[0]
+                                failed_track.stream_url = sc_t.stream_url
+                                logger.info(f"Guild {self.guild.id}: Recovered '{failed_title}' via SoundCloud Direct Engine.")
+                    except Exception as sc_err:
+                        logger.debug(f"Recovery SoundCloud notice: {sc_err}")
+
+                # Stage 3: Alternative YouTube Track Candidate
+                if not recovered_playable:
+                    for src in (wavelink.TrackSource.YouTube, None):
+                        try:
+                            res = await asyncio.wait_for(
+                                wavelink.Playable.search(query_fallback, source=src) if src else wavelink.Playable.search(query_fallback),
+                                timeout=6.0,
+                            )
+                            if res and not isinstance(res, wavelink.Playlist):
+                                tracks = res if isinstance(res, list) else res.tracks
+                                failed_id = getattr(getattr(failed_track, "_playable", None), "identifier", None)
+                                for candidate in tracks[:5]:
+                                    if getattr(candidate, "identifier", None) != failed_id:
+                                        recovered_playable = candidate
+                                        break
+                                if recovered_playable:
                                     break
-                            if recovered_playable:
-                                break
-                    except Exception as rec_err:
-                        logger.debug(f"Recovery attempt with src={src} notice: {rec_err}")
+                        except Exception as rec_err:
+                            logger.debug(f"Recovery attempt with src={src} notice: {rec_err}")
 
                 if recovered_playable:
                     logger.info(f"Guild {self.guild.id}: Stream recovery SUCCESS for '{failed_title}' (id={getattr(recovered_playable, 'identifier', '')}). Resuming playback...")

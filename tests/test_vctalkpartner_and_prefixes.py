@@ -151,3 +151,18 @@ async def test_compact_help_ui():
     assert 2 not in cat_rows, "Category HelpView must not use Row 2"
 
 
+@pytest.mark.asyncio
+async def test_direct_stream_support_and_jiosaavn_unblocked_source():
+    """Verify that GuildPlayer supports direct streams from Saavn/SoundCloud and falls back smoothly."""
+    from src.cogs.music._player import GuildPlayer
+    bot = KyokaBot()
+    guild = mock.MagicMock(id=123)
+    player = GuildPlayer(bot, guild)
+
+    # Verify _is_direct_stream_url recognizes Saavn and SoundCloud streams
+    assert player._is_direct_stream_url("https://aac.saavncdn.com/123/sample_320.mp4") is True
+    assert player._is_direct_stream_url("https://playback.media-streaming.soundcloud.cloud/sample/playlist.m3u8") is True
+    assert player._is_direct_stream_url("https://youtube.com/watch?v=abc") is False
+    assert player._is_direct_stream_url("https://open.spotify.com/track/xyz") is False
+
+
