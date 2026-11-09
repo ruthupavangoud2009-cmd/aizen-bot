@@ -160,13 +160,20 @@ class MusicControlView(discord.ui.View):
             button.label = "Pause"
             if e_reg:
                 button.emoji = e_reg.get_emoji_obj("paused")
+            state_text = "Resumed"
         elif player.is_playing:
             player.pause()
             button.label = "Resume"
             if e_reg:
                 button.emoji = e_reg.get_emoji_obj("music") or e_reg.get_emoji_obj("paused")
+            state_text = "Paused"
+        else:
+            state_text = "Toggled"
 
         await player.update_controller_message(force=True)
+        c = KyokaContainer()
+        c.add_section(content=f"**Playback {state_text}**\n> Successfully **{state_text.lower()}** music playback.")
+        await send_container_response(interaction, c, ephemeral=True)
 
     @discord.ui.button(
         label="Skip",
@@ -195,7 +202,11 @@ class MusicControlView(discord.ui.View):
             return
 
         try:
+            old_title = getattr(player.current, "title", "Track")
             await player.skip()
+            c = KyokaContainer()
+            c.add_section(content=f"**Track Skipped**\n> Successfully skipped `{old_title}`.")
+            await send_container_response(interaction, c, ephemeral=True)
         except Exception as e:
             logger.warning(f"Skip button failed in guild {interaction.guild_id}: {type(e).__name__}: {e}")
             c = KyokaContainer()
@@ -224,8 +235,11 @@ class MusicControlView(discord.ui.View):
             return
 
         cur_vol = int(player.volume * 100)
-        player.set_volume(cur_vol - 10)
+        new_vol = player.set_volume(cur_vol - 10)
         await player.update_controller_message(force=True)
+        c = KyokaContainer()
+        c.add_section(content=f"**Volume Adjusted**\n> Decreased volume to **{new_vol}%**.")
+        await send_container_response(interaction, c, ephemeral=True)
 
     @discord.ui.button(
         label="Vol +",
@@ -248,8 +262,11 @@ class MusicControlView(discord.ui.View):
             return
 
         cur_vol = int(player.volume * 100)
-        player.set_volume(cur_vol + 10)
+        new_vol = player.set_volume(cur_vol + 10)
         await player.update_controller_message(force=True)
+        c = KyokaContainer()
+        c.add_section(content=f"**Volume Adjusted**\n> Increased volume to **{new_vol}%**.")
+        await send_container_response(interaction, c, ephemeral=True)
 
     @discord.ui.button(
         label="Stop",
@@ -273,6 +290,9 @@ class MusicControlView(discord.ui.View):
 
         player._disconnect_announced = True
         await player.stop()
+        c = KyokaContainer()
+        c.add_section(content="**Playback Stopped**\n> Disconnected and cleared the queue.")
+        await send_container_response(interaction, c, ephemeral=True)
 
     @discord.ui.button(
         label="Like",
@@ -451,6 +471,38 @@ class MusicControlView(discord.ui.View):
         c.add_section(
             content=f"{curr_text}**Upcoming Queue ({len(player.queue)} tracks):**\n" + "\n".join(q_lines) + rem_text
         )
+        await send_container_response(interaction, c, ephemeral=True)
+
+    @discord.ui.button(
+        label="Shuffle",
+        style=discord.ButtonStyle.secondary,
+        custom_id="kyoka:music:shuffle",
+        row=1,
+    )
+    async def btn_shuffle(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+        try:
+            if not interaction.response.is_done():
+                await interaction.response.defer(ephemeral=True)
+        except Exception:
+            pass
+
+        player = self._get_player(interaction)
+        err = self._check_voice(interaction, player)
+        if err:
+            c = KyokaContainer()
+            c.add_section(content=f"**Voice Error**\n> {err}")
+            await send_container_response(interaction, c, ephemeral=True)
+            return
+
+        if not player or len(player.queue) < 2:
+            c = KyokaContainer()
+            c.add_section(content="**Shuffle Notice**\n> Need at least 2 tracks in queue to shuffle.")
+            await send_container_response(interaction, c, ephemeral=True)
+            return
+
+        shuffled_count = await player.shuffle_queue()
+        c = KyokaContainer()
+        c.add_section(content=f"**Queue Shuffled**\n> Successfully randomized **{shuffled_count}** tracks in queue!")
         await send_container_response(interaction, c, ephemeral=True)
 
     async def on_error(self, interaction: discord.Interaction, error: Exception, item: discord.ui.Item[Any]) -> None:

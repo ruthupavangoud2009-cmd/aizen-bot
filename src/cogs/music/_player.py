@@ -220,13 +220,13 @@ class GuildPlayer:
     @property
     def is_connected(self) -> bool:
         """Check if connected to a valid Discord voice channel."""
-        vc = self.guild.voice_client
+        vc = self.guild.voice_client or self.voice_client
         return vc is not None and getattr(vc, "connected", False)
 
     @property
     def is_playing(self) -> bool:
         """Check if actively playing audio."""
-        vc = self.guild.voice_client
+        vc = self.guild.voice_client or self.voice_client
         if vc and isinstance(vc, wavelink.Player):
             return vc.playing and not vc.paused
         return False
@@ -234,7 +234,7 @@ class GuildPlayer:
     @property
     def is_paused(self) -> bool:
         """Check if playback is currently paused."""
-        vc = self.guild.voice_client
+        vc = self.guild.voice_client or self.voice_client
         if vc and isinstance(vc, wavelink.Player):
             return vc.paused
         return False
@@ -917,27 +917,51 @@ class GuildPlayer:
 
     async def skip(self) -> None:
         """
-        Skip the currently playing track.
-        Directly pops the next queued track and plays it via Lavalink's native replacement.
+        Skip the currently playing track immediately.
+        Pops the next queued track or triggers smart autoplay recommendations seamlessly.
         """
         if self.loop_mode == "track":
             self.loop_mode = "off"
 
+        # Silence current track immediately so there is zero audio bleed
+        if self.voice_client:
+            try:
+                if hasattr(self.voice_client, "pause"):
+                    self.voice_client.pause(True)
+            except Exception:
+                pass
+
         target = await self.pop_next_track()
         if target is not None:
             await self.play_track(target)
-        else:
-            self.current = None
-            if self.voice_client:
-                try:
-                    await asyncio.wait_for(
-                        self.voice_client.skip(force=True),
-                        timeout=LAVALINK_OP_TIMEOUT,
-                    )
-                except Exception as e:
-                    logger.debug(f"Guild {self.guild.id}: voice skip notice: {e}")
-            await self.send_queue_ended_card()
-            self.schedule_empty_vc_timer()
+            return
+
+        # If queue is empty, check Smart Autoplay
+        if self.smart_autoplay and self.current:
+            try:
+                from src.cogs.music._autoplay import NativeSmartAutoplay
+                rec = await NativeSmartAutoplay.get_next_recommendation(
+                    self.current, self.autoplay_history, self.bot.db
+                )
+                if rec:
+                    rec.requester = "⚡ Smart Autoplay"
+                    await self.play_track(rec)
+                    return
+            except Exception as ap_err:
+                logger.debug(f"Autoplay skip notice: {ap_err}")
+
+        # Queue concluded
+        self.current = None
+        if self.voice_client:
+            try:
+                await asyncio.wait_for(
+                    self.voice_client.skip(force=True),
+                    timeout=LAVALINK_OP_TIMEOUT,
+                )
+            except Exception as e:
+                logger.debug(f"Guild {self.guild.id}: voice skip notice: {e}")
+        await self.send_queue_ended_card()
+        self.schedule_empty_vc_timer()
 
 
     async def stop(self) -> None:
