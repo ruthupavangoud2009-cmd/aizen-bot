@@ -119,10 +119,22 @@ class Ping(commands.Cog):
         )
         container.add_separator(divider=True)
 
+        # Check Lavalink audio engine status
+        ll_status = "Offline"
+        try:
+            import wavelink
+            node = wavelink.Pool.get_node()
+            if node and node.status == wavelink.NodeStatus.CONNECTED:
+                ll_status = "Online (100% Lossless)"
+            elif node:
+                ll_status = f"{node.status.name.title()}"
+        except Exception:
+            pass
+
         container.add_text(
             f"{dot} **Gateway:** `{ws_latency:.2f}ms` | **Bot Processing:** `{cmd_latency:.2f}ms`\n"
             f"{dot} **Event-Loop Lag:** `{loop_lag:.2f}ms` | **Database:** {db_str}\n"
-            f"{dot} **Process Uptime:** `{uptime_str}` | **Shard:** `#{shard_id}`"
+            f"{dot} **Process Uptime:** `{uptime_str}` | **Lavalink Audio:** `{ll_status}`"
         )
         container.add_separator(divider=True)
         container.add_text(f"-# Requested by {ctx.author.display_name}")
