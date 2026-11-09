@@ -117,3 +117,37 @@ async def test_ticket_ai_interactive_dialogue():
     assert cog._ticket_dialogues[777][0]["speaker"] == "TestUser"
     assert cog._ticket_dialogues[777][1]["speaker"] == "Kyoka AI"
 
+
+@pytest.mark.asyncio
+async def test_compact_help_ui():
+    """Verify that Help UI is ultra-compact: minimal fields, single-row buttons, no banner bloat."""
+    from src.cogs.general.help import Help, HelpView
+    bot = KyokaBot()
+    cog = Help(bot)
+
+    mock_guild = mock.MagicMock(id=123)
+    mock_author = mock.MagicMock(display_name="Ruthu", display_avatar=mock.MagicMock(url="https://avatar.png"))
+    mock_ctx = mock.MagicMock(guild=mock_guild, author=mock_author, interaction=None)
+
+    cmd_sample = mock.MagicMock(qualified_name="play", description="Play music in voice", aliases=["p"])
+    visible_cats = {"🎵・MUSIC": [cmd_sample]}
+
+    home_embed = cog.build_home_embed(mock_ctx, visible_cats)
+    assert len(home_embed.fields) == 0, "Home embed must have 0 bloated fields for minimal height"
+    assert "Help Menu" in home_embed.title
+    assert home_embed.image.url is None, "Home embed must not have large banner image"
+
+    cat_embed = cog.build_category_embed(mock_ctx, "🎵・MUSIC", [cmd_sample], visible_cats, page=1)
+    assert len(cat_embed.fields) == 0, "Category embed must not have separate field per command"
+    assert "`" in cat_embed.description
+    assert cat_embed.image.url is None, "Category embed must not have large banner image"
+
+    view = HelpView(cog, mock_ctx, visible_cats, current_category="home")
+    rows_used = {item.row for item in view.children}
+    assert 2 not in rows_used, "HelpView must not use Row 2 to ensure ultra-small height"
+
+    cat_view = HelpView(cog, mock_ctx, visible_cats, current_category="🎵・MUSIC")
+    cat_rows = {item.row for item in cat_view.children}
+    assert 2 not in cat_rows, "Category HelpView must not use Row 2"
+
+

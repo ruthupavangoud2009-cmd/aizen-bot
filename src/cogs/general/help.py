@@ -281,7 +281,7 @@ class HelpView(discord.ui.View):
 
             self.add_item(
                 discord.ui.Button(
-                    label=f"Invite {bot_name}",
+                    label="Invite",
                     url=invite_url,
                     style=discord.ButtonStyle.link,
                     row=1,
@@ -289,14 +289,14 @@ class HelpView(discord.ui.View):
             )
             self.add_item(
                 discord.ui.Button(
-                    label="Support Server",
+                    label="Support",
                     url=support_url,
                     style=discord.ButtonStyle.link,
                     row=1,
                 )
             )
         else:
-            # On Category: Clean Navigation Buttons + Link Buttons
+            # On Category: 4 clean, compact buttons on Row 1 (no Row 2)
             btn_back = discord.ui.Button(
                 label="Back",
                 emoji="◀️",
@@ -332,23 +332,6 @@ class HelpView(discord.ui.View):
             )
             btn_search.callback = self.btn_search_callback
             self.add_item(btn_search)
-
-            self.add_item(
-                discord.ui.Button(
-                    label=f"Invite {bot_name}",
-                    url=invite_url,
-                    style=discord.ButtonStyle.link,
-                    row=2,
-                )
-            )
-            self.add_item(
-                discord.ui.Button(
-                    label="Support Server",
-                    url=support_url,
-                    style=discord.ButtonStyle.link,
-                    row=2,
-                )
-            )
 
     async def interaction_check(self, interaction: discord.Interaction) -> bool:
         """Ensure only the command requester can control this session."""
@@ -1172,44 +1155,13 @@ class Help(commands.Cog):
             else "Built for our community — keeping your server safe, active, and effortlessly connected."
         )
 
-        embed = KyokaHelpEmbed(
-            title=f"Hey, I'm {display_name} ⛩️",
+        embed = discord.Embed(
+            title=f"{display_name} ⛩️ • Help Menu",
             description=(
-                f"> *{bio}*\n\n"
-                f"Select a category from the dropdown menu below or click **Search** to explore commands. "
-                f"Type `{p}help <command>` for detailed command documentation, parameters, and examples."
+                f"`{p}` Prefix  •  `{total_commands}` Commands  •  `{len(visible_categories)}` Categories  •  `{ws_ping}ms` Ping\n"
+                f"> Select a category from the menu below or use `{p}help <cmd>`"
             ),
             color=0x7C3AED,
-        )
-        embed.add_field(
-            name="📊 System Status & Metrics",
-            value=(
-                f"> ▾ **Gateway Ping:** `{ws_ping}ms`\n"
-                f"> ▾ **Guild Prefix:** `{p}`  •  **Slash Commands:** `/`\n"
-                f"> ▾ **Command Modules:** `{len(visible_categories)}` categories\n"
-                f"> ▾ **Active Commands:** `{total_commands}` registered"
-            ),
-            inline=False,
-        )
-        embed.add_field(
-            name="⚡ Featured Suites",
-            value=(
-                f"🎵 **Music & Audio** — Lossless 24/7 background streaming & smart auto-queue\n"
-                f"🎫 **Ticket Support** — Custom categories, interactive modals & staff transcripts\n"
-                f"🎮 **Games & Fun** — 10+ PvP multiplayer duels, party mini-games & trivia\n"
-                f"🤖 **Aizen AI Engine** — Multi-personality chat, voice synthesis & auto channels\n"
-                f"🛡️ **Security & Automod** — Anti-nuke, anti-raid, verification & audit logging"
-            ),
-            inline=False,
-        )
-        embed.add_field(
-            name="💡 Quick Tips",
-            value=(
-                f"• Type `{p}help <module>` (e.g. `{p}help music`) to jump straight to a category\n"
-                f"• Type `{p}hca` to browse the full public command directory archive\n"
-                f"• Click the **🔍 Search** button below to find commands by name or keyword"
-            ),
-            inline=False,
         )
 
         avatar_url = branding.get("avatar_url")
@@ -1218,15 +1170,10 @@ class Help(commands.Cog):
         elif getattr(self.bot, "user", None):
             embed.set_thumbnail(url=self.bot.user.display_avatar.url)
 
-        banner_url = branding.get("banner_url")
-        if isinstance(banner_url, str) and banner_url.strip():
-            embed.set_image(url=banner_url.strip())
-
         embed.set_footer(
             text=f"Requested by {author.display_name}",
             icon_url=author.display_avatar.url if getattr(author, "display_avatar", None) else None,
         )
-        embed.banner_file = None
         return embed
 
     def build_search_results_embed(
@@ -1255,16 +1202,9 @@ class Help(commands.Cog):
         )
 
         if not matched:
-            embed.description = (
-                f"> No accessible commands matching **`{clean_query}`** were found.\n\n"
-                f"**Suggestions:**\n"
-                f"• Try a broader search term (e.g., `mod`, `role`, `ai`, `music`, `level`)\n"
-                f"• Use the dropdown category menu below to browse all available commands\n"
-                f"• Click **🏠 Home** to return to the main console overview"
-            )
+            embed.description = f"> No commands matching **`{clean_query}`** were found.\n> Use the dropdown below or click **Home**."
             embed.color = 0xED4245
         else:
-            embed.description = f"Found **{len(matched)}** accessible command(s) matching `{clean_query}`:\n\n"
             matched.sort(
                 key=lambda item: (
                     0 if item[0].qualified_name.lower() == clean_query else (
@@ -1273,22 +1213,16 @@ class Help(commands.Cog):
                     item[0].qualified_name.lower(),
                 )
             )
-
+            lines = []
             for cmd, cat in matched[:10]:
-                badge = self._get_badge(cmd)
-                desc = (cmd.description or cmd.help or "No detailed description provided.").strip().split("\n")[0][:110]
-                sig = f" {cmd.signature}" if cmd.signature else ""
-                embed.add_field(
-                    name=f"`{p}{cmd.qualified_name}{sig}`{badge}",
-                    value=f"> {desc}\n> *Category: {cat}*",
-                    inline=False,
-                )
+                desc = (cmd.description or cmd.help or "No description").strip().split("\n")[0][:45]
+                lines.append(f"`{p}{cmd.qualified_name}` — {desc}")
 
-            if len(matched) > 10:
-                embed.description += f"*(Showing top 10 of {len(matched)} matches. Refine your query for more precise results.)*\n\n"
+            extra = f"\n*+ {len(matched) - 10} more matches.*" if len(matched) > 10 else ""
+            embed.description = f"**{len(matched)}** command(s) matching `{clean_query}`:\n\n" + "\n".join(lines) + extra
 
         embed.set_footer(
-            text=f"Requested by {ctx.author.display_name} • Type {p}help <command> for full manual",
+            text=f"Requested by {ctx.author.display_name} • Type {p}help <cmd> for full details",
             icon_url=ctx.author.display_avatar.url if ctx.author.display_avatar else None,
         )
         return embed
@@ -1301,24 +1235,13 @@ class Help(commands.Cog):
         visible_categories: dict[str, list[commands.Command]],
         page: int = 1,
     ) -> discord.Embed:
-        """Compact modular category embed — 8 cmds per page, tight bullet layout."""
+        """Ultra-compact category embed — crisp single-card layout."""
         guild = ctx.guild
         p = self.bot.guild_mgr.get_prefix(guild.id if guild else None)
 
         clean_cat_title = cat_name.split("・", 1)[1] if "・" in cat_name else cat_name
         cat_emoji = self._get_category_emoji(cat_name)
         cat_desc = CATEGORY_DESCRIPTIONS.get(cat_name, f"{clean_cat_title} commands.")
-
-        # Branding
-        branding = None
-        if hasattr(self.bot, "branding_mgr"):
-            try:
-                branding = self.bot.branding_mgr._cache.get(guild.id if guild else None)
-            except Exception:
-                pass
-        avatar_url = branding.get("avatar_url") if branding else None
-        if not avatar_url and hasattr(self.bot, "user") and self.bot.user:
-            avatar_url = self.bot.user.display_avatar.url
 
         # Deduplicate and sort
         seen: set[str] = set()
@@ -1329,60 +1252,25 @@ class Help(commands.Cog):
                 unique_cmds.append(c)
         unique_cmds.sort(key=lambda c: c.qualified_name)
 
-        per_page = 10
+        per_page = 12
         total_pages = max(1, math.ceil(len(unique_cmds) / per_page))
         safe_page = max(1, min(page, total_pages))
         start_idx = (safe_page - 1) * per_page
         page_cmds = unique_cmds[start_idx: start_idx + per_page]
 
-        page_str = f"\n-# Page {safe_page}/{total_pages}" if total_pages > 1 else ""
-        cmd_bullets = " ".join(f"`{c.qualified_name}`" for c in page_cmds)
-        embed = KyokaHelpEmbed(
-            title=f"{cat_emoji} {clean_cat_title}",
-            description=f"> *{cat_desc}*{page_str}\n{cmd_bullets}",
-            color=0x2B0938,
+        lines = []
+        for c in page_cmds:
+            desc = (c.description or getattr(c, "help", None) or "No description.").strip().split("\n")[0][:45]
+            lines.append(f"`{p}{c.qualified_name}` — {desc}")
+
+        embed = discord.Embed(
+            title=f"{cat_emoji} {clean_cat_title} ({len(unique_cmds)})",
+            description=f"> *{cat_desc}*\n\n" + "\n".join(lines),
+            color=0x7C3AED,
         )
 
-        banner_url = branding.get("banner_url") if isinstance(branding, dict) else None
-        if isinstance(banner_url, str) and banner_url.strip():
-            embed.set_image(url=banner_url.strip())
-
-        # Each command as its own inline field (modular cards)
-        for c in page_cmds:
-            sig = f" {c.signature}" if c.signature else ""
-            short_desc = (
-                (c.description or getattr(c, "help", None) or "No description.")
-                .strip().split("\n")[0][:80]
-            )
-            badge = self._get_badge(c)
-            aliases_str = ""
-            if c.aliases:
-                aliases_str = f"\nAliases: {', '.join(f'`{a}`' for a in c.aliases[:3])}"
-            embed.add_field(
-                name=f"`{p}{c.qualified_name}{sig}`{badge}",
-                value=f"{short_desc}{aliases_str}",
-                inline=True,
-            )
-
-        # Fill last row to keep grid aligned (Discord needs multiples of 3 for inline)
-        remainder = len(page_cmds) % 3
-        if remainder == 1:
-            embed.add_field(name="\u200b", value="\u200b", inline=True)
-            embed.add_field(name="\u200b", value="\u200b", inline=True)
-        elif remainder == 2:
-            embed.add_field(name="\u200b", value="\u200b", inline=True)
-
-        embed.banner_file = None
-
-        if avatar_url:
-            embed.set_thumbnail(url=avatar_url)
-
-        banner_url = branding.get("banner_url") if branding else None
-        if banner_url and str(banner_url).strip():
-            embed.set_image(url=str(banner_url).strip())
-
         embed.set_footer(
-            text=f"Page {safe_page}/{total_pages}  ·  {len(unique_cmds)} commands  ·  Requested by {ctx.author.display_name}",
+            text=f"Page {safe_page}/{total_pages} • {len(unique_cmds)} commands • {p}help <cmd>",
             icon_url=ctx.author.display_avatar.url if ctx.author and ctx.author.display_avatar else None,
         )
         return embed

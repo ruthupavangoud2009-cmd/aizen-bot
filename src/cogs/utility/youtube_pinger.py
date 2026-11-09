@@ -37,10 +37,11 @@ class YouTubeLivePinger(commands.Cog):
         self.bot = bot
         self._session: aiohttp.ClientSession | None = None
         self._checking_lock = asyncio.Lock()
-        self.live_monitor_loop.start()
 
     async def cog_load(self) -> None:
-        """Create database table for YouTube live subscriptions."""
+        """Create database table for YouTube live subscriptions and start loop."""
+        if not self.live_monitor_loop.is_running():
+            self.live_monitor_loop.start()
         if hasattr(self.bot, "db") and self.bot.db:
             try:
                 await self.bot.db.execute(
@@ -343,7 +344,10 @@ class YouTubeLivePinger(commands.Cog):
 
     @live_monitor_loop.before_loop
     async def before_live_monitor(self) -> None:
-        await self.bot.wait_until_ready()
+        try:
+            await self.bot.wait_until_ready()
+        except (RuntimeError, Exception):
+            pass
 
     # ─── USER COMMANDS ───────────────────────────────────────────────────────
 
