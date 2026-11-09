@@ -237,7 +237,8 @@ async def fetch_public_nodes(limit: int = 30) -> list[tuple[str, str]]:
 
     try:
         timeout_cfg = aiohttp.ClientTimeout(total=15.0, connect=8.0)
-        async with aiohttp.ClientSession(timeout=timeout_cfg) as session:
+        headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko)"}
+        async with aiohttp.ClientSession(timeout=timeout_cfg, headers=headers) as session:
             async with session.get(url) as resp:
                 if resp.status != 200:
                     logger.warning(f"Lavalink node directory returned HTTP {resp.status}")

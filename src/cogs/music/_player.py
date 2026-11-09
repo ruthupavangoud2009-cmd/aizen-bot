@@ -1232,13 +1232,16 @@ class GuildPlayer:
         artist_display = track.author or "Unknown Artist"
         duration_display = track.formatted_duration or "00:00"
 
-        # Calculate elapsed position if available
+        # Calculate elapsed position & dynamic progress bar
         pos_ms = getattr(self.voice_client, "position", 0) if self.voice_client else 0
-        if pos_ms > 0:
-            e_mins, e_secs = divmod(int(pos_ms / 1000), 60)
-            time_display = f"`{e_mins:02d}:{e_secs:02d} / {duration_display}`"
-        else:
-            time_display = f"`{duration_display}`"
+        total_sec = max(1, track.duration)
+        cur_sec = min(int(pos_ms / 1000), total_sec)
+        e_mins, e_secs = divmod(cur_sec, 60)
+        progress = cur_sec / total_sec
+        bar_len = 10
+        filled = min(bar_len, max(0, int(progress * bar_len)))
+        prog_bar = "━" * filled + "🔘" + "─" * max(0, bar_len - filled - 1)
+        progress_display = f"`{e_mins:02d}:{e_secs:02d}` {prog_bar} `{duration_display}`"
 
         vol_pct = int(self.volume * 100)
         loop_status = self.loop_mode.upper() if self.loop_mode != "off" else "Off"
@@ -1251,8 +1254,8 @@ class GuildPlayer:
         body_lines = [
             f"{dot_prefix}**Song:** {song_display}",
             f"{dot_prefix}**Artist:** `{artist_display}`",
-            f"{dot_prefix}**Duration:** {time_display}",
-            f"{dot_prefix}**Status:** Volume: `{vol_pct}%` • Loop: `{loop_status}` • Queue: `{q_label}`",
+            f"{dot_prefix}**Timeline:** {progress_display}",
+            f"{dot_prefix}**Status:** Volume: `{vol_pct}%` • Loop: `{loop_status}` • Queue: `{q_label}` • Engine: `Studio HD`",
         ]
 
         container.add_section(content="\n".join(body_lines))
