@@ -361,7 +361,7 @@ class Economy(commands.Cog):
         except ValueError as err:
             await ctx.send(f"❌ {err}")
 
-    @commands.hybrid_command(name="rob", aliases=["steal"], description="Attempt to pickpocket another member's wallet.")
+    @commands.hybrid_command(name="rob", aliases=["mug", "pickpocket", "robuser"], description="Attempt to pickpocket another member's wallet.")
     async def rob(self, ctx: CustomContext, member: discord.Member) -> None:
         if member.bot:
             return await ctx.send("You cannot rob a bot!")
@@ -405,7 +405,7 @@ class Economy(commands.Cog):
         embed.set_footer(text=f"Page {page} of {total_pages} • Total Wealthy Members: {total}")
         return embed
 
-    @commands.hybrid_command(name="rich", aliases=["leaderboard", "ecotop"], description="View the server economy wealth leaderboard.")
+    @commands.hybrid_command(name="rich", aliases=["ecotop", "richlist", "toprich", "baltop"], description="View the server economy wealth leaderboard.")
     async def rich(self, ctx: CustomContext, page: int = 1) -> None:
         guild_id = ctx.guild.id if ctx.guild else 0
         settings = await self._get_settings(guild_id)
@@ -643,7 +643,7 @@ class Economy(commands.Cog):
             embed.description += "\n*No achievements unlocked yet. Work, gamble, and claim daily rewards to unlock milestones!*"
         await ctx.send(embed=embed)
 
-    @commands.hybrid_command(name="profile", aliases=["ecoprofile", "me"], description="View comprehensive economy, bank, and progression stats.")
+    @commands.hybrid_command(name="ecoprofile", aliases=["ecome", "wealthprofile"], description="View comprehensive economy, bank, and progression stats.")
     async def profile(self, ctx: CustomContext, member: Optional[discord.Member] = None) -> None:
         target = member or ctx.author
         guild_id = ctx.guild.id if ctx.guild else 0

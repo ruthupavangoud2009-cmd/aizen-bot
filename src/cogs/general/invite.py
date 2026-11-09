@@ -50,7 +50,7 @@ class Invite(commands.Cog):
 
     @commands.hybrid_command(
         name="invite",
-        aliases=["inv", "addbot", "links", "support"],
+        aliases=["botinvite", "addbot", "links", "support"],
         description="Get official authorization links to invite Kyoka to your server.",
     )
     async def invite(self, ctx: CustomContext) -> None:

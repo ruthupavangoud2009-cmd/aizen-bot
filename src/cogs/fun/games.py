@@ -430,6 +430,127 @@ class Games(commands.Cog):
         "⚔️ **Roleplay Duel:** Challenge a server friend to a playful duel using a roleplay command.",
     ]
 
+class GamesDropdown(discord.ui.Select):
+    def __init__(self, prefix: str):
+        self.prefix = prefix
+        options = [
+            discord.SelectOption(label="All Games Overview", value="overview", emoji="🎮", description="Summary of the entire gaming suite"),
+            discord.SelectOption(label="Casino & Luck Games", value="casino", emoji="🎰", description="Slots, Blackjack, Crash, Mines, Roulette & more"),
+            discord.SelectOption(label="Multiplayer & PVP Battles", value="multiplayer", emoji="⚔️", description="TicTacToe, Connect4, Duel, Battleship, RPS"),
+            discord.SelectOption(label="Puzzles & Brain Challenges", value="puzzles", emoji="🧩", description="Wordle, 2048, Hangman, Memory, Trivia, Quiz"),
+            discord.SelectOption(label="Number Guessing (Admin Hosted)", value="number", emoji="🔢", description="Server-wide guess a number event & controls"),
+            discord.SelectOption(label="Social & Party Events", value="social", emoji="🎉", description="Reaction Race, Hide & Seek, Two Truths, VC Events"),
+        ]
+        super().__init__(placeholder="Select a game category to explore...", min_values=1, max_values=1, options=options)
+
+    async def callback(self, interaction: discord.Interaction):
+        p = self.prefix
+        val = self.values[0]
+        if val == "casino":
+            embed = discord.Embed(
+                title="🎰 Casino & Luck Games Suite",
+                description=(
+                    f"• `{p}slots <bet>` — 3-reel slot machine with jackpot multipliers\n"
+                    f"• `{p}blackjack <bet>` (or `bj`) — Interactive table with Hit, Stand, Double Down\n"
+                    f"• `{p}crash <bet>` — Rocket multiplier launch game with live cashout\n"
+                    f"• `{p}mines <bet> [bombs]` — Stake-style 5x5 minefield gem hunt\n"
+                    f"• `{p}roulette <bet> <space>` — European roulette (red/black/green/0-36)\n"
+                    f"• `{p}wheel <bet>` — Wheel of Fortune with up to 10x multipliers\n"
+                    f"• `{p}dice [bet] [prediction]` — Standard dice roll or 5x prediction wager\n"
+                    f"• `{p}coinflip [bet] [heads/tails]` — Free coinflip or 1.95x wager\n"
+                    f"• `{p}highlow <bet>` — Card streak prediction game with cashout\n"
+                    f"• `{p}scratch [cost]` — Interactive 3x3 scratch card with 3-match payouts\n"
+                    f"• `{p}baccarat <bet> [side]` — Classic Punto Banco baccarat (Player, Banker, Tie)\n"
+                    f"• `{p}horserace <bet> [horse]` — Live animated 4-horse sprint derby\n"
+                    f"• `{p}russianroulette [bet]` — High-tension 6-chamber revolver game"
+                ),
+                color=0xD4AF37,
+            )
+        elif val == "multiplayer":
+            embed = discord.Embed(
+                title="⚔️ Multiplayer & PVP Battles",
+                description=(
+                    f"• `{p}tictactoe @user` (or `ttt`) — Interactive 3x3 grid duel\n"
+                    f"• `{p}connect4 @user` (or `c4`) — Interactive 7x6 drop column board\n"
+                    f"• `{p}duel @user [bet]` — Turn-based RPG fight with health bars and wagers\n"
+                    f"• `{p}battleship @user` (or `bs`) — 5x5 naval warfare fleet combat\n"
+                    f"• `{p}rps @user [bet]` — Secret-choice simultaneous Rock-Paper-Scissors duel"
+                ),
+                color=0x22C55E,
+            )
+        elif val == "puzzles":
+            embed = discord.Embed(
+                title="🧩 Puzzles & Brain Challenges",
+                description=(
+                    f"• `{p}wordle` — 5-letter Wordle puzzle with 6 attempts & colored tiles\n"
+                    f"• `{p}2048` — 4x4 sliding tile game with directional buttons ⬆️ ⬇️ ⬅️ ➡️\n"
+                    f"• `{p}hangman` — Word hangman with lives and letter guessing\n"
+                    f"• `{p}memory` — 4x4 card pairing memory game with 8 fruit pairs\n"
+                    f"• `{p}trivia` — Anime & general trivia challenge with multi-choice buttons\n"
+                    f"• `{p}quiz [category]` — Categorized trivia tournament (Anime, Gaming)\n"
+                    f"• `{p}riddle` — Enigma puzzles with hints & answer reveals\n"
+                    f"• `{p}reactionspeed` — Reflex testing with millisecond precision\n"
+                    f"• `{p}fasttype` — Speed typing WPM challenge against anime quotes\n"
+                    f"• `{p}unscramble` — Speed anagram race in chat for bonus coins"
+                ),
+                color=0x3B82F6,
+            )
+        elif val == "number":
+            embed = discord.Embed(
+                title="🔢 Guess a Number (Admin Hosted & Server Events)",
+                description=(
+                    f"• `{p}guessanumber <range>` — Start a server number game (e.g. `1-1000`)\n"
+                    f"• `{p}guessstatus` — Check active number game in current channel\n"
+                    f"• `{p}guesscancel` — Cancel active game (Host or Server Admins)\n"
+                    f"• `{p}guessunlock` — Restore channel permissions locked after a game\n"
+                    f"• `{p}guesshelp` — Detailed rules & gameplay mechanics\n\n"
+                    f"**👑 Server Admin & Owner Controls:**\n"
+                    f"• `{p}guesssettings` — View server number game settings\n"
+                    f"• `{p}guessreward <coins>` — Set prize coins awarded to game winner\n"
+                    f"• `{p}guesssettings autolock <on/off>` — Toggle channel auto-lock on completion\n"
+                    f"• `{p}guesshostadd @member` — Authorize a number-game host in this server\n"
+                    f"• `{p}guesshostremove @member` — Remove an authorized host\n"
+                    f"• `{p}guesshosts` — List all authorized hosts for this server"
+                ),
+                color=0x7C3AED,
+            )
+        elif val == "social":
+            embed = discord.Embed(
+                title="🎉 Social & Party Events",
+                description=(
+                    f"• `{p}reactionrace` — Fastest-click race when the GO signal appears\n"
+                    f"• `{p}hideandseek` — Find the hidden treasure on a 9-button grid\n"
+                    f"• `{p}twotruths <s1> | <s2> | <s3> | <lie 1-3>` — Two Truths and a Lie host\n"
+                    f"• `{p}tod` — Interactive Truth or Dare challenge\n"
+                    f"• `{p}ltlvc start` — Last To Leave Voice Channel endurance event\n"
+                    f"• `{p}vctrivia` — Voice-channel real-time trivia competition"
+                ),
+                color=0xEC4899,
+            )
+        else:
+            embed = discord.Embed(
+                title="🎮 Kyoka Sovereign Games Universe",
+                description=(
+                    "> Complete gaming, casino, puzzle & server competition suite!\n\n"
+                    f"**🎰 Casino & Luck:** `{p}slots`, `{p}blackjack`, `{p}crash`, `{p}mines`, `{p}roulette`, `{p}wheel`, `{p}dice`, `{p}baccarat`\n"
+                    f"**⚔️ Multiplayer & PVP:** `{p}tictactoe`, `{p}connect4`, `{p}duel`, `{p}battleship`, `{p}rps`\n"
+                    f"**🧩 Puzzles & Brain:** `{p}wordle`, `{p}2048`, `{p}hangman`, `{p}memory`, `{p}trivia`, `{p}quiz`, `{p}riddle`\n"
+                    f"**🔢 Number Game (Admin):** `{p}guessanumber`, `{p}guesssettings`, `{p}guessreward`, `{p}guesshostadd`\n"
+                    f"**🎉 Social & VC:** `{p}reactionrace`, `{p}hideandseek`, `{p}twotruths`, `{p}tod`, `{p}ltlvc`\n\n"
+                    "-# Use the dropdown menu below to view detailed command instructions & rules."
+                ),
+                color=PURPLE,
+            )
+
+        await interaction.response.edit_message(embed=embed, view=self.view)
+
+
+class GamesHubView(discord.ui.View):
+    def __init__(self, prefix: str):
+        super().__init__(timeout=120)
+        self.add_item(GamesDropdown(prefix))
+
+
     def __init__(self, bot: KyokaBot) -> None:
         self.bot = bot
         self.gif_manager = GIFManager()
@@ -437,21 +558,22 @@ class Games(commands.Cog):
 
     @commands.command(name="games", help="List the games you can play with Kyoka.")
     async def game_list(self, ctx: CustomContext) -> None:
-        await ctx.send(
-            embed=discord.Embed(
-                title="🎮 Kyoka Games",
-                description=(
-                    f"`{ctx.prefix}ltlvc start` — Last To Leave VC\n"
-                    f"`{ctx.prefix}vctrivia` — Voice-channel trivia battle\n"
-                    f"`{ctx.prefix}reactionrace` — Fastest-click race\n"
-                    f"`{ctx.prefix}hideandseek` — Find the hidden treasure\n"
-                    f"`{ctx.prefix}twotruths <s1> | <s2> | <s3> | <lie 1-3>` — Two Truths and a Lie\n"
-                    f"`{ctx.prefix}tod` — Truth or Dare\n"
-                    f"`{ctx.prefix}bloxfruits`, `{ctx.prefix}wordguess`, `{ctx.prefix}guessanumber` — More games"
-                ),
-                color=PURPLE,
-            )
+        p = ctx.prefix
+        embed = discord.Embed(
+            title="🎮 Kyoka Sovereign Games Universe",
+            description=(
+                "> Complete gaming, casino, puzzle & server competition suite!\n\n"
+                f"**🎰 Casino & Luck:** `{p}slots`, `{p}blackjack`, `{p}crash`, `{p}mines`, `{p}roulette`, `{p}wheel`, `{p}dice`, `{p}baccarat`\n"
+                f"**⚔️ Multiplayer & PVP:** `{p}tictactoe`, `{p}connect4`, `{p}duel`, `{p}battleship`, `{p}rps`\n"
+                f"**🧩 Puzzles & Brain:** `{p}wordle`, `{p}2048`, `{p}hangman`, `{p}memory`, `{p}trivia`, `{p}quiz`, `{p}riddle`\n"
+                f"**🔢 Number Game (Admin):** `{p}guessanumber`, `{p}guesssettings`, `{p}guessreward`, `{p}guesshostadd`\n"
+                f"**🎉 Social & VC:** `{p}reactionrace`, `{p}hideandseek`, `{p}twotruths`, `{p}tod`, `{p}ltlvc`\n\n"
+                "-# Use the dropdown menu below to view detailed command instructions & rules."
+            ),
+            color=PURPLE,
         )
+        view = GamesHubView(p)
+        await ctx.send(embed=embed, view=view)
 
     @commands.command(name="reactionrace", aliases=["rrace"], help="Race your friends to click first after GO.")
     @commands.guild_only()

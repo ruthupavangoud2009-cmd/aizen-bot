@@ -155,19 +155,18 @@ Legacy `+` prefix commands (`+gstart`, `+gend`, `+greroll`, `+glist`, `+ai`, `+p
 | `src/cogs/fun/fun.py` | `roast` | — | Give someone a playful roast. |
 | `src/cogs/fun/fun.py` | `ship` | — | Calculate two users' completely scientific compatibility. |
 | `src/cogs/fun/fun.py` | `8ball` | eightball | Ask Aizen's mysterious 8-ball a question. |
-| `src/cogs/fun/fun.py` | `coinflip` | flip | Flip a coin. |
-| `src/cogs/fun/fun.py` | `dice` | roll | Roll a die with 2–100 sides. |
 | `src/cogs/fun/fun.py` | `choose` | — | Choose between options separated by \|. |
 | `src/cogs/fun/fun.py` | `rate` | — | Give something a completely scientific rating. |
 | `src/cogs/fun/fun.py` | `joke` | — | Ask Aizen for a quick joke. |
-| `src/cogs/fun/fun.py` | `rps` | — | Play rock-paper-scissors against Aizen. |
-| `src/cogs/fun/fun.py` | `trivia` | — | Answer a quick anime-themed trivia question. |
-| `src/cogs/fun/fun.py` | `guessanumber` | guessnumber, guess | Start an authorized number guessing game, e.g. ?guessanumber 1-10000. |
-| `src/cogs/fun/fun.py` | `guessstatus` | — | Check the current number game in this channel. |
-| `src/cogs/fun/fun.py` | `guesscancel` | — | Cancel the number game you started in this channel. |
+| `src/cogs/fun/fun.py` | `guessanumber` | guessnumber, guess | Start a number guessing game (Admins, Owner & Authorized Hosts). |
+| `src/cogs/fun/fun.py` | `guessstatus` | — | Check the current number game in this channel (Host, Admins & Owner). |
+| `src/cogs/fun/fun.py` | `guesscancel` | — | Cancel the number game you started in this channel (Host, Admins & Owner). |
+| `src/cogs/fun/fun.py` | `guesssettings` | guessconfig | Admin: View or configure server number game settings (reward, autolock). |
+| `src/cogs/fun/fun.py` | `guessreward` | — | Admin: Set coin prize awarded to number game winners. |
+| `src/cogs/fun/fun.py` | `guessunlock` | gunlock | Admin: Restore channel permissions locked after a game. |
+| `src/cogs/fun/fun.py` | `guesshelp` | — | Explain number-game rules and host authorization. |
 | `src/cogs/fun/fun.py` | `spam` | — | Owner-only: repeat a message up to 100 times; explicit @user mentions are pinged. |
 | `src/cogs/fun/fun.py` | `spamcancel` | — | Owner-only: cancel a running repeat-message task. |
-| `src/cogs/fun/fun.py` | `guesshelp` | — | Explain number-game rules and host authorization. |
 | `src/cogs/fun/fun.py` | `fact` | — | Hear a random harmless fact. |
 | `src/cogs/fun/fun.py` | `quote` | — | Get a short strategic quote. |
 | `src/cogs/fun/fun.py` | `wyr` | — | Get a safe would-you-rather prompt. |
@@ -357,4 +356,32 @@ Legacy `+` prefix commands (`+gstart`, `+gend`, `+greroll`, `+glist`, `+ai`, `+p
 | `src/cogs/fun/arena_rpg.py` | `equip` | — | Equip a weapon or armor from your inventory: `+equip <item name>`. |
 | `src/cogs/fun/arena_rpg.py` | `daily` | claim | Claim daily 350 Gold and 150 XP bonus reward. |
 | `src/cogs/fun/arena_rpg.py` | `arenatop` | gamelb, topraids | View global and server Hall of Fame for top raid kills and wealthiest tycoons. |
+| `src/cogs/games/casino.py` | `slots` | — | Spin the 3-reel Kyoka slot machine with jackpot payouts. |
+| `src/cogs/games/casino.py` | `coinflip` | cf, flip | Wager currency on a coinflip or flip a standard coin. |
+| `src/cogs/games/casino.py` | `blackjack` | bj | Play high-stakes casino blackjack with interactive buttons. |
+| `src/cogs/games/casino.py` | `crash` | — | Rocket launch multiplier game: cash out before the rocket explodes! |
+| `src/cogs/games/casino.py` | `mines` | — | Stake-style 5x5 minefield: reveal safe gems and cash out anytime. |
+| `src/cogs/games/casino.py` | `roulette` | — | Bet on European roulette (red, black, green, or number 0-36). |
+| `src/cogs/games/casino.py` | `dice` | roll, droll | Roll a die (2-100 sides) or wager 5x prediction against Aizen. |
+| `src/cogs/games/casino.py` | `highlow` | hl | Play Higher or Lower card streak game with cashout. |
+| `src/cogs/games/casino.py` | `wheel` | — | Spin the Aizen Wheel of Fortune with up to 10x multipliers. |
+| `src/cogs/games/casino.py` | `scratch` | — | Play interactive 3x3 scratch card with matching symbol payouts. |
+| `src/cogs/games/casino.py` | `baccarat` | bac | Classic Punto Banco baccarat (Player, Banker, Tie). |
+| `src/cogs/games/casino.py` | `horserace` | race | Bet on an animated 4-horse sprint derby across chat lanes. |
+| `src/cogs/games/multiplayer.py` | `tictactoe` | ttt | Challenge a member to interactive 3x3 Tic-Tac-Toe. |
+| `src/cogs/games/multiplayer.py` | `connect4` | c4 | Challenge a member to interactive 7x6 Connect 4 match. |
+| `src/cogs/games/multiplayer.py` | `duel` | — | Turn-based RPG fight against a member with health bars and wagers. |
+| `src/cogs/games/multiplayer.py` | `wordle` | — | Play 5-letter Wordle puzzle with 6 attempts & colored tiles. |
+| `src/cogs/games/multiplayer.py` | `2048` | — | Interactive 4x4 sliding 2048 tile game with button controls. |
+| `src/cogs/games/multiplayer.py` | `battleship` | bs | Challenge a member to 5x5 naval Battleship fleet combat. |
+| `src/cogs/games/multiplayer.py` | `memory` | mem | Interactive 4x4 card pairing memory game with 8 fruit pairs. |
+| `src/cogs/games/multiplayer.py` | `rps` | — | Play Rock-Paper-Scissors against Aizen or secret-choice PVP vs a member. |
+| `src/cogs/games/multiplayer.py` | `russianroulette` | roulettegame, revolver, rroulette | Spin 6-chamber cylinder and pull the trigger with escalating multiplier. |
+| `src/cogs/games/multiplayer.py` | `reactionspeed` | reactiontime, rspeed, rtime | Test reaction speed with millisecond precision. |
+| `src/cogs/games/multiplayer.py` | `fasttype` | typeracer | Test typing speed (WPM) against anime quotes. |
+| `src/cogs/games/multiplayer.py` | `trivia` | — | Multi-choice anime & general trivia challenge. |
+| `src/cogs/games/multiplayer.py` | `quiz` | — | Categorized quiz tournament (Anime, Gaming). |
+| `src/cogs/games/multiplayer.py` | `hangman` | — | Interactive word hangman with lives and letter guessing. |
+| `src/cogs/games/multiplayer.py` | `riddle` | — | Solve challenging riddles with hints and reveals. |
+| `src/cogs/games/multiplayer.py` | `unscramble` | anagram | Speed anagram unscrambling race in chat for coin rewards. |
 

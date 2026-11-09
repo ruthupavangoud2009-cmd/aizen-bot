@@ -925,7 +925,7 @@ class ArenaRPG(commands.Cog):
 
     @commands.command(
         name="summon",
-        aliases=["gacha", "crate", "box"],
+        aliases=["gacha", "rpgbox", "box"],
         help="Summon legendary weapons and armor from the Cyber Crucible (100 Gold).",
     )
     async def summon(self, ctx: CustomContext) -> None:

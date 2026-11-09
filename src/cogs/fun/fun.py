@@ -7,7 +7,7 @@ import secrets
 import time
 import logging
 import datetime as dt
-from typing import Any
+from typing import Any, Optional
 import discord
 from discord.ext import commands
 
@@ -86,6 +86,13 @@ class Fun(commands.Cog):
                 guess INTEGER NOT NULL,
                 attempted_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
                 PRIMARY KEY (game_id, user_id, guess)
+            );
+        """)
+        await self.bot.db.execute("""
+            CREATE TABLE IF NOT EXISTS kyoka_guess_settings (
+                guild_id BIGINT PRIMARY KEY,
+                reward INTEGER DEFAULT 1000,
+                autolock BOOLEAN DEFAULT TRUE
             );
         """)
         await self.bot.db.execute(
@@ -194,16 +201,6 @@ class Fun(commands.Cog):
         answers = ["Absolutely.", "The plan is already in motion.", "Not even Kyōka Suigetsu can confirm that.", "Ask again after the next plot twist.", "The odds are in your favor.", "I wouldn't count on it.", "Aizen knows… but won't tell you."]
         await ctx.send(f"🔮 **Question:** {question}\n**Aizen says:** {random.choice(answers)}")
 
-    @commands.command(name="coinflip", aliases=["flip"], help="Flip a coin.")
-    async def coinflip(self, ctx: CustomContext):
-        await ctx.send(f"🪙 Aizen flips the coin… **{random.choice(['Heads', 'Tails'])}!**")
-
-    @commands.command(name="dice", aliases=["roll"], help="Roll a die with 2–100 sides.")
-    async def dice(self, ctx: CustomContext, sides: int = 6):
-        if not 2 <= sides <= 100:
-            return await ctx.send("Choose a die with **2–100** sides.")
-        await ctx.send(f"🎲 Aizen rolls a d{sides}… **{random.randint(1, sides)}**!")
-
     @commands.command(name="choose", help="Choose between options separated by |.")
     async def choose(self, ctx: CustomContext, *, options: str):
         choices = [item.strip() for item in options.split("|") if item.strip()]
@@ -224,36 +221,18 @@ class Fun(commands.Cog):
         )
         await ctx.send(f"🎭 {random.choice(jokes)}")
 
-    @commands.command(name="rps", help="Play rock-paper-scissors against Aizen.")
-    async def rps(self, ctx: CustomContext, choice: str):
-        player = choice.lower()
-        if player not in {"rock", "paper", "scissors"}:
-            return await ctx.send("Choose `rock`, `paper`, or `scissors`.")
-        opponent = random.choice(("rock", "paper", "scissors"))
-        if player == opponent:
-            result = "A draw. The outcome was an illusion."
-        elif (player, opponent) in {("rock", "scissors"), ("paper", "rock"), ("scissors", "paper")}:
-            result = "You win this round."
-        else:
-            result = "Aizen wins this round."
-        await ctx.send(f"✊ You chose **{player}**; Aizen chose **{opponent}**. {result}")
-
-    @commands.command(name="trivia", help="Answer a quick anime-themed trivia question.")
-    async def trivia(self, ctx: CustomContext):
-        questions = (
-            ("Which division is led by Captain Aizen at the start of Bleach?", "fifth"),
-            ("What is the name of Aizen's Zanpakuto?", "kyoka suigetsu"),
-            ("What color is Ichigo's original Shihakusho?", "black"),
-        )
-        question, answer = random.choice(questions)
-        await ctx.send(f"🧠 **Trivia:** {question}\nReply with your answer. (Answer: ||{answer}||)")
-
     @commands.command(name="guessanumber", aliases=["guessnumber", "guess"], help="Start an authorized number guessing game with unlimited guesses.")
     async def guessanumber(self, ctx: CustomContext, bounds: str = "1-10000"):
         if ctx.guild is None:
             return await ctx.send("Start a number game in a server channel.")
-        # Hosting is allowlisted per guild. The primary owner may always host.
-        if not is_primary_owner(ctx.author.id):
+        # Hosting is allowlisted per guild. Primary bot owner and server admins may always host.
+        is_admin = bool(
+            is_primary_owner(ctx.author.id)
+            or (ctx.guild and getattr(getattr(ctx.author, "guild_permissions", None), "administrator", False))
+            or (ctx.guild and getattr(getattr(ctx.author, "guild_permissions", None), "manage_guild", False))
+            or (ctx.guild and getattr(ctx.author, "id", None) == getattr(ctx.guild, "owner_id", None))
+        )
+        if not is_admin:
             try:
                 authorized = await self.bot.db.fetch_one(
                     "SELECT user_id FROM kyoka_guess_hosts WHERE guild_id = ? AND user_id = ?;",
@@ -263,7 +242,7 @@ class Fun(commands.Cog):
                 logger.exception("Could not verify number-game host allowlist")
                 return await ctx.send("I couldn't verify the host allowlist safely. Please try again later.")
             if not authorized:
-                return await ctx.send(f"You are not authorized to host number games. Ask the bot owner to add you with `{ctx.prefix}guesshostadd @member`.")
+                return await ctx.send(f"You are not authorized to host number games. Ask a server administrator or bot owner to add you with `{ctx.prefix}guesshostadd @member`.")
         try:
             low, high = parse_guess_bounds(bounds)
         except ValueError as exc:
@@ -459,8 +438,14 @@ class Fun(commands.Cog):
                 await ctx.send("⌛ The number game timed out.")
                 await self._lock_channel_after_game(ctx.channel, "Game timed out")
             return await ctx.send("There is no active number game in this channel.")
-        if ctx.author.id != game["starter"] and not is_primary_owner(ctx.author.id):
-            return await ctx.send("Only the game host or primary bot owner can check its status.")
+        is_admin = bool(
+            is_primary_owner(ctx.author.id)
+            or (ctx.guild and getattr(getattr(ctx.author, "guild_permissions", None), "administrator", False))
+            or (ctx.guild and getattr(getattr(ctx.author, "guild_permissions", None), "manage_guild", False))
+            or (ctx.guild and getattr(ctx.author, "id", None) == getattr(ctx.guild, "owner_id", None))
+        )
+        if ctx.author.id != game["starter"] and not is_admin:
+            return await ctx.send("Only the game host, server administrators, or primary bot owner can check its status.")
         status_text = "Starting soon (cooldown)" if game.get("countdown_active") else "Active"
         await ctx.send(f"Number game {status_text.lower()}: range **{game['low']}–{game['high']}**. The answer remains private.")
 
@@ -469,8 +454,14 @@ class Fun(commands.Cog):
         game = self.games.get(ctx.channel.id)
         if not game:
             return await ctx.send("There is no active number game in this channel.")
-        if ctx.author.id != game["starter"] and not is_primary_owner(ctx.author.id):
-            return await ctx.send("Only the game host or primary bot owner can cancel this number game.")
+        is_admin = bool(
+            is_primary_owner(ctx.author.id)
+            or (ctx.guild and getattr(getattr(ctx.author, "guild_permissions", None), "administrator", False))
+            or (ctx.guild and getattr(getattr(ctx.author, "guild_permissions", None), "manage_guild", False))
+            or (ctx.guild and getattr(ctx.author, "id", None) == getattr(ctx.guild, "owner_id", None))
+        )
+        if ctx.author.id != game["starter"] and not is_admin:
+            return await ctx.send("Only the game host, server administrators, or primary bot owner can cancel this number game.")
         
         cd_task = self._countdown_tasks.pop(ctx.channel.id, None)
         if cd_task and not cd_task.done():
@@ -478,9 +469,8 @@ class Fun(commands.Cog):
 
         await self.bot.db.execute(
             "UPDATE guess_number_games SET status = 'cancelled' "
-            "WHERE channel_id = ? AND host_id = ? AND status = 'active';",
+            "WHERE channel_id = ? AND status = 'active';",
             ctx.channel.id,
-            ctx.author.id,
         )
         await self.bot.db.execute(
             "DELETE FROM guess_number_attempts WHERE game_id = ?;",
@@ -563,16 +553,40 @@ class Fun(commands.Cog):
                     return
                 answer = game["answer"]
                 self.games.pop(message.channel.id, None)
+
+                # Check guild settings for rewards & autolock
+                reward = 1000
+                autolock_setting = True
+                try:
+                    set_row = await self.bot.db.fetch_one("SELECT reward, autolock FROM kyoka_guess_settings WHERE guild_id = ?;", message.guild.id)
+                    if set_row:
+                        if set_row.get("reward") is not None:
+                            reward = int(set_row["reward"])
+                        if set_row.get("autolock") is not None:
+                            autolock_setting = bool(set_row["autolock"])
+                except Exception:
+                    pass
+
+                prize_str = ""
+                if reward > 0:
+                    try:
+                        from src.managers.economy_manager import EconomyManager
+                        eco_mgr = EconomyManager(self.bot.db)
+                        await eco_mgr.update_balance(message.guild.id, message.author.id, wallet_delta=reward, tx_type="guess_win", metadata="Won Guess a Number")
+                        prize_str = f"\n💰 **Prize Won:** +{reward:,} Kyoka Coins deposited into your wallet!"
+                    except Exception:
+                        pass
+
                 await message.add_reaction("🎉")
                 await message.reply(
-                    f"🏆 **{message.author.mention} got it!** The secret number was **{answer}**. The illusion is broken. Congratulations!",
+                    f"🏆 **{message.author.mention} got it!** The secret number was **{answer}**. The illusion is broken. Congratulations!{prize_str}",
                     mention_author=False,
                     allowed_mentions=discord.AllowedMentions(users=[message.author], roles=False, everyone=False),
                 )
                 gif_url = await self.gif_mgr.get_action_gif("celebrate")
                 celebration = discord.Embed(
                     title="🏆 Number Game Champion!",
-                    description=f"{message.author.mention} found **{answer}**!",
+                    description=f"{message.author.mention} found **{answer}**!{prize_str}",
                     color=0x7C3AED,
                 )
                 if gif_url:
@@ -608,8 +622,9 @@ class Fun(commands.Cog):
                 except (discord.Forbidden, discord.HTTPException, AttributeError, TypeError):
                     logger.info("Could not DM primary owner about game winner")
 
-                # Lock the channel now that result has been sent
-                await self._lock_channel_after_game(message.channel, "Winner found")
+                # Lock the channel if autolock is enabled
+                if autolock_setting:
+                    await self._lock_channel_after_game(message.channel, "Winner found")
                 self._guess_locks.pop(message.channel.id, None)
             elif guess < game["answer"]:
                 await message.add_reaction("➕")
@@ -830,14 +845,94 @@ class Fun(commands.Cog):
     @commands.command(name="guesshelp", help="Explain number-game rules and host authorization.")
     async def guesshelp(self, ctx: CustomContext):
         embed = discord.Embed(title="🌀 KYŌKA Number Game", color=0x7C3AED, description=(
-            f"An authorized host starts a game with `{ctx.prefix}guessanumber 1-10000`. Members type guesses in that same channel.\n\n"
+            f"An authorized host or server admin starts a game with `{ctx.prefix}guessanumber 1-10000`. Members type guesses in that same channel.\n\n"
             "• `+` means your guess is lower than the secret number.\n"
             "• `-` means your guess is higher than the secret number.\n"
-            "• There is no guess-count limit; the first correct guess wins. The answer is privately DM'd to the host and primary owner.\n"
-            "• Only the primary owner or a host on the server allowlist may start a game.\n\n"
-            f"Owner allowlist commands: `{ctx.prefix}guesshostadd @member`, `{ctx.prefix}guesshostremove @member`, `{ctx.prefix}guesshosts`."
+            "• There is no guess-count limit; the first correct guess wins. The answer is privately DM'd to the host.\n"
+            "• Server Administrators, guild owners, primary bot owner, and authorized hosts may start games.\n\n"
+            f"Host allowlist commands (Admins & Owner): `{ctx.prefix}guesshostadd @member`, `{ctx.prefix}guesshostremove @member`, `{ctx.prefix}guesshosts`.\n"
+            f"Channel controls: `{ctx.prefix}guessstatus`, `{ctx.prefix}guesscancel`, `{ctx.prefix}guessunlock`."
         ))
         await ctx.send(embed=embed)
+
+    @commands.command(name="guesssettings", aliases=["guessconfig"], help="Admin: view or configure number game settings for this server.")
+    @commands.guild_only()
+    async def guesssettings(self, ctx: CustomContext, action: Optional[str] = None, *, value: Optional[str] = None):
+        is_admin = bool(
+            is_primary_owner(ctx.author.id)
+            or (ctx.guild and getattr(getattr(ctx.author, "guild_permissions", None), "administrator", False))
+            or (ctx.guild and getattr(getattr(ctx.author, "guild_permissions", None), "manage_guild", False))
+            or (ctx.guild and getattr(ctx.author, "id", None) == getattr(ctx.guild, "owner_id", None))
+        )
+        if not is_admin:
+            return await ctx.send("Only server administrators or the primary bot owner can manage number game settings.")
+
+        guild_id = ctx.guild.id
+        row = await self.bot.db.fetch_one("SELECT reward, autolock FROM kyoka_guess_settings WHERE guild_id = ?;", guild_id)
+        reward = int(row["reward"]) if row and row.get("reward") is not None else 1000
+        autolock = bool(row["autolock"]) if row and row.get("autolock") is not None else True
+
+        if not action or action.lower() in ("view", "status", "info"):
+            embed = discord.Embed(
+                title=f"⚙️ Guess a Number Settings • {ctx.guild.name}",
+                description=(
+                    f"> **Prize Reward:** `{reward:,} Coins`\n"
+                    f"> **Auto-Lock Channel on Game End:** `{'Enabled' if autolock else 'Disabled'}`\n\n"
+                    f"**Admin Commands:**\n"
+                    f"• `{ctx.prefix}guessreward <amount>` — Set coin reward for the winner\n"
+                    f"• `{ctx.prefix}guesssettings autolock <on/off>` — Toggle channel auto-lock\n"
+                    f"• `{ctx.prefix}guesshostadd @member` — Authorize a number-game host\n"
+                    f"• `{ctx.prefix}guesshostremove @member` — Remove an authorized host\n"
+                    f"• `{ctx.prefix}guesshosts` — List authorized hosts"
+                ),
+                color=0x7C3AED,
+            )
+            return await ctx.send(embed=embed)
+
+        action_clean = action.lower()
+        if action_clean in ("reward", "prize"):
+            if not value or not value.strip().isdigit():
+                return await ctx.send(f"Usage: `{ctx.prefix}guesssettings reward <coins>`")
+            new_rew = max(0, min(1_000_000, int(value.strip())))
+            await self.bot.db.execute(
+                "INSERT INTO kyoka_guess_settings (guild_id, reward, autolock) VALUES (?, ?, ?) "
+                "ON CONFLICT (guild_id) DO UPDATE SET reward = EXCLUDED.reward;",
+                guild_id, new_rew, autolock,
+            )
+            return await ctx.send(f"✅ Number game prize reward set to **{new_rew:,} Coins** for this server.")
+
+        elif action_clean in ("autolock", "lock"):
+            if not value or value.lower().strip() not in ("on", "off", "true", "false", "enable", "disable"):
+                return await ctx.send(f"Usage: `{ctx.prefix}guesssettings autolock <on/off>`")
+            new_lock = value.lower().strip() in ("on", "true", "enable")
+            await self.bot.db.execute(
+                "INSERT INTO kyoka_guess_settings (guild_id, reward, autolock) VALUES (?, ?, ?) "
+                "ON CONFLICT (guild_id) DO UPDATE SET autolock = EXCLUDED.autolock;",
+                guild_id, reward, new_lock,
+            )
+            return await ctx.send(f"✅ Auto-lock on game completion is now **{'Enabled' if new_lock else 'Disabled'}**.")
+        else:
+            return await ctx.send(f"Unknown action. Use `{ctx.prefix}guesssettings` to view settings.")
+
+    @commands.command(name="guessreward", help="Admin: set coin reward for number game winners.")
+    @commands.guild_only()
+    async def guessreward(self, ctx: CustomContext, amount: int):
+        is_admin = bool(
+            is_primary_owner(ctx.author.id)
+            or (ctx.guild and getattr(getattr(ctx.author, "guild_permissions", None), "administrator", False))
+            or (ctx.guild and getattr(getattr(ctx.author, "guild_permissions", None), "manage_guild", False))
+            or (ctx.guild and getattr(ctx.author, "id", None) == getattr(ctx.guild, "owner_id", None))
+        )
+        if not is_admin:
+            return await ctx.send("Only server administrators or the primary bot owner can set number game rewards.")
+        if amount < 0 or amount > 1_000_000:
+            return await ctx.send("Reward must be between 0 and 1,000,000 Coins.")
+        await self.bot.db.execute(
+            "INSERT INTO kyoka_guess_settings (guild_id, reward, autolock) VALUES (?, ?, TRUE) "
+            "ON CONFLICT (guild_id) DO UPDATE SET reward = EXCLUDED.reward;",
+            ctx.guild.id, amount,
+        )
+        await ctx.send(f"✅ Set Guess a Number winner prize to **{amount:,} Coins**.")
 
     @commands.command(name="fact", help="Hear a random harmless fact.")
     async def fact(self, ctx: CustomContext):
@@ -901,6 +996,7 @@ class Fun(commands.Cog):
         )
         embed.set_footer(text="Made by Aizen • Support server linked in botinfo")
         await ctx.send(embed=embed)
+
 
 async def setup(bot: commands.Bot):
     await bot.add_cog(Fun(bot))

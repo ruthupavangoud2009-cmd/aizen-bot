@@ -556,27 +556,45 @@ class AIInteractions(commands.Cog):
         await message.reply(answer[:1900], mention_author=False, allowed_mentions=discord.AllowedMentions.none())
         asyncio.create_task(self._speak_configured_reply(message.guild, message.author, answer))
 
-    @commands.command(name="guesshostadd", help="Owner-only: authorize a number-game host in this server.")
+    @commands.command(name="guesshostadd", help="Admin/Owner: authorize a number-game host in this server.")
     @commands.guild_only()
     async def guesshostadd(self, ctx: CustomContext, member: discord.Member):
-        if not is_primary_owner(ctx.author.id):
-            return await ctx.send("Only the primary bot owner can manage the number-game host allowlist.")
-        await self.bot.db.execute("INSERT INTO kyoka_guess_hosts (guild_id, user_id, added_by) VALUES (?, ?, ?) ON CONFLICT (guild_id, user_id) DO NOTHING;", ctx.guild.id, member.id, OWNER_ID)
+        is_admin = bool(
+            is_primary_owner(ctx.author.id)
+            or (ctx.guild and getattr(getattr(ctx.author, "guild_permissions", None), "administrator", False))
+            or (ctx.guild and getattr(getattr(ctx.author, "guild_permissions", None), "manage_guild", False))
+            or (ctx.guild and getattr(ctx.author, "id", None) == getattr(ctx.guild, "owner_id", None))
+        )
+        if not is_admin:
+            return await ctx.send("Only server administrators or the primary bot owner can manage the number-game host allowlist.")
+        await self.bot.db.execute("INSERT INTO kyoka_guess_hosts (guild_id, user_id, added_by) VALUES (?, ?, ?) ON CONFLICT (guild_id, user_id) DO NOTHING;", ctx.guild.id, member.id, ctx.author.id)
         await ctx.send(f"Added {member.mention} to this server's number-game host allowlist.", allowed_mentions=discord.AllowedMentions.none())
 
-    @commands.command(name="guesshostremove", help="Owner-only: remove a number-game host in this server.")
+    @commands.command(name="guesshostremove", help="Admin/Owner: remove a number-game host in this server.")
     @commands.guild_only()
     async def guesshostremove(self, ctx: CustomContext, member: discord.Member):
-        if not is_primary_owner(ctx.author.id):
-            return await ctx.send("Only the primary bot owner can manage the number-game host allowlist.")
+        is_admin = bool(
+            is_primary_owner(ctx.author.id)
+            or (ctx.guild and getattr(getattr(ctx.author, "guild_permissions", None), "administrator", False))
+            or (ctx.guild and getattr(getattr(ctx.author, "guild_permissions", None), "manage_guild", False))
+            or (ctx.guild and getattr(ctx.author, "id", None) == getattr(ctx.guild, "owner_id", None))
+        )
+        if not is_admin:
+            return await ctx.send("Only server administrators or the primary bot owner can manage the number-game host allowlist.")
         await self.bot.db.execute("DELETE FROM kyoka_guess_hosts WHERE guild_id = ? AND user_id = ?;", ctx.guild.id, member.id)
         await ctx.send(f"Removed {member.mention} from the number-game host allowlist.", allowed_mentions=discord.AllowedMentions.none())
 
-    @commands.command(name="guesshosts", help="Owner-only: list authorized number-game hosts for this server.")
+    @commands.command(name="guesshosts", help="Admin/Owner: list authorized number-game hosts for this server.")
     @commands.guild_only()
     async def guesshosts(self, ctx: CustomContext):
-        if not is_primary_owner(ctx.author.id):
-            return await ctx.send("Only the primary bot owner can view the number-game host allowlist.")
+        is_admin = bool(
+            is_primary_owner(ctx.author.id)
+            or (ctx.guild and getattr(getattr(ctx.author, "guild_permissions", None), "administrator", False))
+            or (ctx.guild and getattr(getattr(ctx.author, "guild_permissions", None), "manage_guild", False))
+            or (ctx.guild and getattr(ctx.author, "id", None) == getattr(ctx.guild, "owner_id", None))
+        )
+        if not is_admin:
+            return await ctx.send("Only server administrators or the primary bot owner can view the number-game host allowlist.")
         rows = await self.bot.db.fetch_all("SELECT user_id FROM kyoka_guess_hosts WHERE guild_id = ? ORDER BY user_id;", ctx.guild.id)
         value = "\n".join(f"• <@{int(row['user_id'])}> (`{int(row['user_id'])}`)" for row in rows) or "No hosts authorized yet."
         await ctx.send(embed=discord.Embed(title="Number-game hosts", description=value, color=PURPLE), allowed_mentions=discord.AllowedMentions.none())

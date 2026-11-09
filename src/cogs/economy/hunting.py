@@ -101,7 +101,7 @@ class Hunting(commands.Cog):
     async def cog_load(self) -> None:
         await self.hunting_mgr.init_catalog()
 
-    @commands.hybrid_command(name="hunt", aliases=["catchanimal"], description="Hunt in the wilderness to encounter wild creatures and collect loot.")
+    @commands.command(name="hunt", aliases=["catchanimal"], description="Hunt in the wilderness to encounter wild creatures and collect loot.")
     @commands.cooldown(1, 15, commands.BucketType.user)
     async def hunt(self, ctx: CustomContext) -> None:
         guild_id = ctx.guild.id if ctx.guild else 0
@@ -154,12 +154,12 @@ class Hunting(commands.Cog):
             )
         await ctx.send(embed=embed)
 
-    @commands.hybrid_command(name="catch", aliases=["capture"], description="Attempt to catch a specific targeted beast.")
+    @commands.command(name="catch", aliases=["capture"], description="Attempt to catch a specific targeted beast.")
     @commands.cooldown(1, 15, commands.BucketType.user)
     async def catch(self, ctx: CustomContext) -> None:
         await self.hunt(ctx)
 
-    @commands.hybrid_command(name="zoo", aliases=["animals", "creatures"], description="View your entire collection of captured creatures.")
+    @commands.command(name="zoo", aliases=["animals", "creatures"], description="View your entire collection of captured creatures.")
     async def zoo(self, ctx: CustomContext, member: Optional[discord.Member] = None) -> None:
         target = member or ctx.author
         guild_id = ctx.guild.id if ctx.guild else 0
@@ -192,11 +192,11 @@ class Hunting(commands.Cog):
         embed.set_footer(text=f"Feed pets with ?feed <name> • Equip with ?pet equip <name>")
         await ctx.send(embed=embed)
 
-    @commands.hybrid_command(name="pets", aliases=["mypets"], description="Manage your equipped pets and pet stats.")
+    @commands.command(name="pets", aliases=["mypets"], description="Manage your equipped pets and pet stats.")
     async def pets(self, ctx: CustomContext, member: Optional[discord.Member] = None) -> None:
         await self.zoo(ctx, member)
 
-    @commands.hybrid_command(name="pet", description="View detailed combat stats and affection for a specific pet.")
+    @commands.command(name="pet", description="View detailed combat stats and affection for a specific pet.")
     async def pet(self, ctx: CustomContext, *, name: str) -> None:
         guild_id = ctx.guild.id if ctx.guild else 0
         pet = await self.hunting_mgr.get_pet(guild_id, ctx.author.id, name)
@@ -222,7 +222,7 @@ class Hunting(commands.Cog):
         embed.set_footer(text=f"Feed your pet with ?feed {pet['creature_id']} to gain XP & Affection!")
         await ctx.send(embed=embed)
 
-    @commands.hybrid_command(name="feed", description="Feed a captured pet with Gourmet Pet Kibble to level it up.")
+    @commands.command(name="feed", description="Feed a captured pet with Gourmet Pet Kibble to level it up.")
     async def feed(self, ctx: CustomContext, *, name: str) -> None:
         guild_id = ctx.guild.id if ctx.guild else 0
         res = await self.hunting_mgr.feed_pet(guild_id, ctx.author.id, name)
@@ -235,7 +235,7 @@ class Hunting(commands.Cog):
             f"• Affection increased to **{res['affection']}/100**!"
         )
 
-    @commands.hybrid_command(name="fishing", aliases=["fish"], description="Cast your fishing rod into mystical waters.")
+    @commands.command(name="fishing", aliases=["fish"], description="Cast your fishing rod into mystical waters.")
     @commands.cooldown(1, 20, commands.BucketType.user)
     async def fishing(self, ctx: CustomContext) -> None:
         guild_id = ctx.guild.id if ctx.guild else 0
@@ -261,7 +261,7 @@ class Hunting(commands.Cog):
         )
         await ctx.send(embed=embed)
 
-    @commands.hybrid_command(name="mine", aliases=["dig"], description="Excavate the underground caverns for precious ores and gems.")
+    @commands.command(name="mine", aliases=["dig"], description="Excavate the underground caverns for precious ores and gems.")
     @commands.cooldown(1, 20, commands.BucketType.user)
     async def mine(self, ctx: CustomContext) -> None:
         guild_id = ctx.guild.id if ctx.guild else 0
@@ -287,7 +287,7 @@ class Hunting(commands.Cog):
         )
         await ctx.send(embed=embed)
 
-    @commands.hybrid_command(name="crate", description="Open a reward crate from your inventory.")
+    @commands.command(name="crate", description="Open a reward crate from your inventory.")
     async def crate(self, ctx: CustomContext, crate_id: str = "wooden_crate") -> None:
         guild_id = ctx.guild.id if ctx.guild else 0
         settings = await self.eco_mgr.get_guild_settings(guild_id)
@@ -308,7 +308,7 @@ class Hunting(commands.Cog):
         )
         await ctx.send(embed=embed)
 
-    @commands.hybrid_command(name="craft", description="Craft tools and weapons from gathered materials.")
+    @commands.command(name="craft", description="Craft tools and weapons from gathered materials.")
     async def craft(self, ctx: CustomContext, recipe_id: Optional[str] = None) -> None:
         guild_id = ctx.guild.id if ctx.guild else 0
         settings = await self.eco_mgr.get_guild_settings(guild_id)
@@ -334,7 +334,7 @@ class Hunting(commands.Cog):
 
         await ctx.send(f"✨ **Forging Complete!** You crafted **{res['recipe']['name']}**! Check `{ctx.clean_prefix}inventory`.")
 
-    @commands.hybrid_command(name="explore", description="Explore unknown territories for random adventure encounters.")
+    @commands.command(name="explore", description="Explore unknown territories for random adventure encounters.")
     @commands.cooldown(1, 30, commands.BucketType.user)
     async def explore(self, ctx: CustomContext) -> None:
         guild_id = ctx.guild.id if ctx.guild else 0
@@ -357,12 +357,12 @@ class Hunting(commands.Cog):
         )
         await ctx.send(embed=embed)
 
-    @commands.hybrid_command(name="adventure", aliases=["adv"], description="Start an RPG questing adventure.")
+    @commands.command(name="adventure", aliases=["adv"], description="Start an RPG questing adventure.")
     @commands.cooldown(1, 30, commands.BucketType.user)
     async def adventure(self, ctx: CustomContext) -> None:
         await self.explore(ctx)
 
-    @commands.hybrid_command(name="dungeon", aliases=["tower"], description="Venture into the procedural Hueco Mundo dungeon.")
+    @commands.command(name="dungeon", aliases=["tower"], description="Venture into the procedural Hueco Mundo dungeon.")
     @commands.cooldown(1, 45, commands.BucketType.user)
     async def dungeon(self, ctx: CustomContext) -> None:
         guild_id = ctx.guild.id if ctx.guild else 0
@@ -383,7 +383,7 @@ class Hunting(commands.Cog):
         )
         await ctx.send(embed=embed)
 
-    @commands.hybrid_command(name="boss", aliases=["worldboss", "raid"], description="Challenge a formidable raid world boss.")
+    @commands.command(name="boss", aliases=["worldboss", "raid"], description="Challenge a formidable raid world boss.")
     @commands.cooldown(1, 60, commands.BucketType.user)
     async def boss(self, ctx: CustomContext) -> None:
         guild_id = ctx.guild.id if ctx.guild else 0
@@ -409,11 +409,11 @@ class Hunting(commands.Cog):
         )
         await ctx.send(embed=embed)
 
-    @commands.hybrid_command(name="collection", description="View your hunting collection completion progress.")
+    @commands.command(name="collection", description="View your hunting collection completion progress.")
     async def collection(self, ctx: CustomContext) -> None:
         await self.zoo(ctx)
 
-    @commands.hybrid_command(name="trade", description="Trade items or creatures safely with another member.")
+    @commands.command(name="trade", description="Trade items or creatures safely with another member.")
     async def trade(self, ctx: CustomContext, member: discord.Member, offer: str, for_item: str) -> None:
         if member.bot or member.id == ctx.author.id:
             return await ctx.send("Invalid trade partner!")

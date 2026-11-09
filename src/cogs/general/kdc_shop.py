@@ -894,7 +894,7 @@ class KDCShop(commands.Cog, name="KDCShop"):
         await ctx.send(embed=embed, view=view)
 
     # ── Command: +stock / +kdc / +shop ──
-    @commands.group(name="stock", aliases=["kdc", "shop", "kdcshop", "store"], invoke_without_command=True)
+    @commands.group(name="stock", aliases=["kdc", "kdcstock", "kdcshop"], invoke_without_command=True)
     async def stock_command(self, ctx: CustomContext, *, query: Optional[str] = None):
         """View official KDC Shop live stock, prices, and automated bot warehouse."""
         await self.open_shop(ctx, query=query)
@@ -1512,7 +1512,7 @@ class KDCShop(commands.Cog, name="KDCShop"):
             else:
                 await ctx.send(embed=scanner_embed, view=view)
 
-    @commands.command(name="pay", aliases=["payscanner", "sendscanner", "qrpay", "scanner", "qr", "kdcqr", "kdcscanner", "upiscanner"])
+    @commands.command(name="payscanner", aliases=["kdcpay", "sendscanner", "qrpay", "scanner", "qr", "kdcqr", "kdcscanner", "upiscanner"])
     async def pay_command(self, ctx: CustomContext):
         """Send the official KDC Shop UPI payment QR scanner with bot staff direct DM options."""
         await self.send_scanner_embed(ctx)
