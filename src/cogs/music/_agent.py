@@ -66,13 +66,16 @@ class MusicAgent:
             "shielded_errors": 0,
         }
 
-        # Start background health & memory sweeper
+        # Start background health & memory sweeper and anti-sleep keepalive
         self._background_sweeper.start()
+        self._render_keepalive.start()
 
     def cog_unload(self) -> None:
         """Cancel background sweeper on module reload."""
         if self._background_sweeper.is_running():
             self._background_sweeper.cancel()
+        if self._render_keepalive.is_running():
+            self._render_keepalive.cancel()
 
     # ── Concurrency & Sharded Lock Management ──
 
@@ -599,6 +602,37 @@ class MusicAgent:
 
     @_background_sweeper.before_loop
     async def _before_sweeper(self) -> None:
+        try:
+            if hasattr(self.bot, "wait_until_ready"):
+                res = self.bot.wait_until_ready()
+                if asyncio.iscoroutine(res):
+                    await res
+        except Exception:
+            pass
+
+    @tasks.loop(minutes=4.0)
+    async def _render_keepalive(self) -> None:
+        """Ping Lavalink /healthz every 4 minutes to guarantee Render free-tier never spins down or returns 502."""
+        from src.core.config import Config
+        uri = getattr(Config, "LAVALINK_URI", None)
+        if not uri or "onrender.com" not in uri:
+            return
+        clean_uri = uri.rstrip("/")
+        password = getattr(Config, "LAVALINK_PASSWORD", "onlyforkyoka") or "onlyforkyoka"
+        headers = {"Authorization": password, "User-Agent": "Kyoka-AntiSleep/3.0"}
+        try:
+            timeout_cfg = aiohttp.ClientTimeout(total=8.0, connect=5.0)
+            async with aiohttp.ClientSession(timeout=timeout_cfg) as session:
+                async with session.get(f"{clean_uri}/healthz", headers=headers) as resp:
+                    if resp.status == 200:
+                        logger.debug(f"Render keepalive ping 200 OK ({clean_uri}).")
+                    else:
+                        logger.debug(f"Render keepalive returned status: {resp.status}")
+        except Exception as e:
+            logger.debug(f"Render keepalive ping error: {e}")
+
+    @_render_keepalive.before_loop
+    async def _before_keepalive(self) -> None:
         try:
             if hasattr(self.bot, "wait_until_ready"):
                 res = self.bot.wait_until_ready()

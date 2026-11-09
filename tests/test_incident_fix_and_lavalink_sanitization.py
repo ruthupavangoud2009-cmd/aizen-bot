@@ -84,3 +84,30 @@ async def test_music_hybrid_commands_have_deferral():
         cb = getattr(cmd_obj, "callback", cmd_obj)
         src = inspect.getsource(cb)
         assert "ctx.interaction.response.defer()" in src, f"{cmd_name} missing deferral"
+
+
+@pytest.mark.asyncio
+async def test_help_command_has_early_deferral():
+    """Verify help hybrid command includes early slash interaction deferral."""
+    import inspect
+    from src.cogs.general.help import Help
+    cb = getattr(Help.help_command, "callback", Help.help_command)
+    src = inspect.getsource(cb)
+    assert "ctx.interaction.response.defer()" in src
+
+
+def test_create_lavalink_node_retries_default():
+    """Verify create_lavalink_node defaults retries to None (indefinite exponential backoff)."""
+    import inspect
+    from src.core.lavalink import create_lavalink_node
+    sig = inspect.signature(create_lavalink_node)
+    assert sig.parameters["retries"].default is None
+
+
+@pytest.mark.asyncio
+async def test_warmup_render_service_non_render():
+    """Verify non-render URIs immediately return True without HTTP calls."""
+    from src.core.lavalink import warmup_render_service
+    res = await warmup_render_service("http://127.0.0.1:2333")
+    assert res is True
+

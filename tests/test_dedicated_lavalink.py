@@ -36,7 +36,7 @@ async def test_node_smooth_streaming_parameters():
     assert node.identifier == "kyoka-lavalink-v4"
     assert node.uri == "https://kyoka-lavalink.onrender.com:443"
     assert node.heartbeat == 15.0
-    assert node._retries == 10
+    assert node._retries is None
     assert getattr(node, "_resume_timeout", getattr(node, "resume_timeout", None)) == 120
     if hasattr(node, "_session") and node._session and not node._session.closed:
         await node._session.close()

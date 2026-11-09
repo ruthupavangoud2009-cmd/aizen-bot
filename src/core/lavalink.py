@@ -129,7 +129,7 @@ def create_lavalink_node(
     *,
     identifier: Optional[str] = None,
     inactive_player_timeout: int = 300,
-    retries: int = 10,
+    retries: Optional[int] = None,
     resume_timeout: int = 120,
     heartbeat: float = 15.0,
 ) -> wavelink.Node:
@@ -371,6 +371,41 @@ def _ws_url(uri: str) -> str:
     return url + "/v4/websocket"
 
 
+async def warmup_render_service(uri: str, max_wait: float = 35.0) -> bool:
+    """
+    Ensure the Render host is awake and healthy before performing websocket upgrades.
+    Render free tier web services spin down after 15m and return 502 for 15-30s while booting.
+    Polling /healthz proactively warms up the container so connections never fail with 502.
+    """
+    clean_uri = uri.rstrip("/")
+    if "onrender.com" not in clean_uri:
+        return True
+
+    from src.core.config import Config
+    password = getattr(Config, "LAVALINK_PASSWORD", "onlyforkyoka") or "onlyforkyoka"
+    headers = {"Authorization": password, "User-Agent": "Kyoka-Keepalive/3.0"}
+    timeout_cfg = aiohttp.ClientTimeout(total=6.0, connect=5.0)
+
+    start_time = time.time()
+    logger.info(f"Checking Render Lavalink health on {clean_uri}...")
+    try:
+        async with aiohttp.ClientSession(timeout=timeout_cfg) as session:
+            while time.time() - start_time < max_wait:
+                try:
+                    async with session.get(f"{clean_uri}/healthz", headers=headers) as resp:
+                        if resp.status == 200:
+                            logger.info(f"Render container {clean_uri} is awake and healthy (HTTP 200).")
+                            return True
+                        elif resp.status in (502, 503, 504):
+                            logger.info(f"Render container is waking up (HTTP {resp.status}), waiting...")
+                except Exception as e:
+                    logger.debug(f"Render wake-up probe error ({clean_uri}): {e}")
+                await asyncio.sleep(2.5)
+    except Exception as outer_err:
+        logger.debug(f"warmup_render_service exception: {outer_err}")
+    return False
+
+
 async def check_websocket(
     uri: str,
     password: str,
@@ -418,6 +453,18 @@ async def check_websocket(
                     pass
                 return True, "websocket handshake and ready ok"
     except aiohttp.WSServerHandshakeError as e:
+        if e.status in (502, 503, 504) and "onrender.com" in uri:
+            logger.info(f"Lavalink node {uri} returned HTTP {e.status} (Render container booting). Warming up...")
+            if await warmup_render_service(uri, max_wait=30.0):
+                try:
+                    timeout_cfg = aiohttp.ClientTimeout(total=timeout, connect=timeout)
+                    async with aiohttp.ClientSession(timeout=timeout_cfg) as session:
+                        async with session.ws_connect(_ws_url(uri), headers=headers) as ws:
+                            msg = await asyncio.wait_for(ws.receive(), timeout=min(timeout, 3.5))
+                            if msg.type is aiohttp.WSMsgType.TEXT:
+                                return True, "websocket handshake and ready ok"
+                except Exception as retry_err:
+                    return False, f"websocket retry after warmup failed: {retry_err}"
         return False, f"websocket rejected with HTTP {e.status}"
     except asyncio.TimeoutError:
         return False, "websocket handshake timed out"

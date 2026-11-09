@@ -1173,23 +1173,41 @@ class Help(commands.Cog):
         )
 
         embed = KyokaHelpEmbed(
-            title=f"Hey, I'm {display_name}",
+            title=f"Hey, I'm {display_name} ⛩️",
             description=(
-                f"> {bio}\n\n"
-                f"▾ **Latency:** `{ws_ping}ms`\n"
-                f"▾ **Prefix:** `{p}`  **Slash:** `/`\n"
-                f"▾ **Command Modules:** `{len(visible_categories)}`\n"
-                f"▾ **Available Commands:** `{total_commands}` (Essential Commands: `{total_commands}`)"
+                f"> *{bio}*\n\n"
+                f"Select a category from the dropdown menu below or click **Search** to explore commands. "
+                f"Type `{p}help <command>` for detailed command documentation, parameters, and examples."
             ),
-            color=0x2B0938,
+            color=0x7C3AED,
         )
         embed.add_field(
-            name="\u200b",
+            name="📊 System Status & Metrics",
             value=(
-                f"▾ **Latency:** `{ws_ping}ms`\n"
-                f"▾ **Prefix:** `{p}`  **Slash:** `/`\n"
-                f"▾ **Command Modules:** `{len(visible_categories)}`\n"
-                f"▾ **Available Commands:** `{total_commands}` (Essential Commands: `{total_commands}`)"
+                f"> ▾ **Gateway Ping:** `{ws_ping}ms`\n"
+                f"> ▾ **Guild Prefix:** `{p}`  •  **Slash Commands:** `/`\n"
+                f"> ▾ **Command Modules:** `{len(visible_categories)}` categories\n"
+                f"> ▾ **Active Commands:** `{total_commands}` registered"
+            ),
+            inline=False,
+        )
+        embed.add_field(
+            name="⚡ Featured Suites",
+            value=(
+                f"🎵 **Music & Audio** — Lossless 24/7 background streaming & smart auto-queue\n"
+                f"🎫 **Ticket Support** — Custom categories, interactive modals & staff transcripts\n"
+                f"🎮 **Games & Fun** — 10+ PvP multiplayer duels, party mini-games & trivia\n"
+                f"🤖 **Aizen AI Engine** — Multi-personality chat, voice synthesis & auto channels\n"
+                f"🛡️ **Security & Automod** — Anti-nuke, anti-raid, verification & audit logging"
+            ),
+            inline=False,
+        )
+        embed.add_field(
+            name="💡 Quick Tips",
+            value=(
+                f"• Type `{p}help <module>` (e.g. `{p}help music`) to jump straight to a category\n"
+                f"• Type `{p}hca` to browse the full public command directory archive\n"
+                f"• Click the **🔍 Search** button below to find commands by name or keyword"
             ),
             inline=False,
         )
@@ -1453,6 +1471,9 @@ class Help(commands.Cog):
     )
     async def help_command(self, ctx: CustomContext, *, command_or_module: str | None = None) -> None:
         """Interactive help menu filtered by user permissions and organized into categories."""
+        if ctx.interaction and not ctx.interaction.response.is_done():
+            await ctx.interaction.response.defer()
+
         t_start = time.perf_counter()
         if hasattr(self.bot, "branding_mgr"):
             await self.bot.branding_mgr.get_branding(ctx.guild.id if ctx.guild else None)
