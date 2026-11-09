@@ -73,14 +73,9 @@ async def test_ticket_custom_categories():
 
     mgr = TicketManager(bot_mock)
 
-    # 1. Without any custom categories in DB, list_categories returns DEFAULT_TICKET_CATEGORIES
+    # 1. Without any custom categories in DB, list_categories returns [] (clean slate for custom topics)
     cats = await mgr.list_categories(guild_id=123)
-    assert len(cats) >= 5
-    cat_names = [c["name"] for c in cats]
-    assert "Support" in cat_names
-    assert "Trials" in cat_names
-    assert "Raids" in cat_names
-    assert "Bosses" in cat_names
+    assert len(cats) == 0
 
     # 2. Add custom Blox Fruits category
     new_cat = await mgr.add_category(

@@ -330,10 +330,8 @@ class TicketManager:
         except Exception:
             pass
 
-        # Return default Blox Fruits and server categories
-        defaults = [dict(c) for c in DEFAULT_TICKET_CATEGORIES]
-        self._categories_cache[key] = defaults
-        return list(defaults)
+        # Default is empty (nothing) so server owners have a clean slate to customize whatever topics they want
+        return []
 
     async def add_category(
         self,

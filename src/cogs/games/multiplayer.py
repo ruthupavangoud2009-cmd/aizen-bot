@@ -875,7 +875,29 @@ class MultiplayerGames(commands.Cog):
         await ctx.send(embed=embed, view=view)
 
     @commands.command(name="rps", description="Play Rock-Paper-Scissors against Aizen or challenge a member.")
-    async def rps(self, ctx: CustomContext, member: Optional[discord.Member] = None, bet: int = 0) -> None:
+    async def rps(self, ctx: CustomContext, target_or_choice: Optional[str] = None, bet: int = 0) -> None:
+        options = ["rock", "paper", "scissors"]
+
+        # 1. Direct solo play vs Aizen if string choice passed (e.g. ?rps rock)
+        if target_or_choice and target_or_choice.lower() in options:
+            player_choice = target_or_choice.lower()
+            ai_choice = random.choice(options)
+            if player_choice == ai_choice:
+                res = "🤝 Draw! The outcome was an illusion."
+            elif (player_choice, ai_choice) in [("rock", "scissors"), ("paper", "rock"), ("scissors", "paper")]:
+                res = "🎉 You win this round!"
+            else:
+                res = "💀 Aizen wins this round."
+            return await ctx.send(f"✊ You chose **{player_choice}**; Aizen chose **{ai_choice}**.\n{res}")
+
+        # 2. Member PVP challenge if member passed (e.g. ?rps @member 100)
+        member: Optional[discord.Member] = None
+        if target_or_choice and ctx.guild:
+            try:
+                member = await commands.MemberConverter().convert(ctx, target_or_choice)
+            except Exception:
+                member = None
+
         if member is not None and not member.bot and member.id != ctx.author.id:
             # Multiplayer PVP duel
             guild_id = ctx.guild.id if ctx.guild else 0
@@ -893,8 +915,7 @@ class MultiplayerGames(commands.Cog):
             )
             return await ctx.send(embed=embed, view=view)
 
-        # Solo vs Aizen
-        options = ["rock", "paper", "scissors"]
+        # 3. Interactive buttons vs Aizen if no valid member passed
         view = discord.ui.View(timeout=30)
         for opt in options:
             btn = discord.ui.Button(label=opt.title(), style=discord.ButtonStyle.primary)

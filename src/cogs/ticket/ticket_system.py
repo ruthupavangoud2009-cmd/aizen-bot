@@ -370,15 +370,15 @@ class ManageTopicsView(discord.ui.View):
         btn_add.callback = self._on_add_clicked
         self.add_item(btn_add)
 
-        btn_reset = discord.ui.Button(
-            label="Reset Defaults",
-            emoji="🔄",
-            style=discord.ButtonStyle.secondary,
-            custom_id="manage_topic_btn_reset",
+        btn_clear = discord.ui.Button(
+            label="Clear All Topics",
+            emoji="🗑️",
+            style=discord.ButtonStyle.danger,
+            custom_id="manage_topic_btn_clear",
             row=1,
         )
-        btn_reset.callback = self._on_reset_clicked
-        self.add_item(btn_reset)
+        btn_clear.callback = self._on_clear_clicked
+        self.add_item(btn_clear)
 
         btn_done = discord.ui.Button(
             label="Done / Back to Wizard",
@@ -397,7 +397,7 @@ class ManageTopicsView(discord.ui.View):
             content=(
                 "**Ticket Topics Manager**\n"
                 "> Configure what the topics in tickets should be for this panel.\n"
-                "> You can create, customize, or remove any topic you want."
+                "> Default is clean (no pre-filled topics) so you can customize whatever you want."
             )
         )
         c.add_separator(divider=True)
@@ -407,9 +407,9 @@ class ManageTopicsView(discord.ui.View):
                 lines.append(f"{arrow} {t.get('emoji', '🎫')} **{t['name']}** — *{t.get('description', 'No description')}*")
             c.add_text("\n".join(lines))
         else:
-            c.add_text("⚠️ *No custom topics defined. Standard support will be used.*")
+            c.add_text("✨ *No topics configured (Default is Clean / Direct Button). Click 'Add Topic' to add any custom topic you want.*")
         c.add_separator(divider=True)
-        c.add_text("-# Use dropdown to delete a topic, or click Add Topic to create a new one.")
+        c.add_text("-# Use dropdown to delete a topic, click Add Topic to create one, or Clear All to start fresh.")
         return c
 
     async def _on_remove_selected(self, interaction: discord.Interaction) -> None:
@@ -423,13 +423,8 @@ class ManageTopicsView(discord.ui.View):
     async def _on_add_clicked(self, interaction: discord.Interaction) -> None:
         await interaction.response.send_modal(AddTopicModal(self.wizard))
 
-    async def _on_reset_clicked(self, interaction: discord.Interaction) -> None:
-        self.wizard.custom_topics = [
-            {"name": "General Support", "emoji": "🎫", "description": "General server assistance and inquiries"},
-            {"name": "Billing / Orders", "emoji": "💳", "description": "Purchases, orders, and payment inquiries"},
-            {"name": "Bug Report", "emoji": "🐛", "description": "Report technical issues and server bugs"},
-            {"name": "Staff Application", "emoji": "📋", "description": "Apply for server moderation and staff roles"},
-        ]
+    async def _on_clear_clicked(self, interaction: discord.Interaction) -> None:
+        self.wizard.custom_topics = []
         self._build_components()
         await edit_container_response(interaction, self.get_container(), view=self)
 
@@ -545,11 +540,7 @@ class TicketSetupWizard(discord.ui.View):
         self.selected_target_channel_id: int | None = None
         self.naming_format: str = "ticket-{count}"
         self.button_label: str = "Create Ticket"
-        self.custom_topics: list[dict[str, Any]] = [
-            {"name": "General Support", "emoji": "🎫", "description": "General server assistance and inquiries"},
-            {"name": "Billing / Orders", "emoji": "💳", "description": "Purchases, orders, and payment inquiries"},
-            {"name": "Bug Report", "emoji": "🐛", "description": "Report technical issues and server bugs"},
-        ]
+        self.custom_topics: list[dict[str, Any]] = []
 
         self._build_components_for_slide()
 
@@ -780,7 +771,7 @@ class TicketSetupWizard(discord.ui.View):
         if len(self.custom_topics) > 4:
             topics_summary += f" +{len(self.custom_topics) - 4} more"
         if not topics_summary:
-            topics_summary = "None (Standard Support)"
+            topics_summary = "None (Clean Direct Button)"
 
         container.add_text(
             f"{arrow} **Selected Embed:** {e_disp}\n"
@@ -974,7 +965,8 @@ class TicketSetupWizard(discord.ui.View):
         if ticket_emoji:
             btn_action_row["components"][0]["emoji"] = ticket_emoji
 
-        panel_container.components.append(select_action_row)
+        if cat_options:
+            panel_container.components.append(select_action_row)
         panel_container.components.append(btn_action_row)
 
         msg_data = await send_container_response(target_channel, panel_container)

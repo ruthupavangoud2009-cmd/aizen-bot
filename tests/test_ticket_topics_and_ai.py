@@ -23,11 +23,8 @@ async def test_ticket_setup_wizard_topics():
 
     wizard = TicketSetupWizard(cog=cog_mock, author=author_mock)
 
-    # Initial topics should be populated with defaults
-    assert len(wizard.custom_topics) >= 3
-    names = [t["name"] for t in wizard.custom_topics]
-    assert "General Support" in names
-    assert "Bug Report" in names
+    # Initial topics should be empty (clean slate) so admins can customize whatever they want
+    assert len(wizard.custom_topics) == 0
 
     # Switch to slide 2 ("roles")
     wizard.current_slide_idx = 1
@@ -36,7 +33,6 @@ async def test_ticket_setup_wizard_topics():
     # Check that custom topic buttons exist
     custom_ids = [item.custom_id for item in wizard.children if hasattr(item, "custom_id")]
     assert "wiz_btn_topics" in custom_ids
-    assert "wiz_btn_add_topic" in custom_ids
 
     # Add a custom topic via Modal logic
     modal = AddTopicModal(wizard)
