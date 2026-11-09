@@ -1955,10 +1955,6 @@ class AIVoice(commands.Cog, name="AIVoice"):
             await ctx.interaction.response.defer()
         await self.voice_talk(ctx, mode=mode)
 
-    @commands.command(name="vctalk", aliases=["talkvc", "chatinvc", "conversevc"], help="AI joins voice channel to listen and converse in real-time like a human.")
-    async def cmd_vctalk(self, ctx: CustomContext, mode: str = "open") -> None:
-        await self.voice_talk(ctx, mode=mode)
-
     @commands.command(name="endvctalk", aliases=["stopvctalk", "vctalkend"], help="End real-time voice conversation session.")
     async def cmd_endvctalk(self, ctx: CustomContext) -> None:
         await self.voice_endtalk(ctx)

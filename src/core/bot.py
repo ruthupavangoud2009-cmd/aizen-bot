@@ -482,7 +482,7 @@ class KyokaBot(commands.Bot):
         """Walk through src/cogs and load every python module."""
         cogs_dir = Path(__file__).resolve().parent.parent / "cogs"
 
-        for file in cogs_dir.rglob("*.py"):
+        for file in sorted(cogs_dir.rglob("*.py")):
             relative_to_cogs = file.relative_to(cogs_dir)
             # Skip any file that starts with '_' or is inside a directory starting with '_'.
             if any(part.startswith("_") for part in relative_to_cogs.parts):

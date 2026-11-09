@@ -76,3 +76,44 @@ def test_voice_conversation_vibes_and_voices():
     stopped = mgr.stop_session(111)
     assert stopped.active is False
     assert mgr.is_active(111) is False
+
+
+@pytest.mark.asyncio
+async def test_all_cogs_load_cleanly_and_join_in_tree():
+    """Verify that music, events, and ai_voice load with zero collision and /join exists in tree."""
+    bot = KyokaBot()
+    # Explicitly load in collision-prone reverse order
+    await bot.load_extension("src.cogs.utility.events")
+    await bot.load_extension("src.cogs.music.music")
+    await bot.load_extension("src.cogs.fun.ai_voice")
+
+    join_cmd = bot.tree.get_command("join")
+    assert join_cmd is not None, "/join command must be present in bot tree"
+
+    vctalk_cmd = bot.tree.get_command("vctalkpartner")
+    assert vctalk_cmd is not None, "/vctalkpartner must be present in bot tree"
+
+
+@pytest.mark.asyncio
+async def test_ticket_ai_interactive_dialogue():
+    """Verify ticket AI maintains multi-turn dialogue memory for interactive conversations."""
+    from src.cogs.ticket.ticket_system import TicketSystem
+    bot = KyokaBot()
+    cog = TicketSystem(bot)
+
+    mock_guild = mock.MagicMock(id=999, name="Test Guild")
+    mock_user = mock.MagicMock(id=888, display_name="TestUser")
+
+    sol1 = await cog.generate_ticket_solution(
+        query="I have a bug with my inventory",
+        category="Technical Support",
+        guild=mock_guild,
+        user=mock_user,
+        channel_id=777,
+    )
+    assert len(sol1) > 10
+    assert 777 in cog._ticket_dialogues
+    assert len(cog._ticket_dialogues[777]) >= 2
+    assert cog._ticket_dialogues[777][0]["speaker"] == "TestUser"
+    assert cog._ticket_dialogues[777][1]["speaker"] == "Kyoka AI"
+

@@ -1023,6 +1023,7 @@ class TicketSystem(commands.Cog):
         self._creating_tickets: set[tuple[int, int]] = set()
         self._staff_summoned_tickets: set[int] = set()
         self._ai_processing_tickets: set[int] = set()
+        self._ticket_dialogues: dict[int, list[dict[str, str]]] = {}
         # Register persistent inside-ticket views (active and closed controls)
         self.bot.add_view(TicketInsideControlsView(self))
         self.bot.add_view(TicketClosedControlsView(self))
@@ -1391,8 +1392,16 @@ class TicketSystem(commands.Cog):
         category: str,
         guild: discord.Guild,
         user: discord.User | discord.Member,
+        channel_id: int = 0,
     ) -> str:
-        """Generate an AI solution via Gemini API / AIManager or smart fallback knowledge base."""
+        """Generate an interactive conversational AI solution via Gemini API / AIManager or smart fallback knowledge base."""
+        # Assemble multi-turn dialogue memory for interactive ticket chat
+        history_entries = self._ticket_dialogues.get(channel_id, [])
+        history_text = ""
+        if history_entries:
+            lines = [f"{entry['speaker']}: {entry['text']}" for entry in history_entries[-6:]]
+            history_text = "\n".join(lines)
+
         # 1. Try Gemini via ai_mgr or direct Gemini call
         ai_mgr = getattr(self.bot, "ai_mgr", None)
         if ai_mgr and hasattr(ai_mgr, "generate_response"):
@@ -1400,22 +1409,35 @@ class TicketSystem(commands.Cog):
                 session = getattr(self.bot, "session", None)
                 if session and not session.closed:
                     prompt = (
-                        f"You are Kyoka AI Support Assistant for the Discord server '{guild.name}'. "
-                        f"The user '{user.display_name}' has opened a ticket under the category '{category}'. "
-                        f"Their inquiry is: '{query}'. "
-                        f"Provide a clear, helpful, polite step-by-step solution to their issue. "
-                        f"Keep it under 600 characters and format nicely with bullet points."
+                        f"You are Kyoka AI Support Assistant actively conversing in a Discord ticket channel for '{guild.name}'.\n"
+                        f"Category: {category}\n"
+                        f"User: {user.display_name}\n"
+                        f"Recent ticket dialogue history:\n{history_text or 'Ticket just opened.'}\n\n"
+                        f"{user.display_name}: '{query}'\n\n"
+                        "Instructions:\n"
+                        "1. Talk directly, politely, and interactively to the user like a skilled live support partner.\n"
+                        "2. Provide clear, direct steps or answers to what they just asked.\n"
+                        "3. Keep the reply friendly, conversational, and under 500 characters so it fits neatly into the card.\n"
+                        "4. If they need human assistance, remind them they can click 'Need Staff Help' below."
                     )
                     res = await ai_mgr.generate_response(
                         session=session,
                         guild_id=guild.id,
-                        channel_id=0,
+                        channel_id=channel_id or 0,
                         user_id=user.id,
                         prompt=prompt,
                         server_name=guild.name,
                     )
                     if res and len(res.strip()) > 10:
-                        return res.strip()
+                        sol = res.strip()
+                        if channel_id:
+                            if channel_id not in self._ticket_dialogues:
+                                self._ticket_dialogues[channel_id] = []
+                            self._ticket_dialogues[channel_id].append({"speaker": user.display_name, "text": query})
+                            self._ticket_dialogues[channel_id].append({"speaker": "Kyoka AI", "text": sol})
+                            if len(self._ticket_dialogues[channel_id]) > 20:
+                                self._ticket_dialogues[channel_id] = self._ticket_dialogues[channel_id][-20:]
+                        return sol
             except Exception as e:
                 logger.debug(f"AI Manager ticket solution exception: {e}")
 
@@ -1424,7 +1446,7 @@ class TicketSystem(commands.Cog):
         cat_low = category.lower()
 
         if any(w in q_low or w in cat_low for w in ("bug", "glitch", "error", "crash", "broken")):
-            return (
+            sol = (
                 "Here are immediate troubleshooting steps for technical issues:\n"
                 "1. **Restart your client:** Close and restart Discord / Roblox to clear cached state.\n"
                 "2. **Check connection:** Ensure your network or DNS is stable.\n"
@@ -1432,7 +1454,7 @@ class TicketSystem(commands.Cog):
                 "If this is a server bug, click **Need Staff Help** below so our dev team can investigate!"
             )
         elif any(w in q_low or w in cat_low for w in ("buy", "order", "purchase", "billing", "payment", "shop", "price")):
-            return (
+            sol = (
                 "For purchases, orders, and billing:\n"
                 "1. **Payment Methods:** We accept standard server payment methods.\n"
                 "2. **Proof of Payment:** Please upload your transaction ID or receipt screenshot in this channel.\n"
@@ -1440,7 +1462,7 @@ class TicketSystem(commands.Cog):
                 "Click **Need Staff Help** below to complete your transaction with an authorized staff member!"
             )
         elif any(w in q_low or w in cat_low for w in ("trial", "race v4", "awakening", "v4", "mirage", "gear")):
-            return (
+            sol = (
                 "For Race V4 Trials & Mirage Island:\n"
                 "1. **Full Moon:** Ensure you are in a Third Sea server with a Full Moon active.\n"
                 "2. **Mirage Island:** Look at the highest peak with your mirror fractal during Full Moon.\n"
@@ -1448,7 +1470,7 @@ class TicketSystem(commands.Cog):
                 "Click **Need Staff Help** if you need a carry or carry team assistance!"
             )
         elif any(w in q_low or w in cat_low for w in ("raid", "chip", "fragments", "advance raid", "order")):
-            return (
+            sol = (
                 "For Raids & Fragment Farming:\n"
                 "1. **Requirements:** Level 1100+ to purchase microchips at the Raid Laboratory.\n"
                 "2. **Carry Rules:** Stay in the starting zone or protect the carry player.\n"
@@ -1456,7 +1478,7 @@ class TicketSystem(commands.Cog):
                 "Click **Need Staff Help** below to squad up with our verified raid carries!"
             )
         elif any(w in q_low or w in cat_low for w in ("role", "verify", "permission", "access", "rank")):
-            return (
+            sol = (
                 "For Roles & Server Permissions:\n"
                 "1. **Verification:** Check the `#verification` channel and complete the prompt.\n"
                 "2. **Reaction Roles:** Visit `#roles` to select your ping and game roles.\n"
@@ -1464,19 +1486,29 @@ class TicketSystem(commands.Cog):
                 "If your roles did not update automatically, click **Need Staff Help** below."
             )
         elif any(w in q_low or w in cat_low for w in ("rule", "ban", "warn", "mute", "appeal")):
-            return (
+            sol = (
                 "For Moderation Appeals & Inquiries:\n"
                 "1. Please provide your User ID and the reason for your penalty.\n"
                 "2. Be respectful and describe what happened honestly.\n"
                 "3. Click **Need Staff Help** below so a Moderator or Administrator can review your case."
             )
         else:
-            return (
+            sol = (
                 f"Thank you for contacting support regarding **{category}**.\n"
                 "1. Please describe your inquiry with as much detail as possible.\n"
                 "2. If applicable, attach relevant screenshots or transaction links.\n"
                 "3. If you'd like a human team member to review this right away, click **Need Staff Help** below!"
             )
+
+        if channel_id:
+            if channel_id not in self._ticket_dialogues:
+                self._ticket_dialogues[channel_id] = []
+            self._ticket_dialogues[channel_id].append({"speaker": user.display_name, "text": query})
+            self._ticket_dialogues[channel_id].append({"speaker": "Kyoka AI", "text": sol})
+            if len(self._ticket_dialogues[channel_id]) > 20:
+                self._ticket_dialogues[channel_id] = self._ticket_dialogues[channel_id][-20:]
+
+        return sol
 
     # ─── TICKET CLOSE EXECUTION ───────────────────────────────────────────────
 
@@ -1577,6 +1609,7 @@ class TicketSystem(commands.Cog):
 
         # Update database record
         await self.bot.ticket_mgr.close_ticket(channel.id, closer.id)
+        self._ticket_dialogues.pop(channel.id, None)
 
         # Lock channel permissions so creator cannot send messages anymore
         if user_id:
@@ -2114,12 +2147,15 @@ class TicketSystem(commands.Cog):
                         )
                         return
 
-                # AI auto-response if message from ticket creator & staff not yet summoned & ticket not claimed
+                # AI interactive response if message is from ticket creator, mentions bot, or calls AI
+                is_creator = message.author.id == ticket.get("user_id")
+                bot_mentioned = bool(self.bot.user and self.bot.user in message.mentions)
+                is_ai_chat = is_creator or bot_mentioned or msg_low.startswith(("ai ", "kyoka "))
                 if (
-                    message.author.id == ticket.get("user_id")
+                    is_ai_chat
                     and message.channel.id not in self._staff_summoned_tickets
                     and not ticket.get("claimed_by")
-                    and len(msg_clean) >= 3
+                    and len(msg_clean) >= 2
                 ):
                     if message.channel.id not in self._ai_processing_tickets:
                         self._ai_processing_tickets.add(message.channel.id)
@@ -2131,6 +2167,7 @@ class TicketSystem(commands.Cog):
                                     category=ticket.get("category", "General Support"),
                                     guild=message.guild,
                                     user=message.author,
+                                    channel_id=message.channel.id,
                                 )
                                 c = KyokaContainer(accent_color=0x7C3AED)
                                 c.add_section(

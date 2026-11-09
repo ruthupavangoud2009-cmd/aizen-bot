@@ -81,7 +81,9 @@ async def test_music_commands_structure():
 
     stop_cmd = cog.stop
     assert "disconnect" in stop_cmd.aliases
-    assert "leave" in stop_cmd.aliases
+    assert "dc" in stop_cmd.aliases
+    # "leave" alias is excluded to avoid collision with utility.events 'leave' hybrid group
+    assert "leave" not in stop_cmd.aliases
 
     np_cmd = cog.nowplaying
     assert "np" in np_cmd.aliases
