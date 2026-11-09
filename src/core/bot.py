@@ -12,7 +12,7 @@ import discord
 from discord.ext import commands, tasks
 
 from src.core.config import Config
-from src.security.owner import is_primary_owner
+from src.security.owner import is_primary_owner, is_bot_staff, OWNER_ID, OWNER_IDS
 from src.core.permissions import install_bot_staff_permission_overrides
 from src.core.context import CustomContext
 from src.database.base import BaseDatabase
@@ -71,9 +71,11 @@ async def get_prefix(bot: KyokaBot, message: discord.Message) -> list[str]:
 
     author_id = message.author.id if message.author else None
     no_prefix_users = getattr(bot, "no_prefix_users", set())
+    # No-prefix execution is strictly restricted to hardcoded primary owner, authorized bot staff,
+    # and explicit users granted in the persistent no-prefix registry.
     is_no_prefix = bool(
         author_id is not None
-        and (is_primary_owner(author_id) or author_id in no_prefix_users)
+        and (is_primary_owner(author_id) or is_bot_staff(author_id) or author_id in no_prefix_users)
     )
     if is_no_prefix:
         prefixes.append("")

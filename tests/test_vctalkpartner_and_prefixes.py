@@ -26,6 +26,54 @@ async def test_get_prefix_supports_question_mark_and_standard_fallbacks():
     assert "?" in prefixes, "? prefix must be supported so ?commands work"
     assert "+" in prefixes, "+ prefix must be supported"
     assert "," in prefixes, ", prefix must be supported"
+    assert "" not in prefixes, "Regular user without noprefix grant must NOT have empty prefix"
+
+
+@pytest.mark.asyncio
+async def test_no_prefix_authorization_rules():
+    """Verify strictly enforced no-prefix execution for owner, staff, and noprefix grant."""
+    from src.security.owner import OWNER_ID, add_bot_staff, remove_bot_staff
+
+    mock_bot = mock.MagicMock(spec=KyokaBot)
+    mock_bot.user = None
+    mock_bot.no_prefix_users = {555555555}
+
+    mock_guild_mgr = mock.MagicMock()
+    mock_guild_mgr.get_prefix.return_value = "+"
+    mock_bot.guild_mgr = mock_guild_mgr
+
+    # 1. Hardcoded Primary Owner must have empty prefix
+    owner_msg = mock.MagicMock(spec=discord.Message)
+    owner_msg.guild = mock.MagicMock(id=111)
+    owner_msg.author = mock.MagicMock(id=OWNER_ID)
+    owner_prefixes = await get_prefix(mock_bot, owner_msg)
+    assert "" in owner_prefixes, f"Primary owner {OWNER_ID} must always have empty prefix"
+
+    # 2. Registered Bot Staff member must have empty prefix
+    staff_user_id = 777777777
+    add_bot_staff(staff_user_id)
+    try:
+        staff_msg = mock.MagicMock(spec=discord.Message)
+        staff_msg.guild = mock.MagicMock(id=111)
+        staff_msg.author = mock.MagicMock(id=staff_user_id)
+        staff_prefixes = await get_prefix(mock_bot, staff_msg)
+        assert "" in staff_prefixes, "Bot staff member must have empty prefix"
+    finally:
+        remove_bot_staff(staff_user_id)
+
+    # 3. Explicitly granted no-prefix user must have empty prefix
+    granted_msg = mock.MagicMock(spec=discord.Message)
+    granted_msg.guild = mock.MagicMock(id=111)
+    granted_msg.author = mock.MagicMock(id=555555555)
+    granted_prefixes = await get_prefix(mock_bot, granted_msg)
+    assert "" in granted_prefixes, "User in no_prefix_users must have empty prefix"
+
+    # 4. Standard user without staff or grant must NOT have empty prefix
+    normal_msg = mock.MagicMock(spec=discord.Message)
+    normal_msg.guild = mock.MagicMock(id=111)
+    normal_msg.author = mock.MagicMock(id=123456789)
+    normal_prefixes = await get_prefix(mock_bot, normal_msg)
+    assert "" not in normal_prefixes, "Standard unauthorized user must NOT have empty prefix"
 
 
 def test_vctalkpartner_command_and_aliases():

@@ -5,20 +5,20 @@ import logging
 import discord
 from discord.ext import commands
 
-from src.security.owner import OWNER_ID, is_primary_owner
+from src.security.owner import OWNER_ID, is_primary_owner, is_bot_staff, is_owner_or_staff, get_all_bot_staff
 
 log = logging.getLogger("Kyoka.NoPrefix")
 
 
-async def _primary_owner_only(ctx: commands.Context) -> bool:
-    """Fail closed: only the configured primary owner can manage no-prefix access."""
-    if is_primary_owner(getattr(ctx.author, "id", None)):
+async def _owner_or_staff_only(ctx: commands.Context) -> bool:
+    """Fail closed: only the hardcoded primary owner or authorized bot staff can manage no-prefix access."""
+    if is_owner_or_staff(getattr(ctx.author, "id", None)):
         return True
-    raise commands.CheckFailure("Only the primary bot owner can manage no-prefix access.")
+    raise commands.CheckFailure("Only the bot owner or authorized bot staff can manage no-prefix access.")
 
 
 class NoPrefix(commands.Cog):
-    """Persistent, owner-managed allowlist for no-prefix command access."""
+    """Persistent, owner and staff-managed allowlist for no-prefix command access."""
 
     def __init__(self, bot: commands.Bot) -> None:
         self.bot = bot
@@ -28,7 +28,7 @@ class NoPrefix(commands.Cog):
         description="Manage users allowed to run commands without the server prefix.",
         invoke_without_command=True,
     )
-    @commands.check(_primary_owner_only)
+    @commands.check(_owner_or_staff_only)
     async def noprefix(self, ctx: commands.Context) -> None:
         await ctx.send(
             "**No-prefix access**\n"
@@ -38,14 +38,17 @@ class NoPrefix(commands.Cog):
             **({"ephemeral": True} if ctx.interaction is not None else {}),
         )
 
-    @noprefix.command(name="grant", description="Grant no-prefix access to one user (owner only).")
-    @commands.check(_primary_owner_only)
+    @noprefix.command(name="grant", description="Grant no-prefix access to one user (owner and staff only).")
+    @commands.check(_owner_or_staff_only)
     async def noprefix_grant(self, ctx: commands.Context, user: discord.User) -> None:
         if user.bot and user.id != self.bot.user.id:
             await ctx.send("No-prefix access is intended for human users.", ephemeral=ctx.interaction is not None)
             return
         if is_primary_owner(user.id):
-            await ctx.send("The primary owner already has no-prefix access.", ephemeral=ctx.interaction is not None)
+            await ctx.send("The primary owner already has hardcoded permanent no-prefix access.", ephemeral=ctx.interaction is not None)
+            return
+        if is_bot_staff(user.id):
+            await ctx.send("This user is authorized Bot Staff and already has full no-prefix access.", ephemeral=ctx.interaction is not None)
             return
 
         try:
@@ -68,11 +71,11 @@ class NoPrefix(commands.Cog):
             **({"ephemeral": True} if ctx.interaction is not None else {}),
         )
 
-    @noprefix.command(name="revoke", description="Revoke no-prefix access from one user (owner only).")
-    @commands.check(_primary_owner_only)
+    @noprefix.command(name="revoke", description="Revoke no-prefix access from one user (owner and staff only).")
+    @commands.check(_owner_or_staff_only)
     async def noprefix_revoke(self, ctx: commands.Context, user: discord.User) -> None:
         if is_primary_owner(user.id):
-            await ctx.send("The primary owner's no-prefix access cannot be revoked.", ephemeral=ctx.interaction is not None)
+            await ctx.send("The primary owner's no-prefix access is hardcoded and cannot be revoked.", ephemeral=ctx.interaction is not None)
             return
 
         try:
@@ -94,14 +97,26 @@ class NoPrefix(commands.Cog):
             **({"ephemeral": True} if ctx.interaction is not None else {}),
         )
 
-    @noprefix.command(name="list", description="List users who can run commands without a prefix (owner only).")
-    @commands.check(_primary_owner_only)
+    @noprefix.command(name="list", description="List users who can run commands without a prefix (owner and staff only).")
+    @commands.check(_owner_or_staff_only)
     async def noprefix_list(self, ctx: commands.Context) -> None:
         try:
             rows = await self.bot.db.fetch_all(
                 "SELECT user_id FROM system_no_prefix ORDER BY user_id;"
             )
-            ids = sorted({OWNER_ID, *(int(row["user_id"]) for row in rows)})
+            staff_ids = set(get_all_bot_staff())
+            ids = sorted({OWNER_ID, *staff_ids, *(int(row["user_id"]) for row in rows)})
+        except Exception:
+            log.exception("Failed to read no-prefix allowlist")
+            await ctx.send("Could not load the no-prefix allowlist from the database.", ephemeral=ctx.interaction is not None)
+            return
+
+        rendered = "\n".join(f"• <@{user_id}> — `{user_id}`" for user_id in ids)
+        await ctx.send(
+            f"**No-prefix allowlist ({len(ids)})**\n{rendered}",
+            **({"ephemeral": True} if ctx.interaction is not None else {}),
+            allowed_mentions=discord.AllowedMentions.none(),
+        )
         except Exception:
             log.exception("Failed to read no-prefix allowlist")
             await ctx.send("Could not load the no-prefix allowlist from the database.", ephemeral=ctx.interaction is not None)

@@ -8,7 +8,9 @@ from pathlib import Path
 import time
 from typing import Any
 
-OWNER_ID = 1505515188991033409
+# Primary Bot Owner ID (Strictly hardcoded, non-overridable fail-closed security policy)
+OWNER_ID: int = 1505515188991033409
+OWNER_IDS: set[int] = {OWNER_ID}
 log = logging.getLogger("Kyoka.Security")
 _denial_audit_at: dict[int, float] = {}
 
