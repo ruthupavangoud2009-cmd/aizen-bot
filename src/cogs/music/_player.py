@@ -748,25 +748,27 @@ class GuildPlayer:
             except Exception as e:
                 logger.debug(f"Direct stream URL resolve notice for '{track.title}': {e}")
 
-        # ── Priority 2: Direct URL (YouTube or Spotify track) ──
+        # ── Priority 2: Direct URL (YouTube track) ──
         if url.startswith(("http://", "https://")):
             is_yt = any(yt in url for yt in ("youtube.com/watch", "youtu.be/", "music.youtube.com/watch"))
-            is_sp = "open.spotify.com/track/" in url
-            if is_yt or is_sp:
+            if is_yt:
+                from src.cogs.music._extractor import YOUTUBE_URL_REGEX
+                yt_m = YOUTUBE_URL_REGEX.search(url)
+                clean_yt = f"https://www.youtube.com/watch?v={yt_m.group(1)}" if yt_m else url
                 for attempt in range(2):
                     try:
                         results = await asyncio.wait_for(
-                            wavelink.Playable.search(url), timeout=10.0
+                            wavelink.Playable.search(clean_yt), timeout=12.0
                         )
                         if results:
                             return results[0] if isinstance(results, list) else results.tracks[0]
                         break  # got empty response, no point retrying
                     except asyncio.TimeoutError:
-                        logger.debug(f"Direct URL resolve timeout for '{url}' (attempt {attempt + 1})")
+                        logger.debug(f"Direct URL resolve timeout for '{clean_yt}' (attempt {attempt + 1})")
                         if attempt == 0:
                             await asyncio.sleep(0.5)
                     except Exception as e:
-                        logger.debug(f"Direct URL resolve notice for '{url}': {e}")
+                        logger.debug(f"Direct URL resolve notice for '{clean_yt}': {e}")
                         break
 
         # ── Priority 3: Multi-strategy search cascade with retry ──

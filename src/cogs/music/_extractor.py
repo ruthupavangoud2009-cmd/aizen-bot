@@ -426,6 +426,24 @@ def parse_and_clean_query(raw_query: str) -> str:
     return core if core else cleaned
 
 
+async def resolve_redirect_url(url: str) -> str:
+    """Follow HTTP redirects for short share links (e.g. spotify.link, spoti.fi) to canonical URL."""
+    if not url or not isinstance(url, str):
+        return ""
+    u = url.strip()
+    if u.startswith("<") and u.endswith(">"):
+        u = u[1:-1].strip()
+    if any(short in u.lower() for short in ("spotify.link/", "spotify.app.link/", "spoti.fi/")):
+        try:
+            headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"}
+            async with aiohttp.ClientSession(headers=headers) as session:
+                async with session.get(u, allow_redirects=True, timeout=aiohttp.ClientTimeout(total=5)) as resp:
+                    return str(resp.url)
+        except Exception:
+            return u
+    return u
+
+
 def is_playlist_url(raw_url: str) -> bool:
     """Detect if a query/url is an external playlist or album link."""
     if not raw_url or not isinstance(raw_url, str):
@@ -435,9 +453,9 @@ def is_playlist_url(raw_url: str) -> bool:
         u = u[1:-1].strip()
     u_low = u.lower()
 
-    # Spotify short links (mobile share links like spotify.link, spotify.app.link, spoti.fi)
-    if any(sp in u_low for sp in ("spotify.link/", "spotify.app.link/", "spoti.fi/")):
-        return True
+    # Explicit single tracks are NEVER playlists
+    if "/track/" in u_low or "spotify:track:" in u_low or "v=" in u_low or "youtu.be/" in u_low:
+        return False
 
     # YouTube Playlists (only pure playlists without specific video target 'v=')
     if any(yt in u_low for yt in ("youtube.com/", "youtu.be/", "music.youtube.com/")):
@@ -447,7 +465,7 @@ def is_playlist_url(raw_url: str) -> bool:
             return True
 
     # Spotify Playlists & Albums
-    if any(sp in u_low for sp in ("spotify.com/", "spotify.link/")):
+    if any(sp in u_low for sp in ("spotify.com/", "spotify.link/", "spoti.fi/")):
         if any(sec in u_low for sec in ("/playlist/", "/album/")):
             return True
 
@@ -476,6 +494,10 @@ class NativeExtractor:
         # Strip Discord URL angle brackets if present
         if raw_q.startswith("<") and raw_q.endswith(">"):
             raw_q = raw_q[1:-1].strip()
+
+        # Follow short share link redirects
+        if any(sp in raw_q for sp in ("spotify.link/", "spotify.app.link/", "spoti.fi/")):
+            raw_q = await resolve_redirect_url(raw_q)
 
         # check in-memory search cache for instant playback
         cache_key = raw_q.lower()
@@ -508,6 +530,8 @@ class NativeExtractor:
         except Exception:
             pass
 
+        search_target = raw_q
+
         # direct YouTube URL Handling
         yt_match = YOUTUBE_URL_REGEX.search(raw_q)
         orig_yt_url = None
@@ -515,16 +539,16 @@ class NativeExtractor:
             video_id = yt_match.group(1)
             orig_yt_url = f"https://www.youtube.com/watch?v={video_id}"
             try:
-                results = await asyncio.wait_for(wavelink.Playable.search(orig_yt_url), timeout=8.0)
+                results = await asyncio.wait_for(wavelink.Playable.search(orig_yt_url), timeout=12.0)
                 if results:
                     top = results[0] if isinstance(results, list) else results.tracks[0]
-                    thumb = top.artwork or (f"https://i.ytimg.com/vi/{top.identifier}/hqdefault.jpg" if getattr(top, "identifier", None) else None)
+                    thumb = getattr(top, "artwork", None) or f"https://i.ytimg.com/vi/{video_id}/hqdefault.jpg"
                     trk = Track(
                         title=top.title or "Unknown Track",
                         author=top.author or "Unknown Artist",
                         url=orig_yt_url,
                         stream_url="",
-                        duration=int((top.length or 0) / 1000),
+                        duration=int((getattr(top, "length", 0) or 0) / 1000),
                         thumbnail=thumb,
                         requester=requester,
                         is_autoplay=is_autoplay,
@@ -536,10 +560,17 @@ class NativeExtractor:
             except Exception as e:
                 logger.debug(f"Direct YouTube URL resolution notice: {e}")
 
+            # Fallback for YouTube URL: fetch video title via oEmbed and search YouTube Music
+            try:
+                yt_title = await asyncio.wait_for(cls._fetch_youtube_title(orig_yt_url), timeout=4.0)
+                if yt_title:
+                    search_target = yt_title
+            except Exception:
+                pass
+
         # Spotify URL Handling (Extract '{Title} {Artist}' metadata to bridge to YouTube)
         is_spotify = any(sp in raw_q for sp in ("spotify.com/", "spotify.link/", "spotify:track:", "spotify.app.link/", "spoti.fi/"))
         orig_spotify_url = None
-        search_target = raw_q
 
         if is_spotify:
             sp_url = raw_q
@@ -547,7 +578,7 @@ class NativeExtractor:
                 sp_url = f"https://open.spotify.com/track/{sp_url.split(':')[-1]}"
             orig_spotify_url = sp_url
             try:
-                spotify_title = await asyncio.wait_for(cls._fetch_spotify_title(sp_url), timeout=6.0)
+                spotify_title = await asyncio.wait_for(cls._fetch_spotify_title(sp_url), timeout=8.0)
                 if spotify_title:
                     search_target = spotify_title
             except Exception as e:

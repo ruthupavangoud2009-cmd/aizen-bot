@@ -146,3 +146,28 @@ def test_select_best_playable_prioritizes_official_over_covers_and_loops():
 
     best = select_best_playable([t1, t2, t3], "Taare")
     assert best is t2
+
+
+def test_youtube_and_spotify_url_handling():
+    """Verify that is_playlist_url correctly distinguishes tracks vs playlists."""
+    from src.cogs.music._extractor import is_playlist_url, YOUTUBE_URL_REGEX
+
+    # Tracks must NOT be classified as playlists
+    assert is_playlist_url("https://open.spotify.com/track/4cOdK2wGLETKBW3PvgPWqT") is False
+    assert is_playlist_url("https://open.spotify.com/intl-es/track/4cOdK2wGLETKBW3PvgPWqT") is False
+    assert is_playlist_url("spotify:track:4cOdK2wGLETKBW3PvgPWqT") is False
+    assert is_playlist_url("https://www.youtube.com/watch?v=dQw4w9WgXcQ") is False
+    assert is_playlist_url("https://youtu.be/dQw4w9WgXcQ") is False
+    assert is_playlist_url("https://www.youtube.com/watch?v=dQw4w9WgXcQ&list=RDdQw4w9WgXcQ") is False
+
+    # Actual playlists must be classified as playlists
+    assert is_playlist_url("https://open.spotify.com/playlist/37i9dQZF1DXcBWIGoYBM5M") is True
+    assert is_playlist_url("https://open.spotify.com/album/4eLPsYPBmXABThSJ821sqY") is True
+    assert is_playlist_url("https://www.youtube.com/playlist?list=PLMC9KNkIncKtPzgY-5rmhvj7fax8fdxoj") is True
+
+    # YouTube URL regex extraction
+    m1 = YOUTUBE_URL_REGEX.search("https://www.youtube.com/watch?v=dQw4w9WgXcQ&list=RD123")
+    assert m1 is not None and m1.group(1) == "dQw4w9WgXcQ"
+
+    m2 = YOUTUBE_URL_REGEX.search("https://youtu.be/dQw4w9WgXcQ?si=abc123xyz")
+    assert m2 is not None and m2.group(1) == "dQw4w9WgXcQ"

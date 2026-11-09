@@ -186,6 +186,11 @@ async def execute_play(cog: Music, ctx: commands.Context, query: Optional[str] =
     if clean_q.startswith("<") and clean_q.endswith(">"):
         clean_q = clean_q[1:-1].strip()
 
+    # Follow short share link redirects (e.g. spotify.link, spoti.fi) to canonical URL
+    if any(sp in clean_q for sp in ("spotify.link/", "spotify.app.link/", "spoti.fi/")):
+        from src.cogs.music._extractor import resolve_redirect_url
+        clean_q = await resolve_redirect_url(clean_q)
+
     try:
         # Check if Playlist URL (Spotify, YouTube, SoundCloud, etc.)
         if is_playlist_url(clean_q):
@@ -303,23 +308,29 @@ async def execute_play(cog: Music, ctx: commands.Context, query: Optional[str] =
         lookup_target = clean_q
 
         # If single Spotify track URL, resolve metadata title first
-        if any(sp in lookup_target for sp in ("spotify.com/track/", "spotify.link/", "spotify:track:")):
+        if any(sp in lookup_target for sp in ("spotify.com/track/", "spotify.link/", "spotify:track:", "spoti.fi/")) or "/track/" in lookup_target:
             try:
                 sp_title = await asyncio.wait_for(
                     NativeExtractor._fetch_spotify_title(lookup_target),
-                    timeout=5.0
+                    timeout=8.0
                 )
                 if sp_title:
                     lookup_target = sp_title
             except Exception as e:
                 logger.debug(f"Spotify track title fetch notice: {e}")
 
+        # If YouTube URL, clean off heavy query parameters (&list=, &si=, &feature=)
+        from src.cogs.music._extractor import YOUTUBE_URL_REGEX
+        yt_m = YOUTUBE_URL_REGEX.search(lookup_target)
+        if yt_m:
+            lookup_target = f"https://www.youtube.com/watch?v={yt_m.group(1)}"
+
         is_direct_url = lookup_target.startswith(("http://", "https://"))
 
         # Case A: Direct URL (YouTube, SoundCloud, Direct HTTP Streams, Playlists) -> Resolve via Lavalink directly
         if is_direct_url:
             try:
-                results = await asyncio.wait_for(wavelink.Playable.search(lookup_target), timeout=6.0)
+                results = await asyncio.wait_for(wavelink.Playable.search(lookup_target), timeout=12.0)
                 if isinstance(results, wavelink.Playlist) and results.tracks:
                     pl = results
                     was_idle = player.current is None
