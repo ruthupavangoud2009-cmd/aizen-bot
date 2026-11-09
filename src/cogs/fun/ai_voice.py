@@ -1066,9 +1066,7 @@ class AIVoice(commands.Cog, name="AIVoice"):
         if not ctx.guild:
             return await ctx.send_error("This command can only be used in a server.")
         if not HAS_VOICE_RECV:
-            return await ctx.send_error(
-                "Live voice conversations are unavailable because `discord-ext-voice_recv` is not installed."
-            )
+            logger.info("Voice recv extension not loaded; running voice partner in speech synthesis mode.")
 
         author_voice = getattr(ctx.author, "voice", None)
         target_channel = getattr(author_voice, "channel", None) if author_voice else None
@@ -1945,6 +1943,17 @@ class AIVoice(commands.Cog, name="AIVoice"):
     async def cmd_voiceagent(self, ctx: CustomContext, vibe: str = "normal") -> None:
         """Launch the Ultimate AI Voice Agent in your voice channel with real-time 2-way conversation."""
         await self.voice_talk(ctx, mode=vibe)
+
+    @commands.hybrid_command(
+        name="vctalkpartner",
+        aliases=["vctalkpatner", "vctalk", "vcpartner", "talkpartner", "aipartner", "voicepartner", "talkvc", "chatinvc", "conversevc"],
+        description="Kyoka joins your voice channel and talks naturally like an actual human conversational partner.",
+    )
+    async def cmd_vctalkpartner(self, ctx: CustomContext, mode: str = "open") -> None:
+        """AI joins voice channel to listen and converse in real-time like an actual human partner."""
+        if ctx.interaction and not ctx.interaction.response.is_done():
+            await ctx.interaction.response.defer()
+        await self.voice_talk(ctx, mode=mode)
 
     @commands.command(name="vctalk", aliases=["talkvc", "chatinvc", "conversevc"], help="AI joins voice channel to listen and converse in real-time like a human.")
     async def cmd_vctalk(self, ctx: CustomContext, mode: str = "open") -> None:

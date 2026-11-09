@@ -1687,6 +1687,9 @@ class TicketSystem(commands.Cog):
     )
     async def ticket_group(self, ctx: CustomContext) -> None:
         """Ticket Hub Overview & Commands Guide."""
+        if ctx.interaction and not ctx.interaction.response.is_done():
+            await ctx.interaction.response.defer()
+
         prefix = self.bot.guild_mgr.get_prefix(ctx.guild.id)
         panels = await self.bot.ticket_mgr.list_panels(ctx.guild.id)
 
@@ -1729,6 +1732,9 @@ class TicketSystem(commands.Cog):
     @commands.has_permissions(manage_guild=True)
     async def ticket_setup(self, ctx: CustomContext, embed_name: str | None = None) -> None:
         """Launch the 4-step Slide Wizard."""
+        if ctx.interaction and not ctx.interaction.response.is_done():
+            await ctx.interaction.response.defer()
+
         templates = await self.bot.embed_mgr.list_templates(ctx.guild.id)
         wizard = TicketSetupWizard(self, ctx.author, templates=templates, initial_embed=embed_name)
         dashboard_container = wizard.get_dashboard_container(ctx.guild)
