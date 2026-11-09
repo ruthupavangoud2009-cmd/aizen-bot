@@ -715,15 +715,17 @@ class AIManager:
         prompt: str,
         server_name: str = "Discord Server",
         persona_key: str = "aizen",
+        enforce_cooldown: bool = True,
     ) -> str:
         """
         Execute an AI conversation query with per-user cooldowns, isolated history,
         and optimized latency.
         """
         config = self.get_server_config(guild_id)
-        rem = self.check_user_cooldown(user_id, config.get("cooldown_seconds", self.user_cooldown_default))
-        if rem > 0:
-            raise RuntimeError(f"⛩️ *The mind requires focus. Please wait `{rem:.1f}s` before making another inquiry.*")
+        if enforce_cooldown:
+            rem = self.check_user_cooldown(user_id, config.get("cooldown_seconds", self.user_cooldown_default))
+            if rem > 0:
+                raise RuntimeError(f"⛩️ *The mind requires focus. Please wait `{rem:.1f}s` before making another inquiry.*")
 
         history_key = (guild_id, channel_id, user_id)
         lock = self._locks.setdefault(history_key, asyncio.Lock())

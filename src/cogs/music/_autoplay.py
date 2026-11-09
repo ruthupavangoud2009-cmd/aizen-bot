@@ -181,36 +181,7 @@ class NativeSmartAutoplay:
 
         import wavelink
 
-        # Strategy 1: YouTube Music Candidate Recommendations (High Audio Fidelity)
-        for q in queries:
-            try:
-                res = await asyncio.wait_for(
-                    wavelink.Playable.search(q, source=wavelink.TrackSource.YouTubeMusic),
-                    timeout=6.0,
-                )
-                if res:
-                    tracks = res if isinstance(res, list) else getattr(res, "tracks", [])
-                    for top in tracks[:5]:
-                        top_norm = normalize_history_title(top.title or "")
-                        if top_norm and top_norm not in played_history and top_norm != norm_curr_title:
-                            trk = Track(
-                                title=top.title or q,
-                                author=top.author or "Artist",
-                                url=top.uri or "",
-                                stream_url="",
-                                duration=int((top.length or 0) / 1000),
-                                thumbnail=top.artwork,
-                                requester="⚡ Smart Autoplay Radio",
-                                is_autoplay=True,
-                                query=q,
-                            )
-                            trk._playable = top
-                            played_history.add(top_norm)
-                            return trk
-            except Exception as e:
-                logger.debug(f"YouTube Music autoplay search notice for '{q}': {e}")
-
-        # Strategy 2: Standard YouTube Search Fallback
+        # Strategy 1: Standard YouTube Recommendations (High Stability & Direct Codecs)
         for q in queries:
             try:
                 res = await asyncio.wait_for(
@@ -237,7 +208,36 @@ class NativeSmartAutoplay:
                             played_history.add(top_norm)
                             return trk
             except Exception as e:
-                logger.debug(f"Standard YouTube autoplay search notice for '{q}': {e}")
+                logger.debug(f"YouTube autoplay search notice for '{q}': {e}")
+
+        # Strategy 2: YouTube Music Search Fallback
+        for q in queries:
+            try:
+                res = await asyncio.wait_for(
+                    wavelink.Playable.search(q, source=wavelink.TrackSource.YouTubeMusic),
+                    timeout=6.0,
+                )
+                if res:
+                    tracks = res if isinstance(res, list) else getattr(res, "tracks", [])
+                    for top in tracks[:5]:
+                        top_norm = normalize_history_title(top.title or "")
+                        if top_norm and top_norm not in played_history and top_norm != norm_curr_title:
+                            trk = Track(
+                                title=top.title or q,
+                                author=top.author or "Artist",
+                                url=top.uri or "",
+                                stream_url="",
+                                duration=int((top.length or 0) / 1000),
+                                thumbnail=top.artwork or (f"https://i.ytimg.com/vi/{top.identifier}/hqdefault.jpg" if getattr(top, "identifier", None) else None),
+                                requester="⚡ Smart Autoplay Radio",
+                                is_autoplay=True,
+                                query=q,
+                            )
+                            trk._playable = top
+                            played_history.add(top_norm)
+                            return trk
+            except Exception as e:
+                logger.debug(f"YouTube Music autoplay search notice for '{q}': {e}")
 
         # Strategy 3: Default Search Fallback
         for q in queries:

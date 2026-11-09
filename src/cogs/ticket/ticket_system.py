@@ -1409,16 +1409,18 @@ class TicketSystem(commands.Cog):
                 session = getattr(self.bot, "session", None)
                 if session and not session.closed:
                     prompt = (
-                        f"You are Kyoka AI Support Assistant actively conversing in a Discord ticket channel for '{guild.name}'.\n"
-                        f"Category: {category}\n"
+                        f"You are Kyoka, a warm, super-smart, empathetic, and genuinely helpful live support specialist in '{guild.name}'.\n"
+                        f"Ticket Category: {category}\n"
                         f"User: {user.display_name}\n"
-                        f"Recent ticket dialogue history:\n{history_text or 'Ticket just opened.'}\n\n"
-                        f"{user.display_name}: '{query}'\n\n"
+                        f"Dialogue History in this Ticket:\n{history_text or 'Ticket just opened.'}\n\n"
+                        f"{user.display_name} just said: '{query}'\n\n"
                         "Instructions:\n"
-                        "1. Talk directly, politely, and interactively to the user like a skilled live support partner.\n"
-                        "2. Provide clear, direct steps or answers to what they just asked.\n"
-                        "3. Keep the reply friendly, conversational, and under 500 characters so it fits neatly into the card.\n"
-                        "4. If they need human assistance, remind them they can click 'Need Staff Help' below."
+                        "1. Talk directly and warmly like an authentic human support partner — approachable, attentive, friendly, and practical.\n"
+                        f"2. Greet or address the user naturally by name ({user.display_name}).\n"
+                        "3. Directly solve, troubleshoot, or guide them through what they asked. Keep formatting clean with bullet points or numbered steps where needed.\n"
+                        "4. Maintain seamless context from the dialogue history so it feels like a real, continuous conversation.\n"
+                        "5. Keep the reply friendly, conversational, and under 550 characters.\n"
+                        "6. Remind them warmly that if they ever want a human staff member to step in, they can click 'Need Staff Help' below."
                     )
                     res = await ai_mgr.generate_response(
                         session=session,
@@ -1427,6 +1429,7 @@ class TicketSystem(commands.Cog):
                         user_id=user.id,
                         prompt=prompt,
                         server_name=guild.name,
+                        enforce_cooldown=False,
                     )
                     if res and len(res.strip()) > 10:
                         sol = res.strip()
@@ -1441,63 +1444,71 @@ class TicketSystem(commands.Cog):
             except Exception as e:
                 logger.debug(f"AI Manager ticket solution exception: {e}")
 
-        # 2. Smart Knowledge Base Fallback Engine
+        # 2. Smart Knowledge Base Fallback Engine (Authentic & Conversational)
         q_low = query.lower()
         cat_low = category.lower()
+        name = user.display_name
 
         if any(w in q_low or w in cat_low for w in ("bug", "glitch", "error", "crash", "broken")):
             sol = (
-                "Here are immediate troubleshooting steps for technical issues:\n"
-                "1. **Restart your client:** Close and restart Discord / Roblox to clear cached state.\n"
-                "2. **Check connection:** Ensure your network or DNS is stable.\n"
-                "3. **Provide details:** Please reply with your exact device/OS, error screenshot, and steps to reproduce.\n"
-                "If this is a server bug, click **Need Staff Help** below so our dev team can investigate!"
+                f"Hey {name}! I hear you — let's get this sorted out right away.\n\n"
+                "1. **Quick Restart:** Close and restart your app/game to clear any stuck cached memory.\n"
+                "2. **Verify Network:** Double-check your connection or DNS so requests sync smoothly.\n"
+                "3. **Drop Details:** Mind sharing a quick screenshot or your device/OS? That'll help me or our staff pinpoint the exact cause.\n\n"
+                "If it looks like a server-side bug, just tap **Need Staff Help** below and our devs will take over!"
             )
         elif any(w in q_low or w in cat_low for w in ("buy", "order", "purchase", "billing", "payment", "shop", "price")):
             sol = (
-                "For purchases, orders, and billing:\n"
-                "1. **Payment Methods:** We accept standard server payment methods.\n"
-                "2. **Proof of Payment:** Please upload your transaction ID or receipt screenshot in this channel.\n"
-                "3. **Delivery:** Orders are manually verified by staff for security.\n"
-                "Click **Need Staff Help** below to complete your transaction with an authorized staff member!"
+                f"Hey {name}, thanks for reaching out about your purchase!\n\n"
+                "1. **Receipt / Order ID:** Please drop your transaction ID or receipt screenshot right here in chat.\n"
+                "2. **Verification:** Our staff team personally reviews every order to ensure total account security.\n\n"
+                "Click **Need Staff Help** below so an authorized staff member can verify and fulfill your order immediately!"
             )
         elif any(w in q_low or w in cat_low for w in ("trial", "race v4", "awakening", "v4", "mirage", "gear")):
             sol = (
-                "For Race V4 Trials & Mirage Island:\n"
-                "1. **Full Moon:** Ensure you are in a Third Sea server with a Full Moon active.\n"
-                "2. **Mirage Island:** Look at the highest peak with your mirror fractal during Full Moon.\n"
-                "3. **Trials Room:** 3 players with different races must activate abilities simultaneously at the Temple of Time.\n"
-                "Click **Need Staff Help** if you need a carry or carry team assistance!"
+                f"Hey {name}! Ready for Race V4? Here's the playbook:\n\n"
+                "1. **Full Moon:** Head over to the Third Sea and make sure Full Moon is currently in the sky.\n"
+                "2. **Mirage Island Peak:** Stand on the highest peak with your Mirror Fractal and look up.\n"
+                "3. **Temple of Time:** You'll need 3 players with different races activating skills at the exact same moment.\n\n"
+                "Need a carry or want to squad up? Click **Need Staff Help** below and our verified team will jump in!"
             )
         elif any(w in q_low or w in cat_low for w in ("raid", "chip", "fragments", "advance raid", "order")):
             sol = (
-                "For Raids & Fragment Farming:\n"
-                "1. **Requirements:** Level 1100+ to purchase microchips at the Raid Laboratory.\n"
-                "2. **Carry Rules:** Stay in the starting zone or protect the carry player.\n"
-                "3. **Advance Raids:** Dough / Phoenix require special chip unlocks.\n"
-                "Click **Need Staff Help** below to squad up with our verified raid carries!"
+                f"Hey {name}! Let's get those raids and fragments knocked out:\n\n"
+                "1. **Requirements:** Level 1100+ is needed to buy microchips at the Raid Lab.\n"
+                "2. **Carries:** Stay safe at the spawn island while your carry clears each island.\n"
+                "3. **Advanced Raids:** Dough and Phoenix chips require special chip unlocks.\n\n"
+                "Want a verified carry player right now? Click **Need Staff Help** below to team up!"
             )
         elif any(w in q_low or w in cat_low for w in ("role", "verify", "permission", "access", "rank")):
             sol = (
-                "For Roles & Server Permissions:\n"
-                "1. **Verification:** Check the `#verification` channel and complete the prompt.\n"
-                "2. **Reaction Roles:** Visit `#roles` to select your ping and game roles.\n"
-                "3. **Level Roles:** Level up your activity in chat to unlock higher privileges.\n"
-                "If your roles did not update automatically, click **Need Staff Help** below."
+                f"Hey {name}, let's get your roles sorted out!\n\n"
+                "1. Check the `#verification` channel and make sure you've completed the prompt.\n"
+                "2. Head over to `#roles` to grab any notification, game, or ping roles you'd like.\n\n"
+                "If a role didn't apply or your permissions look off, click **Need Staff Help** below so a Moderator can assign it directly!"
             )
         elif any(w in q_low or w in cat_low for w in ("rule", "ban", "warn", "mute", "appeal")):
             sol = (
-                "For Moderation Appeals & Inquiries:\n"
-                "1. Please provide your User ID and the reason for your penalty.\n"
-                "2. Be respectful and describe what happened honestly.\n"
-                "3. Click **Need Staff Help** below so a Moderator or Administrator can review your case."
+                f"Hey {name}, thank you for contacting us regarding your moderation appeal.\n\n"
+                "Please share your User ID along with a brief, honest explanation of what happened. Our moderation team reviews every appeal fairly.\n\n"
+                "Click **Need Staff Help** below so a Moderator or Administrator can review your case directly."
+            )
+        elif any(w in q_low for w in ("hi", "hello", "hey", "sup", "yo")):
+            sol = (
+                f"Hey {name}! 👋 Great to meet you. I'm Kyoka, your live support assistant here in **{guild.name}**.\n\n"
+                "How can I help you today? Just describe what's going on or what you need, and I'll walk you through it step-by-step!\n"
+                "*(You can also click **Need Staff Help** below anytime if you want a human team member to step in.)*"
+            )
+        elif any(w in q_low for w in ("thanks", "thank you", "thx", "ty", "worked", "fixed", "good")):
+            sol = (
+                f"Awesome, so glad that worked for you, {name}! 🎉\n\n"
+                "If everything's all set, feel free to click **Close Ticket** below to wrap up. Have an amazing day!"
             )
         else:
             sol = (
-                f"Thank you for contacting support regarding **{category}**.\n"
-                "1. Please describe your inquiry with as much detail as possible.\n"
-                "2. If applicable, attach relevant screenshots or transaction links.\n"
-                "3. If you'd like a human team member to review this right away, click **Need Staff Help** below!"
+                f"Hey {name}! Thanks for opening a ticket regarding **{category}**.\n\n"
+                "Could you give me a few more details or drop any screenshots about what's going on? I'll do everything I can to help you get this resolved.\n\n"
+                "Whenever you'd like human staff to step in, just hit **Need Staff Help** below!"
             )
 
         if channel_id:
@@ -2172,12 +2183,12 @@ class TicketSystem(commands.Cog):
                                 c = KyokaContainer(accent_color=0x7C3AED)
                                 c.add_section(
                                     content=(
-                                        "🤖 **Kyoka AI Support Solution**\n"
-                                        f"> {sol}"
+                                        "💬 **Kyoka (Live Assistant)**\n\n"
+                                        f"{sol}"
                                     )
                                 )
                                 c.add_separator(divider=True)
-                                c.add_text("💡 *Did this solve your problem? If not, click below to summon human staff.*")
+                                c.add_text("💡 *Need a human team member? Tap **Need Staff Help** below at any time.*")
                                 await send_container_response(
                                     message.channel,
                                     c,

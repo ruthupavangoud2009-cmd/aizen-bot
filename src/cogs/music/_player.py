@@ -778,19 +778,19 @@ class GuildPlayer:
         # Build ordered search strategies: (query, source)
         strategies: list[tuple[str, object]] = []
         if full_query:
-            strategies.append((full_query, wavelink.TrackSource.YouTubeMusic))
             strategies.append((full_query, wavelink.TrackSource.YouTube))
+            strategies.append((full_query, wavelink.TrackSource.YouTubeMusic))
             strategies.append((full_query, None))
             strategies.append((full_query, wavelink.TrackSource.SoundCloud))
             strategies.append((full_query, "spsearch"))
         if clean_title and clean_title != full_query:
-            strategies.append((clean_title, wavelink.TrackSource.YouTubeMusic))
             strategies.append((clean_title, wavelink.TrackSource.YouTube))
+            strategies.append((clean_title, wavelink.TrackSource.YouTubeMusic))
             strategies.append((clean_title, None))
             strategies.append((clean_title, wavelink.TrackSource.SoundCloud))
         if track.query and track.query not in (full_query, clean_title) and not track.query.startswith(("http://", "https://")):
-            strategies.append((track.query, wavelink.TrackSource.YouTubeMusic))
             strategies.append((track.query, wavelink.TrackSource.YouTube))
+            strategies.append((track.query, wavelink.TrackSource.YouTubeMusic))
             strategies.append((track.query, None))
             strategies.append((track.query, wavelink.TrackSource.SoundCloud))
         if track.title and track.title not in (full_query, clean_title):

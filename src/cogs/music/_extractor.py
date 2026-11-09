@@ -480,7 +480,33 @@ class NativeExtractor:
 
         cleaned_query = parse_and_clean_query(search_target)
 
-        # Priority 1: YouTube Music search via Lavalink (Official release priority)
+        # Priority 1: Standard YouTube search via Lavalink (Highest reliability & unblocked stream codecs)
+        try:
+            results = await asyncio.wait_for(
+                wavelink.Playable.search(cleaned_query, source=wavelink.TrackSource.YouTube),
+                timeout=8.0,
+            )
+            if results:
+                top = results[0] if isinstance(results, list) else results.tracks[0]
+                thumb = top.artwork or (f"https://i.ytimg.com/vi/{top.identifier}/hqdefault.jpg" if getattr(top, "identifier", None) else None)
+                trk = Track(
+                    title=top.title or cleaned_query,
+                    author=top.author or "Artist",
+                    url=orig_spotify_url or top.uri or orig_yt_url or raw_q,
+                    stream_url="",
+                    duration=int((top.length or 0) / 1000),
+                    thumbnail=thumb,
+                    requester=requester,
+                    is_autoplay=is_autoplay,
+                    query=raw_q,
+                )
+                trk._playable = top
+                _SEARCH_CACHE[cache_key] = (now, trk)
+                return trk
+        except Exception as e:
+            logger.debug(f"YouTube search notice: {e}")
+
+        # Priority 2: YouTube Music search via Lavalink
         try:
             results = await asyncio.wait_for(
                 wavelink.Playable.search(cleaned_query, source=wavelink.TrackSource.YouTubeMusic),
@@ -505,32 +531,6 @@ class NativeExtractor:
                 return trk
         except Exception as e:
             logger.debug(f"YouTube Music search notice: {e}")
-
-        # Priority 2: Standard YouTube search via Lavalink
-        try:
-            results = await asyncio.wait_for(
-                wavelink.Playable.search(cleaned_query, source=wavelink.TrackSource.YouTube),
-                timeout=8.0,
-            )
-            if results:
-                top = results[0] if isinstance(results, list) else results.tracks[0]
-                thumb = top.artwork or (f"https://i.ytimg.com/vi/{top.identifier}/hqdefault.jpg" if getattr(top, "identifier", None) else None)
-                trk = Track(
-                    title=top.title or cleaned_query,
-                    author=top.author or "Artist",
-                    url=orig_spotify_url or top.uri or orig_yt_url or raw_q,
-                    stream_url="",
-                    duration=int((top.length or 0) / 1000),
-                    thumbnail=thumb,
-                    requester=requester,
-                    is_autoplay=is_autoplay,
-                    query=raw_q,
-                )
-                trk._playable = top
-                _SEARCH_CACHE[cache_key] = (now, trk)
-                return trk
-        except Exception as e:
-            logger.debug(f"YouTube fallback search notice: {e}")
 
         # Priority 3: Default Lavalink search (uses node default source manager)
         try:
