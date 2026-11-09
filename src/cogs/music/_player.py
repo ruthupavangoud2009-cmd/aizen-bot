@@ -770,7 +770,7 @@ class GuildPlayer:
                         break
 
         # ── Priority 3: Multi-strategy search cascade with retry ──
-        from src.cogs.music._extractor import clean_track_title
+        from src.cogs.music._extractor import clean_track_title, select_best_playable
         clean_title = clean_track_title(track.title) if track.title else ""
         raw_author = track.author if (track.author and "spotify" not in track.author.lower() and "unknown" not in track.author.lower() and "artist" != track.author.lower()) else ""
         full_query = f"{clean_title} {raw_author}".strip() or track.query or track.title or ""
@@ -778,22 +778,23 @@ class GuildPlayer:
         # Build ordered search strategies: (query, source)
         strategies: list[tuple[str, object]] = []
         if full_query:
-            strategies.append((full_query, wavelink.TrackSource.YouTube))
             strategies.append((full_query, wavelink.TrackSource.YouTubeMusic))
+            strategies.append((full_query, wavelink.TrackSource.YouTube))
             strategies.append((full_query, None))
             strategies.append((full_query, wavelink.TrackSource.SoundCloud))
             strategies.append((full_query, "spsearch"))
         if clean_title and clean_title != full_query:
-            strategies.append((clean_title, wavelink.TrackSource.YouTube))
             strategies.append((clean_title, wavelink.TrackSource.YouTubeMusic))
+            strategies.append((clean_title, wavelink.TrackSource.YouTube))
             strategies.append((clean_title, None))
             strategies.append((clean_title, wavelink.TrackSource.SoundCloud))
         if track.query and track.query not in (full_query, clean_title) and not track.query.startswith(("http://", "https://")):
-            strategies.append((track.query, wavelink.TrackSource.YouTube))
             strategies.append((track.query, wavelink.TrackSource.YouTubeMusic))
+            strategies.append((track.query, wavelink.TrackSource.YouTube))
             strategies.append((track.query, None))
             strategies.append((track.query, wavelink.TrackSource.SoundCloud))
         if track.title and track.title not in (full_query, clean_title):
+            strategies.append((track.title, wavelink.TrackSource.YouTubeMusic))
             strategies.append((track.title, wavelink.TrackSource.YouTube))
             strategies.append((track.title, None))
             strategies.append((track.title, wavelink.TrackSource.SoundCloud))
@@ -808,11 +809,12 @@ class GuildPlayer:
                         timeout=10.0,
                     )
                     if results:
-                        p = results[0] if isinstance(results, list) else results.tracks[0]
-                        logger.debug(
-                            f"Resolved '{track.title}' via strategy ({source}, query='{query}', attempt={attempt + 1})"
-                        )
-                        return p
+                        p = select_best_playable(results, query)
+                        if p:
+                            logger.debug(
+                                f"Resolved '{track.title}' via strategy ({source}, query='{query}', attempt={attempt + 1})"
+                            )
+                            return p
                     break  # empty result — no point retrying this strategy
                 except asyncio.TimeoutError:
                     logger.debug(

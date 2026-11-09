@@ -135,3 +135,14 @@ async def test_resolve_playable_with_attached_playable():
 
     resolved = await player._resolve_playable_cascade(track)
     assert resolved is dummy_playable
+
+
+def test_select_best_playable_prioritizes_official_over_covers_and_loops():
+    """Verify select_best_playable picks the official topic release over covers and 10-hour loops."""
+    from src.cogs.music._extractor import select_best_playable
+    t1 = MagicMock(title="Taare (Cover)", author="Cover Artist", length=180000, is_stream=False)
+    t2 = MagicMock(title="Taare", author="Farak - Topic", length=155000, is_stream=False)
+    t3 = MagicMock(title="Taare 10 Hours Loop", author="Meme Channel", length=36000000, is_stream=False)
+
+    best = select_best_playable([t1, t2, t3], "Taare")
+    assert best is t2

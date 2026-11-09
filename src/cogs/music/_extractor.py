@@ -250,6 +250,89 @@ def score_candidate(
     return score
 
 
+def select_best_playable(
+    results: Any,
+    query: str,
+) -> Optional[Any]:
+    """
+    Score and select the most relevant, highest-fidelity official track from a Wavelink search result.
+    Discards live streams, 10-hour loops, covers, karaoke, and snippets unless requested by user.
+    """
+    if not results:
+        return None
+    import wavelink
+    tracks: list[Any] = []
+    if isinstance(results, wavelink.Playlist):
+        tracks = list(results.tracks)
+    elif isinstance(results, list):
+        tracks = list(results)
+    else:
+        tracks = [results]
+
+    if not tracks:
+        return None
+    if len(tracks) == 1:
+        return tracks[0]
+
+    q_lower = (query or "").lower().strip()
+    q_words = set(re.findall(r"\w+", q_lower))
+    user_requested = {
+        kw for kw in UNWANTED_VERSION_KEYWORDS
+        if kw in q_lower or any(part in q_words for part in kw.split())
+    }
+
+    scored: list[tuple[float, Any]] = []
+    for trk in tracks:
+        title = (getattr(trk, "title", "") or "").lower()
+        author = (getattr(trk, "author", "") or "").lower()
+        length_ms = getattr(trk, "length", 0) or 0
+        dur_sec = length_ms / 1000.0
+
+        # Disqualify endless streams unless user explicitly asked for 'live' / 'stream' / 'radio'
+        if getattr(trk, "is_stream", False) and not any(k in q_lower for k in ("live", "stream", "radio")):
+            continue
+
+        score = 100.0
+        # Title word overlap
+        title_tokens = [w for w in re.findall(r"\w+", title) if len(w) > 1]
+        matched_tokens = sum(1 for tok in q_words if tok in title_tokens or tok in author)
+        if q_words:
+            score += (matched_tokens / len(q_words)) * 60.0
+
+        # Exact clean title match boost
+        clean_title = re.sub(r"\(.*?\)|\[.*?\]", "", title).strip()
+        if clean_title == q_lower or clean_title in q_lower or q_lower in clean_title:
+            score += 40.0
+
+        # Official release / Topic channel boost
+        if " - topic" in author or "topic" in author or "official" in title or "official" in author:
+            score += 35.0
+
+        # Penalize unwanted modifier keywords (remix, cover, lofi, etc.) unless requested
+        for kw in UNWANTED_VERSION_KEYWORDS:
+            if kw in user_requested:
+                continue
+            if re.search(rf"\b{re.escape(kw)}\b", title):
+                score -= 150.0
+                break
+
+        # Ideal song duration (90s - 480s)
+        if 90 <= dur_sec <= 480:
+            score += 25.0
+        elif 0 < dur_sec < 60:
+            score -= 60.0
+        elif dur_sec > 1200:
+            score -= 80.0
+
+        scored.append((score, trk))
+
+    if not scored:
+        return tracks[0]
+
+    scored.sort(key=lambda x: x[0], reverse=True)
+    return scored[0][1]
+
+
 
 # In-memory search cache with 10-minute TTL for instant repeat queries
 _SEARCH_CACHE: Dict[str, Tuple[float, Track]] = {}
@@ -479,176 +562,133 @@ class NativeExtractor:
                 search_target = canonical_q
 
         cleaned_query = parse_and_clean_query(search_target)
+        search_terms = [cleaned_query]
+        if search_target.strip().lower() != cleaned_query.strip().lower():
+            search_terms.append(search_target.strip())
 
-        # Tier 1: JioSaavn 320kbps HD Audio Engine (0% Cloud Block, 100M+ Worldwide Tracks)
-        if not is_direct_url:
+        # Priority 1: YouTube Music search via Lavalink with candidate scoring (Studio Quality, 100M+ Official Tracks)
+        for term in search_terms:
             try:
-                saavn_trk = await asyncio.wait_for(
-                    cls._extract_jiosaavn(search_target, requester=requester, is_autoplay=is_autoplay),
-                    timeout=4.5,
+                results = await asyncio.wait_for(
+                    wavelink.Playable.search(term, source=wavelink.TrackSource.YouTubeMusic),
+                    timeout=8.0,
                 )
-                if saavn_trk and saavn_trk.stream_url:
-                    try:
-                        direct_res = await asyncio.wait_for(
-                            wavelink.Playable.search(saavn_trk.stream_url), timeout=5.0
-                        )
-                        if direct_res:
-                            saavn_trk._playable = direct_res[0] if isinstance(direct_res, list) else direct_res.tracks[0]
-                    except Exception:
-                        pass
-                    _SEARCH_CACHE[cache_key] = (now, saavn_trk)
-                    return saavn_trk
+                top = select_best_playable(results, term)
+                if top:
+                    thumb = getattr(top, "artwork", None) or (f"https://i.ytimg.com/vi/{top.identifier}/hqdefault.jpg" if getattr(top, "identifier", None) else None)
+                    trk = Track(
+                        title=top.title or term,
+                        author=top.author or "Artist",
+                        url=orig_spotify_url or getattr(top, "uri", None) or orig_yt_url or raw_q,
+                        stream_url="",
+                        duration=int((getattr(top, "length", 0) or 0) / 1000),
+                        thumbnail=thumb,
+                        requester=requester,
+                        is_autoplay=is_autoplay,
+                        query=raw_q,
+                    )
+                    trk._playable = top
+                    _SEARCH_CACHE[cache_key] = (now, trk)
+                    return trk
             except Exception as e:
-                logger.debug(f"Tier 1 JioSaavn extraction notice: {e}")
+                logger.debug(f"YouTube Music search notice for '{term}': {e}")
 
-        # Priority 1: Standard YouTube search via Lavalink (Highest reliability & unblocked stream codecs)
-        try:
-            results = await asyncio.wait_for(
-                wavelink.Playable.search(cleaned_query, source=wavelink.TrackSource.YouTube),
-                timeout=8.0,
-            )
-            if results:
-                top = results[0] if isinstance(results, list) else results.tracks[0]
-                thumb = top.artwork or (f"https://i.ytimg.com/vi/{top.identifier}/hqdefault.jpg" if getattr(top, "identifier", None) else None)
-                trk = Track(
-                    title=top.title or cleaned_query,
-                    author=top.author or "Artist",
-                    url=orig_spotify_url or top.uri or orig_yt_url or raw_q,
-                    stream_url="",
-                    duration=int((top.length or 0) / 1000),
-                    thumbnail=thumb,
-                    requester=requester,
-                    is_autoplay=is_autoplay,
-                    query=raw_q,
+        # Priority 2: Standard YouTube search via Lavalink with candidate scoring
+        for term in search_terms:
+            try:
+                results = await asyncio.wait_for(
+                    wavelink.Playable.search(term, source=wavelink.TrackSource.YouTube),
+                    timeout=8.0,
                 )
-                trk._playable = top
-                _SEARCH_CACHE[cache_key] = (now, trk)
-                return trk
-        except Exception as e:
-            logger.debug(f"YouTube search notice: {e}")
-
-        # Priority 2: YouTube Music search via Lavalink
-        try:
-            results = await asyncio.wait_for(
-                wavelink.Playable.search(cleaned_query, source=wavelink.TrackSource.YouTubeMusic),
-                timeout=8.0,
-            )
-            if results:
-                top = results[0] if isinstance(results, list) else results.tracks[0]
-                thumb = top.artwork or (f"https://i.ytimg.com/vi/{top.identifier}/hqdefault.jpg" if getattr(top, "identifier", None) else None)
-                trk = Track(
-                    title=top.title or cleaned_query,
-                    author=top.author or "Artist",
-                    url=orig_spotify_url or top.uri or orig_yt_url or raw_q,
-                    stream_url="",
-                    duration=int((top.length or 0) / 1000),
-                    thumbnail=thumb,
-                    requester=requester,
-                    is_autoplay=is_autoplay,
-                    query=raw_q,
-                )
-                trk._playable = top
-                _SEARCH_CACHE[cache_key] = (now, trk)
-                return trk
-        except Exception as e:
-            logger.debug(f"YouTube Music search notice: {e}")
+                top = select_best_playable(results, term)
+                if top:
+                    thumb = getattr(top, "artwork", None) or (f"https://i.ytimg.com/vi/{top.identifier}/hqdefault.jpg" if getattr(top, "identifier", None) else None)
+                    trk = Track(
+                        title=top.title or term,
+                        author=top.author or "Artist",
+                        url=orig_spotify_url or getattr(top, "uri", None) or orig_yt_url or raw_q,
+                        stream_url="",
+                        duration=int((getattr(top, "length", 0) or 0) / 1000),
+                        thumbnail=thumb,
+                        requester=requester,
+                        is_autoplay=is_autoplay,
+                        query=raw_q,
+                    )
+                    trk._playable = top
+                    _SEARCH_CACHE[cache_key] = (now, trk)
+                    return trk
+            except Exception as e:
+                logger.debug(f"YouTube search notice for '{term}': {e}")
 
         # Priority 3: Default Lavalink search (uses node default source manager)
-        try:
-            results = await asyncio.wait_for(
-                wavelink.Playable.search(cleaned_query),
-                timeout=8.0,
-            )
-            if results and not isinstance(results, wavelink.Playlist):
-                top = results[0] if isinstance(results, list) else results.tracks[0]
-                thumb = top.artwork or (f"https://i.ytimg.com/vi/{top.identifier}/hqdefault.jpg" if getattr(top, "identifier", None) else None)
-                trk = Track(
-                    title=top.title or cleaned_query,
-                    author=top.author or "Artist",
-                    url=orig_spotify_url or top.uri or orig_yt_url or raw_q,
-                    stream_url="",
-                    duration=int((top.length or 0) / 1000),
-                    thumbnail=thumb,
-                    requester=requester,
-                    is_autoplay=is_autoplay,
-                    query=raw_q,
+        for term in search_terms:
+            try:
+                results = await asyncio.wait_for(
+                    wavelink.Playable.search(term),
+                    timeout=8.0,
                 )
-                trk._playable = top
-                _SEARCH_CACHE[cache_key] = (now, trk)
-                return trk
-        except Exception as e:
-            logger.debug(f"Default search notice: {e}")
+                top = select_best_playable(results, term)
+                if top:
+                    thumb = getattr(top, "artwork", None) or (f"https://i.ytimg.com/vi/{top.identifier}/hqdefault.jpg" if getattr(top, "identifier", None) else None)
+                    trk = Track(
+                        title=top.title or term,
+                        author=top.author or "Artist",
+                        url=orig_spotify_url or getattr(top, "uri", None) or orig_yt_url or raw_q,
+                        stream_url="",
+                        duration=int((getattr(top, "length", 0) or 0) / 1000),
+                        thumbnail=thumb,
+                        requester=requester,
+                        is_autoplay=is_autoplay,
+                        query=raw_q,
+                    )
+                    trk._playable = top
+                    _SEARCH_CACHE[cache_key] = (now, trk)
+                    return trk
+            except Exception as e:
+                logger.debug(f"Default search notice for '{term}': {e}")
 
         # Priority 4: SoundCloud direct stream extraction
-        try:
-            sc_trk = await asyncio.wait_for(
-                cls._extract_soundcloud(cleaned_query, requester=requester, is_autoplay=is_autoplay),
-                timeout=5.0,
-            )
-            if sc_trk and sc_trk.stream_url:
-                try:
-                    direct_res = await asyncio.wait_for(
-                        wavelink.Playable.search(sc_trk.stream_url), timeout=5.0
-                    )
-                    if direct_res:
-                        sc_trk._playable = direct_res[0] if isinstance(direct_res, list) else direct_res.tracks[0]
-                except Exception:
-                    pass
-                _SEARCH_CACHE[cache_key] = (now, sc_trk)
-                return sc_trk
-        except Exception as e:
-            logger.debug(f"SoundCloud direct extract notice: {e}")
-
-        # Priority 5: Raw query fallback if cleaned was different
-        if search_target.lower() != cleaned_query.lower():
-            for raw_source in (wavelink.TrackSource.YouTubeMusic, wavelink.TrackSource.YouTube, None, wavelink.TrackSource.SoundCloud):
-                try:
-                    kwargs = {"source": raw_source} if raw_source else {}
-                    results = await asyncio.wait_for(
-                        wavelink.Playable.search(search_target, **kwargs),
-                        timeout=8.0,
-                    )
-                    if results and not isinstance(results, wavelink.Playlist):
-                        top = results[0] if isinstance(results, list) else results.tracks[0]
-                        thumb = top.artwork or (f"https://i.ytimg.com/vi/{top.identifier}/hqdefault.jpg" if getattr(top, "identifier", None) else None)
-                        trk = Track(
-                            title=top.title or search_target,
-                            author=top.author or "Artist",
-                            url=orig_spotify_url or top.uri or orig_yt_url or raw_q,
-                            stream_url="",
-                            duration=int((top.length or 0) / 1000),
-                            thumbnail=thumb,
-                            requester=requester,
-                            is_autoplay=is_autoplay,
-                            query=raw_q,
-                        )
-                        trk._playable = top
-                        _SEARCH_CACHE[cache_key] = (now, trk)
-                        return trk
-                except Exception as e:
-                    logger.debug(f"Raw query fallback notice ({raw_source}): {e}")
-
-        # Priority 6: JioSaavn 320kbps HD Audio Engine Fallback (Unblocked, 100M+ tracks)
-        if not is_direct_url:
+        for term in search_terms:
             try:
-                saavn_trk = await asyncio.wait_for(
-                    cls._extract_jiosaavn(search_target, requester=requester, is_autoplay=is_autoplay),
+                sc_trk = await asyncio.wait_for(
+                    cls._extract_soundcloud(term, requester=requester, is_autoplay=is_autoplay),
                     timeout=5.0,
                 )
-                if saavn_trk:
-                    if saavn_trk.stream_url:
+                if sc_trk and sc_trk.stream_url:
+                    try:
+                        direct_res = await asyncio.wait_for(
+                            wavelink.Playable.search(sc_trk.stream_url), timeout=5.0
+                        )
+                        if direct_res:
+                            sc_trk._playable = direct_res[0] if isinstance(direct_res, list) else direct_res.tracks[0]
+                    except Exception:
+                        pass
+                    _SEARCH_CACHE[cache_key] = (now, sc_trk)
+                    return sc_trk
+            except Exception as e:
+                logger.debug(f"SoundCloud direct extract notice for '{term}': {e}")
+
+        # Priority 5: JioSaavn Fallback (Only if all YouTube/SoundCloud queries fail)
+        if not is_direct_url:
+            for term in search_terms:
+                try:
+                    saavn_trk = await asyncio.wait_for(
+                        cls._extract_jiosaavn(term, requester=requester, is_autoplay=is_autoplay),
+                        timeout=4.5,
+                    )
+                    if saavn_trk and saavn_trk.stream_url:
                         try:
                             direct_res = await asyncio.wait_for(
-                                wavelink.Playable.search(saavn_trk.stream_url), timeout=6.0
+                                wavelink.Playable.search(saavn_trk.stream_url), timeout=5.0
                             )
                             if direct_res:
                                 saavn_trk._playable = direct_res[0] if isinstance(direct_res, list) else direct_res.tracks[0]
                         except Exception:
                             pass
-                    _SEARCH_CACHE[cache_key] = (now, saavn_trk)
-                    return saavn_trk
-            except Exception as e:
-                logger.debug(f"JioSaavn extraction fallback notice: {e}")
+                        _SEARCH_CACHE[cache_key] = (now, saavn_trk)
+                        return saavn_trk
+                except Exception as e:
+                    logger.debug(f"JioSaavn extraction fallback notice: {e}")
 
         return None
 
