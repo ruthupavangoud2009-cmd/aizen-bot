@@ -994,8 +994,48 @@ class GuildPlayer:
             return
 
         if reason and str(reason).lower() in ("loadfailed", "load_failed", "stuck", "error"):
-            logger.warning(f"Guild {self.guild.id}: Lavalink reported track {reason}.")
-            failed_title = self.current.title if self.current else "track"
+            # 1. Debounce rapid duplicate failure events from Lavalink
+            now = time.time()
+            if now - getattr(self, "_last_failure_advance_time", 0.0) < 1.5:
+                logger.debug(f"Guild {self.guild.id}: Duplicate failure advance debounced.")
+                return
+            self._last_failure_advance_time = now
+
+            failed_track = self.current
+            failed_title = failed_track.title if failed_track else "track"
+            logger.warning(f"Guild {self.guild.id}: Lavalink reported track {reason} for '{failed_title}'.")
+
+            # 2. Smart auto-healing: Try alternative stream source before discarding the track!
+            if failed_track and not getattr(failed_track, "_auto_healed", False):
+                failed_track._auto_healed = True
+                logger.info(f"Guild {self.guild.id}: Proactively attempting alternative stream recovery for '{failed_title}'...")
+                query_fallback = f"{failed_track.title} {failed_track.author}".strip() or getattr(failed_track, "query", "")
+                recovered_playable = None
+                for src in (wavelink.TrackSource.YouTube, None):
+                    try:
+                        res = await asyncio.wait_for(
+                            wavelink.Playable.search(query_fallback, source=src) if src else wavelink.Playable.search(query_fallback),
+                            timeout=6.0,
+                        )
+                        if res and not isinstance(res, wavelink.Playlist):
+                            tracks = res if isinstance(res, list) else res.tracks
+                            failed_id = getattr(getattr(failed_track, "_playable", None), "identifier", None)
+                            for candidate in tracks[:5]:
+                                if getattr(candidate, "identifier", None) != failed_id:
+                                    recovered_playable = candidate
+                                    break
+                            if recovered_playable:
+                                break
+                    except Exception as rec_err:
+                        logger.debug(f"Recovery attempt with src={src} notice: {rec_err}")
+
+                if recovered_playable:
+                    logger.info(f"Guild {self.guild.id}: Stream recovery SUCCESS for '{failed_title}' (id={getattr(recovered_playable, 'identifier', '')}). Resuming playback...")
+                    failed_track._playable = recovered_playable
+                    await self.play_track(failed_track)
+                    return
+
+            # 3. If stream recovery failed or was already attempted, cleanly advance
             if self.voice_client and hasattr(self.voice_client, "skip"):
                 try:
                     await asyncio.wait_for(

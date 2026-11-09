@@ -92,3 +92,31 @@ async def test_music_commands_structure():
     assert "prev" in prev_cmd.aliases
     assert "back" in prev_cmd.aliases
 
+
+@pytest.mark.asyncio
+async def test_track_failure_auto_recovery_and_debounce():
+    """Verify that when Lavalink reports track failure (loadFailed), duplicate calls are debounced and recovery is attempted."""
+    from unittest.mock import AsyncMock, MagicMock, patch
+    from src.cogs.music._player import GuildPlayer
+    from src.cogs.music._models import Track
+
+    mock_bot = MagicMock()
+    mock_guild = MagicMock(id=123456)
+    player = GuildPlayer(mock_guild, mock_bot)
+
+    mock_track = Track(title="Taare", author="Farak", url="https://youtube.com/watch?v=OUilrtigWGg")
+    player.current = mock_track
+    player.home_channel = MagicMock()
+
+    with patch("wavelink.Playable.search", new_callable=AsyncMock) as mock_search:
+        mock_cand = MagicMock(identifier="yIiAyoLZ9U0")
+        mock_search.return_value = [mock_cand]
+        with patch.object(player, "play_track", new_callable=AsyncMock) as mock_play:
+            await player.on_track_end(reason="loadFailed")
+            # Rapid duplicate invocation simulates on_wavelink_track_exception + on_wavelink_track_end firing together
+            await player.on_track_end(reason="loadFailed")
+
+            assert getattr(mock_track, "_auto_healed", False) is True
+            assert mock_play.call_count == 1
+
+
