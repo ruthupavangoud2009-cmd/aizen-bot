@@ -151,27 +151,24 @@ class Config:
         return pool
 
     # Lavalink / Audio Settings
-    LAVALINK_HOST: str = os.getenv("LAVALINK_HOST", "").strip()
+    LAVALINK_HOST: str = os.getenv("LAVALINK_HOST", "kyoka-lavalink.onrender.com").strip()
     LAVALINK_PORT: int = int(os.getenv("LAVALINK_PORT", "443").strip() or 443)
     LAVALINK_SECURE: bool = os.getenv("LAVALINK_SECURE", "true").lower() in ("true", "1", "yes")
-    LAVALINK_IDENTIFIER: str = os.getenv("LAVALINK_IDENTIFIER", "lavalinkv4.serenetia.com").strip()
-    LAVALINK_PASSWORD: str = os.getenv("LAVALINK_PASSWORD", "https://dsc.gg/ajidevserver").strip()
+    LAVALINK_IDENTIFIER: str = os.getenv("LAVALINK_IDENTIFIER", "kyoka-lavalink-v4").strip()
+    LAVALINK_PASSWORD: str = os.getenv("LAVALINK_PASSWORD", "onlyforkyoka").strip()
 
     # If LAVALINK_HOST is set, dynamically build LAVALINK_URI; otherwise use LAVALINK_URI env var or default
     if LAVALINK_HOST:
         _scheme = "https" if LAVALINK_SECURE else "http"
         LAVALINK_URI: str = f"{_scheme}://{LAVALINK_HOST}:{LAVALINK_PORT}"
     else:
-        LAVALINK_URI: str = os.getenv("LAVALINK_URI", "https://lavalinkv4.serenetia.com:443").strip()
+        LAVALINK_URI: str = os.getenv("LAVALINK_URI", "https://kyoka-lavalink.onrender.com:443").strip()
 
-    LAVALINK_FALLBACK_URIS: str = os.getenv(
-        "LAVALINK_FALLBACK_URIS",
-        "https://lava-v4.millohost.my.id:443|https://discord.gg/mjS5J2K3ep,"
-        "http://lava2.kasawa.pro:2334|youshallnotpass,"
-        "http://lavalinkv4.serenetia.com:80|https://dsc.gg/ajidevserver,"
-        "https://lavalinkv4.serenetia.com:443|https://dsc.gg/ajidevserver"
+    LAVALINK_FALLBACK_URIS: str = (
+        os.getenv("LAVALINK_FALLBACK_URIS") if os.getenv("LAVALINK_FALLBACK_URIS") is not None
+        else ""
     ).strip()
-    LAVALINK_AUTO_DISCOVER: bool = os.getenv("LAVALINK_AUTO_DISCOVER", "1").lower() in ("1", "true", "yes")
+    LAVALINK_AUTO_DISCOVER: bool = os.getenv("LAVALINK_AUTO_DISCOVER", "false").lower() in ("1", "true", "yes")
     LAVALINK_PUBLIC_LIST_URL: str = os.getenv(
         "LAVALINK_PUBLIC_LIST_URL",
         "https://lavalink-list.ajieblogs.eu.org/All"

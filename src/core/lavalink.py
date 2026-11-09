@@ -42,24 +42,24 @@ logger = logging.getLogger("Kyoka.Lavalink")
 # Total request budget, TCP connect budget and socket-read budget for every
 # call made against the Lavalink REST API.
 LAVALINK_HTTP_TIMEOUT = aiohttp.ClientTimeout(
-    total=12.0,
-    connect=5.0,
-    sock_read=8.0,
+    total=20.0,
+    connect=8.0,
+    sock_read=15.0,
 )
 
 # Budget for a single player operation (skip / stop / move / close).
-LAVALINK_OP_TIMEOUT = 8.0
+LAVALINK_OP_TIMEOUT = 10.0
 
 # Budget for starting a track (play does a bit more work than skip).
-LAVALINK_PLAY_TIMEOUT = 12.0
+LAVALINK_PLAY_TIMEOUT = 15.0
 
 # Budget for the node websocket handshake (it shares the same session).
-LAVALINK_CONNECT_TIMEOUT = 10.0
+LAVALINK_CONNECT_TIMEOUT = 20.0
 
 # Overall budget for resolving a playable (search cascade across several
 # strategies). Without this a single unresolvable track could keep the caller
 # waiting for well over a minute.
-LAVALINK_RESOLVE_TIMEOUT = 25.0
+LAVALINK_RESOLVE_TIMEOUT = 30.0
 
 
 class LavalinkUnavailable(RuntimeError):
@@ -129,19 +129,23 @@ def create_lavalink_node(
     *,
     identifier: Optional[str] = None,
     inactive_player_timeout: int = 300,
-    retries: int = 1,
+    retries: int = 10,
+    resume_timeout: int = 120,
+    heartbeat: float = 15.0,
 ) -> wavelink.Node:
     """Create a Wavelink node whose HTTP transport can never block for minutes."""
     from src.core.config import Config
-    node_id = identifier or getattr(Config, "LAVALINK_IDENTIFIER", None) or "lavalinkv4.serenetia.com"
+    node_id = identifier or getattr(Config, "LAVALINK_IDENTIFIER", None) or "kyoka-lavalink-v4"
     session = aiohttp.ClientSession(timeout=LAVALINK_HTTP_TIMEOUT)
     return wavelink.Node(
         uri=uri,
         password=password,
         identifier=node_id,
         session=session,
+        heartbeat=heartbeat,
         inactive_player_timeout=inactive_player_timeout,
         retries=retries,
+        resume_timeout=resume_timeout,
     )
 
 
@@ -370,7 +374,7 @@ def _ws_url(uri: str) -> str:
 async def check_websocket(
     uri: str,
     password: str,
-    timeout: float = 8.0,
+    timeout: float = 12.0,
     user_id: Optional[str] = None,
 ) -> tuple[bool, str]:
     """
@@ -424,7 +428,7 @@ async def check_websocket(
 async def probe_candidate_node(
     uri: str,
     password: str,
-    timeout: float = 8.0,
+    timeout: float = 12.0,
     user_id: Optional[str] = None,
 ) -> tuple[bool, str]:
     """
@@ -532,6 +536,9 @@ async def connect_lavalink_node(
             def __init__(self, target: Any):
                 self._target = target
                 self.user = _UserAdapter()
+            def dispatch(self, event_name: str, *args: Any, **kwargs: Any) -> None:
+                if self._target is not None and hasattr(self._target, "dispatch"):
+                    self._target.dispatch(event_name, *args, **kwargs)
             def __getattr__(self, name: str) -> Any:
                 if self._target is not None:
                     return getattr(self._target, name)
