@@ -92,6 +92,17 @@ async def test_music_commands_structure():
     assert "prev" in prev_cmd.aliases
     assert "back" in prev_cmd.aliases
 
+    seek_cmd = cog.seek
+    assert seek_cmd is not None
+
+    filter_cmd = cog.filter
+    assert "filters" in filter_cmd.aliases
+    assert "fx" in filter_cmd.aliases
+
+    lyrics_cmd = cog.lyrics
+    assert "lyric" in lyrics_cmd.aliases
+    assert "ly" in lyrics_cmd.aliases
+
 
 @pytest.mark.asyncio
 async def test_track_failure_auto_recovery_and_debounce():

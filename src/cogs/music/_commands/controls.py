@@ -291,3 +291,332 @@ async def execute_stay(cog: Music, ctx: commands.Context) -> None:
     container.add_separator(divider=True)
     container.add_text(f"-# Requested by {ctx.author.display_name}")
     await send_container_response(ctx, container)
+
+
+def parse_time_to_seconds(time_str: str) -> int | None:
+    """Parse time string like 1:30, 02:45, 90, 90s, 2m30s into integer seconds."""
+    time_str = time_str.strip().lower()
+    if not time_str:
+        return None
+    import re
+    if ":" in time_str:
+        parts = time_str.split(":")
+        try:
+            if len(parts) == 2:
+                return int(parts[0]) * 60 + int(parts[1])
+            elif len(parts) == 3:
+                return int(parts[0]) * 3600 + int(parts[1]) * 60 + int(parts[2])
+        except ValueError:
+            return None
+    m_match = re.match(r"^(?:(\d+)h)?(?:(\d+)m)?(?:(\d+)s?)?$", time_str)
+    if m_match and any(m_match.groups()):
+        h = int(m_match.group(1) or 0)
+        m = int(m_match.group(2) or 0)
+        s = int(m_match.group(3) or 0)
+        return h * 3600 + m * 60 + s
+    if time_str.isdigit():
+        return int(time_str)
+    return None
+
+
+async def execute_seek(cog: Music, ctx: commands.Context, position: str) -> None:
+    """Seek to a specific timestamp in the current track."""
+    allowed, err = check_voice_channel(ctx)
+    if not allowed:
+        container = KyokaContainer(accent_color=None)
+        container.add_text(f"**{err}**")
+        await send_container_response(ctx, container)
+        return
+
+    player = cog.controller.get_player(ctx.guild.id)
+    if not player or not player.is_connected or not player.current or not player.voice_client:
+        container = KyokaContainer(accent_color=None)
+        container.add_text("**No track is currently playing.**")
+        await send_container_response(ctx, container)
+        return
+
+    track = player.current
+    if track.duration <= 0:
+        container = KyokaContainer(accent_color=None)
+        container.add_text("**Cannot seek in a live stream.**")
+        await send_container_response(ctx, container)
+        return
+
+    seconds = parse_time_to_seconds(position)
+    if seconds is None or seconds < 0:
+        container = KyokaContainer(accent_color=None)
+        container.add_text(
+            "**Invalid timestamp format.**\n> Usage: `?seek 1:30`, `?seek 90`, or `?seek 2m15s`"
+        )
+        await send_container_response(ctx, container)
+        return
+
+    if seconds > track.duration:
+        container = KyokaContainer(accent_color=None)
+        container.add_text(
+            f"**Timestamp exceeds track duration.**\n> Track duration: `{track.formatted_duration}`"
+        )
+        await send_container_response(ctx, container)
+        return
+
+    position_ms = seconds * 1000
+    try:
+        await player.voice_client.seek(position_ms)
+        await player.update_controller_message(force=True)
+    except Exception as e:
+        logger.warning(f"Seek error in guild {ctx.guild.id}: {e}")
+        container = KyokaContainer(accent_color=None)
+        container.add_text(f"**Failed to seek:** `{e}`")
+        await send_container_response(ctx, container)
+        return
+
+    # Formatted target position
+    m = seconds // 60
+    s = seconds % 60
+    formatted_pos = f"{m:02d}:{s:02d}"
+
+    container = KyokaContainer(accent_color=None)
+    container.add_section(
+        content=(
+            f"**⏩ Seeked to `{formatted_pos}` / `{track.formatted_duration}`**\n"
+            f"> [{track.title}]({track.url}) by `{track.author}`"
+        )
+    )
+    await send_container_response(ctx, container)
+
+
+async def execute_filter(cog: Music, ctx: commands.Context, filter_name: str) -> None:
+    """Apply audio filters (bassboost, nightcore, vaporwave, 8d, karaoke, tremolo, reset)."""
+    allowed, err = check_voice_channel(ctx)
+    if not allowed:
+        container = KyokaContainer(accent_color=None)
+        container.add_text(f"**{err}**")
+        await send_container_response(ctx, container)
+        return
+
+    player = cog.controller.get_player(ctx.guild.id)
+    if not player or not player.is_connected or not player.voice_client:
+        container = KyokaContainer(accent_color=None)
+        container.add_text("**No active music player found in this server.**")
+        await send_container_response(ctx, container)
+        return
+
+    import wavelink
+    mode = (filter_name or "help").strip().lower()
+
+    filters = wavelink.Filters()
+    filter_label = ""
+    filter_desc = ""
+
+    if mode in ("bassboost", "bb", "bass"):
+        filters.equalizer.set(bands=[
+            {"band": 0, "gain": 0.35},
+            {"band": 1, "gain": 0.30},
+            {"band": 2, "gain": 0.25},
+            {"band": 3, "gain": 0.15},
+            {"band": 4, "gain": 0.10},
+        ])
+        filter_label = "🔊 Bass Boost (High Output)"
+        filter_desc = "Low-end frequencies boosted by +35% for deep sub-bass punch."
+        player.active_filter = "bassboost"
+
+    elif mode in ("nightcore", "nc"):
+        filters.timescale.set(speed=1.25, pitch=1.25, rate=1.0)
+        filter_label = "⚡ Nightcore"
+        filter_desc = "Speed and pitch increased by 1.25x for energetic high-tempo playback."
+        player.active_filter = "nightcore"
+
+    elif mode in ("vaporwave", "slowed", "slowed+reverb", "vw"):
+        filters.timescale.set(speed=0.85, pitch=0.85, rate=1.0)
+        filter_label = "🌊 Vaporwave / Slowed"
+        filter_desc = "Speed and pitch lowered by 0.85x for aesthetic, relaxed vibes."
+        player.active_filter = "vaporwave"
+
+    elif mode in ("8d", "3d", "spatial", "rotation"):
+        filters.rotation.set(rotation_hz=0.2)
+        filter_label = "🎧 8D Spatial Audio"
+        filter_desc = "Surround sound rotating around your headphones at 0.2Hz."
+        player.active_filter = "8d"
+
+    elif mode in ("karaoke", "vocal"):
+        filters.karaoke.set(level=1.0, mono_level=1.0, filter_band=220.0, filter_width=100.0)
+        filter_label = "🎤 Karaoke Mode"
+        filter_desc = "Center vocal frequencies suppressed for sing-along audio."
+        player.active_filter = "karaoke"
+
+    elif mode in ("tremolo", "vibrato"):
+        filters.tremolo.set(frequency=4.0, depth=0.75)
+        filter_label = "〰️ Tremolo Pulse"
+        filter_desc = "Pulsing audio amplitude modulation at 4Hz."
+        player.active_filter = "tremolo"
+
+    elif mode in ("reset", "off", "clear", "flat", "none"):
+        filters.reset()
+        filter_label = "✨ Studio Flat (Reset)"
+        filter_desc = "All audio DSP effects cleared. Bit-perfect lossless playback restored."
+        player.active_filter = None
+
+    else:
+        # Help card
+        container = KyokaContainer(accent_color=None)
+        container.add_section(
+            content=(
+                "**🎛️ Audio DSP Filters & Effects**\n"
+                "> Select an audio preset to transform your sound stream:\n\n"
+                "• `?filter bassboost` — Heavy deep bass boost\n"
+                "• `?filter nightcore` — High-tempo 1.25x speed & pitch\n"
+                "• `?filter vaporwave` — Slowed aesthetic 0.85x tempo\n"
+                "• `?filter 8d` — Rotating 3D spatial surround sound\n"
+                "• `?filter karaoke` — Center channel vocal suppression\n"
+                "• `?filter tremolo` — Rapid amplitude pulsing effect\n"
+                "• `?filter reset` — Clear all effects and restore flat studio sound"
+            )
+        )
+        await send_container_response(ctx, container)
+        return
+
+    try:
+        await player.voice_client.set_filters(filters)
+    except Exception as e:
+        logger.warning(f"Filter error in guild {ctx.guild.id}: {e}")
+        container = KyokaContainer(accent_color=None)
+        container.add_text(f"**Failed to apply filter:** `{e}`")
+        await send_container_response(ctx, container)
+        return
+
+    container = KyokaContainer(accent_color=None)
+    container.add_section(
+        content=(
+            f"**{filter_label}**\n"
+            f"> {filter_desc}\n"
+            f"> Applied to active player by `{ctx.author.display_name}`."
+        )
+    )
+    await send_container_response(ctx, container)
+
+
+async def execute_lyrics(cog: Music, ctx: commands.Context, query: Optional[str] = None) -> None:
+    """Fetch and display synchronized or plain song lyrics."""
+    player = cog.controller.get_player(ctx.guild.id) if ctx.guild else None
+
+    search_title = (query or "").strip()
+    search_artist = ""
+
+    if not search_title:
+        if player and player.current:
+            search_title = player.current.title
+            search_artist = player.current.author or ""
+        else:
+            container = KyokaContainer(accent_color=None)
+            container.add_text(
+                "**No song is currently playing.**\n> Usage: `?lyrics <song name>`"
+            )
+            await send_container_response(ctx, container)
+            return
+
+    # Clean title (remove brackets, ft., 8D audio noise)
+    import html
+    import urllib.parse
+    import aiohttp
+    import re
+    from src.cogs.music._extractor import clean_track_title
+
+    clean_target = clean_track_title(search_title)
+    clean_target = re.sub(r"\b(?:official\s+video|lyrics?|audio)\b", "", clean_target, flags=re.IGNORECASE).strip()
+
+    search_container = KyokaContainer(accent_color=None)
+    search_container.add_text(f"**Searching lyrics for:** `{clean_target}`...")
+    status_msg = await send_container_response(ctx, search_container)
+
+    lyrics_text: Optional[str] = None
+    track_name_found = clean_target
+    artist_name_found = search_artist
+
+    try:
+        headers = {"User-Agent": "KyokaDiscordBot/3.0 (+https://github.com/ruthupavangoud2009-cmd/aizen-bot)"}
+        async with aiohttp.ClientSession(headers=headers) as session:
+            # 1. Try exact match if artist is known
+            if search_artist and "topic" not in search_artist.lower() and "artist" != search_artist.lower():
+                enc_t = urllib.parse.quote(clean_target)
+                enc_a = urllib.parse.quote(search_artist)
+                exact_url = f"https://lrclib.net/api/get?track_name={enc_t}&artist_name={enc_a}"
+                try:
+                    async with session.get(exact_url, timeout=aiohttp.ClientTimeout(total=4)) as r:
+                        if r.status == 200:
+                            data = await r.json()
+                            raw_ly = data.get("plainLyrics") or data.get("syncedLyrics")
+                            if raw_ly:
+                                lyrics_text = raw_ly
+                                track_name_found = data.get("trackName") or clean_target
+                                artist_name_found = data.get("artistName") or search_artist
+                except Exception:
+                    pass
+
+            # 2. General search query fallback
+            if not lyrics_text:
+                q_enc = urllib.parse.quote(clean_target)
+                search_url = f"https://lrclib.net/api/search?q={q_enc}"
+                try:
+                    async with session.get(search_url, timeout=aiohttp.ClientTimeout(total=5)) as r2:
+                        if r2.status == 200:
+                            results = await r2.json()
+                            if results and isinstance(results, list):
+                                for item in results[:5]:
+                                    raw_ly = item.get("plainLyrics") or item.get("syncedLyrics")
+                                    if raw_ly:
+                                        lyrics_text = raw_ly
+                                        track_name_found = item.get("trackName") or clean_target
+                                        artist_name_found = item.get("artistName") or ""
+                                        break
+                except Exception:
+                    pass
+    except Exception as e:
+        logger.debug(f"Lyrics lookup error: {e}")
+
+    if not lyrics_text:
+        err_c = KyokaContainer(accent_color=None)
+        err_c.add_section(
+            content=(
+                f"**Lyrics Not Found**\n"
+                f"> Could not find lyrics for `{clean_target}`.\n"
+                f"> Try searching with both title and artist: `?lyrics <title> <artist>`"
+            )
+        )
+        if status_msg:
+            try:
+                from src.utils.containers import edit_container_response
+                await edit_container_response(status_msg, err_c)
+                return
+            except Exception:
+                pass
+        await send_container_response(ctx, err_c)
+        return
+
+    # Strip synced timestamps if mostly synced [00:12.34]
+    clean_lyrics = re.sub(r"\[\d{2}:\d{2}\.\d{2,3}\]", "", lyrics_text).strip()
+
+    # Truncate to Discord embed limit (3800 chars)
+    if len(clean_lyrics) > 3800:
+        clean_lyrics = clean_lyrics[:3750] + "\n\n... *(lyrics truncated due to length)*"
+
+    result_c = KyokaContainer(accent_color=None)
+    header = f"**Lyrics: {track_name_found}**"
+    if artist_name_found:
+        header += f" — *{artist_name_found}*"
+    result_c.add_section(
+        content=(
+            f"{header}\n\n"
+            f"```text\n{clean_lyrics}\n```"
+        )
+    )
+    result_c.add_separator(divider=True)
+    result_c.add_text(f"-# Requested by {ctx.author.display_name}")
+
+    if status_msg:
+        try:
+            from src.utils.containers import edit_container_response
+            await edit_container_response(status_msg, result_c)
+            return
+        except Exception:
+            pass
+    await send_container_response(ctx, result_c)

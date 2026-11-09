@@ -171,3 +171,45 @@ def test_youtube_and_spotify_url_handling():
 
     m2 = YOUTUBE_URL_REGEX.search("https://youtu.be/dQw4w9WgXcQ?si=abc123xyz")
     assert m2 is not None and m2.group(1) == "dQw4w9WgXcQ"
+
+
+def test_parse_time_to_seconds():
+    """Verify parse_time_to_seconds handles mm:ss, hh:mm:ss, integer seconds, and human durations."""
+    from src.cogs.music._commands.controls import parse_time_to_seconds
+
+    assert parse_time_to_seconds("1:30") == 90
+    assert parse_time_to_seconds("02:45") == 165
+    assert parse_time_to_seconds("1:10:20") == 4220
+    assert parse_time_to_seconds("90") == 90
+    assert parse_time_to_seconds("90s") == 90
+    assert parse_time_to_seconds("2m30s") == 150
+    assert parse_time_to_seconds("1h5m") == 3900
+    assert parse_time_to_seconds("invalid") is None
+    assert parse_time_to_seconds("") is None
+
+
+def test_wavelink_filters_integration():
+    """Verify that Wavelink filter objects configure timescale, rotation, and equalizer payloads properly."""
+    import wavelink
+
+    # Nightcore
+    f_nc = wavelink.Filters()
+    f_nc.timescale.set(speed=1.25, pitch=1.25)
+    assert f_nc.timescale.payload == {"speed": 1.25, "pitch": 1.25}
+
+    # Vaporwave
+    f_vw = wavelink.Filters()
+    f_vw.timescale.set(speed=0.85, pitch=0.85)
+    assert f_vw.timescale.payload == {"speed": 0.85, "pitch": 0.85}
+
+    # 8D Spatial Audio
+    f_8d = wavelink.Filters()
+    f_8d.rotation.set(rotation_hz=0.2)
+    assert f_8d.rotation.payload == {"rotationHz": 0.2}
+
+    # Bass Boost
+    f_bb = wavelink.Filters()
+    f_bb.equalizer.set(bands=[{"band": 0, "gain": 0.35}, {"band": 1, "gain": 0.30}])
+    eq_payload = f_bb.equalizer.payload
+    assert eq_payload[0]["gain"] == 0.35
+    assert eq_payload[1]["gain"] == 0.30

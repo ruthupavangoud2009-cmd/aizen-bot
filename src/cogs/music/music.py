@@ -30,6 +30,9 @@ from src.cogs.music._commands.controls import (
     execute_remove,
     execute_jump,
     execute_stay,
+    execute_seek,
+    execute_filter,
+    execute_lyrics,
 )
 from src.cogs.music._commands.playlist import handle_playlist, handle_like, handle_unlike
 
@@ -839,6 +842,86 @@ class Music(commands.Cog):
         if not has_perm:
             return await ctx.send("⛔ You need `Manage Server` permission (or Bot Staff) to toggle 24/7 mode.", delete_after=6)
         await execute_stay(self, ctx)
+
+    @commands.hybrid_command(
+        name="seek",
+        description="Seek to a specific timestamp in the currently playing track (e.g. 1:30 or 90s).",
+    )
+    @app_commands.describe(position="Timestamp to seek to (e.g. 1:30, 90, 2m15s)")
+    async def seek(self, ctx: CustomContext, *, position: str) -> None:
+        """Seek to a specific timestamp in the current track."""
+        if ctx.interaction and not ctx.interaction.response.is_done():
+            await ctx.interaction.response.defer()
+        await execute_seek(self, ctx, position)
+
+    @commands.hybrid_command(
+        name="filter",
+        aliases=["filters", "fx"],
+        description="Transform music playback with studio audio filters (bassboost, nightcore, 8d, vaporwave, etc).",
+    )
+    @app_commands.describe(name="Filter preset: bassboost, nightcore, vaporwave, 8d, karaoke, tremolo, reset")
+    async def filter(self, ctx: CustomContext, *, name: Optional[str] = "help") -> None:
+        """Apply an audio DSP filter."""
+        if ctx.interaction and not ctx.interaction.response.is_done():
+            await ctx.interaction.response.defer()
+        await execute_filter(self, ctx, name or "help")
+
+    @commands.command(
+        name="bassboost",
+        aliases=["bb"],
+        description="Boost sub-bass frequencies by +35% for heavy bass output.",
+    )
+    async def bassboost(self, ctx: CustomContext) -> None:
+        """Apply heavy bass boost."""
+        await execute_filter(self, ctx, "bassboost")
+
+    @commands.command(
+        name="nightcore",
+        aliases=["nc"],
+        description="Speed up tempo and pitch by 1.25x for energetic nightcore sound.",
+    )
+    async def nightcore(self, ctx: CustomContext) -> None:
+        """Apply nightcore filter."""
+        await execute_filter(self, ctx, "nightcore")
+
+    @commands.command(
+        name="vaporwave",
+        aliases=["slowed"],
+        description="Slow down tempo and pitch by 0.85x for relaxed aesthetic sound.",
+    )
+    async def vaporwave(self, ctx: CustomContext) -> None:
+        """Apply vaporwave / slowed filter."""
+        await execute_filter(self, ctx, "vaporwave")
+
+    @commands.command(
+        name="8d",
+        aliases=["3d", "spatial"],
+        description="Apply rotating 3D surround sound audio effect.",
+    )
+    async def filter_8d(self, ctx: CustomContext) -> None:
+        """Apply 8D spatial rotation."""
+        await execute_filter(self, ctx, "8d")
+
+    @commands.command(
+        name="resetfilters",
+        aliases=["rf", "filterreset", "clearfilters"],
+        description="Clear all active audio filters and restore bit-perfect flat audio.",
+    )
+    async def resetfilters(self, ctx: CustomContext) -> None:
+        """Reset all active audio filters."""
+        await execute_filter(self, ctx, "reset")
+
+    @commands.hybrid_command(
+        name="lyrics",
+        aliases=["lyric", "ly"],
+        description="Fetch and display synchronized or plain lyrics for the current song or search query.",
+    )
+    @app_commands.describe(query="Song title and optional artist name (leave blank for playing song)")
+    async def lyrics(self, ctx: CustomContext, *, query: Optional[str] = None) -> None:
+        """View song lyrics."""
+        if ctx.interaction and not ctx.interaction.response.is_done():
+            await ctx.interaction.response.defer()
+        await execute_lyrics(self, ctx, query=query)
 
     async def play_halloween_theme(self, ctx: CustomContext, selection: Optional[str] = None) -> None:
         """Launch 24/7 continuous spooky Halloween theme music in the caller's voice channel."""
