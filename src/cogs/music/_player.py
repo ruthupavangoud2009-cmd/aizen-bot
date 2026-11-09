@@ -188,6 +188,7 @@ class GuildPlayer:
         # Playback state
         self.queue: List[Track] = []
         self.current: Optional[Track] = None
+        self.history: List[Track] = []
         self.volume: float = 1.0  # Normalized (1.0 = 100%)
         self.loop_mode: str = "off"  # "off", "track", "queue"
         self.smart_autoplay: bool = False
@@ -590,6 +591,11 @@ class GuildPlayer:
                 self.schedule_empty_vc_timer()
             return
 
+        if self.current and getattr(self.current, "title", None) != getattr(track, "title", None):
+            self.history.append(self.current)
+            if len(self.history) > 25:
+                self.history.pop(0)
+
         self.current = track
         self.autoplay_history.add(track.title.lower())
         self._was_paused_for_empty_vc = False
@@ -876,6 +882,17 @@ class GuildPlayer:
             self._was_paused_for_empty_vc = False
             return True
         return False
+
+    async def previous(self) -> Optional[Track]:
+        """Replay the previously played track from history."""
+        if not self.history:
+            return None
+        prev_track = self.history.pop()
+        if self.current:
+            async with self._queue_lock:
+                self.queue.insert(0, self.current)
+        await self.play_track(prev_track)
+        return prev_track
 
     async def skip(self) -> None:
         """

@@ -50,3 +50,43 @@ async def test_live_lavalink_connectivity_and_probe():
         assert healthy is True, "Dedicated Lavalink node did not pass the health probe"
     except Exception as exc:
         pytest.fail(f"Failed to probe dedicated Lavalink node: {exc}")
+
+
+@pytest.mark.asyncio
+async def test_live_youtube_track_resolution():
+    """Verify that YouTube search and track resolution works through the dedicated Lavalink node."""
+    import aiohttp
+    async with aiohttp.ClientSession() as session:
+        headers = {"Authorization": Config.LAVALINK_PASSWORD}
+        url = f"{Config.LAVALINK_URI}/v4/loadtracks?identifier=ytsearch:test"
+        async with session.get(url, headers=headers, timeout=aiohttp.ClientTimeout(total=15.0)) as resp:
+            assert resp.status == 200
+            data = await resp.json()
+            assert data.get("loadType") in ("search", "track", "playlist")
+            assert len(data.get("data", [])) > 0
+
+
+@pytest.mark.asyncio
+async def test_music_commands_structure():
+    """Verify play, previous, nowplaying, and stop command aliases."""
+    from src.cogs.music.music import Music
+    from unittest.mock import MagicMock
+    mock_bot = MagicMock()
+    cog = Music(mock_bot)
+    cog.agent.cog_unload()
+
+    play_cmd = cog.play
+    assert "search" in play_cmd.aliases
+    assert "p" in play_cmd.aliases
+
+    stop_cmd = cog.stop
+    assert "disconnect" in stop_cmd.aliases
+    assert "leave" in stop_cmd.aliases
+
+    np_cmd = cog.nowplaying
+    assert "np" in np_cmd.aliases
+
+    prev_cmd = cog.previous
+    assert "prev" in prev_cmd.aliases
+    assert "back" in prev_cmd.aliases
+

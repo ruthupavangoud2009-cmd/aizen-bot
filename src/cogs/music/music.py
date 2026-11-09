@@ -561,7 +561,7 @@ class Music(commands.Cog):
 
     @commands.hybrid_command(
         name="play",
-        aliases=["p"],
+        aliases=["p", "search"],
         description="Play high-fidelity music tracks directly in your voice channel.",
     )
     @app_commands.describe(query="Song title, artist name, Spotify or YouTube URL")
@@ -610,8 +610,32 @@ class Music(commands.Cog):
         await execute_skip(self, ctx)
 
     @commands.hybrid_command(
+        name="previous",
+        aliases=["prev", "back"],
+        description="Replay the previous track from history.",
+    )
+    async def previous(self, ctx: CustomContext) -> None:
+        """Replay the previously played song."""
+        if not ctx.guild:
+            return
+        player = self.controller.get_player(ctx.guild.id)
+        if not player or not player.is_connected:
+            container = KyokaContainer(accent_color=None)
+            container.add_text("⚠️ **Not connected to any voice channel.**")
+            return await send_container_response(ctx, container)
+        if not getattr(player, "history", None):
+            container = KyokaContainer(accent_color=None)
+            container.add_text("⏮️ **No previous tracks in history.**")
+            return await send_container_response(ctx, container)
+        prev_track = await player.previous()
+        if prev_track:
+            container = KyokaContainer(accent_color=None)
+            container.add_text(f"⏮️ **Playing previous track:** `{prev_track.title}`")
+            await send_container_response(ctx, container)
+
+    @commands.hybrid_command(
         name="stop",
-        aliases=["disconnect", "dc"],
+        aliases=["disconnect", "dc", "leave"],
         description="Stop playback, clear queue, and disconnect from voice.",
     )
     async def stop(self, ctx: CustomContext) -> None:
@@ -630,7 +654,7 @@ class Music(commands.Cog):
 
     @commands.hybrid_command(
         name="nowplaying",
-        aliases=["now", "playing"],
+        aliases=["np", "now", "playing"],
         description="Display the currently playing song with interactive controls.",
     )
     async def nowplaying(self, ctx: CustomContext) -> None:
