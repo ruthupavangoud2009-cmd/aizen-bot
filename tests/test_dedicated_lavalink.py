@@ -58,7 +58,8 @@ async def test_live_youtube_track_resolution():
     import aiohttp
     async with aiohttp.ClientSession() as session:
         headers = {"Authorization": Config.LAVALINK_PASSWORD}
-        url = f"{Config.LAVALINK_URI}/v4/loadtracks?identifier=ytsearch:test"
+        # YouTube Music search is the primary high-fidelity search engine on Lavalink v4
+        url = f"{Config.LAVALINK_URI}/v4/loadtracks?identifier=ytmsearch:test"
         async with session.get(url, headers=headers, timeout=aiohttp.ClientTimeout(total=15.0)) as resp:
             assert resp.status == 200
             data = await resp.json()

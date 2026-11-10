@@ -161,7 +161,7 @@ class MusicAgent:
                 logger.error(f"MusicAgent: Error healing voice session for guild {guild_id}: {e}", exc_info=True)
                 return False, str(e)
 
-    async def heal_node(self, force: bool = False) -> tuple[bool, str]:
+    async def heal_node(self, force: bool = False, failed_uri: Optional[str] = None) -> tuple[bool, str]:
         """
         Anti-Thundering-Herd Single-Flight Node Reconnector.
         If 1,000 servers detect a node drop simultaneously, only ONE task connects,
@@ -180,7 +180,7 @@ class MusicAgent:
         # such a node is exactly what makes the music commands time out.
         try:
             current_node = wavelink.Pool.get_node()
-            if current_node and current_node.status == wavelink.NodeStatus.CONNECTED:
+            if not force and current_node and current_node.status == wavelink.NodeStatus.CONNECTED:
                 if await probe_node(current_node):
                     return True, "Lavalink node is healthy and connected."
                 logger.warning(
@@ -238,6 +238,15 @@ class MusicAgent:
                             "autoplay": getattr(plyr, "autoplay", False),
                         })
 
+                # Determine if current node failed during playback to route to cluster alternative
+                active_node_uri = None
+                try:
+                    cur = wavelink.Pool.get_node()
+                    if cur:
+                        active_node_uri = getattr(cur, "uri", None)
+                except Exception:
+                    pass
+
                 # Close dead sockets in the pool.
                 await close_pool_nodes()
 
@@ -245,6 +254,7 @@ class MusicAgent:
                 new_node = await connect_lavalink_node(
                     self.bot,
                     inactive_player_timeout=300,
+                    exclude_uri=(failed_uri or active_node_uri) if force else None,
                 )
 
                 self._metrics["node_reconnects"] += 1

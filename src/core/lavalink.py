@@ -103,7 +103,11 @@ def candidates() -> list[tuple[str, str]]:
     primary = (getattr(Config, "LAVALINK_URI", "") or "").strip()
     password = getattr(Config, "LAVALINK_PASSWORD", "onlyforkyoka") or "onlyforkyoka"
     if primary:
-        result.append((primary, password))
+        if "|" in primary:
+            p_uri, p_pw = primary.split("|", 1)
+            result.append((p_uri.strip(), p_pw.strip() or password))
+        else:
+            result.append((primary, password))
 
     fallback_str = getattr(Config, "LAVALINK_FALLBACK_URIS", "") or ""
     for raw in fallback_str.split(","):
@@ -548,11 +552,18 @@ async def probe_candidate_node(
         return False, err_text(e)
 
 
+RESILIENT_CLUSTER_NODES: list[tuple[str, str]] = [
+    ("https://lavalinkv4.serenetia.com:443", "https://seretia.link/discord"),
+    ("https://lava-v4.millohost.my.id:443", "https://discord.gg/mjS5J2K3ep"),
+]
+
+
 async def connect_lavalink_node(
     bot: Optional["discord.Client"] = None,
     *,
     inactive_player_timeout: int = 300,
     allow_discovery: bool = True,
+    exclude_uri: Optional[str] = None,
 ) -> wavelink.Node:
     """
     Connect to the first reachable Lavalink node.
@@ -598,6 +609,9 @@ async def connect_lavalink_node(
     tried: set[str] = set()
 
     async def _try(uri: str, password: str) -> Optional[wavelink.Node]:
+        if exclude_uri and uri.rstrip("/") == exclude_uri.rstrip("/"):
+            logger.info(f"Skipping failing node {uri} during cluster failover")
+            return None
         if uri in tried:
             return None
         tried.add(uri)
@@ -654,7 +668,14 @@ async def connect_lavalink_node(
         if node is not None:
             return node
 
-    # 3: community directory - only when it is enabled and no configured node worked
+    # 3: Resilient cluster nodes (Failover when primary is down or blocked)
+    for fb_uri, fb_pw in RESILIENT_CLUSTER_NODES:
+        node = await _try(fb_uri, fb_pw)
+        if node is not None:
+            logger.info(f"MusicAgent: Connected to resilient fallback cluster node {fb_uri}")
+            return node
+
+    # 4: community directory - only when it is enabled and no configured node worked
     if allow_discovery and getattr(Config, "LAVALINK_AUTO_DISCOVER", True):
         discovered_nodes = await discover_working_nodes()
         for disc_uri, disc_pw in discovered_nodes:

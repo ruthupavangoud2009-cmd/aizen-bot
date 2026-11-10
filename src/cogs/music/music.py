@@ -173,6 +173,13 @@ class Music(commands.Cog):
         if player_obj and player_obj.guild:
             player = self.controller.get_player(player_obj.guild.id)
             if player and hasattr(player, "on_track_end"):
+                if player.current is None and track:
+                    from src.cogs.music._models import Track
+                    player.current = Track(
+                        title=getattr(track, "title", "Track") or "Track",
+                        author=getattr(track, "author", "Artist") or "Artist",
+                        url=getattr(track, "uri", ""),
+                    )
                 await player.on_track_end(reason="loadFailed")
 
     @commands.Cog.listener()
@@ -232,6 +239,15 @@ class Music(commands.Cog):
             return
         player = self.controller.get_player(player_obj.guild.id)
         if player and hasattr(player, "on_track_end"):
+            if str(reason).lower() in ("loadfailed", "load_failed", "error") and player.current is None:
+                track = getattr(payload, "track", None)
+                if track:
+                    from src.cogs.music._models import Track
+                    player.current = Track(
+                        title=getattr(track, "title", "Track") or "Track",
+                        author=getattr(track, "author", "Artist") or "Artist",
+                        url=getattr(track, "uri", ""),
+                    )
             await player.on_track_end(reason=str(reason))
 
     @commands.Cog.listener()

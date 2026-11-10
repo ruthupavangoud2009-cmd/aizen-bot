@@ -597,6 +597,7 @@ class GuildPlayer:
                 self.history.pop(0)
 
         self.current = track
+        self._last_played_track = track
         self.autoplay_history.add(track.title.lower())
         self._was_paused_for_empty_vc = False
         self.cancel_empty_vc_timer(auto_resume=False)
@@ -1056,7 +1057,7 @@ class GuildPlayer:
                 return
             self._last_failure_advance_time = now
 
-            failed_track = self.current
+            failed_track = self.current or getattr(self, "_last_played_track", None)
             failed_title = failed_track.title if failed_track else "track"
             logger.warning(f"Guild {self.guild.id}: Lavalink reported track {reason} for '{failed_title}'.")
 
@@ -1066,7 +1067,32 @@ class GuildPlayer:
                 logger.info(f"Guild {self.guild.id}: Proactively attempting alternative stream recovery for '{failed_title}'...")
                 query_fallback = f"{failed_track.title} {failed_track.author}".strip() or getattr(failed_track, "query", "")
                 recovered_playable = None
-                # Stage 1: Official YouTube Music Search
+
+                # Stage 1: Direct JioSaavn 320kbps CD-Quality Stream (Unblocked High-Speed CDN)
+                if not recovered_playable:
+                    try:
+                        from src.cogs.music._extractor import NativeExtractor
+                        js_t = await asyncio.wait_for(
+                            NativeExtractor._extract_jiosaavn(
+                                query_fallback or failed_title,
+                                requester=getattr(failed_track, "requester", "DJ"),
+                                is_autoplay=getattr(failed_track, "is_autoplay", False),
+                            ),
+                            timeout=5.0,
+                        )
+                        if js_t and js_t.stream_url:
+                            js_res = await asyncio.wait_for(
+                                wavelink.Playable.search(js_t.stream_url),
+                                timeout=6.0,
+                            )
+                            if js_res:
+                                recovered_playable = js_res[0] if isinstance(js_res, list) else js_res.tracks[0]
+                                failed_track.stream_url = js_t.stream_url
+                                logger.info(f"Guild {self.guild.id}: Recovered '{failed_title}' via JioSaavn 320kbps CDN stream.")
+                    except Exception as js_err:
+                        logger.debug(f"Recovery JioSaavn notice: {js_err}")
+
+                # Stage 2: Official YouTube Music Search
                 if not recovered_playable:
                     try:
                         from src.cogs.music._extractor import select_best_playable
@@ -1076,13 +1102,13 @@ class GuildPlayer:
                         )
                         top = select_best_playable(res, query_fallback or failed_title)
                         failed_id = getattr(getattr(failed_track, "_playable", None), "identifier", None)
-                        if top and getattr(top, "identifier", None) != failed_id:
+                        if top and (getattr(top, "identifier", None) != failed_id or str(getattr(top, "source", "")).lower() != "youtube"):
                             recovered_playable = top
                             logger.info(f"Guild {self.guild.id}: Recovered '{failed_title}' via official YouTube Music stream.")
                     except Exception as ytm_err:
                         logger.debug(f"Recovery YouTube Music notice: {ytm_err}")
 
-                # Stage 2: Standard YouTube Search
+                # Stage 3: Standard YouTube Search
                 if not recovered_playable:
                     try:
                         from src.cogs.music._extractor import select_best_playable
@@ -1098,7 +1124,7 @@ class GuildPlayer:
                     except Exception as yt_err:
                         logger.debug(f"Recovery YouTube notice: {yt_err}")
 
-                # Stage 3: SoundCloud Direct Engine
+                # Stage 4: SoundCloud Direct Engine
                 if not recovered_playable:
                     try:
                         from src.cogs.music._extractor import NativeExtractor
@@ -1121,6 +1147,37 @@ class GuildPlayer:
                                 logger.info(f"Guild {self.guild.id}: Recovered '{failed_title}' via SoundCloud Direct Engine.")
                     except Exception as sc_err:
                         logger.debug(f"Recovery SoundCloud notice: {sc_err}")
+
+                # Stage 5: Lavalink Cluster Failover (If current node is blocked or failing)
+                if not recovered_playable:
+                    agent = getattr(self.bot, "_music_agent", None)
+                    if agent:
+                        try:
+                            current_node_uri = None
+                            try:
+                                c_node = wavelink.Pool.get_node()
+                                if c_node:
+                                    current_node_uri = getattr(c_node, "uri", None)
+                            except Exception:
+                                pass
+                            logger.warning(f"Guild {self.guild.id}: Playback failure on node. Triggering cluster failover (failed_node={current_node_uri})...")
+                            healed, _ = await agent.heal_node(force=True, failed_uri=current_node_uri)
+                            if healed:
+                                for src in (wavelink.TrackSource.YouTubeMusic, wavelink.TrackSource.YouTube):
+                                    try:
+                                        res = await asyncio.wait_for(
+                                            wavelink.Playable.search(query_fallback or failed_title, source=src),
+                                            timeout=6.0,
+                                        )
+                                        from src.cogs.music._extractor import select_best_playable
+                                        top = select_best_playable(res, query_fallback or failed_title)
+                                        if top:
+                                            recovered_playable = top
+                                            break
+                                    except Exception:
+                                        pass
+                        except Exception as h_err:
+                            logger.debug(f"Node failover recovery notice: {h_err}")
 
                 if recovered_playable:
                     logger.info(f"Guild {self.guild.id}: Stream recovery SUCCESS for '{failed_title}' (id={getattr(recovered_playable, 'identifier', '')}). Resuming playback...")
