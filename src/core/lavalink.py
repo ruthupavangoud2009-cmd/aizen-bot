@@ -448,8 +448,9 @@ async def check_websocket(
                     return False, "websocket closed before sending 'ready'"
                 try:
                     payload = json.loads(msg.data)
-                    if payload.get("op") != "ready":
-                        return False, f"websocket sent '{payload.get('op')}' instead of 'ready'"
+                    op = payload.get("op")
+                    if op not in ("ready", "stats", "event", "playerUpdate"):
+                        return False, f"websocket sent unexpected '{op}'"
                 except Exception:
                     pass
                 return True, "websocket handshake and ready ok"

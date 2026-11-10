@@ -581,8 +581,12 @@ class NativeExtractor:
                 spotify_title = await asyncio.wait_for(cls._fetch_spotify_title(sp_url), timeout=8.0)
                 if spotify_title:
                     search_target = spotify_title
+                else:
+                    logger.warning(f"Could not resolve Spotify metadata for '{sp_url}'.")
+                    return None
             except Exception as e:
                 logger.debug(f"Spotify metadata fetch notice: {e}")
+                return None
 
         # Smart canonical query discovery: for bare search terms without known artists or URLs,
         # resolve the official track & primary artist from YouTube public index in ~0.2s.
@@ -813,7 +817,12 @@ class NativeExtractor:
                             has_user_keyword = any(kw in query.lower() for kw in UNWANTED_VERSION_KEYWORDS)
 
                             for sc, cand in scored1:
-                                if sc < 0 and not has_user_keyword:
+                                if sc < 40.0 and not has_user_keyword:
+                                    continue
+                                # Double-check that candidate title has real token overlap with query
+                                cand_title_low = (cand.get("title") or "").lower()
+                                q_tokens_chk = [w for w in re.findall(r"\w{2,}", query.lower()) if w not in {"the", "and", "song", "audio", "music"}]
+                                if q_tokens_chk and not any(tok in cand_title_low for tok in q_tokens_chk):
                                     continue
                                 pid = cand.get("id")
                                 if not pid:
@@ -877,7 +886,11 @@ class NativeExtractor:
                             has_user_keyword = any(kw in query.lower() for kw in UNWANTED_VERSION_KEYWORDS)
 
                             for sc, song in scored_res:
-                                if sc < 0 and not has_user_keyword:
+                                if sc < 40.0 and not has_user_keyword:
+                                    continue
+                                s_title_chk = (song.get("title") or song.get("song") or "").lower()
+                                q_tokens_chk = [w for w in re.findall(r"\w{2,}", query.lower()) if w not in {"the", "and", "song", "audio", "music"}]
+                                if q_tokens_chk and not any(tok in s_title_chk for tok in q_tokens_chk):
                                     continue
                                 trk = cls._build_saavn_track(song, requester, is_autoplay, query)
                                 if trk:

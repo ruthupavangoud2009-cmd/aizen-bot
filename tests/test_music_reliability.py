@@ -213,3 +213,86 @@ def test_wavelink_filters_integration():
     eq_payload = f_bb.equalizer.payload
     assert eq_payload[0]["gain"] == 0.35
     assert eq_payload[1]["gain"] == 0.30
+
+
+@pytest.mark.asyncio
+async def test_lavalink_websocket_check_accepts_stats_and_ready_opcodes():
+    """Verify check_websocket accepts both 'ready' and 'stats' opcodes without false-failing the node."""
+    import aiohttp
+    import json
+    from src.core.lavalink import check_websocket
+
+    class FakeWS:
+        def __init__(self, op_name: str):
+            self.op_name = op_name
+            self.closed = False
+
+        async def receive(self):
+            class Msg:
+                type = aiohttp.WSMsgType.TEXT
+                data = json.dumps({"op": self.op_name, "players": 0})
+            return Msg()
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, exc_type, exc_val, exc_tb):
+            self.closed = True
+
+    class FakeSession:
+        def __init__(self, op_name: str):
+            self.op_name = op_name
+
+        def ws_connect(self, *args, **kwargs):
+            return FakeWS(self.op_name)
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, exc_type, exc_val, exc_tb):
+            pass
+
+    # Op 'ready' must succeed
+    with patch("aiohttp.ClientSession", return_value=FakeSession("ready")):
+        ok, reason = await check_websocket("http://localhost:2333", "pass")
+        assert ok is True, f"Ready op must be accepted: {reason}"
+
+    # Op 'stats' must also succeed (does not falsely reject connected node)
+    with patch("aiohttp.ClientSession", return_value=FakeSession("stats")):
+        ok, reason = await check_websocket("http://localhost:2333", "pass")
+        assert ok is True, f"Stats op must be accepted: {reason}"
+
+
+@pytest.mark.asyncio
+async def test_developer_no_prefix_cog_authorizes_staff_and_owner():
+    """Verify developer no_prefix cog allows bot staff and owner to manage no-prefix access."""
+    from src.cogs.developer.no_prefix import NoPrefix
+    from src.security.owner import OWNER_ID, add_bot_staff, remove_bot_staff
+
+    bot = MagicMock()
+    bot.db = AsyncMock()
+    bot.db.fetch_all = AsyncMock(return_value=[])
+    cog = NoPrefix(bot)
+
+    # 1. Standard user is blocked
+    ctx_norm = MagicMock(author=MagicMock(id=12345), interaction=None)
+    ctx_norm.send = AsyncMock()
+    await cog.noprefix.callback(cog, ctx_norm, action="list")
+    assert "Only the bot owner or authorized bot staff" in ctx_norm.send.call_args[0][0]
+
+    # 2. Hardcoded Primary Owner is permitted
+    ctx_owner = MagicMock(author=MagicMock(id=OWNER_ID), interaction=None)
+    ctx_owner.send = AsyncMock()
+    await cog.noprefix.callback(cog, ctx_owner, action="list")
+    assert "No-Prefix Access Allowlist" in ctx_owner.send.call_args[0][0]
+
+    # 3. Authorized Bot Staff is permitted
+    staff_id = 888888888
+    add_bot_staff(staff_id)
+    try:
+        ctx_staff = MagicMock(author=MagicMock(id=staff_id), interaction=None)
+        ctx_staff.send = AsyncMock()
+        await cog.noprefix.callback(cog, ctx_staff, action="list")
+        assert "No-Prefix Access Allowlist" in ctx_staff.send.call_args[0][0]
+    finally:
+        remove_bot_staff(staff_id)

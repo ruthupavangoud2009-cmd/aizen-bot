@@ -15,20 +15,20 @@ import discord
 from discord import app_commands
 from discord.ext import commands
 
-from src.security.owner import is_primary_owner
+from src.security.owner import OWNER_ID, is_primary_owner, is_bot_staff, is_owner_or_staff, get_all_bot_staff
 
 log = logging.getLogger("Kyoka.NoPrefix")
 
 
 class NoPrefix(commands.Cog):
-    """Manage the small, explicit allowlist of users allowed to omit the prefix."""
+    """Manage the allowlist of users allowed to omit the prefix."""
 
     def __init__(self, bot: commands.Bot) -> None:
         self.bot = bot
 
     @commands.hybrid_command(
         name="noprefix",
-        description="Owner only: grant, revoke, or list users allowed to use commands without a prefix.",
+        description="Owner and Staff only: grant, revoke, or list users allowed to use commands without a prefix.",
     )
     @app_commands.describe(
         action="Choose add, remove, or list",
@@ -46,12 +46,18 @@ class NoPrefix(commands.Cog):
         member: discord.User | None = None,
     ) -> None:
         """Grant/revoke persistent no-prefix access by Discord user ID."""
-        if not is_primary_owner(ctx.author.id):
-            await ctx.send("⛔ Only the primary bot owner can manage no-prefix access.", ephemeral=bool(ctx.interaction))
+        if not is_owner_or_staff(ctx.author.id):
+            await ctx.send("⛔ Only the bot owner or authorized bot staff can manage no-prefix access.", ephemeral=bool(ctx.interaction))
             return
 
         action = action.strip().lower()
-        if action not in {"add", "remove", "list"}:
+        if action in ("grant", "add"):
+            action = "add"
+        elif action in ("revoke", "remove", "delete"):
+            action = "remove"
+        elif action in ("list", "show", "all"):
+            action = "list"
+        else:
             await ctx.send("Usage: `noprefix add @member`, `noprefix remove @member`, or `noprefix list`.")
             return
 
@@ -60,25 +66,38 @@ class NoPrefix(commands.Cog):
                 rows = await self.bot.db.fetch_all(
                     "SELECT user_id, added_by, created_at FROM system_no_prefix ORDER BY created_at ASC;"
                 )
+                db_ids = {int(row["user_id"]) for row in rows}
             except Exception:
                 log.exception("Failed to read persistent no-prefix grants")
-                await ctx.send("⚠️ Could not read the no-prefix list because the database query failed.")
-                return
-            ids = sorted({int(row["user_id"]) for row in rows})
-            if not ids:
-                await ctx.send("No explicitly granted no-prefix users are saved.")
-                return
-            lines = [f"• <@{uid}> — `{uid}`" for uid in ids]
-            await ctx.send("**Persistent no-prefix users**\n" + "\n".join(lines[:50]))
+                db_ids = set()
+
+            all_staff = get_all_bot_staff()
+            lines = [f"👑 **Primary Owner:** <@{OWNER_ID}> (`{OWNER_ID}`)"]
+            if all_staff:
+                lines.append(f"🛡️ **Bot Staff ({len(all_staff)}):** " + ", ".join(f"<@{sid}>" for sid in sorted(all_staff)))
+            if db_ids:
+                lines.append(f"⚡ **Granted Users ({len(db_ids)}):**\n" + "\n".join(f"• <@{uid}> (`{uid}`)" for uid in sorted(db_ids)[:40]))
+            else:
+                lines.append("⚡ **Granted Users:** None")
+
+            await ctx.send("**No-Prefix Access Allowlist**\n" + "\n".join(lines), allowed_mentions=discord.AllowedMentions.none())
             return
 
         if member is None:
             await ctx.send("Please provide a member. Example: `noprefix add @member`.")
             return
 
-        if is_primary_owner(member.id) and action == "remove":
-            await ctx.send("The primary owner always retains no-prefix access.")
+        if is_primary_owner(member.id):
+            if action == "remove":
+                await ctx.send("The primary owner has permanent hardcoded no-prefix access and cannot be revoked.")
+            else:
+                await ctx.send("The primary owner already has permanent hardcoded no-prefix access.")
             return
+
+        if is_bot_staff(member.id):
+            if action == "add":
+                await ctx.send(f"{member.mention} is authorized Bot Staff and already has full no-prefix access.")
+                return
 
         try:
             if action == "add":
@@ -87,19 +106,21 @@ class NoPrefix(commands.Cog):
                     member.id,
                     ctx.author.id,
                 )
-                self.bot.no_prefix_users.add(member.id)
+                if hasattr(self.bot, "no_prefix_users"):
+                    self.bot.no_prefix_users.add(member.id)
                 await ctx.send(f"✅ Granted persistent no-prefix access to {member.mention} (`{member.id}`).")
             else:
                 await self.bot.db.execute(
                     "DELETE FROM system_no_prefix WHERE user_id = ?;",
                     member.id,
                 )
-                if member.id != ctx.author.id or not is_primary_owner(member.id):
-                    self.bot.no_prefix_users.discard(member.id)
+                if hasattr(self.bot, "no_prefix_users"):
+                    if member.id != OWNER_ID and not is_bot_staff(member.id):
+                        self.bot.no_prefix_users.discard(member.id)
                 await ctx.send(f"✅ Revoked no-prefix access from {member.mention} (`{member.id}`).")
         except Exception:
             log.exception("Failed to update persistent no-prefix grant for user_id=%s", member.id)
-            await ctx.send("⚠️ The database update failed; the in-memory allowlist was not intentionally changed.")
+            await ctx.send("⚠️ The database update failed; please try again.")
 
 async def setup(bot: commands.Bot) -> None:
     await bot.add_cog(NoPrefix(bot))
