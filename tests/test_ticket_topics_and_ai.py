@@ -8,6 +8,7 @@ from src.cogs.ticket.ticket_system import (
     AddTopicModal,
     ManageTopicsView,
     TicketAIReplyView,
+    TicketAISolvedPromptView,
     TicketSystem,
 )
 
@@ -113,3 +114,39 @@ async def test_ticket_solution_generation():
     # Test trials solution
     sol_trial = await ticket_cog.generate_ticket_solution("Help with race v4 trials", "Trials", guild_mock, user_mock)
     assert "trials" in sol_trial.lower() or "moon" in sol_trial.lower()
+
+
+@pytest.mark.asyncio
+async def test_ticket_ai_solved_prompt_view():
+    cog_mock = MagicMock(spec=TicketSystem)
+    cog_mock.execute_ticket_close = AsyncMock()
+    cog_mock.summon_ticket_staff = AsyncMock()
+
+    ticket_data = {
+        "id": 105,
+        "channel_id": 99999,
+        "user_id": 22222,
+        "ticket_number": 55,
+        "category": "General Support",
+    }
+
+    view = TicketAISolvedPromptView(cog=cog_mock, ticket_data=ticket_data)
+    assert view.btn_close.custom_id == "ticket_ai_solved_close_105"
+    assert view.btn_more.custom_id == "ticket_ai_solved_more_105"
+    assert view.btn_staff.custom_id == "ticket_ai_solved_staff_105"
+
+    interaction_mock = MagicMock(spec=discord.Interaction)
+    interaction_mock.user = MagicMock(spec=discord.Member)
+    interaction_mock.user.id = 22222
+    interaction_mock.channel = MagicMock()
+    interaction_mock.response = MagicMock()
+    interaction_mock.response.edit_message = AsyncMock()
+
+    # Test "I Have Another Question" button
+    with patch("src.cogs.ticket.ticket_system.send_container_response", new=AsyncMock()) as mock_send:
+        await view.btn_more.callback(interaction_mock)
+        mock_send.assert_awaited_once()
+
+    # Test "Need Staff Help" button
+    await view.btn_staff.callback(interaction_mock)
+    cog_mock.summon_ticket_staff.assert_awaited_once()

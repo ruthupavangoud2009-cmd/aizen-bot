@@ -48,17 +48,19 @@ class Profile(commands.Cog):
         # resolve Access & Tier
         access_str = "No-Prefix Active" if has_no_prefix else "Standard"
 
-        tier_str = "Standard"
+        from src.core.config import Config
+        tier_str = "👑 Supreme Lifetime" if getattr(Config, "SUPREME_PREMIUM", True) else "Standard"
         try:
-            prem_row = await self.bot.db.fetch_one(
-                "SELECT tier, expires_at FROM user_premium WHERE user_id = $1;",
-                target_id,
-            )
-            if prem_row:
-                tier_val = (prem_row["tier"] or "Pro").capitalize()
-                tier_str = f"Prime {tier_val}"
-            elif is_owner_user:
-                tier_str = "Prime Lifetime"
+            if is_owner_user:
+                tier_str = "Supreme Owner (Lifetime)"
+            else:
+                prem_row = await self.bot.db.fetch_one(
+                    "SELECT tier, expires_at FROM user_premium WHERE user_id = $1;",
+                    target_id,
+                )
+                if prem_row:
+                    tier_val = (prem_row["tier"] or "Supreme").capitalize()
+                    tier_str = f"Supreme {tier_val}"
         except Exception:
             pass
 
@@ -156,6 +158,43 @@ class Profile(commands.Cog):
 
         container.add_text(
             audio_lines + "-# Powered by Kyoka Studio"
+        )
+
+        await send_container_response(ctx, container)
+
+    @commands.hybrid_command(
+        name="premium",
+        aliases=["supreme", "perks", "tier"],
+        description="View Kyoka Supreme Premium status and unlocked VIP capabilities.",
+    )
+    async def premium(self, ctx: CustomContext) -> None:
+        """Display Supreme Premium status and all active high-tier perks."""
+        container = KyokaContainer(accent_color=0x7C3AED)
+        arrow = getattr(self.bot, "custom_emojis", {}).get("icons_rightarrow", "›")
+
+        container.add_section(
+            content=(
+                "## 👑 KYOKA SUPREME PREMIUM\n"
+                "> **Global Tier Status:** `SUPREME LIFETIME (ACTIVE)`\n"
+                "> All enterprise modules, 24/7 radio stay, and AI systems are permanently unlocked."
+            )
+        )
+
+        container.add_separator(divider=True)
+
+        perks = (
+            f"{arrow} 🎧 **24/7 Stay & Radio Autoplay** — Non-stop voice channel stream with smart recommendations.\n"
+            f"{arrow} 🤖 **Ticket AI Live Assistant** — Multi-turn conversational solver with instant 1-click resolution.\n"
+            f"{arrow} 🎨 **Custom Bot Identity** — Set server-specific avatars & custom branding.\n"
+            f"{arrow} ⚡ **Priority Gemini AI Engine** — Sub-second response times across all 10 AI personas.\n"
+            f"{arrow} 🎫 **Enterprise Ticket Panels** — Unlimited panels, custom topics & interactive routing.\n"
+            f"{arrow} 🛡️ **Autonomous Anti-Nuke** — Real-time quantum threat suppression & emergency locks.\n"
+            f"{arrow} 📊 **Studio Master Audio** — 320kbps Lavalink v4 streaming pipeline."
+        )
+
+        container.add_text(
+            f"### 💎 Unlocked Supreme Perks\n{perks}\n\n"
+            "-# Kyoka Supreme Edition • Permanently Activated by Aizen"
         )
 
         await send_container_response(ctx, container)

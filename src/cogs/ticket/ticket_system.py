@@ -500,6 +500,102 @@ class TicketAIReplyView(discord.ui.View):
         )
 
 
+class TicketAISolvedPromptView(discord.ui.View):
+    """View shown when user indicates issue resolution, offering 1-click closure or continued assistance."""
+
+    def __init__(self, cog: "TicketSystem", ticket_data: dict[str, Any]) -> None:
+        super().__init__(timeout=None)
+        self.cog = cog
+        self.ticket_data = ticket_data
+        ticket_id = ticket_data.get("id", 0)
+        self.btn_close.custom_id = f"ticket_ai_solved_close_{ticket_id}"
+        self.btn_more.custom_id = f"ticket_ai_solved_more_{ticket_id}"
+        self.btn_staff.custom_id = f"ticket_ai_solved_staff_{ticket_id}"
+
+    @discord.ui.button(
+        label="Close Ticket - Solved",
+        style=discord.ButtonStyle.success,
+        emoji="✅",
+        custom_id="ticket_ai_btn_solved_close",
+    )
+    async def btn_close(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+        is_creator = interaction.user.id == self.ticket_data.get("user_id")
+        perms = getattr(interaction.user, "guild_permissions", None)
+        is_staff = bool(perms and (perms.manage_channels or perms.administrator))
+        if not (is_creator or is_staff):
+            return await interaction.response.send_message("Only the ticket creator or staff can close this ticket.", ephemeral=True)
+
+        for item in self.children:
+            item.disabled = True
+        try:
+            await interaction.response.edit_message(view=self)
+        except Exception:
+            pass
+
+        sol_card = KyokaContainer(accent_color=5763719)
+        sol_card.add_section(
+            content=(
+                "**Ticket Marked as Solved!**\n"
+                f"> We're glad we could solve your problem, {interaction.user.mention}!\n"
+                "> Closing and archiving this ticket in 5 seconds..."
+            )
+        )
+        await send_container_response(interaction.channel, sol_card)
+        await asyncio.sleep(5)
+        await self.cog.execute_ticket_close(interaction, self.ticket_data, reason="Resolved by Kyoka AI Assistant")
+
+    @discord.ui.button(
+        label="I Have Another Question",
+        style=discord.ButtonStyle.secondary,
+        emoji="💬",
+        custom_id="ticket_ai_btn_solved_more",
+    )
+    async def btn_more(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+        is_creator = interaction.user.id == self.ticket_data.get("user_id")
+        perms = getattr(interaction.user, "guild_permissions", None)
+        is_staff = bool(perms and (perms.manage_channels or perms.administrator))
+        if not (is_creator or is_staff):
+            return await interaction.response.send_message("Only the ticket creator or staff can interact with this.", ephemeral=True)
+
+        for item in self.children:
+            item.disabled = True
+        try:
+            await interaction.response.edit_message(view=self)
+        except Exception:
+            pass
+
+        card = KyokaContainer(accent_color=0x7C3AED)
+        card.add_section(
+            content=(
+                "**I'm Right Here!**\n"
+                f"> Go ahead, {interaction.user.mention} — ask me whatever else you need help with!\n"
+                "> I'll keep assisting you until everything is 100% sorted."
+            )
+        )
+        await send_container_response(interaction.channel, card)
+
+    @discord.ui.button(
+        label="Need Staff Help",
+        style=discord.ButtonStyle.danger,
+        emoji="🔔",
+        custom_id="ticket_ai_btn_solved_staff",
+    )
+    async def btn_staff(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+        for item in self.children:
+            item.disabled = True
+        try:
+            await interaction.response.edit_message(view=self)
+        except Exception:
+            pass
+
+        await self.cog.summon_ticket_staff(
+            channel=interaction.channel,
+            ticket=self.ticket_data,
+            requested_by=interaction.user,
+            reason="User requested human staff after AI assistance",
+        )
+
+
 # ─── SLIDE-BASED TICKET DASHBOARD SETUP WIZARD ───────────────────────────────
 
 class TicketSetupWizard(discord.ui.View):
@@ -1407,7 +1503,11 @@ class TicketSystem(commands.Cog):
         if ai_mgr and hasattr(ai_mgr, "generate_response"):
             try:
                 session = getattr(self.bot, "session", None)
-                if session and not session.closed:
+                if not session or getattr(session, "closed", False):
+                    session_getter = getattr(self.bot, "get_session", None)
+                    if callable(session_getter):
+                        session = session_getter()
+                if session and not getattr(session, "closed", False):
                     prompt = (
                         f"You are Kyoka, a warm, super-smart, empathetic, and genuinely helpful live support specialist in '{guild.name}'.\n"
                         f"Ticket Category: {category}\n"
@@ -1459,14 +1559,14 @@ class TicketSystem(commands.Cog):
             )
         elif any(w in q_low or w in cat_low for w in ("buy", "order", "purchase", "billing", "payment", "shop", "price")):
             sol = (
-                f"Hey {name}, thanks for reaching out about your purchase!\n\n"
+                f"Hey {name}, thanks for reaching out about your purchases and payment verification!\n\n"
                 "1. **Receipt / Order ID:** Please drop your transaction ID or receipt screenshot right here in chat.\n"
                 "2. **Verification:** Our staff team personally reviews every order to ensure total account security.\n\n"
                 "Click **Need Staff Help** below so an authorized staff member can verify and fulfill your order immediately!"
             )
         elif any(w in q_low or w in cat_low for w in ("trial", "race v4", "awakening", "v4", "mirage", "gear")):
             sol = (
-                f"Hey {name}! Ready for Race V4? Here's the playbook:\n\n"
+                f"Hey {name}! Ready for Race V4 trials? Here's the playbook:\n\n"
                 "1. **Full Moon:** Head over to the Third Sea and make sure Full Moon is currently in the sky.\n"
                 "2. **Mirage Island Peak:** Stand on the highest peak with your Mirror Fractal and look up.\n"
                 "3. **Temple of Time:** You'll need 3 players with different races activating skills at the exact same moment.\n\n"
@@ -2162,12 +2262,38 @@ class TicketSystem(commands.Cog):
                 is_creator = message.author.id == ticket.get("user_id")
                 bot_mentioned = bool(self.bot.user and self.bot.user in message.mentions)
                 is_ai_chat = is_creator or bot_mentioned or msg_low.startswith(("ai ", "kyoka "))
-                if (
+                is_solved = any(w in msg_low for w in ("thank you", "thanks", "thx", "ty", "that worked", "it worked", "fixed", "solved", "all good now", "works now", "working now"))
+
+                can_respond = (
                     is_ai_chat
-                    and message.channel.id not in self._staff_summoned_tickets
-                    and not ticket.get("claimed_by")
                     and len(msg_clean) >= 2
-                ):
+                    and (not ticket.get("claimed_by") or bot_mentioned)
+                    and (message.channel.id not in self._staff_summoned_tickets or bot_mentioned or msg_low.startswith(("ai ", "kyoka ")))
+                )
+
+                if can_respond and is_solved:
+                    if message.channel.id not in self._ai_processing_tickets:
+                        self._ai_processing_tickets.add(message.channel.id)
+                        try:
+                            c = KyokaContainer(accent_color=5763719)
+                            c.add_section(
+                                content=(
+                                    f"🎉 **Glad we could solve your issue, {message.author.display_name}!**\n\n"
+                                    "> Would you like me to close and archive this ticket for you, or do you have any other questions?"
+                                )
+                            )
+                            c.add_separator(divider=True)
+                            c.add_text("💡 *Select an option below to close or keep chatting:*")
+                            await send_container_response(
+                                message.channel,
+                                c,
+                                view=TicketAISolvedPromptView(self, ticket),
+                            )
+                        finally:
+                            self._ai_processing_tickets.discard(message.channel.id)
+                        return
+
+                if can_respond:
                     if message.channel.id not in self._ai_processing_tickets:
                         self._ai_processing_tickets.add(message.channel.id)
                         try:
@@ -2188,7 +2314,7 @@ class TicketSystem(commands.Cog):
                                     )
                                 )
                                 c.add_separator(divider=True)
-                                c.add_text("💡 *Need a human team member? Tap **Need Staff Help** below at any time.*")
+                                c.add_text("💡 *Problem solved? Tap **Solved My Issue** or **Need Staff Help** below.*")
                                 await send_container_response(
                                     message.channel,
                                     c,

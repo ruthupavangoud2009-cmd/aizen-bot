@@ -116,6 +116,10 @@ class PremiumManager:
         if not guild_id:
             return False
 
+        from src.core.config import Config
+        if getattr(Config, "SUPREME_PREMIUM", True):
+            return True
+
         data = self._guild_cache.get(guild_id)
         if not data:
             return False
@@ -141,6 +145,10 @@ class PremiumManager:
         if is_primary_owner(user_id):
             return True
 
+        from src.core.config import Config
+        if getattr(Config, "SUPREME_PREMIUM", True):
+            return True
+
         data = self._user_cache.get(user_id)
         if not data:
             return False
@@ -158,7 +166,28 @@ class PremiumManager:
 
     def get_guild_info(self, guild_id: int | None) -> dict[str, Any]:
         """Get detailed premium information for a server."""
-        if not guild_id or not self.is_guild_premium(guild_id):
+        if not guild_id:
+            return {
+                "is_premium": False,
+                "tier": "Free",
+                "expires_at": None,
+                "remaining_str": "N/A",
+            }
+
+        from src.core.config import Config
+        if getattr(Config, "SUPREME_PREMIUM", True):
+            cached_data = self._guild_cache.get(guild_id)
+            exp = cached_data["expires_at"] if cached_data else None
+            tier_name = cached_data.get("tier", "Supreme").title() if cached_data else "Supreme"
+            return {
+                "is_premium": True,
+                "tier": f"Supreme ({tier_name})" if tier_name != "Supreme" else "Supreme",
+                "badge": "👑 SUPREME PREMIUM (LIFETIME)",
+                "expires_at": exp,
+                "remaining_str": "Lifetime / Permanent (Supreme Edition)",
+            }
+
+        if not self.is_guild_premium(guild_id):
             return {
                 "is_premium": False,
                 "tier": "Free",
@@ -204,8 +233,22 @@ class PremiumManager:
             return {
                 "is_premium": True,
                 "tier": "Prime Lifetime (Owner)",
+                "badge": "👑 SUPREME OWNER (LIFETIME)",
                 "expires_at": None,
                 "remaining_str": "Lifetime / Permanent",
+            }
+
+        from src.core.config import Config
+        if getattr(Config, "SUPREME_PREMIUM", True):
+            cached_data = self._user_cache.get(user_id)
+            exp = cached_data["expires_at"] if cached_data else None
+            tier_name = cached_data.get("tier", "Supreme").title() if cached_data else "Supreme"
+            return {
+                "is_premium": True,
+                "tier": f"Supreme ({tier_name})" if tier_name != "Supreme" else "Supreme",
+                "badge": "👑 SUPREME PREMIUM (LIFETIME)",
+                "expires_at": exp,
+                "remaining_str": "Lifetime / Permanent (Supreme Edition)",
             }
 
         if not self.is_user_premium(user_id):

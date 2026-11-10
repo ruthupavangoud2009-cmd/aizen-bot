@@ -23,6 +23,7 @@ class FeatureTier(str, Enum):
     FREE = "free"
     PREMIUM = "premium"
     PRO = "pro"
+    SUPREME = "supreme"
 
 
 @dataclass(frozen=True)
@@ -253,6 +254,10 @@ async def check_guild_feature_access(
     # Bot Primary Owner and Bot Staff bypass all restrictions
     if user_id and is_owner_or_staff(user_id):
         return True, "Bot Owner/Staff Override", feat
+
+    # Global Supreme Premium Tier check (All features unconditionally unlocked)
+    if getattr(Config, "SUPREME_PREMIUM", True):
+        return True, "👑 Supreme Premium (All Features Unlocked)", feat
 
     if not guild_id:
         return False, "This command can only be executed within a Discord server.", feat

@@ -121,6 +121,9 @@ class Config:
     BOT_NAME: str = os.getenv("BOT_NAME", "KYOKA 3.0")
     DEFAULT_PREFIX: str = os.getenv("BOT_PREFIX", "+")
     
+    # Supreme Premium Engine (Lifetime unrestricted access to all modules)
+    SUPREME_PREMIUM: bool = os.getenv("SUPREME_PREMIUM", "true").lower() in ("true", "1", "yes")
+    
     # Environment & Dev Settings
     ENVIRONMENT: str = os.getenv("ENVIRONMENT", "development").lower()
     DEV_GUILD_ID: int | None = (
