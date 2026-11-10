@@ -132,7 +132,7 @@ def create_lavalink_node(
     password: str,
     *,
     identifier: Optional[str] = None,
-    inactive_player_timeout: int = 300,
+    inactive_player_timeout: Optional[int] = None,
     retries: Optional[int] = None,
     resume_timeout: int = 120,
     heartbeat: float = 15.0,
@@ -148,6 +148,7 @@ def create_lavalink_node(
         session=session,
         heartbeat=heartbeat,
         inactive_player_timeout=inactive_player_timeout,
+        inactive_channel_tokens=None,
         retries=retries,
         resume_timeout=resume_timeout,
     )
@@ -561,7 +562,7 @@ RESILIENT_CLUSTER_NODES: list[tuple[str, str]] = [
 async def connect_lavalink_node(
     bot: Optional["discord.Client"] = None,
     *,
-    inactive_player_timeout: int = 300,
+    inactive_player_timeout: Optional[int] = None,
     allow_discovery: bool = True,
     exclude_uri: Optional[str] = None,
 ) -> wavelink.Node:

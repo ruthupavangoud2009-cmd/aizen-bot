@@ -67,7 +67,7 @@ class Music(commands.Cog):
             await asyncio.sleep(1)
         from src.core.lavalink import connect_lavalink_node
         try:
-            node = await connect_lavalink_node(self.bot, inactive_player_timeout=300)
+            node = await connect_lavalink_node(self.bot, inactive_player_timeout=None)
             logger.info(f"Connected to Lavalink Node at {node.uri} (status={node.status})")
         except Exception as e:
             logger.error(f"Failed to connect to Lavalink node: {e}")
@@ -294,6 +294,24 @@ class Music(commands.Cog):
                     )
                     return
 
+                # 24/7 Resilience Guard: If 24/7 is enabled, automatically reconnect to the voice channel!
+                if getattr(player, "is_247", False):
+                    target_ch = before.channel
+                    logger.info(f"Guild {member.guild.id}: 24/7 mode active. Scheduling automatic voice reconnection...")
+                    async def _reconnect_247() -> None:
+                        await asyncio.sleep(2.0)
+                        if target_ch and not player.is_connected:
+                            try:
+                                await player.connect_voice(target_ch)
+                                logger.info(f"Guild {member.guild.id}: 24/7 auto-reconnect successful in #{target_ch.name}.")
+                                if not player.is_playing and not player.queue:
+                                    if hasattr(player, "trigger_247_playback"):
+                                        await player.trigger_247_playback()
+                            except Exception as rec_err:
+                                logger.debug(f"24/7 auto-reconnect notice: {rec_err}")
+                    asyncio.create_task(_reconnect_247())
+                    return
+
                 player.cancel_empty_vc_timer(auto_resume=False)
                 # Only announce disconnect if not already announced by empty timer or user command
                 if not getattr(player, "_disconnect_announced", False):
@@ -391,16 +409,16 @@ class Music(commands.Cog):
             if player and player.voice_client and player.voice_client.channel == before.channel:
                 human_listeners = [m for m in before.channel.members if not m.bot]
                 if len(human_listeners) == 0:
+                    # Check 24/7 mode: Never pause and never disconnect!
+                    if getattr(player, "is_247", False):
+                        logger.info(f"Voice channel #{before.channel.name} empty, but 24/7 active. Keeping 24/7 continuous music playing.")
+                        return
+
                     # Auto-pause playback if playing
                     if player.is_playing:
                         player.pause()
                         player._was_paused_for_empty_vc = True
                         await player.update_controller_message(force=True)
-
-                    # Check 24/7 mode
-                    if getattr(player, "is_247", False):
-                        logger.info(f"Voice channel #{before.channel.name} empty, but 24/7 active. Paused and staying connected.")
-                        return
 
                     # 24/7 is OFF: start 2-minute countdown timer silently (no spam in chat)
                     logger.info(f"Voice channel #{before.channel.name} empty. Starting 2-minute disconnect countdown.")

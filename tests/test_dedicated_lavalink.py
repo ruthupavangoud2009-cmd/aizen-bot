@@ -46,7 +46,9 @@ async def test_node_smooth_streaming_parameters():
 async def test_live_lavalink_connectivity_and_probe():
     """Verify the live Render-hosted node responds to the REST health probe."""
     try:
-        healthy = await probe_node(Config.LAVALINK_URI, Config.LAVALINK_PASSWORD, timeout=10.0)
+        from src.core.lavalink import warmup_render_service
+        await warmup_render_service(Config.LAVALINK_URI, max_wait=15.0)
+        healthy = await probe_node(Config.LAVALINK_URI, Config.LAVALINK_PASSWORD, timeout=15.0)
         assert healthy is True, "Dedicated Lavalink node did not pass the health probe"
     except Exception as exc:
         pytest.fail(f"Failed to probe dedicated Lavalink node: {exc}")

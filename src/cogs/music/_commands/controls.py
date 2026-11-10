@@ -234,7 +234,9 @@ async def execute_stay(cog: Music, ctx: commands.Context) -> None:
     player.is_247 = not getattr(player, "is_247", False)
 
     if player.is_247:
+        player.smart_autoplay = True
         player.autoplay = True
+        player.user_247_id = ctx.author.id
         if hasattr(cog.controller, "_247_cache"):
             cog.controller._247_cache.add(ctx.guild.id)
         player.cancel_empty_vc_timer(auto_resume=False)
@@ -245,14 +247,19 @@ async def execute_stay(cog: Music, ctx: commands.Context) -> None:
             except Exception:
                 pass
 
-        # If not actively playing and queue is empty, auto-start 24/7 continuous music
+        # If not actively playing and queue is empty, auto-start 24/7 continuous music with liked/related tracks
         if not player.is_playing and not player.queue:
             try:
-                from src.cogs.music._commands.play import execute_play
-                asyncio.create_task(execute_play(cog, ctx, "lofi hip hop radio beats to relax study to"))
+                if hasattr(player, "trigger_247_playback"):
+                    asyncio.create_task(player.trigger_247_playback(ctx))
+                else:
+                    from src.cogs.music._commands.play import execute_play
+                    asyncio.create_task(execute_play(cog, ctx, "lofi hip hop radio beats to relax study to"))
             except Exception as e:
                 logger.warning(f"Could not auto-start 24/7 music: {e}")
     else:
+        player.smart_autoplay = False
+        player.autoplay = False
         if hasattr(cog.controller, "_247_cache"):
             cog.controller._247_cache.discard(ctx.guild.id)
         if not player.is_playing and not player.queue:
@@ -284,12 +291,12 @@ async def execute_stay(cog: Music, ctx: commands.Context) -> None:
     container = KyokaContainer(accent_color=None)
     container.add_section(
         content=(
-            f"**24/7 Voice & Music Mode: {state_str}**\n"
-            f"> Kyoka will {'remain in voice 24/7 playing continuous music with Autoplay active' if player.is_247 else 'automatically disconnect when the voice channel is empty'}."
+            f"**24/7 Voice & Continuous Music: {state_str}**\n"
+            f"> Kyoka will {'remain in voice 24/7 playing continuous liked music & related tracks with Smart Autoplay active' if player.is_247 else 'automatically disconnect when the voice channel is empty or queue concludes'}."
         )
     )
     container.add_separator(divider=True)
-    container.add_text(f"-# Requested by {ctx.author.display_name}")
+    container.add_text(f"-# Requested by {ctx.author.display_name} • 24/7 Liked & Related Music System")
     await send_container_response(ctx, container)
 
 

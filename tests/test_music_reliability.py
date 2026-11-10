@@ -296,3 +296,83 @@ async def test_developer_no_prefix_cog_authorizes_staff_and_owner():
         assert "No-Prefix Access Allowlist" in ctx_staff.send.call_args[0][0]
     finally:
         remove_bot_staff(staff_id)
+
+
+@pytest.mark.asyncio
+async def test_247_mode_continuous_autoplay_liked_and_related_music():
+    """Verify 24/7 mode continuously plays liked music from Favorites and related tracks."""
+    from src.cogs.music._autoplay import NativeSmartAutoplay
+    from src.cogs.music._player import GuildPlayer
+    from src.cogs.music._models import Track
+
+    # 1. DB returns liked track from Favorites
+    mock_db = MagicMock()
+    mock_db.fetch_all = AsyncMock(return_value=[
+        {
+            "title": "Starboy",
+            "author": "The Weeknd",
+            "duration": 230,
+            "url": "https://www.youtube.com/watch?v=34Na4j8AVgA",
+        }
+    ])
+
+    played_history = set()
+    track = await NativeSmartAutoplay.get_next_recommendation(
+        current_track=None,
+        played_history=played_history,
+        db=mock_db,
+        user_ids=[123456],
+        is_247=True,
+    )
+    assert track is not None
+    assert track.title == "Starboy"
+    assert "Liked Music" in track.requester
+    assert "starboy" in played_history
+
+    # 2. Related track recommendation when current track is playing
+    current = Track(title="Starboy", author="The Weeknd", url="https://example.com")
+    with patch("wavelink.Playable.search", new_callable=AsyncMock) as mock_search:
+        dummy_playable = MagicMock(title="Blinding Lights", author="The Weeknd", uri="https://example.com/bl", length=200000, artwork=None, identifier="bl123")
+        mock_search.return_value = [dummy_playable]
+
+        rel_track = await NativeSmartAutoplay.get_next_recommendation(
+            current_track=current,
+            played_history=played_history,
+            db=mock_db, # All liked tracks in history now
+            user_ids=[123456],
+            is_247=True,
+        )
+        assert rel_track is not None
+        assert rel_track.title == "Blinding Lights"
+        assert "Related Music" in rel_track.requester
+
+    # 3. GuildPlayer 24/7 stop safety
+    bot = MagicMock()
+    guild = MagicMock(id=987654321)
+    player = GuildPlayer(bot, guild)
+    player.is_247 = True
+    player.voice_client = MagicMock()
+    player.voice_client.stop = AsyncMock()
+    player.voice_client.disconnect = AsyncMock()
+
+    await player.stop(force_disconnect=False)
+    # Stop track called, but disconnect NEVER called when 24/7 is active
+    player.voice_client.stop.assert_awaited_once()
+    player.voice_client.disconnect.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_node_inactivity_timeout_disabled_for_247_playback():
+    """Verify Lavalink node creation completely disables 300s inactivity timeouts for 24/7 continuous music."""
+    from src.core.lavalink import create_lavalink_node
+    from src.core.config import Config
+
+    node = create_lavalink_node(
+        Config.LAVALINK_URI,
+        Config.LAVALINK_PASSWORD,
+    )
+    assert getattr(node, "_inactive_player_timeout", None) is None
+    assert getattr(node, "_inactive_channel_limit", None) is None
+    if hasattr(node, "_session") and node._session and not node._session.closed:
+        await node._session.close()
+

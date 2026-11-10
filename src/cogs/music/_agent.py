@@ -253,7 +253,7 @@ class MusicAgent:
                 # Connect to the primary node, falling back to any configured alternatives.
                 new_node = await connect_lavalink_node(
                     self.bot,
-                    inactive_player_timeout=300,
+                    inactive_player_timeout=None,
                     exclude_uri=(failed_uri or active_node_uri) if force else None,
                 )
 
@@ -620,9 +620,9 @@ class MusicAgent:
         except Exception:
             pass
 
-    @tasks.loop(minutes=4.0)
+    @tasks.loop(seconds=60.0)
     async def _render_keepalive(self) -> None:
-        """Ping Lavalink /healthz every 4 minutes to guarantee Render free-tier never spins down or returns 502."""
+        """Ping Lavalink /healthz and /v4/info every 60 seconds to guarantee Render free-tier never spins down or drops WebSockets."""
         from src.core.config import Config
         uri = getattr(Config, "LAVALINK_URI", None)
         if not uri or "onrender.com" not in uri:
@@ -638,6 +638,10 @@ class MusicAgent:
                         logger.debug(f"Render keepalive ping 200 OK ({clean_uri}).")
                     else:
                         logger.debug(f"Render keepalive returned status: {resp.status}")
+                # Keep REST API and proxy connection warm
+                async with session.get(f"{clean_uri}/v4/info", headers=headers) as resp2:
+                    if resp2.status == 200:
+                        logger.debug("Render Lavalink REST /v4/info warm 200 OK.")
         except Exception as e:
             logger.debug(f"Render keepalive ping error: {e}")
 

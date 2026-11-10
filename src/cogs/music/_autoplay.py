@@ -115,22 +115,156 @@ def normalize_history_title(raw_title: str) -> str:
 
 
 class NativeSmartAutoplay:
-    """Autonomous Multi-Engine Continuous Radio Player (JioSaavn + YouTube Mix)."""
+    """Autonomous Multi-Engine Continuous Radio Player (Liked Music + JioSaavn + YouTube Mix)."""
+
+    @classmethod
+    async def get_liked_tracks_from_db(
+        cls,
+        db: Any,
+        user_ids: Optional[List[int]] = None,
+        limit: int = 50,
+    ) -> List[Dict[str, Any]]:
+        """Fetch saved Favorites/Liked songs from the user_playlist_tracks database table."""
+        if not db or not hasattr(db, "fetch_all"):
+            return []
+        try:
+            # 1. Prefer songs from users currently in voice or who enabled 24/7
+            if user_ids:
+                clean_ids = [int(uid) for uid in user_ids if uid]
+                if clean_ids:
+                    query = """
+                        SELECT DISTINCT upt.title, upt.author, upt.duration, upt.url
+                        FROM user_playlist_tracks upt
+                        JOIN user_playlists up ON upt.playlist_id = up.id
+                        WHERE up.user_id = ANY($1::bigint[]) AND LOWER(up.playlist_name) = 'favorites'
+                        ORDER BY upt.id DESC LIMIT $2;
+                    """
+                    rows = await db.fetch_all(query, clean_ids, limit)
+                    if rows:
+                        return [dict(r) for r in rows]
+
+            # 2. General server / global favorites
+            query = """
+                SELECT DISTINCT upt.title, upt.author, upt.duration, upt.url
+                FROM user_playlist_tracks upt
+                JOIN user_playlists up ON upt.playlist_id = up.id
+                WHERE LOWER(up.playlist_name) = 'favorites'
+                ORDER BY upt.id DESC LIMIT $1;
+            """
+            rows = await db.fetch_all(query, limit)
+            return [dict(r) for r in rows] if rows else []
+        except Exception as e:
+            logger.debug(f"Liked tracks DB lookup notice: {e}")
+            return []
 
     @classmethod
     async def get_next_recommendation(
         cls,
-        current_track: Track,
+        current_track: Optional[Track],
         played_history: Set[str],
         db: Any = None,
         consecutive_same_artist: int = 0,
+        user_ids: Optional[List[int]] = None,
+        is_247: bool = False,
     ) -> Optional[Track]:
-        """Compatibility bridge for GuildPlayer."""
-        return await cls.get_next_track(
-            current_track=current_track,
-            played_history=played_history,
-            consecutive_same_artist=consecutive_same_artist,
-        )
+        """Produce the next recommended track with Liked Music priority & Related Music cascade."""
+        import wavelink
+
+        # Bound history size to prevent unbounded memory growth during 24/7 sessions
+        if len(played_history) > 250:
+            to_remove = list(played_history)[:120]
+            for item in to_remove:
+                played_history.discard(item)
+
+        # ── Step 1: Liked Music Priority (When 24/7 is on, or randomly interleaved) ──
+        liked_rows = await cls.get_liked_tracks_from_db(db, user_ids=user_ids)
+        if liked_rows:
+            unplayed_liked = [
+                r for r in liked_rows
+                if normalize_history_title(r.get("title") or "") not in played_history
+            ]
+            # In 24/7 mode, prioritize liked songs heavily (or every 2 tracks)
+            if unplayed_liked and (is_247 or random.random() < 0.65 or not current_track):
+                selected = random.choice(unplayed_liked)
+                l_title = selected.get("title") or "Liked Track"
+                l_author = selected.get("author") or "Artist"
+                l_url = selected.get("url") or ""
+                l_dur = int(selected.get("duration") or 0)
+                norm_title = normalize_history_title(l_title)
+                played_history.add(norm_title)
+
+                # Search via Wavelink / JioSaavn
+                resolved_playable = None
+                search_target = l_url if l_url.startswith("http") else f"{l_title} {l_author}".strip()
+                try:
+                    res = await asyncio.wait_for(wavelink.Playable.search(search_target), timeout=6.0)
+                    if res:
+                        resolved_playable = res[0] if isinstance(res, list) else getattr(res, "tracks", [None])[0]
+                except Exception:
+                    pass
+
+                trk = Track(
+                    title=l_title,
+                    author=l_author,
+                    url=l_url,
+                    stream_url="",
+                    duration=l_dur,
+                    requester="💖 Liked Music (24/7)" if is_247 else "💖 Liked Music Radio",
+                    is_autoplay=True,
+                    query=search_target,
+                )
+                if resolved_playable:
+                    trk._playable = resolved_playable
+                return trk
+
+        # ── Step 2: Related Music to Current / Previous Track ──
+        if current_track:
+            rel = await cls.get_next_track(
+                current_track=current_track,
+                played_history=played_history,
+                consecutive_same_artist=consecutive_same_artist,
+            )
+            if rel:
+                if is_247:
+                    rel.requester = "⚡ Related Music (24/7)"
+                return rel
+
+        # ── Step 3: High-Energy / 24/7 Continuous Music Curated Fallback ──
+        default_queries = [
+            "popular songs 2026 hits",
+            "lofi hip hop radio beats to relax study to",
+            "today top hits official playlist",
+            "chill acoustic pop radio",
+            "viral songs worldwide radio",
+            "synthwave radio chill beats",
+        ]
+        random.shuffle(default_queries)
+        for q in default_queries:
+            try:
+                res = await asyncio.wait_for(wavelink.Playable.search(q), timeout=6.0)
+                if res:
+                    tracks = res if isinstance(res, list) else getattr(res, "tracks", [])
+                    for top in tracks[:5]:
+                        top_norm = normalize_history_title(top.title or "")
+                        if top_norm and top_norm not in played_history:
+                            trk = Track(
+                                title=top.title or q,
+                                author=top.author or "Artist",
+                                url=top.uri or "",
+                                stream_url="",
+                                duration=int((top.length or 0) / 1000),
+                                thumbnail=getattr(top, "artwork", None) or (f"https://i.ytimg.com/vi/{top.identifier}/hqdefault.jpg" if getattr(top, "identifier", None) else None),
+                                requester="⚡ 24/7 Continuous Radio",
+                                is_autoplay=True,
+                                query=q,
+                            )
+                            trk._playable = top
+                            played_history.add(top_norm)
+                            return trk
+            except Exception:
+                continue
+
+        return None
 
     @classmethod
     async def get_next_track(

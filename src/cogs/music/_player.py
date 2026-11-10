@@ -194,6 +194,7 @@ class GuildPlayer:
         self.smart_autoplay: bool = False
         self.autoplay_history: Set[str] = set()
         self.is_247: bool = False
+        self.user_247_id: Optional[int] = None
 
         # UI & Communication
         self.home_channel: Optional[discord.TextChannel | discord.Thread] = None
@@ -395,7 +396,7 @@ class GuildPlayer:
                         await close_pool_nodes()
                         node = await connect_lavalink_node(
                             self.bot,
-                            inactive_player_timeout=300,
+                            inactive_player_timeout=None,
                         )
                     except Exception as e:
                         logger.error(f"On-demand Lavalink node connect error: {err_text(e)}")
@@ -577,6 +578,8 @@ class GuildPlayer:
             next_t = await self.pop_next_track()
             if next_t:
                 await self.play_track(next_t, message_to_edit=message_to_edit)
+            elif getattr(self, "is_247", False):
+                asyncio.create_task(self.trigger_247_playback())
             else:
                 self.current = None
                 if message_to_edit and isinstance(message_to_edit, discord.Message):
@@ -926,6 +929,30 @@ class GuildPlayer:
         await self.play_track(prev_track)
         return prev_track
 
+    async def trigger_247_playback(self, ctx: Optional[commands.Context] = None) -> None:
+        """Trigger continuous 24/7 music stream starting with liked music or related tracks."""
+        if self.is_playing:
+            return
+
+        from src.cogs.music._autoplay import NativeSmartAutoplay
+        user_ids = []
+        if ctx and getattr(ctx, "author", None):
+            user_ids.append(ctx.author.id)
+        if self.voice_client and getattr(self.voice_client, "channel", None):
+            user_ids.extend([m.id for m in self.voice_client.channel.members if not m.bot])
+        if getattr(self, "user_247_id", None):
+            user_ids.append(self.user_247_id)
+
+        next_track = await NativeSmartAutoplay.get_next_recommendation(
+            self.current or getattr(self, "_last_played_track", None),
+            self.autoplay_history,
+            db=getattr(self.bot, "db", None),
+            user_ids=user_ids,
+            is_247=True,
+        )
+        if next_track:
+            await self.play_track(next_track)
+
     async def skip(self) -> None:
         """
         Skip the currently playing track immediately.
@@ -947,15 +974,24 @@ class GuildPlayer:
             except Exception:
                 pass
 
-        # If queue is empty, check Smart Autoplay
-        if self.smart_autoplay and self.current:
+        # If queue is empty, check Smart Autoplay or 24/7 continuous stream
+        if self.smart_autoplay or getattr(self, "is_247", False):
             try:
                 from src.cogs.music._autoplay import NativeSmartAutoplay
+                user_ids = []
+                if self.voice_client and getattr(self.voice_client, "channel", None):
+                    user_ids.extend([m.id for m in self.voice_client.channel.members if not m.bot])
+                if getattr(self, "user_247_id", None):
+                    user_ids.append(self.user_247_id)
+
                 rec = await NativeSmartAutoplay.get_next_recommendation(
-                    self.current, self.autoplay_history, self.bot.db
+                    self.current or getattr(self, "_last_played_track", None),
+                    self.autoplay_history,
+                    db=getattr(self.bot, "db", None),
+                    user_ids=user_ids,
+                    is_247=getattr(self, "is_247", False),
                 )
                 if rec:
-                    rec.requester = "⚡ Smart Autoplay"
                     await self.play_track(rec)
                     return
             except Exception as ap_err:
@@ -971,17 +1007,29 @@ class GuildPlayer:
                 )
             except Exception as e:
                 logger.debug(f"Guild {self.guild.id}: voice skip notice: {e}")
-        await self.send_queue_ended_card()
-        self.schedule_empty_vc_timer()
+        if not getattr(self, "is_247", False):
+            await self.send_queue_ended_card()
+            self.schedule_empty_vc_timer()
+        else:
+            asyncio.create_task(self.trigger_247_playback())
 
 
-    async def stop(self) -> None:
-        """Stop playback and disconnect."""
+    async def stop(self, force_disconnect: bool = False) -> None:
+        """Stop playback and disconnect (unless 24/7 is active and not forced)."""
         self.cancel_empty_vc_timer(auto_resume=False)
         self.queue.clear()
         self.current = None
         self.autoplay_history.clear()
         self._was_paused_for_empty_vc = False
+
+        if getattr(self, "is_247", False) and not force_disconnect:
+            if self.voice_client and hasattr(self.voice_client, "stop"):
+                try:
+                    await self.voice_client.stop()
+                except Exception:
+                    pass
+            logger.info(f"Guild {self.guild.id}: 24/7 active. Stopping track but keeping 24/7 voice connection.")
+            return
 
         if self.voice_client:
             # Mark this as a self-initiated disconnect so the matching
@@ -1204,6 +1252,8 @@ class GuildPlayer:
             next_track = await self.pop_next_track()
             if next_track:
                 await self.play_track(next_track)
+            elif getattr(self, "is_247", False):
+                asyncio.create_task(self.trigger_247_playback())
             else:
                 self.current = None
                 await self.send_queue_ended_card()
@@ -1260,28 +1310,35 @@ class GuildPlayer:
             await self.play_track(target)
             return
 
-        if self.smart_autoplay and self.current:
-            # Smart Autoplay AI recommendation
+        if self.smart_autoplay or getattr(self, "is_247", False):
+            # Smart Autoplay / 24/7 continuous music with liked and related tracks
             try:
+                from src.cogs.music._autoplay import NativeSmartAutoplay
+                user_ids = []
+                if self.voice_client and getattr(self.voice_client, "channel", None):
+                    user_ids.extend([m.id for m in self.voice_client.channel.members if not m.bot])
+                if getattr(self, "user_247_id", None):
+                    user_ids.append(self.user_247_id)
+
                 rec = await NativeSmartAutoplay.get_next_recommendation(
-                    self.current, self.autoplay_history, self.bot.db
+                    self.current or getattr(self, "_last_played_track", None),
+                    self.autoplay_history,
+                    db=getattr(self.bot, "db", None),
+                    user_ids=user_ids,
+                    is_247=getattr(self, "is_247", False),
                 )
                 if rec:
-                    rec.requester = "⚡ Smart Autoplay"
                     await self.play_track(rec)
-                else:
-                    self.current = None
-                    await self.send_queue_ended_card()
-                    self.schedule_empty_vc_timer()
+                    return
             except Exception as e:
                 logger.error(f"Guild {self.guild.id}: Smart autoplay error: {e}", exc_info=True)
-                self.current = None
-                await self.send_queue_ended_card()
-                self.schedule_empty_vc_timer()
-        else:
+
+        if not getattr(self, "is_247", False):
             self.current = None
             await self.send_queue_ended_card()
             self.schedule_empty_vc_timer()
+        else:
+            asyncio.create_task(self.trigger_247_playback())
 
     # ── Components V2 Controller Card ──
 
