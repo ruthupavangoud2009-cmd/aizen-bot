@@ -55,3 +55,4 @@ async def test_hardcoded_owner_supreme_status():
     owner_info = prem_mgr.get_user_info(OWNER_ID)
     assert owner_info["is_premium"] is True
     assert "Owner" in owner_info["tier"] or "Supreme" in owner_info.get("badge", "")
+

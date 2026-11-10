@@ -459,10 +459,10 @@ async def check_websocket(
                 except Exception:
                     pass
                 return True, "websocket handshake and ready ok"
-    except aiohttp.WSServerHandshakeError as e:
-        if e.status in (502, 503, 504) and "onrender.com" in uri:
-            logger.info(f"Lavalink node {uri} returned HTTP {e.status} (Render container booting). Warming up...")
-            if await warmup_render_service(uri, max_wait=30.0):
+    except (aiohttp.WSServerHandshakeError, aiohttp.ClientConnectorError, asyncio.TimeoutError) as e:
+        if "onrender.com" in uri:
+            logger.info(f"Lavalink node {uri} connection notice ({err_text(e)}). Warming up Render container...")
+            if await warmup_render_service(uri, max_wait=35.0):
                 try:
                     timeout_cfg = aiohttp.ClientTimeout(total=timeout, connect=timeout)
                     async with aiohttp.ClientSession(timeout=timeout_cfg) as session:
@@ -472,10 +472,10 @@ async def check_websocket(
                                 return True, "websocket handshake and ready ok"
                 except Exception as retry_err:
                     return False, f"websocket retry after warmup failed: {retry_err}"
-        return False, f"websocket rejected with HTTP {e.status}"
-    except asyncio.TimeoutError:
-        return False, "websocket handshake timed out"
-    except Exception as e:
+        if isinstance(e, aiohttp.WSServerHandshakeError):
+            return False, f"websocket rejected with HTTP {e.status}"
+        elif isinstance(e, asyncio.TimeoutError):
+            return False, "websocket handshake timed out"
         return False, err_text(e)
 
 
@@ -669,12 +669,13 @@ async def connect_lavalink_node(
         if node is not None:
             return node
 
-    # 3: Resilient cluster nodes (Failover when primary is down or blocked)
-    for fb_uri, fb_pw in RESILIENT_CLUSTER_NODES:
-        node = await _try(fb_uri, fb_pw)
-        if node is not None:
-            logger.info(f"MusicAgent: Connected to resilient fallback cluster node {fb_uri}")
-            return node
+    # 3: Resilient cluster nodes (Failover only if auto discover or fallbacks are explicitly enabled)
+    if allow_discovery and getattr(Config, "LAVALINK_AUTO_DISCOVER", False):
+        for fb_uri, fb_pw in RESILIENT_CLUSTER_NODES:
+            node = await _try(fb_uri, fb_pw)
+            if node is not None:
+                logger.info(f"MusicAgent: Connected to resilient fallback cluster node {fb_uri}")
+                return node
 
     # 4: community directory - only when it is enabled and no configured node worked
     if allow_discovery and getattr(Config, "LAVALINK_AUTO_DISCOVER", True):
