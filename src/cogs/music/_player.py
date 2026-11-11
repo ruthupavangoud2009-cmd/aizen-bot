@@ -568,13 +568,6 @@ class GuildPlayer:
 
         if not playable:
             logger.warning(f"Guild {self.guild.id}: Lavalink could not resolve playable for '{track.title}'")
-            if self.home_channel:
-                try:
-                    warn_c = KyokaContainer(accent_color=None)
-                    warn_c.add_text(f"⚠️ **Could not stream track:** `{track.title}`\n> Audio stream was unavailable on YouTube. Advancing to next track in queue...")
-                    await send_container_response(self.home_channel, warn_c)
-                except Exception:
-                    pass
             next_t = await self.pop_next_track()
             if next_t:
                 await self.play_track(next_t, message_to_edit=message_to_edit)
@@ -1242,13 +1235,7 @@ class GuildPlayer:
                     )
                 except Exception as e:
                     logger.debug(f"Guild {self.guild.id}: voice skip cleanup notice: {e}")
-            if self.home_channel:
-                try:
-                    warn_c = KyokaContainer(accent_color=None)
-                    warn_c.add_text(f"⚠️ **Could not stream track:** `{failed_title}` (audio source error). Advancing queue...")
-                    await send_container_response(self.home_channel, warn_c)
-                except Exception:
-                    pass
+            logger.warning(f"Guild {self.guild.id}: Could not stream track '{failed_title}' (source error). Advancing queue silently.")
             next_track = await self.pop_next_track()
             if next_track:
                 await self.play_track(next_track)
@@ -1419,31 +1406,40 @@ class GuildPlayer:
         return container
 
     async def send_now_playing_card(self, track: Track, message_to_edit: Optional[discord.Message] = None) -> None:
-        """Post or edit the interactive Now Playing card in home channel."""
+        """
+        Update the Now Playing controller card in the home channel.
+        Only displays in chat when explicitly requested by a user command (?nowplaying, ?np, or ?play),
+        preventing automatic chat clutter during queue playback, autoplay, and 24/7 radio.
+        """
         if not self.home_channel:
             return
 
         container = self.build_now_playing_container(track)
         view = MusicControlView(self.bot, player=self, track_url=track.url)
 
-        # For every song starting from queue, skip, autoplay, or fresh play: send a brand-new clean Now Playing card!
-        try:
-            msg = await send_container_response(
-                self.home_channel, container, view=view, content=None
-            )
-            if isinstance(msg, discord.Message):
-                self.controller_message = msg
-                # Clean up initial temporary searching message if present
-                if message_to_edit and isinstance(message_to_edit, discord.Message) and message_to_edit.id != msg.id:
-                    try:
-                        await message_to_edit.delete()
-                    except Exception:
-                        pass
-        except Exception as e:
-            logger.debug(f"Failed to send now playing card: {e}")
+        # 1. If triggered by an explicit command message (e.g. ?play when idle):
+        if message_to_edit and isinstance(message_to_edit, discord.Message):
+            try:
+                await edit_container_response(message_to_edit, container, view=view, content=None)
+                self.controller_message = message_to_edit
+                return
+            except Exception as e:
+                logger.debug(f"Failed to edit command message with now playing: {e}")
+
+        # 2. If a controller message exists from an explicit ?nowplaying / ?np command, edit it in place
+        if self.controller_message and isinstance(self.controller_message, discord.Message):
+            try:
+                await edit_container_response(self.controller_message, container, view=view, content=None)
+                return
+            except Exception:
+                self.controller_message = None
+
+        # 3. DO NOT post new messages into chat automatically on song transitions!
+        # The Now Playing card will only appear when someone explicitly uses a command (?nowplaying / ?np).
+        return
 
     async def update_controller_message(self, force: bool = False) -> None:
-        """Refresh active controller card."""
+        """Refresh active controller card in place without posting new messages."""
         if not self.controller_message or not self.current:
             return
 
@@ -1453,6 +1449,7 @@ class GuildPlayer:
             await edit_container_response(self.controller_message, container, view=view, content=None)
         except Exception as e:
             logger.debug(f"Failed to edit controller message: {e}")
+            self.controller_message = None
 
     async def send_queue_ended_card(self) -> None:
         """Post or edit the Queue Ended card in home channel."""
@@ -1486,16 +1483,10 @@ class GuildPlayer:
                 self.controller_message = None
                 return
             except Exception:
-                pass
+                self.controller_message = None
 
-        try:
-            await send_container_response(
-                self.home_channel,
-                container,
-                content=None,
-            )
-        except Exception:
-            pass
+        # Do not post a brand-new message to chat when queue ends to avoid filling the chat
+        return
 
     # ── Inactivity Timers ──
 
