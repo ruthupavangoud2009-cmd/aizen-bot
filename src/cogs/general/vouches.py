@@ -510,7 +510,8 @@ class Vouches(commands.Cog, name="Vouches"):
             color=KyokaTheme.PRIMARY,
             timestamp=discord.utils.utcnow()
         )
-        avatar = getattr(member, "display_avatar", getattr(member, "avatar", None))        if avatar:
+        avatar = getattr(member, "display_avatar", getattr(member, "avatar", None))
+        if avatar:
             e.set_thumbnail(url=avatar.url)
 
         e.add_field(name='Vouched By', value=ctx.author.mention, inline=True)
