@@ -704,7 +704,7 @@ class Vouches(commands.Cog, name="Vouches"):
         banner_file = AssetManager.attach_feature_banner(embed, "vouches")
         await ctx.reply(embed=embed, file=banner_file, mention_author=False)
 
-    def _extract_vouch_from_message(self, msg: discord.Message) -> Optional[tuple[int, int, str, str]]:
+    def _extract_vouch_from_message(self, msg: discord.Message) -> Optional[tuple[int, int, str, str, int]]:
         """
         Intelligently extract target_id, voucher_id, reason, and service_type from a historical message or embed.
         Returns (target_id, voucher_id, reason, service_type) or None if not a valid vouch.
@@ -721,8 +721,9 @@ class Vouches(commands.Cog, name="Vouches"):
                     if target_match:
                         target_id = int(target_match.group(1))
                         reason = (emb.description or full_text)[:250].strip()
+                        reason, rating = self._parse_rating(reason)
                         service_type, clean_reason = self._parse_service_and_reason(reason)
-                        return target_id, msg.author.id, clean_reason or "Verified Service Vouch", service_type
+                        return target_id, msg.author.id, clean_reason or "Verified Service Vouch", service_type, rating
 
         # 2. Check plain text patterns
         content = (msg.content or "").strip()
@@ -740,14 +741,16 @@ class Vouches(commands.Cog, name="Vouches"):
             if m:
                 target_id = int(m.group(1))
                 reason = m.group(2).strip() or "Verified Service Vouch"
+                reason, rating = self._parse_rating(reason)
                 service_type, clean_reason = self._parse_service_and_reason(reason)
-                return target_id, msg.author.id, clean_reason or "Verified Service Vouch", service_type
+                return target_id, msg.author.id, clean_reason or "Verified Service Vouch", service_type, rating
 
         if msg.mentions and any(w in content.lower() for w in ("vouch", "+rep", "legit", "fast raid", "fast carry", "delivered", "trusted")):
             target_id = msg.mentions[0].id
             clean_content = re.sub(r"<@!?\d{17,20}>", "", content).strip()
+            clean_content, rating = self._parse_rating(clean_content)
             service_type, clean_reason = self._parse_service_and_reason(clean_content)
-            return target_id, msg.author.id, clean_reason or "Verified Service Vouch", service_type
+            return target_id, msg.author.id, clean_reason or "Verified Service Vouch", service_type, rating
 
         return None
 
@@ -812,7 +815,7 @@ class Vouches(commands.Cog, name="Vouches"):
                     skipped += 1
                     continue
 
-                target_id, voucher_id, reason_text, service_type = parsed
+                target_id, voucher_id, reason_text, service_type, rating = parsed
 
                 if target_id == voucher_id:
                     skipped += 1
@@ -833,7 +836,7 @@ class Vouches(commands.Cog, name="Vouches"):
                             msg.created_at.timestamp(),
                             0,
                             service_type,
-                            5,
+                            rating,
                             'scanned_channel',
                             ctx.author.id,
                             now,
