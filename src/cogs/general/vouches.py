@@ -124,6 +124,12 @@ def conn():
         except sqlite3.OperationalError:
             pass
 
+    # Replace the old default star reaction in existing server configurations.
+    try:
+        c.execute("UPDATE vouch_config SET reaction_2='✨' WHERE reaction_2='⭐'")
+    except sqlite3.OperationalError:
+        pass
+
     try:
         c.execute("CREATE INDEX IF NOT EXISTS idx_vouches_msg_id ON vouches(message_id)")
     except sqlite3.OperationalError:
