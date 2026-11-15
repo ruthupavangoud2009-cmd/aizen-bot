@@ -489,11 +489,18 @@ class Vouches(commands.Cog, name="Vouches"):
                 (member.id,)
             ).fetchone()['n']
 
-            # Check configured showcase channel in current guild
-            cfg = c.execute('SELECT channel_id FROM vouch_config WHERE guild_id=?', (ctx.guild.id,)).fetchone()
-            vouch_ch_id = cfg['channel_id'] if cfg else None
+            # Keep the full configuration row loaded above; do not overwrite it
+            # with a channel_id-only query (which caused KeyError on reaction_1).
+            showcase_cfg = c.execute(
+                'SELECT channel_id FROM vouch_config WHERE guild_id=?',
+                (ctx.guild.id,)
+            ).fetchone()
+            vouch_ch_id = showcase_cfg['channel_id'] if showcase_cfg else None
 
-        reaction_values = (cfg["reaction_1"] or "💜", cfg["reaction_2"] or "✨")
+        reaction_values = (
+            (cfg["reaction_1"] or "💜") if cfg else "💜",
+            (cfg["reaction_2"] or "✨") if cfg else "✨",
+        )
 
         if held:
             return await ctx.reply(
