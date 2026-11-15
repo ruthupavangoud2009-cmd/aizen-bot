@@ -516,12 +516,16 @@ class Vouches(commands.Cog, name="Vouches"):
         e.add_field(name='Global Vouches', value=f'`{total}` active across servers', inline=True)
         e.set_footer(text=f'KYŌKA Global Reputation • Verified #{vid:04d}')
 
-        posted = await ctx.reply(embed=e, mention_author=False)
+        # React to the member's original vouch submission, not the bot's own
+        # confirmation card. This makes the configured animated/custom emojis
+        # visible beside the actual vouch command.
         for reaction in reaction_values:
             try:
-                await posted.add_reaction(reaction)
+                await ctx.message.add_reaction(reaction)
             except (discord.HTTPException, TypeError, ValueError) as exc:
-                logger.warning("Could not add configured vouch reaction %r: %s", reaction, exc)
+                logger.warning("Could not add configured vouch reaction %r to message %s: %s", reaction, ctx.message.id, exc)
+
+        await ctx.reply(embed=e, mention_author=False)
 
     # ── 2. GLOBAL LEADERBOARD (VLB) ───────────────────────────────────────────
     @commands.command(name='vlb', aliases=['vouchleaderboard', 'vouchlb', 'topvouches', 'repleaderboard'])
