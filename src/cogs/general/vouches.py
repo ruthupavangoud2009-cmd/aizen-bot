@@ -108,11 +108,19 @@ def conn():
         ("origin_guild_name", "TEXT"),
         ("is_active", "INTEGER DEFAULT 1"),
         ("message_id", "TEXT DEFAULT ''"),
+    ]:
+        try:
+            c.execute(f"ALTER TABLE vouches ADD COLUMN {col_name} {col_def}")
+        except sqlite3.OperationalError:
+            pass
+
+    # Migrate per-server reaction preferences on the configuration table.
+    for col_name, col_def in [
         ("reaction_1", "TEXT DEFAULT '💜'"),
         ("reaction_2", "TEXT DEFAULT '⭐'"),
     ]:
         try:
-            c.execute(f"ALTER TABLE vouches ADD COLUMN {col_name} {col_def}")
+            c.execute(f"ALTER TABLE vouch_config ADD COLUMN {col_name} {col_def}")
         except sqlite3.OperationalError:
             pass
 
