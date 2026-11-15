@@ -299,19 +299,8 @@ class Vouches(commands.Cog, name="Vouches"):
         return await self.vouchhistory(ctx, member=member)
 
     def _parse_rating(self, raw_text: str) -> tuple[str, int]:
-        """Extract a trailing rating such as 5stars, 4-star, or a star string."""
-        text = raw_text.strip()
-        rating = 5
-        match = re.search(r"(?:^|\s)([1-5])\s*(?:stars?|⭐|★)\s*$", text, flags=re.IGNORECASE)
-        if match:
-            rating = int(match.group(1))
-            text = text[:match.start()].strip()
-        else:
-            stars = re.search(r"\s*([⭐★]{1,5})\s*$", text)
-            if stars:
-                rating = len(stars.group(1))
-                text = text[:stars.start()].strip()
-        return text, rating
+        """Legacy compatibility: preserve review text; vouches have no star ratings."""
+        return raw_text.strip(), 5
 
     def _parse_service_and_reason(self, raw_text: str) -> tuple[str, str]:
         parts = raw_text.strip().split(maxsplit=1)
@@ -1122,8 +1111,11 @@ class Vouches(commands.Cog, name="Vouches"):
             if channel is None:
                 c.execute('DELETE FROM vouch_config WHERE guild_id=?', (ctx.guild.id,))
                 return await ctx.reply('Vouch showcase channel has been reset to default.', mention_author=False)
-            c.execute('INSERT OR REPLACE INTO vouch_config(guild_id, channel_id) VALUES(?,?)',
-                      (ctx.guild.id, channel.id))
+            c.execute(
+                'INSERT INTO vouch_config(guild_id, channel_id) VALUES(?,?) '
+                'ON CONFLICT(guild_id) DO UPDATE SET channel_id=excluded.channel_id',
+                (ctx.guild.id, channel.id)
+            )
         await ctx.reply(f'✅ Vouch showcase channel set to {channel.mention}. All new verified vouches will be auto-posted there.', mention_author=False)
 
 
