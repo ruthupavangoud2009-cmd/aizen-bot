@@ -1505,13 +1505,26 @@ class TicketSystem(commands.Cog):
         blocks: list[str] = []
         total = 0
         for channel in getattr(guild, "text_channels", []):
-            if not any(word in (channel.name or "").lower() for word in keywords):
+            channel_label = f"{channel.name or ''} {getattr(channel, 'topic', '') or ''}".lower()
+            if not any(word in channel_label for word in keywords):
                 continue
             try:
                 if not channel.permissions_for(guild.me).read_message_history:
                     continue
                 lines: list[str] = []
-                async for msg in channel.history(limit=35, oldest_first=False):
+                # Include pinned product/price menus even if they are older than recent chat.
+                for pinned in await channel.pins():
+                    pinned_parts = [pinned.clean_content.strip()]
+                    for embed in pinned.embeds:
+                        if embed.title:
+                            pinned_parts.append(embed.title)
+                        if embed.description:
+                            pinned_parts.append(embed.description)
+                        pinned_parts.extend(f"{field.name}: {field.value}" for field in embed.fields[:10])
+                    pinned_text = " | ".join(part for part in pinned_parts if part)
+                    if pinned_text:
+                        lines.append(f"[#{channel.name} • pinned] {pinned.author.display_name}: {pinned_text[:1000]}")
+                async for msg in channel.history(limit=100, oldest_first=False):
                     parts = [msg.clean_content.strip()]
                     for embed in msg.embeds:
                         if embed.title:
@@ -1528,7 +1541,7 @@ class TicketSystem(commands.Cog):
                     block = "\n".join(lines)
                     blocks.append(block)
                     total += len(block)
-                    if total >= 12000:
+                    if total >= 20000:
                         break
             except (discord.Forbidden, discord.HTTPException):
                 continue
