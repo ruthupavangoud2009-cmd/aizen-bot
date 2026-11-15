@@ -42,6 +42,24 @@ class ErrorHandler(commands.Cog, name="ErrorHandler"):
         error = getattr(error, "original", error)
 
         if isinstance(error, commands.CommandNotFound):
+            # Do not silently swallow a missing vouch command: that made a
+            # failed Vouches extension look like the bot ignored the message.
+            attempted = (getattr(ctx, "invoked_with", "") or "").lower()
+            if attempted in {"vouch", "vouchhelp", "rephelp", "vouchremove", "vouchchannel", "vouchregister", "vouchscan"}:
+                logger.error(
+                    "Vouch command '%s' was invoked but is not registered. Vouches cog loaded=%s; failed extension=%s",
+                    attempted,
+                    bool(self.bot.get_cog("Vouches")),
+                    getattr(self.bot, "failed_extensions", {}).get("src.cogs.general.vouches"),
+                )
+                try:
+                    await ctx.reply(
+                        "The vouch module is not loaded right now. The bot has logged the extension failure; "
+                        "please check the latest Render startup logs.",
+                        mention_author=False,
+                    )
+                except Exception:
+                    pass
             return
 
         e_reg = getattr(self.bot, "custom_emojis", None)
