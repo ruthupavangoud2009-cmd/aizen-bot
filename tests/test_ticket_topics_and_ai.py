@@ -3,6 +3,7 @@ import asyncio
 from unittest.mock import AsyncMock, MagicMock, patch
 import discord
 
+from src.cogs.fun.companion_ai import CompanionAI
 from src.cogs.ticket.ticket_system import (
     TicketSetupWizard,
     AddTopicModal,
@@ -150,3 +151,41 @@ async def test_ticket_ai_solved_prompt_view():
     # Test "Need Staff Help" button
     await view.btn_staff.callback(interaction_mock)
     cog_mock.summon_ticket_staff.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_ticket_ai_is_disabled_when_no_setting_exists():
+    bot_mock = MagicMock()
+    bot_mock.add_view = MagicMock()
+    bot_mock.db.fetch_one = AsyncMock(return_value=None)
+    ticket_cog = TicketSystem(bot_mock)
+
+    assert await ticket_cog._ticket_ai_enabled(123456) is False
+
+
+@pytest.mark.asyncio
+async def test_companion_ai_never_replies_inside_ticket_channels():
+    bot_mock = MagicMock()
+    bot_mock.user = MagicMock()
+    bot_mock.user.id = 999
+    bot_mock.ticket_mgr.get_ticket = AsyncMock(return_value={
+        "id": 10, "channel_id": 555, "status": "open", "user_id": 123
+    })
+    companion = CompanionAI(bot_mock)
+    companion._channel_configs[555] = {
+        "guild_id": 1, "channel_id": 555, "enabled": True,
+        "mention_only": False, "persona": "aizen",
+    }
+
+    message = MagicMock()
+    message.author.bot = False
+    message.author.id = 123
+    message.webhook_id = None
+    message.content = "hello kyoka"
+    message.guild = MagicMock()
+    message.channel.id = 555
+
+    await companion.on_message(message)
+
+    bot_mock.ticket_mgr.get_ticket.assert_awaited_once_with(555)
+    assert companion._channel_last_time == {}
