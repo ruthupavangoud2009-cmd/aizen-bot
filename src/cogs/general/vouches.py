@@ -282,6 +282,21 @@ class Vouches(commands.Cog, name="Vouches"):
         """Backward-compatible proxy for tests and internal callers."""
         return await self.vouchhistory(ctx, member=member)
 
+    def _parse_rating(self, raw_text: str) -> tuple[str, int]:
+        """Extract a trailing rating such as 5stars, 4-star, or a star string."""
+        text = raw_text.strip()
+        rating = 5
+        match = re.search(r"(?:^|\s)([1-5])\s*(?:stars?|⭐|★)\s*$", text, flags=re.IGNORECASE)
+        if match:
+            rating = int(match.group(1))
+            text = text[:match.start()].strip()
+        else:
+            stars = re.search(r"\s*([⭐★]{1,5})\s*$", text)
+            if stars:
+                rating = len(stars.group(1))
+                text = text[:stars.start()].strip()
+        return text, rating
+
     def _parse_service_and_reason(self, raw_text: str) -> tuple[str, str]:
         parts = raw_text.strip().split(maxsplit=1)
         if not parts:
@@ -299,7 +314,7 @@ class Vouches(commands.Cog, name="Vouches"):
     # ── 1. VOUCH COMMAND ───────────────────────────────────────────────────────
     @commands.command(name='vouch')
     @commands.guild_only()
-    async def vouch(self, ctx, member: Union[discord.Member, discord.User], *, reason: str):
+    async def vouch(self, ctx, member: Union[discord.Member, discord.User, str], *, reason: Optional[str] = None):
         """Give a reputation vouch to a member for Blox Fruits trades or services.
         
         Usage: +vouch @user [service] <reason>
@@ -307,9 +322,21 @@ class Vouches(commands.Cog, name="Vouches"):
         """
         if not ctx.guild:
             return
+        if isinstance(member, str):
+            subcommand = member.lower().strip()
+            if subcommand in {"lb", "leaderboard", "global"}:
+                return await ctx.invoke(self.vlb)
+            if subcommand in {"wlb", "weekly", "week"}:
+                return await ctx.invoke(self.vouchwlb)
+            if subcommand in {"update", "scan", "register"}:
+                return await ctx.invoke(self.vouchregister, channel=ctx.channel, limit=1000)
+            return await ctx.reply("Use ?vouch @user <reason> [1-5stars], ?vouch lb, ?vouch wlb, or staff-only ?vouch update.", mention_author=False)
+        if reason is None:
+            return await ctx.reply("Add a reason, for example: ?vouch @user Fast delivery 5stars.", mention_author=False)
         if getattr(member, "bot", False) or member.id == ctx.author.id:
             return await ctx.reply('Self-vouches and bot vouches are not allowed.', mention_author=False)
 
+        reason, rating = self._parse_rating(reason)
         service_type, clean_reason = self._parse_service_and_reason(reason)
         clean_reason = clean_reason[:500].strip()
         if not clean_reason:
@@ -325,6 +352,10 @@ class Vouches(commands.Cog, name="Vouches"):
                 return await ctx.reply(f'⏳ You can vouch again in **{rem}** seconds.', mention_author=False)
 
             # Check duplicate within 24 hours
+            already_registered = c.execute('SELECT id FROM vouches WHERE message_id=? AND is_active=1', (str(ctx.message.id),)).fetchone()
+            if already_registered:
+                return await ctx.reply(f'Already registered as VOUCH-{already_registered["id"]:04d}.', mention_author=False)
+
             duplicate = c.execute(
                 'SELECT id FROM vouches WHERE voucher_id=? AND target_id=? AND (? - created) < 86400 AND is_active=1',
                 (ctx.author.id, member.id, now)
@@ -332,9 +363,9 @@ class Vouches(commands.Cog, name="Vouches"):
             held = 1 if duplicate else 0
 
             c.execute(
-                'INSERT INTO vouches(guild_id, voucher_id, target_id, reason, created, held, service_type, rating, source, is_active) '
-                'VALUES(?,?,?,?,?,?,?,?,?,1)',
-                (ctx.guild.id, ctx.author.id, member.id, clean_reason, now, held, service_type, 5, 'normal')
+                'INSERT INTO vouches(guild_id, voucher_id, target_id, reason, created, held, service_type, rating, source, is_active, message_id) '
+                'VALUES(?,?,?,?,?,?,?,?,?,1,?)',
+                (ctx.guild.id, ctx.author.id, member.id, clean_reason, now, held, service_type, rating, 'normal', str(ctx.message.id))
             )
             vid = c.execute('SELECT last_insert_rowid()').fetchone()[0]
             c.execute('INSERT OR REPLACE INTO vouch_cooldowns VALUES(?,?,?)', (ctx.guild.id, ctx.author.id, now))
@@ -349,6 +380,12 @@ class Vouches(commands.Cog, name="Vouches"):
             # Check configured showcase channel in current guild
             cfg = c.execute('SELECT channel_id FROM vouch_config WHERE guild_id=?', (ctx.guild.id,)).fetchone()
             vouch_ch_id = cfg['channel_id'] if cfg else None
+
+        try:
+            await ctx.message.add_reaction("💜")
+            await ctx.message.add_reaction("⭐")
+        except discord.HTTPException as exc:
+            logger.debug("Could not add vouch acknowledgement reactions: %s", exc)
 
         if held:
             return await ctx.reply(
@@ -372,7 +409,7 @@ class Vouches(commands.Cog, name="Vouches"):
         e.add_field(name='Vouched By', value=ctx.author.mention, inline=True)
         e.add_field(name='Service Category', value=f'{icon} {s_label}', inline=True)
         e.add_field(name='Vouch ID', value=f'`#VOUCH-{vid:04d}`', inline=True)
-        e.add_field(name='Rating', value='⭐⭐⭐⭐⭐ (5/5)', inline=True)
+        e.add_field(name='Rating', value=f'{"⭐" * rating} ({rating}/5)', inline=True)
         e.add_field(name='Global Vouches', value=f'`{total}` active across servers', inline=True)
         e.set_footer(text=f'KYŌKA Global Reputation • Verified #{vid:04d}')
 
@@ -422,8 +459,38 @@ class Vouches(commands.Cog, name="Vouches"):
         banner_file = AssetManager.attach_feature_banner(embed, "vouches")
         await ctx.reply(embed=embed, file=banner_file, mention_author=False)
 
+    @commands.command(name='vouchwlb', aliases=['vouchweekly', 'weeklyvouches'])
+    @commands.guild_only()
+    async def vouchwlb(self, ctx):
+        """Show the top members by verified vouches received in the last seven days."""
+        since = time.time() - 7 * 86400
+        with conn() as c:
+            rows = c.execute(
+                'SELECT target_id, COUNT(*) AS total, AVG(rating) AS average_rating '
+                'FROM vouches WHERE held=0 AND is_active=1 AND created>=? '
+                'GROUP BY target_id ORDER BY total DESC, average_rating DESC LIMIT 10',
+                (since,)
+            ).fetchall()
+        embed = discord.Embed(
+            title='KYOKA WEEKLY VOUCH LEADERBOARD',
+            description='Top reputation earners from the last 7 days, across every server:\n\n',
+            color=KyokaTheme.PRIMARY,
+            timestamp=discord.utils.utcnow(),
+        )
+        if not rows:
+            embed.description += 'No verified vouches have been recorded this week yet.'
+        else:
+            medals = ["🥇", "🥈", "🥉", "4️⃣", "5️⃣", "6️⃣", "7️⃣", "8️⃣", "9️⃣", "🔟"]
+            for idx, row in enumerate(rows):
+                medal = medals[idx] if idx < len(medals) else f"#{idx + 1}"
+                avg = float(row["average_rating"] or 0)
+                embed.description += f"{medal} <@{row['target_id']}> — {row['total']} vouches · {avg:.1f}/5 ⭐\n"
+        embed.set_footer(text='KYOKA Weekly Reputation • Rolling 7-day window')
+        banner_file = AssetManager.attach_feature_banner(embed, "vouches")
+        await ctx.reply(embed=embed, file=banner_file, mention_author=False)
+
     # ── 3. VOUCH PROFILE / VOUCHINFO ──────────────────────────────────────────
-    @commands.command(name='vouchinfo', aliases=['vouchprofile', 'rep', 'reputation'])
+    @commands.command(name='vouchinfo', aliases=['vouchprofile', 'rep', 'reputation', 'vp'])
     @commands.guild_only()
     async def vouchinfo(self, ctx, member: Optional[Union[discord.Member, discord.User]] = None):
         """Display global Blox Fruits reputation statistics, breakdown by service, and provenance."""
