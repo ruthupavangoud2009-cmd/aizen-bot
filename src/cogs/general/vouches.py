@@ -311,6 +311,32 @@ class Vouches(commands.Cog, name="Vouches"):
             return matched, parts[1].strip()
         return "general", raw_text.strip()
 
+    @commands.command(name='vouchhelp', aliases=['rephelp'])
+    @commands.guild_only()
+    async def vouchhelp(self, ctx):
+        """Show the complete reputation command guide."""
+        prefix = getattr(self.bot, "command_prefix", "+")
+        if not isinstance(prefix, str):
+            prefix = "+"
+        embed = discord.Embed(title="KYOKA • GLOBAL VOUCH SYSTEM",
+            description="A cross-server reputation ledger with ratings, public profiles, leaderboards and staff review.",
+            color=KyokaTheme.PRIMARY)
+        embed.add_field(name="Member commands", value=(
+            f"{prefix}vouch @user <reason> 5stars — submit a rated vouch\n"
+            f"{prefix}vouch lb — global leaderboard\n"
+            f"{prefix}vouch wlb — rolling 7-day leaderboard\n"
+            f"{prefix}vp @user — global reputation profile\n"
+            f"{prefix}vouchhistory @user — paginated review history"), inline=False)
+        embed.add_field(name="Staff commands", value=(
+            f"{prefix}vouch update — scan the configured vouch channel\n"
+            f"{prefix}heldvouches — review pending entries\n"
+            f"{prefix}vouchapprove <id> [reason] — approve a held vouch\n"
+            f"{prefix}vouchreject <id> [reason] — reject a held vouch\n"
+            f"{prefix}vouchremove <id> [reason] — remove a public vouch with audit retention\n"
+            f"{prefix}vouchchannel #channel — set the showcase / import channel"), inline=False)
+        embed.set_footer(text="Vouches are shared globally by Discord user ID across servers using the same database.")
+        await ctx.reply(embed=embed, mention_author=False)
+
     # ── 1. VOUCH COMMAND ───────────────────────────────────────────────────────
     @commands.command(name='vouch')
     @commands.guild_only()
@@ -329,7 +355,7 @@ class Vouches(commands.Cog, name="Vouches"):
             if subcommand in {"wlb", "weekly", "week"}:
                 return await ctx.invoke(self.vouchwlb)
             if subcommand in {"update", "scan", "register"}:
-                return await ctx.invoke(self.vouchregister, channel=ctx.channel, limit=1000)
+                return await ctx.invoke(self.vouchregister, limit=1000)
             return await ctx.reply("Use ?vouch @user <reason> [1-5stars], ?vouch lb, ?vouch wlb, or staff-only ?vouch update.", mention_author=False)
         if reason is None:
             return await ctx.reply("Add a reason, for example: ?vouch @user Fast delivery 5stars.", mention_author=False)
@@ -433,7 +459,7 @@ class Vouches(commands.Cog, name="Vouches"):
         with conn() as c:
             rows = c.execute(
                 'SELECT target_id, COUNT(*) as total, AVG(rating) AS average_rating FROM vouches '
-                'WHERE held=0 AND is_active=1 GROUP BY target_id ORDER BY total DESC LIMIT 10'
+                'WHERE held=0 AND is_active=1 GROUP BY target_id ORDER BY total DESC, average_rating DESC LIMIT 10'
             ).fetchall()
 
         embed = discord.Embed(
@@ -508,7 +534,7 @@ class Vouches(commands.Cog, name="Vouches"):
                 (member.id,)
             ).fetchone()['n']
             imported_count = c.execute(
-                "SELECT COUNT(*) n FROM vouches WHERE target_id=? AND source='historical_import' AND held=0 AND is_active=1",
+                "SELECT COUNT(*) n FROM vouches WHERE target_id=? AND source IN ('historical_import', 'scanned_channel') AND held=0 AND is_active=1",
                 (member.id,)
             ).fetchone()['n']
             breakdown = c.execute(
@@ -546,7 +572,7 @@ class Vouches(commands.Cog, name="Vouches"):
                         f'**Global Verified Vouches:** `{total}`\n'
                         f'**Average Rating:** `{average_rating:.1f}/5` ⭐\n'
                         f'**Live Verified Vouches:** `{live_count}`\n'
-                        f'**Historical Staff Imports:** `{imported_count}`\n'
+                        f'**Historical / Scanned Imports:** `{imported_count}`\n'
                         f'**Held Entries Pending:** `{held}`\n\n'
                         f'**Services Completed:**\n{breakdown_text}',
             color=KyokaTheme.PRIMARY,
@@ -611,7 +637,8 @@ class Vouches(commands.Cog, name="Vouches"):
         if not self.is_bot_staff(ctx):
             return await ctx.reply('❌ Access Denied: Only authorized Bot Staff or administrators can import historical vouches.', mention_author=False)
 
-        clean_reason = reason.strip()[:500]
+        clean_reason, import_rating = self._parse_rating(reason.strip())
+        clean_reason = clean_reason[:500]
         if len(clean_reason) < 3:
             return await ctx.reply('❌ Please provide a valid historical review or service reason.', mention_author=False)
 
@@ -663,7 +690,7 @@ class Vouches(commands.Cog, name="Vouches"):
                     now,
                     0,
                     service_type,
-                    5,
+                    import_rating,
                     'historical_import',
                     ctx.author.id,
                     now,
@@ -851,7 +878,7 @@ class Vouches(commands.Cog, name="Vouches"):
                     )
                     c.execute(
                         'INSERT INTO vouch_audit_log(guild_id, mod_id, action, vouch_id, reason, created) VALUES(?,?,?,?,?,?)',
-                        (ctx.guild.id, ctx.author.id, 'SCAN_REGISTER', msg.id, f"Scanned from {target_ch.id} (msg {msg.id})", now)
+                        (ctx.guild.id, ctx.author.id, 'SCAN_REGISTER', c.execute('SELECT last_insert_rowid()').fetchone()[0], f"Scanned from {target_ch.id} (msg {msg.id})", now)
                     )
 
                 imported += 1
@@ -907,7 +934,7 @@ class Vouches(commands.Cog, name="Vouches"):
             if not row:
                 return await ctx.reply(f'Vouch `#{vouch_id}` not found or already inactive.', mention_author=False)
 
-            c.execute('DELETE FROM vouches WHERE id=?', (vouch_id,))
+            c.execute('UPDATE vouches SET is_active=0, reviewer_id=? WHERE id=?', (ctx.author.id, vouch_id))
             c.execute(
                 'INSERT INTO vouch_audit_log(guild_id, mod_id, action, vouch_id, reason, created) VALUES(?,?,?,?,?,?)',
                 (ctx.guild.id, ctx.author.id, 'REMOVE', vouch_id, reason, time.time())
@@ -950,6 +977,38 @@ class Vouches(commands.Cog, name="Vouches"):
         e = discord.Embed(title='✦ HELD VOUCHES • REVIEW QUEUE', color=KyokaTheme.PRIMARY, description=desc)
         banner_file = AssetManager.attach_feature_banner(e, "vouches")
         await ctx.reply(embed=e, file=banner_file, mention_author=False)
+
+    @commands.command(name='vouchapprove')
+    @commands.guild_only()
+    async def vouchapprove(self, ctx, vouch_id: int, *, reason: Optional[str] = "Approved after staff review"):
+        """Approve a held vouch and add it to public reputation totals."""
+        if not self.is_bot_staff(ctx):
+            return await ctx.reply("Only authorized reputation staff can approve vouches.", mention_author=False)
+        now = time.time()
+        with conn() as c:
+            row = c.execute("SELECT id, target_id FROM vouches WHERE id=? AND guild_id=? AND held=1 AND is_active=1", (vouch_id, ctx.guild.id)).fetchone()
+            if not row:
+                return await ctx.reply("That held vouch was not found in this server's review queue.", mention_author=False)
+            c.execute("UPDATE vouches SET held=0, reviewer_id=? WHERE id=?", (ctx.author.id, vouch_id))
+            c.execute("INSERT INTO vouch_audit_log(guild_id, mod_id, action, vouch_id, reason, created) VALUES(?,?,?,?,?,?)",
+                      (ctx.guild.id, ctx.author.id, "APPROVE", vouch_id, reason[:300], now))
+        await ctx.reply(f"Approved VOUCH-{vouch_id:04d}. <@{row['target_id']}> now receives this vouch in their global profile.", mention_author=False)
+
+    @commands.command(name='vouchreject')
+    @commands.guild_only()
+    async def vouchreject(self, ctx, vouch_id: int, *, reason: str = "Rejected after staff review"):
+        """Reject a held vouch without deleting its audit record."""
+        if not self.is_bot_staff(ctx):
+            return await ctx.reply("Only authorized reputation staff can reject vouches.", mention_author=False)
+        now = time.time()
+        with conn() as c:
+            row = c.execute("SELECT id FROM vouches WHERE id=? AND guild_id=? AND held=1 AND is_active=1", (vouch_id, ctx.guild.id)).fetchone()
+            if not row:
+                return await ctx.reply("That held vouch was not found in this server's review queue.", mention_author=False)
+            c.execute("UPDATE vouches SET is_active=0, reviewer_id=? WHERE id=?", (ctx.author.id, vouch_id))
+            c.execute("INSERT INTO vouch_audit_log(guild_id, mod_id, action, vouch_id, reason, created) VALUES(?,?,?,?,?,?)",
+                      (ctx.guild.id, ctx.author.id, "REJECT", vouch_id, reason[:300], now))
+        await ctx.reply(f"Rejected VOUCH-{vouch_id:04d}. The entry remains in the audit history but is excluded from public reputation.", mention_author=False)
 
     # ── 8. VOUCH / REPUTATION STAFF MANAGEMENT ────────────────────────────────
     @commands.command(name='repstaff', aliases=['vouchstaff'])
