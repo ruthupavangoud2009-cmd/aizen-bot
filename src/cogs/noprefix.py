@@ -117,18 +117,6 @@ class NoPrefix(commands.Cog):
             **({"ephemeral": True} if ctx.interaction is not None else {}),
             allowed_mentions=discord.AllowedMentions.none(),
         )
-        except Exception:
-            log.exception("Failed to read no-prefix allowlist")
-            await ctx.send("Could not load the no-prefix allowlist from the database.", ephemeral=ctx.interaction is not None)
-            return
-
-        rendered = "\n".join(f"• <@{user_id}> — `{user_id}`" for user_id in ids)
-        await ctx.send(
-            f"**No-prefix allowlist ({len(ids)})**\n{rendered}",
-            **({"ephemeral": True} if ctx.interaction is not None else {}),
-            allowed_mentions=discord.AllowedMentions.none(),
-        )
-
 
 async def setup(bot: commands.Bot) -> None:
     await bot.add_cog(NoPrefix(bot))
