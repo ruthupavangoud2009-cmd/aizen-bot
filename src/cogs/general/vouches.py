@@ -177,7 +177,6 @@ class VouchesPaginationView(discord.ui.View):
             for r in rows:
                 stype = r["service_type"] or "general"
                 icon, label = SERVICE_TYPES.get(stype, ("🛡️", stype.title()))
-                stars = "⭐" * int(r["rating"] or 5)
                 raw_ts = r["created"]
                 ts_str = f"<t:{int(raw_ts)}:R>" if raw_ts else "*Date Unknown*"
 
@@ -194,7 +193,7 @@ class VouchesPaginationView(discord.ui.View):
                     voucher_desc = "*Anonymous Voucher*"
 
                 embed.add_field(
-                    name=f"`#VOUCH-{r['id']:04d}` {icon} {label} · {stars}{import_badge}",
+                    name=f"`#VOUCH-{r['id']:04d}` {icon} {label}{import_badge}",
                     value=f"> {discord.utils.escape_markdown(r['reason'])}\n"
                           f"> *Vouched by {voucher_desc} • {ts_str}*",
                     inline=False
@@ -246,8 +245,7 @@ class Vouches(commands.Cog, name="Vouches"):
 
     def is_bot_staff(self, ctx) -> bool:
         """Check if author has authoritative Bot Staff or Administrator privileges."""
-        if is_owner_or_staff(ctx.author.id):
-            return True
+        if is_owner_or_staff(ctx.author.id):            return True
         # 1. Authoritative Primary Owner
         if ctx.author.id == 1505515188991033409:
             return True
@@ -331,10 +329,10 @@ class Vouches(commands.Cog, name="Vouches"):
         if not isinstance(prefix, str):
             prefix = "+"
         embed = discord.Embed(title="KYOKA • GLOBAL VOUCH SYSTEM",
-            description="A cross-server reputation ledger with ratings, public profiles, leaderboards and staff review.",
+            description="A cross-server reputation ledger with verified reviews, public profiles, leaderboards and staff review.",
             color=KyokaTheme.PRIMARY)
         embed.add_field(name="Member commands", value=(
-            f"{prefix}vouch @user <reason> 5stars — submit a rated vouch\n"
+            f"{prefix}vouch @user <reason> — submit a vouch\n"
             f"{prefix}vouch lb — global leaderboard\n"
             f"{prefix}vouch wlb — rolling 7-day leaderboard\n"
             f"{prefix}vp @user — global reputation profile\n"
@@ -429,7 +427,7 @@ class Vouches(commands.Cog, name="Vouches"):
                 return await ctx.invoke(self.vouchwlb)
             if subcommand in {"update", "scan", "register"}:
                 return await ctx.invoke(self.vouchregister, limit=1000)
-            return await ctx.reply("Use ?vouch @user <reason> [1-5stars], ?vouch lb, ?vouch wlb, or staff-only ?vouch update.", mention_author=False)
+            return await ctx.reply("Use ?vouch @user <reason>, ?vouch lb, ?vouch wlb, or staff-only ?vouch update.", mention_author=False)
         with conn() as c:
             cfg = c.execute("SELECT channel_id, reaction_1, reaction_2 FROM vouch_config WHERE guild_id=?", (ctx.guild.id,)).fetchone()
         if not cfg or not cfg["channel_id"]:
@@ -440,7 +438,7 @@ class Vouches(commands.Cog, name="Vouches"):
                 return await ctx.reply(f"Vouches can only be submitted in {ch.mention}.", mention_author=False)
             return await ctx.reply("The configured vouch channel is unavailable.", mention_author=False)
         if reason is None:
-            return await ctx.reply("Add a reason, for example: ?vouch @user Fast delivery 5stars.", mention_author=False)
+            return await ctx.reply("Add a reason, for example: ?vouch @user Fast delivery.", mention_author=False)
         if getattr(member, "bot", False) or member.id == ctx.author.id:
             return await ctx.reply('Self-vouches and bot vouches are not allowed.', mention_author=False)
 
@@ -506,19 +504,16 @@ class Vouches(commands.Cog, name="Vouches"):
             color=KyokaTheme.PRIMARY,
             timestamp=discord.utils.utcnow()
         )
-        avatar = getattr(member, "display_avatar", getattr(member, "avatar", None))
-        if avatar:
+        avatar = getattr(member, "display_avatar", getattr(member, "avatar", None))        if avatar:
             e.set_thumbnail(url=avatar.url)
 
         e.add_field(name='Vouched By', value=ctx.author.mention, inline=True)
         e.add_field(name='Service Category', value=f'{icon} {s_label}', inline=True)
         e.add_field(name='Vouch ID', value=f'`#VOUCH-{vid:04d}`', inline=True)
-        e.add_field(name='Rating', value=f'{"⭐" * rating} ({rating}/5)', inline=True)
         e.add_field(name='Global Vouches', value=f'`{total}` active across servers', inline=True)
         e.set_footer(text=f'KYŌKA Global Reputation • Verified #{vid:04d}')
 
-        banner_file = AssetManager.attach_feature_banner(e, "vouches")
-        posted = await ctx.reply(embed=e, file=banner_file, mention_author=False)
+        posted = await ctx.reply(embed=e, mention_author=False)
         for reaction in reaction_values:
             try:
                 await posted.add_reaction(reaction)
@@ -551,7 +546,7 @@ class Vouches(commands.Cog, name="Vouches"):
                 target_user = self.bot.get_user(r['target_id']) or (ctx.guild.get_member(r['target_id']) if ctx.guild else None)
                 name = target_user.mention if target_user else f"<@{r['target_id']}>"
                 avg_rating = float(r['average_rating'] or 0)
-                embed.description += f"{medal} {name} — **{r['total']} vouches** · **{avg_rating:.1f}/5 ⭐**\n"
+                embed.description += f"{medal} {name} — **{r['total']} vouches**\n"
 
         if ctx.guild and ctx.guild.icon:
             embed.set_thumbnail(url=ctx.guild.icon.url)
@@ -585,7 +580,7 @@ class Vouches(commands.Cog, name="Vouches"):
             for idx, row in enumerate(rows):
                 medal = medals[idx] if idx < len(medals) else f"#{idx + 1}"
                 avg = float(row["average_rating"] or 0)
-                embed.description += f"{medal} <@{row['target_id']}> — {row['total']} vouches · {avg:.1f}/5 ⭐\n"
+                embed.description += f"{medal} <@{row['target_id']}> — {row['total']} vouches\n"
         embed.set_footer(text='KYOKA Weekly Reputation • Rolling 7-day window')
         banner_file = AssetManager.attach_feature_banner(embed, "vouches")
         await ctx.reply(embed=embed, file=banner_file, mention_author=False)
@@ -997,8 +992,7 @@ class Vouches(commands.Cog, name="Vouches"):
 
     # ── 6. VOUCH REMOVAL (STAFF / MOD) ────────────────────────────────────────
     @commands.command(name='vouchremove')
-    @commands.guild_only()
-    async def vouchremove(self, ctx, vouch_id: int, *, reason: Optional[str] = "Moderator removal"):
+    @commands.guild_only()    async def vouchremove(self, ctx, vouch_id: int, *, reason: Optional[str] = "Moderator removal"):
         """Remove a vouch from public records and log the action in the audit trail."""
         if not self.is_bot_staff(ctx):
             return await ctx.reply('❌ Only authorized Bot Staff or administrators can remove vouches.', mention_author=False)
