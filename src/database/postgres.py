@@ -1385,6 +1385,14 @@ class PostgresDatabase(BaseDatabase):
             """,
             "CREATE INDEX IF NOT EXISTS idx_v_records_guild ON kyoka_verification_records(guild_id, user_id);",
             "CREATE INDEX IF NOT EXISTS idx_v_records_status ON kyoka_verification_records(guild_id, status);",
+            # Per-guild ticket AI is opt-in and defaults to disabled.
+            """
+            CREATE TABLE IF NOT EXISTS ticket_ai_settings (
+                guild_id BIGINT PRIMARY KEY,
+                enabled BOOLEAN NOT NULL DEFAULT FALSE,
+                updated_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
+            );
+            """,
             # KYOKA 3.0 Enhanced Ticket System Columns & Notes
             "ALTER TABLE active_tickets ADD COLUMN IF NOT EXISTS category VARCHAR(64) DEFAULT 'General Support';",
             "ALTER TABLE active_tickets ADD COLUMN IF NOT EXISTS priority VARCHAR(20) DEFAULT 'Normal';",
