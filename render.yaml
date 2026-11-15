@@ -25,8 +25,12 @@ services:
         value: "1"
       - key: LAVALINK_PUBLIC_LIST_URL
         value: "https://lavalink-list.ajieblogs.eu.org/All"
-      - key: LAVALINK_URI
-        value: "http://lava2.kasawa.pro:2334"
+      - key: LAVALINK_HOST
+        value: "lava2.kasawa.pro"
+      - key: LAVALINK_PORT
+        value: "2334"
+      - key: LAVALINK_SECURE
+        value: "false"
       - key: LAVALINK_PASSWORD
         value: "youshallnotpass"
       - key: GEMINI_MODEL
