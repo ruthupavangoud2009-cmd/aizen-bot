@@ -375,8 +375,24 @@ class CompanionAI(commands.Cog):
         if self.bot.user and message.author.id == self.bot.user.id:
             return
 
-        # Automatic replies are opt-in per channel; direct AI commands remain available everywhere.
+        # Ticket channels are owned exclusively by the Ticket AI switch.
+        # Never let a separately configured Companion AI channel bypass
+        # ?ticket ai enable / disable.
         channel_id = message.channel.id
+        if message.guild:
+            ticket_mgr = getattr(self.bot, "ticket_mgr", None)
+            if ticket_mgr is not None:
+                try:
+                    active_ticket = await ticket_mgr.get_ticket(channel_id)
+                except Exception as exc:
+                    # Fail closed: if ticket state cannot be checked, do not
+                    # allow another AI listener to answer in a possible ticket.
+                    logger.warning("Companion AI skipped channel %s because ticket status could not be checked: %s", channel_id, exc)
+                    return
+                if active_ticket:
+                    return
+
+        # Automatic replies are opt-in per channel; direct AI commands remain available everywhere.
         config = self._channel_configs.get(channel_id) if message.guild else None
         if not config or not config.get("enabled", True):
             return
