@@ -73,7 +73,9 @@ def conn():
             guild_id INTEGER PRIMARY KEY,
             channel_id INTEGER,
             min_age_days INTEGER DEFAULT 0,
-            log_channel_id INTEGER
+            log_channel_id INTEGER,
+            reaction_1 TEXT DEFAULT '💜',
+            reaction_2 TEXT DEFAULT '⭐'
         );
         CREATE TABLE IF NOT EXISTS vouch_scan_state(
             guild_id INTEGER PRIMARY KEY,
@@ -106,6 +108,8 @@ def conn():
         ("origin_guild_name", "TEXT"),
         ("is_active", "INTEGER DEFAULT 1"),
         ("message_id", "TEXT DEFAULT ''"),
+        ("reaction_1", "TEXT DEFAULT '💜'"),
+        ("reaction_2", "TEXT DEFAULT '⭐'"),
     ]:
         try:
             c.execute(f"ALTER TABLE vouches ADD COLUMN {col_name} {col_def}")
@@ -333,7 +337,10 @@ class Vouches(commands.Cog, name="Vouches"):
             f"{prefix}vouchapprove <id> [reason] — approve a held vouch\n"
             f"{prefix}vouchreject <id> [reason] — reject a held vouch\n"
             f"{prefix}vouchremove <id> [reason] — remove a public vouch with audit retention\n"
-            f"{prefix}vouchchannel #channel — set the showcase / import channel"), inline=False)
+            f"{prefix}vouch channel #channel — set the single vouch channel\n"
+            f"{prefix}vouch react 1 set <emoji> — configure reaction one\n"
+            f"{prefix}vouch react 2 set <emoji> — configure reaction two\n"
+            f"{prefix}vouch remove @user <id> — remove a vouch"), inline=False)
         embed.set_footer(text="Vouches are shared globally by Discord user ID across servers using the same database.")
         await ctx.reply(embed=embed, mention_author=False)
 
@@ -350,6 +357,64 @@ class Vouches(commands.Cog, name="Vouches"):
             return
         if isinstance(member, str):
             subcommand = member.lower().strip()
+            if subcommand == "react":
+                if not self.is_bot_staff(ctx):
+                    return await ctx.reply("Only authorized staff can configure reactions.", mention_author=False)
+                parts = (reason or "").split(maxsplit=2)
+                if len(parts) != 3 or parts[1].lower() != "set" or parts[0] not in {"1", "2"}:
+                    return await ctx.reply("Usage: ?vouch react 1 set <emoji>", mention_author=False)
+                raw = parts[2].strip()
+                try:
+                    parsed = discord.PartialEmoji.from_str(raw)
+                    if not parsed.name:
+                        raise ValueError("Invalid emoji")
+                    value = str(parsed) if parsed.id else raw
+                    with conn() as c:
+                        c.execute("INSERT OR IGNORE INTO vouch_config(guild_id, channel_id) VALUES(?,NULL)", (ctx.guild.id,))
+                        c.execute("UPDATE vouch_config SET reaction_%s=? WHERE guild_id=?" % parts[0], (value, ctx.guild.id))
+                except Exception:
+                    return await ctx.reply("Invalid emoji. Use Unicode or <:name:id> / <a:name:id>.", mention_author=False)
+                return await ctx.reply(f"Reaction {parts[0]} set to {raw}.", mention_author=False)
+
+            if subcommand == "channel":
+                if not self.is_bot_staff(ctx):
+                    return await ctx.reply("Only authorized staff can configure the channel.", mention_author=False)
+                channel = ctx.message.channel_mentions[0] if ctx.message.channel_mentions else None
+                if channel is None and reason:
+                    try:
+                        channel = ctx.guild.get_channel(int(reason.strip().replace("<#", "").replace(">", "")))
+                    except (TypeError, ValueError):
+                        pass
+                if not isinstance(channel, discord.TextChannel) or channel.guild.id != ctx.guild.id:
+                    return await ctx.reply("Usage: ?vouch channel #vouches", mention_author=False)
+                with conn() as c:
+                    c.execute("INSERT INTO vouch_config(guild_id, channel_id) VALUES(?,?) ON CONFLICT(guild_id) DO UPDATE SET channel_id=excluded.channel_id", (ctx.guild.id, channel.id))
+                return await ctx.reply(f"Server vouch channel set to {channel.mention}.", mention_author=False)
+
+            if subcommand == "remove":
+                if not self.is_bot_staff(ctx):
+                    return await ctx.reply("Only authorized staff can remove vouches.", mention_author=False)
+                target = ctx.message.mentions[0] if ctx.message.mentions else None
+                match = re.search(r"(?:VOUCH-)?#?(\d{1,12})\s*$", reason or "", re.IGNORECASE)
+                if not target or not match:
+                    return await ctx.reply("Usage: ?vouch remove @user VOUCH_ID", mention_author=False)
+                vid = int(match.group(1))
+                with conn() as c:
+                    row = c.execute("SELECT * FROM vouches WHERE id=? AND guild_id=? AND target_id=? AND is_active=1", (vid, ctx.guild.id, target.id)).fetchone()
+                    if not row:
+                        return await ctx.reply("Active vouch not found for that user in this server.", mention_author=False)
+                    c.execute("UPDATE vouches SET is_active=0, reviewer_id=? WHERE id=?", (ctx.author.id, vid))
+                    c.execute("INSERT INTO vouch_audit_log(guild_id, mod_id, action, vouch_id, reason, created) VALUES(?,?,?,?,?,?)", (ctx.guild.id, ctx.author.id, "REMOVE", vid, "Removed by staff", time.time()))
+                    ch_id, msg_id = row["channel_id"], row["message_id"]
+                if ch_id and msg_id:
+                    ch = ctx.guild.get_channel(int(ch_id))
+                    if ch:
+                        try:
+                            await (await ch.fetch_message(int(msg_id))).delete()
+                        except (discord.NotFound, discord.Forbidden, discord.HTTPException, ValueError):
+                            pass
+                return await ctx.reply(f"Removed VOUCH-{vid:04d} for {target.mention}. Audit record retained.", mention_author=False)
+
             if subcommand in {"lb", "leaderboard", "global"}:
                 return await ctx.invoke(self.vlb)
             if subcommand in {"wlb", "weekly", "week"}:
@@ -357,6 +422,15 @@ class Vouches(commands.Cog, name="Vouches"):
             if subcommand in {"update", "scan", "register"}:
                 return await ctx.invoke(self.vouchregister, limit=1000)
             return await ctx.reply("Use ?vouch @user <reason> [1-5stars], ?vouch lb, ?vouch wlb, or staff-only ?vouch update.", mention_author=False)
+        with conn() as c:
+            cfg = c.execute("SELECT channel_id, reaction_1, reaction_2 FROM vouch_config WHERE guild_id=?", (ctx.guild.id,)).fetchone()
+        if not cfg or not cfg["channel_id"]:
+            return await ctx.reply("Staff must configure the vouch channel first: ?vouch channel #vouches", mention_author=False)
+        if ctx.channel.id != int(cfg["channel_id"]):
+            ch = ctx.guild.get_channel(int(cfg["channel_id"]))
+            if ch:
+                return await ctx.reply(f"Vouches can only be submitted in {ch.mention}.", mention_author=False)
+            return await ctx.reply("The configured vouch channel is unavailable.", mention_author=False)
         if reason is None:
             return await ctx.reply("Add a reason, for example: ?vouch @user Fast delivery 5stars.", mention_author=False)
         if getattr(member, "bot", False) or member.id == ctx.author.id:
@@ -389,9 +463,9 @@ class Vouches(commands.Cog, name="Vouches"):
             held = 1 if duplicate else 0
 
             c.execute(
-                'INSERT INTO vouches(guild_id, voucher_id, target_id, reason, created, held, service_type, rating, source, is_active, message_id) '
-                'VALUES(?,?,?,?,?,?,?,?,?,1,?)',
-                (ctx.guild.id, ctx.author.id, member.id, clean_reason, now, held, service_type, rating, 'normal', str(ctx.message.id))
+                'INSERT INTO vouches(guild_id, voucher_id, target_id, reason, created, held, service_type, rating, source, is_active, message_id, channel_id) '
+                'VALUES(?,?,?,?,?,?,?,?,?,1,?,?)',
+                (ctx.guild.id, ctx.author.id, member.id, clean_reason, now, held, service_type, rating, 'normal', str(ctx.message.id), ctx.channel.id)
             )
             vid = c.execute('SELECT last_insert_rowid()').fetchone()[0]
             c.execute('INSERT OR REPLACE INTO vouch_cooldowns VALUES(?,?,?)', (ctx.guild.id, ctx.author.id, now))
@@ -407,11 +481,7 @@ class Vouches(commands.Cog, name="Vouches"):
             cfg = c.execute('SELECT channel_id FROM vouch_config WHERE guild_id=?', (ctx.guild.id,)).fetchone()
             vouch_ch_id = cfg['channel_id'] if cfg else None
 
-        try:
-            await ctx.message.add_reaction("💜")
-            await ctx.message.add_reaction("⭐")
-        except discord.HTTPException as exc:
-            logger.debug("Could not add vouch acknowledgement reactions: %s", exc)
+        reaction_values = (cfg["reaction_1"] or "💜", cfg["reaction_2"] or "⭐")
 
         if held:
             return await ctx.reply(
@@ -440,16 +510,12 @@ class Vouches(commands.Cog, name="Vouches"):
         e.set_footer(text=f'KYŌKA Global Reputation • Verified #{vid:04d}')
 
         banner_file = AssetManager.attach_feature_banner(e, "vouches")
-        await ctx.reply(embed=e, file=banner_file, mention_author=False)
-
-        # Dispatch copy to configured guild vouch channel if distinct
-        if vouch_ch_id and vouch_ch_id != ctx.channel.id:
-            v_channel = ctx.guild.get_channel(vouch_ch_id)
-            if isinstance(v_channel, discord.TextChannel):
-                try:
-                    await v_channel.send(embed=e)
-                except Exception:
-                    pass
+        posted = await ctx.reply(embed=e, file=banner_file, mention_author=False)
+        for reaction in reaction_values:
+            try:
+                await posted.add_reaction(reaction)
+            except (discord.HTTPException, TypeError, ValueError) as exc:
+                logger.warning("Could not add configured vouch reaction %r: %s", reaction, exc)
 
     # ── 2. GLOBAL LEADERBOARD (VLB) ───────────────────────────────────────────
     @commands.command(name='vlb', aliases=['vouchleaderboard', 'vouchlb', 'topvouches', 'repleaderboard'])
@@ -810,7 +876,7 @@ class Vouches(commands.Cog, name="Vouches"):
                 if cfg and cfg['channel_id']:
                     target_ch = ctx.guild.get_channel(cfg['channel_id'])
         if not target_ch:
-            target_ch = ctx.channel
+            return await ctx.reply("Configure the server vouch channel first with ?vouch channel #vouches.", mention_author=False)
 
         if not target_ch.permissions_for(ctx.guild.me).read_message_history:
             return await ctx.reply(f'❌ Missing Permissions: I do not have permission to read message history in {target_ch.mention}.', mention_author=False)
