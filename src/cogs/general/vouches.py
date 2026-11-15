@@ -432,7 +432,7 @@ class Vouches(commands.Cog, name="Vouches"):
         """Display the global top trusted members and service providers across all servers."""
         with conn() as c:
             rows = c.execute(
-                'SELECT target_id, COUNT(*) as total FROM vouches '
+                'SELECT target_id, COUNT(*) as total, AVG(rating) AS average_rating FROM vouches '
                 'WHERE held=0 AND is_active=1 GROUP BY target_id ORDER BY total DESC LIMIT 10'
             ).fetchall()
 
@@ -450,7 +450,8 @@ class Vouches(commands.Cog, name="Vouches"):
                 medal = medals[idx] if idx < len(medals) else f"`#{idx+1}`"
                 target_user = self.bot.get_user(r['target_id']) or (ctx.guild.get_member(r['target_id']) if ctx.guild else None)
                 name = target_user.mention if target_user else f"<@{r['target_id']}>"
-                embed.description += f"{medal} {name} — **{r['total']} vouches** (100% ⭐⭐⭐⭐⭐)\n"
+                avg_rating = float(r['average_rating'] or 0)
+                embed.description += f"{medal} {name} — **{r['total']} vouches** · **{avg_rating:.1f}/5 ⭐**\n"
 
         if ctx.guild and ctx.guild.icon:
             embed.set_thumbnail(url=ctx.guild.icon.url)
@@ -496,10 +497,12 @@ class Vouches(commands.Cog, name="Vouches"):
         """Display global Blox Fruits reputation statistics, breakdown by service, and provenance."""
         member = member or ctx.author
         with conn() as c:
-            total = c.execute(
-                'SELECT COUNT(*) n FROM vouches WHERE target_id=? AND held=0 AND is_active=1',
+            summary = c.execute(
+                'SELECT COUNT(*) AS n, AVG(rating) AS average_rating FROM vouches WHERE target_id=? AND held=0 AND is_active=1',
                 (member.id,)
-            ).fetchone()['n']
+            ).fetchone()
+            total = summary['n']
+            average_rating = float(summary['average_rating'] or 0)
             held = c.execute(
                 'SELECT COUNT(*) n FROM vouches WHERE target_id=? AND held=1 AND is_active=1',
                 (member.id,)
@@ -541,7 +544,7 @@ class Vouches(commands.Cog, name="Vouches"):
             title=f'✦ {disp_name} • GLOBAL REPUTATION PROFILE',
             description=f'{member.mention}\n{badge}\n\n'
                         f'**Global Verified Vouches:** `{total}`\n'
-                        f'**Positive Review Rate:** `100%` ⭐⭐⭐⭐⭐\n'
+                        f'**Average Rating:** `{average_rating:.1f}/5` ⭐\n'
                         f'**Live Verified Vouches:** `{live_count}`\n'
                         f'**Historical Staff Imports:** `{imported_count}`\n'
                         f'**Held Entries Pending:** `{held}`\n\n'
