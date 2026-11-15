@@ -153,37 +153,24 @@ class Config:
         # explicitly in the hosting environment when a trusted proxy is required.
         return pool
 
-    # Lavalink / Audio Settings (Sanitizes protocol or trailing port if entered in env vars)
-    _raw_lavalink_host = os.getenv("LAVALINK_HOST", "kyoka-lavalink.onrender.com").strip()
-    if "://" in _raw_lavalink_host:
-        _raw_lavalink_host = _raw_lavalink_host.split("://", 1)[1]
-    _raw_lavalink_host = _raw_lavalink_host.rstrip("/")
-    if ":" in _raw_lavalink_host:
-        _host_part, _port_from_host = _raw_lavalink_host.split(":", 1)
-        _raw_lavalink_host = _host_part
-        _inferred_port = _port_from_host
-    else:
-        _inferred_port = "443"
+    # Lavalink / Audio Settings
+    # KYOKA is pinned to the requested public Lavalink node. This intentionally
+    # ignores stale Render dashboard variables (which previously kept routing
+    # the bot to kyoka-lavalink.onrender.com and caused websocket HTTP 404s).
+    LAVALINK_HOST: str = "lava2.kasawa.pro"
+    LAVALINK_PORT: int = 2334
+    LAVALINK_SECURE: bool = False
+    LAVALINK_IDENTIFIER: str = "kyoka-kasawa-v4"
+    LAVALINK_PASSWORD: str = "youshallnotpass"
 
-    LAVALINK_HOST: str = _raw_lavalink_host or "kyoka-lavalink.onrender.com"
-    LAVALINK_PORT: int = int((os.getenv("LAVALINK_PORT", "").strip() or _inferred_port).strip() or 443)
-    LAVALINK_SECURE: bool = os.getenv("LAVALINK_SECURE", "true").lower() in ("true", "1", "yes")
-    LAVALINK_IDENTIFIER: str = os.getenv("LAVALINK_IDENTIFIER", "kyoka-lavalink-v4").strip()
-    LAVALINK_PASSWORD: str = os.getenv("LAVALINK_PASSWORD", "onlyforkyoka").strip()
+    # Canonical Lavalink REST URI; Wavelink upgrades this to ws://.../v4/websocket.
+    LAVALINK_URI: str = "http://lava2.kasawa.pro:2334"
 
-    # Dynamically build canonical LAVALINK_URI
-    _scheme = "https" if LAVALINK_SECURE else "http"
-    LAVALINK_URI: str = f"{_scheme}://{LAVALINK_HOST}:{LAVALINK_PORT}"
-
-    LAVALINK_FALLBACK_URIS: str = (
-        os.getenv("LAVALINK_FALLBACK_URIS") if os.getenv("LAVALINK_FALLBACK_URIS") is not None
-        else ""
-    ).strip()
-    LAVALINK_AUTO_DISCOVER: bool = os.getenv("LAVALINK_AUTO_DISCOVER", "false").lower() in ("1", "true", "yes")
-    LAVALINK_PUBLIC_LIST_URL: str = os.getenv(
-        "LAVALINK_PUBLIC_LIST_URL",
-        "https://lavalink-list.ajieblogs.eu.org/All"
-    ).strip()
+    # Keep discovery disabled so a different community node cannot silently
+    # replace the explicitly configured primary node.
+    LAVALINK_FALLBACK_URIS: str = ""
+    LAVALINK_AUTO_DISCOVER: bool = False
+    LAVALINK_PUBLIC_LIST_URL: str = "https://lavalink-list.ajieblogs.eu.org/All"
 
     # Aesthetics
     COLORS: ThemeColors = ThemeColors()
