@@ -75,7 +75,7 @@ def conn():
             min_age_days INTEGER DEFAULT 0,
             log_channel_id INTEGER,
             reaction_1 TEXT DEFAULT '💜',
-            reaction_2 TEXT DEFAULT '⭐'
+            reaction_2 TEXT DEFAULT '✨'
         );
         CREATE TABLE IF NOT EXISTS vouch_scan_state(
             guild_id INTEGER PRIMARY KEY,
@@ -117,7 +117,7 @@ def conn():
     # Migrate per-server reaction preferences on the configuration table.
     for col_name, col_def in [
         ("reaction_1", "TEXT DEFAULT '💜'"),
-        ("reaction_2", "TEXT DEFAULT '⭐'"),
+        ("reaction_2", "TEXT DEFAULT '✨'"),
     ]:
         try:
             c.execute(f"ALTER TABLE vouch_config ADD COLUMN {col_name} {col_def}")
@@ -487,7 +487,7 @@ class Vouches(commands.Cog, name="Vouches"):
             cfg = c.execute('SELECT channel_id FROM vouch_config WHERE guild_id=?', (ctx.guild.id,)).fetchone()
             vouch_ch_id = cfg['channel_id'] if cfg else None
 
-        reaction_values = (cfg["reaction_1"] or "💜", cfg["reaction_2"] or "⭐")
+        reaction_values = (cfg["reaction_1"] or "💜", cfg["reaction_2"] or "✨")
 
         if held:
             return await ctx.reply(
@@ -639,7 +639,7 @@ class Vouches(commands.Cog, name="Vouches"):
             title=f'✦ {disp_name} • GLOBAL REPUTATION PROFILE',
             description=f'{member.mention}\n{badge}\n\n'
                         f'**Global Verified Vouches:** `{total}`\n'
-                        f'**Average Rating:** `{average_rating:.1f}/5` ⭐\n'
+                        f'**Verified Vouches:** `{total}`\n'
                         f'**Live Verified Vouches:** `{live_count}`\n'
                         f'**Historical / Scanned Imports:** `{imported_count}`\n'
                         f'**Held Entries Pending:** `{held}`\n\n'
