@@ -1467,159 +1467,102 @@ class TicketSystem(commands.Cog):
         support_role_id = panel.get("support_role_id") if panel else None
         support_role = channel.guild.get_role(support_role_id) if (support_role_id and channel.guild) else None
 
-        role_ping = support_role.mention if support_role else "@here"
+        candidates: list[discord.Member] = []
+        if support_role:
+            candidates = [m for m in support_role.members if not m.bot]
+        if not candidates and channel.guild:
+            candidates = [m for m in channel.guild.members if not m.bot and (m.guild_permissions.manage_messages or m.guild_permissions.manage_channels or m.guild_permissions.administrator)]
+        available = [m for m in candidates if getattr(m, "status", discord.Status.offline) in (discord.Status.online, discord.Status.idle)]
+        selected = available[0] if available else (candidates[0] if candidates else None)
+        staff_ping = selected.mention if selected else (support_role.mention if support_role else "")
         arrow = self.bot.custom_emojis.get("icons_rightarrow", "›")
+        staff_card = KyokaContainer(accent_color=0xF59E0B)
+        staff_card.add_section(content=("🔔 **Staff Assistance Requested**\\n" + f"> {staff_ping or 'No configured staff member was found; check the ticket staff role.'} — please assist {requested_by.mention}.\\n\\n" + f"{arrow} **Reason:** *{reason}*\\n" + f"{arrow} **Ticket:** #{ticket.get('ticket_number', 0):04d} • {ticket.get('category', 'Support')}"))
+        await send_container_response(channel, staff_card, content=staff_ping or None, allowed_mentions=discord.AllowedMentions(users=True, roles=False, everyone=False))
 
-        staff_card = KyokaContainer(accent_color=0xF59E0B)  # Amber
-        staff_card.add_section(
-            content=(
-                "🔔 **Support Staff Summoned**\n"
-                f"> {role_ping} — A staff member is needed to assist {requested_by.mention}.\n\n"
-                f"{arrow} **Reason:** *{reason}*\n"
-                f"{arrow} **Ticket:** `#{ticket.get('ticket_number', 0):04d}` • `{ticket.get('category', 'Support')}`\n"
-                f"> *Our staff team has been alerted and will respond shortly!*"
-            )
-        )
-        await send_container_response(channel, staff_card, content=f"{role_ping}")
+    async def _ticket_ai_enabled(self, guild_id: int) -> bool:
+        """Ticket AI is opt-in per guild and defaults to disabled."""
+        try:
+            row = await self.bot.db.fetch_one("SELECT enabled FROM ticket_ai_settings WHERE guild_id = $1;", guild_id)
+            return bool(row and row.get("enabled", False))
+        except Exception as exc:
+            logger.warning("Ticket AI setting lookup failed for guild %s: %s", guild_id, exc)
+            return False
+
+    async def _collect_server_shop_context(self, guild: discord.Guild) -> str:
+        """Read recent shop/catalog/stock listings from relevant public server channels."""
+        keywords = ("shop", "store", "catalog", "catalogue", "product", "price", "stock", "nitro", "boost", "service", "market", "inventory")
+        blocks: list[str] = []
+        total = 0
+        for channel in getattr(guild, "text_channels", []):
+            if not any(word in (channel.name or "").lower() for word in keywords):
+                continue
+            try:
+                if not channel.permissions_for(guild.me).read_message_history:
+                    continue
+                lines: list[str] = []
+                async for msg in channel.history(limit=35, oldest_first=False):
+                    parts = [msg.clean_content.strip()]
+                    for embed in msg.embeds:
+                        if embed.title:
+                            parts.append(embed.title)
+                        if embed.description:
+                            parts.append(embed.description)
+                        parts.extend(f"{field.name}: {field.value}" for field in embed.fields[:10])
+                    content = " | ".join(x for x in parts if x)
+                    if content:
+                        lines.append(f"[#{channel.name}] {msg.author.display_name}: {content[:800]}")
+                    if sum(map(len, lines)) >= 4000:
+                        break
+                if lines:
+                    block = "\n".join(lines)
+                    blocks.append(block)
+                    total += len(block)
+                    if total >= 12000:
+                        break
+            except (discord.Forbidden, discord.HTTPException):
+                continue
+        return "\n".join(blocks)[:12000] or "No shop/product/stock listings were readable in relevant channels."
 
     async def generate_ticket_solution(
-        self,
-        query: str,
-        category: str,
-        guild: discord.Guild,
-        user: discord.User | discord.Member,
-        channel_id: int = 0,
+        self, query: str, category: str, guild: discord.Guild,
+        user: discord.User | discord.Member, channel_id: int = 0,
     ) -> str:
-        """Generate an interactive conversational AI solution via Gemini API / AIManager or smart fallback knowledge base."""
-        # Assemble multi-turn dialogue memory for interactive ticket chat
-        history_entries = self._ticket_dialogues.get(channel_id, [])
-        history_text = ""
-        if history_entries:
-            lines = [f"{entry['speaker']}: {entry['text']}" for entry in history_entries[-6:]]
-            history_text = "\n".join(lines)
-
-        # 1. Try Gemini via ai_mgr or direct Gemini call
+        """Answer from ticket dialogue and the server's real shop/catalog messages."""
+        history = self._ticket_dialogues.get(channel_id, [])
+        history_text = "\n".join(f"{x['speaker']}: {x['text']}" for x in history[-10:]) or "No prior AI dialogue."
+        shop_context = await self._collect_server_shop_context(guild)
         ai_mgr = getattr(self.bot, "ai_mgr", None)
-        if ai_mgr and hasattr(ai_mgr, "generate_response"):
-            try:
-                session = getattr(self.bot, "session", None)
-                if not session or getattr(session, "closed", False):
-                    session_getter = getattr(self.bot, "get_session", None)
-                    if callable(session_getter):
-                        session = session_getter()
-                if session and not getattr(session, "closed", False):
-                    prompt = (
-                        f"You are Kyoka, a warm, super-smart, empathetic, and genuinely helpful live support specialist in '{guild.name}'.\n"
-                        f"Ticket Category: {category}\n"
-                        f"User: {user.display_name}\n"
-                        f"Dialogue History in this Ticket:\n{history_text or 'Ticket just opened.'}\n\n"
-                        f"{user.display_name} just said: '{query}'\n\n"
-                        "Instructions:\n"
-                        "1. Talk directly and warmly like an authentic human support partner — approachable, attentive, friendly, and practical.\n"
-                        f"2. Greet or address the user naturally by name ({user.display_name}).\n"
-                        "3. Directly solve, troubleshoot, or guide them through what they asked. Keep formatting clean with bullet points or numbered steps where needed.\n"
-                        "4. Maintain seamless context from the dialogue history so it feels like a real, continuous conversation.\n"
-                        "5. Keep the reply friendly, conversational, and under 550 characters.\n"
-                        "6. Remind them warmly that if they ever want a human staff member to step in, they can click 'Need Staff Help' below."
-                    )
-                    res = await ai_mgr.generate_response(
-                        session=session,
-                        guild_id=guild.id,
-                        channel_id=channel_id or 0,
-                        user_id=user.id,
-                        prompt=prompt,
-                        server_name=guild.name,
-                        enforce_cooldown=False,
-                    )
-                    if res and len(res.strip()) > 10:
-                        sol = res.strip()
-                        if channel_id:
-                            if channel_id not in self._ticket_dialogues:
-                                self._ticket_dialogues[channel_id] = []
-                            self._ticket_dialogues[channel_id].append({"speaker": user.display_name, "text": query})
-                            self._ticket_dialogues[channel_id].append({"speaker": "Kyoka AI", "text": sol})
-                            if len(self._ticket_dialogues[channel_id]) > 20:
-                                self._ticket_dialogues[channel_id] = self._ticket_dialogues[channel_id][-20:]
-                        return sol
-            except Exception as e:
-                logger.debug(f"AI Manager ticket solution exception: {e}")
-
-        # 2. Smart Knowledge Base Fallback Engine (Authentic & Conversational)
-        q_low = query.lower()
-        cat_low = category.lower()
-        name = user.display_name
-
-        if any(w in q_low or w in cat_low for w in ("bug", "glitch", "error", "crash", "broken")):
-            sol = (
-                f"Hey {name}! I hear you — let's get this sorted out right away.\n\n"
-                "1. **Quick Restart:** Close and restart your app/game to clear any stuck cached memory.\n"
-                "2. **Verify Network:** Double-check your connection or DNS so requests sync smoothly.\n"
-                "3. **Drop Details:** Mind sharing a quick screenshot or your device/OS? That'll help me or our staff pinpoint the exact cause.\n\n"
-                "If it looks like a server-side bug, just tap **Need Staff Help** below and our devs will take over!"
-            )
-        elif any(w in q_low or w in cat_low for w in ("buy", "order", "purchase", "billing", "payment", "shop", "price")):
-            sol = (
-                f"Hey {name}, thanks for reaching out about your purchases and payment verification!\n\n"
-                "1. **Receipt / Order ID:** Please drop your transaction ID or receipt screenshot right here in chat.\n"
-                "2. **Verification:** Our staff team personally reviews every order to ensure total account security.\n\n"
-                "Click **Need Staff Help** below so an authorized staff member can verify and fulfill your order immediately!"
-            )
-        elif any(w in q_low or w in cat_low for w in ("trial", "race v4", "awakening", "v4", "mirage", "gear")):
-            sol = (
-                f"Hey {name}! Ready for Race V4 trials? Here's the playbook:\n\n"
-                "1. **Full Moon:** Head over to the Third Sea and make sure Full Moon is currently in the sky.\n"
-                "2. **Mirage Island Peak:** Stand on the highest peak with your Mirror Fractal and look up.\n"
-                "3. **Temple of Time:** You'll need 3 players with different races activating skills at the exact same moment.\n\n"
-                "Need a carry or want to squad up? Click **Need Staff Help** below and our verified team will jump in!"
-            )
-        elif any(w in q_low or w in cat_low for w in ("raid", "chip", "fragments", "advance raid", "order")):
-            sol = (
-                f"Hey {name}! Let's get those raids and fragments knocked out:\n\n"
-                "1. **Requirements:** Level 1100+ is needed to buy microchips at the Raid Lab.\n"
-                "2. **Carries:** Stay safe at the spawn island while your carry clears each island.\n"
-                "3. **Advanced Raids:** Dough and Phoenix chips require special chip unlocks.\n\n"
-                "Want a verified carry player right now? Click **Need Staff Help** below to team up!"
-            )
-        elif any(w in q_low or w in cat_low for w in ("role", "verify", "permission", "access", "rank")):
-            sol = (
-                f"Hey {name}, let's get your roles sorted out!\n\n"
-                "1. Check the `#verification` channel and make sure you've completed the prompt.\n"
-                "2. Head over to `#roles` to grab any notification, game, or ping roles you'd like.\n\n"
-                "If a role didn't apply or your permissions look off, click **Need Staff Help** below so a Moderator can assign it directly!"
-            )
-        elif any(w in q_low or w in cat_low for w in ("rule", "ban", "warn", "mute", "appeal")):
-            sol = (
-                f"Hey {name}, thank you for contacting us regarding your moderation appeal.\n\n"
-                "Please share your User ID along with a brief, honest explanation of what happened. Our moderation team reviews every appeal fairly.\n\n"
-                "Click **Need Staff Help** below so a Moderator or Administrator can review your case directly."
-            )
-        elif any(w in q_low for w in ("hi", "hello", "hey", "sup", "yo")):
-            sol = (
-                f"Hey {name}! 👋 Great to meet you. I'm Kyoka, your live support assistant here in **{guild.name}**.\n\n"
-                "How can I help you today? Just describe what's going on or what you need, and I'll walk you through it step-by-step!\n"
-                "*(You can also click **Need Staff Help** below anytime if you want a human team member to step in.)*"
-            )
-        elif any(w in q_low for w in ("thanks", "thank you", "thx", "ty", "worked", "fixed", "good")):
-            sol = (
-                f"Awesome, so glad that worked for you, {name}! 🎉\n\n"
-                "If everything's all set, feel free to click **Close Ticket** below to wrap up. Have an amazing day!"
-            )
-        else:
-            sol = (
-                f"Hey {name}! Thanks for opening a ticket regarding **{category}**.\n\n"
-                "Could you give me a few more details or drop any screenshots about what's going on? I'll do everything I can to help you get this resolved.\n\n"
-                "Whenever you'd like human staff to step in, just hit **Need Staff Help** below!"
-            )
-
-        if channel_id:
-            if channel_id not in self._ticket_dialogues:
-                self._ticket_dialogues[channel_id] = []
-            self._ticket_dialogues[channel_id].append({"speaker": user.display_name, "text": query})
-            self._ticket_dialogues[channel_id].append({"speaker": "Kyoka AI", "text": sol})
-            if len(self._ticket_dialogues[channel_id]) > 20:
-                self._ticket_dialogues[channel_id] = self._ticket_dialogues[channel_id][-20:]
-
-        return sol
+        session = getattr(self.bot, "session", None)
+        if (not session or getattr(session, "closed", False)) and callable(getattr(self.bot, "get_session", None)):
+            session = self.bot.get_session()
+        if not ai_mgr or not session or getattr(session, "closed", False):
+            raise RuntimeError("Ticket AI provider is unavailable.")
+        prompt = (
+            "You are this Discord server's contextual support assistant. Read the member's question, ticket history, and shop evidence.\n"
+            f"Server: {guild.name}; category: {category}; member: {user.display_name}\n"
+            f"Ticket conversation:\n{history_text}\nLatest member message:\n{query[:2500]}\n"
+            f"Shop/catalog/stock evidence:\n{shop_context}\n\n"
+            "Rules:\n"
+            "- Answer the actual question; do not use a generic greeting, canned script, or repetitive footer. Use context and vary wording.\n"
+            "- For Nitro, boosts, IDs, subscriptions, and products, find the exact item in the evidence. Quote only the exact listed price and conditions. If absent, say it is not confirmed. Never invent prices or stock.\n"
+            "- For purchase inquiries, tell the member staff will confirm stock/fulfillment; a separate staff alert is sent.\n"
+            "- For other issues, provide specific useful steps. Ask one concise clarification only if necessary.\n"
+            "- Never expose staff-only information or claim to have read channels not included. Keep the answer concise."
+        )
+        answer = await ai_mgr.generate_response(
+            session=session, guild_id=guild.id, channel_id=channel_id or 0,
+            user_id=user.id, prompt=prompt, server_name=guild.name, enforce_cooldown=False,
+        )
+        answer = (answer or "").strip()
+        if len(answer) < 8:
+            raise RuntimeError("Ticket AI returned an empty response.")
+        self._ticket_dialogues.setdefault(channel_id, []).extend([
+            {"speaker": user.display_name, "text": query[:2000]},
+            {"speaker": "Kyoka AI", "text": answer[:2000]},
+        ])
+        self._ticket_dialogues[channel_id] = self._ticket_dialogues[channel_id][-20:]
+        return answer[:1800]
 
     # ─── TICKET CLOSE EXECUTION ───────────────────────────────────────────────
 
@@ -1694,6 +1637,18 @@ class TicketSystem(commands.Cog):
                     await send_container_response(user, dm_container, file=transcript_file)
             except Exception as dm_e:
                 logger.debug(f"Could not DM user close transcript: {dm_e}")
+
+        claimed_by = ticket_data.get("claimed_by")
+        if claimed_by and int(claimed_by) != int(user_id or 0):
+            try:
+                claimant = guild.get_member(int(claimed_by)) or await self.bot.fetch_user(int(claimed_by))
+                if claimant:
+                    staff_file = await generate_html_transcript(channel, ticket_data, bot=self.bot)
+                    staff_card = KyokaContainer(accent_color=0x7C3AED)
+                    staff_card.add_section(content=f"**Claimed Ticket Transcript • #{int(ticket_num) if str(ticket_num).isdigit() else 1:04d}**\n> Server: **{guild.name}**\n> Closed by: **{closer.display_name}**")
+                    await send_container_response(claimant, staff_card, file=staff_file)
+            except Exception as staff_dm_error:
+                logger.debug("Could not DM claimed staff transcript: %s", staff_dm_error)
 
         # Send transcript to log channel if configured
         log_channel_id = panel.get("log_channel_id") if panel else None
@@ -1868,6 +1823,31 @@ class TicketSystem(commands.Cog):
         hub_container.add_text(f"-# Requested by {ctx.author.display_name}")
 
         await send_container_response(ctx, hub_container)
+
+    @ticket_group.command(name="ai", description="Enable, disable, or check the server ticket AI assistant.")
+    @commands.has_permissions(manage_guild=True)
+    async def ticket_ai_cmd(self, ctx: CustomContext, action: str = "status") -> None:
+        """Ticket AI is disabled until a server manager explicitly enables it."""
+        action = action.strip().lower()
+        if action not in ("enable", "on", "disable", "off", "status"):
+            return await ctx.send_error("Use ?ticket ai enable, ?ticket ai disable, or ?ticket ai status.")
+        if action in ("enable", "on", "disable", "off"):
+            enabled = action in ("enable", "on")
+            await self.bot.db.execute(
+                """
+                INSERT INTO ticket_ai_settings (guild_id, enabled, updated_at)
+                VALUES ($1, $2, CURRENT_TIMESTAMP)
+                ON CONFLICT (guild_id) DO UPDATE SET enabled = EXCLUDED.enabled, updated_at = CURRENT_TIMESTAMP;
+                """,
+                ctx.guild.id, enabled,
+            )
+        else:
+            enabled = await self._ticket_ai_enabled(ctx.guild.id)
+        await ctx.send_success(
+            f"Ticket AI is {'ENABLED' if enabled else 'DISABLED'}. " +
+            ("It answers from ticket context and shop listings." if enabled else "Normal ticket and staff controls remain active."),
+            title="Ticket AI Settings",
+        )
 
     @ticket_group.command(
         name="setup",
@@ -2244,86 +2224,104 @@ class TicketSystem(commands.Cog):
         try:
             ticket = await self.bot.ticket_mgr.get_ticket(message.channel.id)
             if ticket and ticket.get("status") == "open":
-                msg_clean = message.clean_content.strip()
-                msg_low = msg_clean.lower()
+                if await self._ticket_ai_enabled(message.guild.id):
+                    msg_clean = message.clean_content.strip()
+                    msg_low = msg_clean.lower()
 
-                # User requested staff directly
-                if any(p in msg_low for p in ("talk to staff", "call staff", "ping staff", "need staff", "human staff", "admin help", "human please", "not working", "didn't help")):
-                    if message.channel.id not in self._staff_summoned_tickets:
-                        await self.summon_ticket_staff(
-                            message.channel,
-                            ticket,
-                            requested_by=message.author,
-                            reason="User requested human staff in chat",
-                        )
-                        return
-
-                # AI interactive response if message is from ticket creator, mentions bot, or calls AI
-                is_creator = message.author.id == ticket.get("user_id")
-                bot_mentioned = bool(self.bot.user and self.bot.user in message.mentions)
-                is_ai_chat = is_creator or bot_mentioned or msg_low.startswith(("ai ", "kyoka "))
-                is_solved = any(w in msg_low for w in ("thank you", "thanks", "thx", "ty", "that worked", "it worked", "fixed", "solved", "all good now", "works now", "working now"))
-
-                can_respond = (
-                    is_ai_chat
-                    and len(msg_clean) >= 2
-                    and (not ticket.get("claimed_by") or bot_mentioned)
-                    and (message.channel.id not in self._staff_summoned_tickets or bot_mentioned or msg_low.startswith(("ai ", "kyoka ")))
-                )
-
-                if can_respond and is_solved:
-                    if message.channel.id not in self._ai_processing_tickets:
-                        self._ai_processing_tickets.add(message.channel.id)
-                        try:
-                            c = KyokaContainer(accent_color=5763719)
-                            c.add_section(
-                                content=(
-                                    f"🎉 **Glad we could solve your issue, {message.author.display_name}!**\n\n"
-                                    "> Would you like me to close and archive this ticket for you, or do you have any other questions?"
-                                )
-                            )
-                            c.add_separator(divider=True)
-                            c.add_text("💡 *Select an option below to close or keep chatting:*")
-                            await send_container_response(
+                    # User requested staff directly
+                    if any(p in msg_low for p in ("talk to staff", "call staff", "ping staff", "need staff", "human staff", "admin help", "human please", "not working", "didn't help")):
+                        if message.channel.id not in self._staff_summoned_tickets:
+                            await self.summon_ticket_staff(
                                 message.channel,
-                                c,
-                                view=TicketAISolvedPromptView(self, ticket),
+                                ticket,
+                                requested_by=message.author,
+                                reason="User requested human staff in chat",
                             )
-                        finally:
-                            self._ai_processing_tickets.discard(message.channel.id)
-                        return
+                            return
 
-                if can_respond:
-                    if message.channel.id not in self._ai_processing_tickets:
-                        self._ai_processing_tickets.add(message.channel.id)
-                        try:
-                            async with message.channel.typing():
-                                await asyncio.sleep(0.5)
-                                sol = await self.generate_ticket_solution(
-                                    query=msg_clean,
-                                    category=ticket.get("category", "General Support"),
-                                    guild=message.guild,
-                                    user=message.author,
-                                    channel_id=message.channel.id,
-                                )
-                                c = KyokaContainer(accent_color=0x7C3AED)
+                    # AI interactive response if message is from ticket creator, mentions bot, or calls AI
+                    is_creator = message.author.id == ticket.get("user_id")
+                    bot_mentioned = bool(self.bot.user and self.bot.user in message.mentions)
+                    is_ai_chat = is_creator or bot_mentioned or msg_low.startswith(("ai ", "kyoka "))
+                    is_solved = any(w in msg_low for w in ("thank you", "thanks", "thx", "ty", "that worked", "it worked", "fixed", "solved", "all good now", "works now", "working now"))
+
+                    can_respond = (
+                        is_ai_chat
+                        and len(msg_clean) >= 2
+                        and (not ticket.get("claimed_by") or bot_mentioned)
+                        and (message.channel.id not in self._staff_summoned_tickets or bot_mentioned or msg_low.startswith(("ai ", "kyoka ")))
+                    )
+
+                    if can_respond and is_solved:
+                        if message.channel.id not in self._ai_processing_tickets:
+                            self._ai_processing_tickets.add(message.channel.id)
+                            try:
+                                c = KyokaContainer(accent_color=5763719)
                                 c.add_section(
                                     content=(
-                                        "💬 **Kyoka (Live Assistant)**\n\n"
-                                        f"{sol}"
+                                        f"🎉 **Glad we could solve your issue, {message.author.display_name}!**\n\n"
+                                        "> Would you like me to close and archive this ticket for you, or do you have any other questions?"
                                     )
                                 )
                                 c.add_separator(divider=True)
-                                c.add_text("💡 *Problem solved? Tap **Solved My Issue** or **Need Staff Help** below.*")
+                                c.add_text("💡 *Select an option below to close or keep chatting:*")
                                 await send_container_response(
                                     message.channel,
                                     c,
-                                    view=TicketAIReplyView(self, ticket),
+                                    view=TicketAISolvedPromptView(self, ticket),
                                 )
-                        except Exception as ai_e:
-                            logger.debug(f"AI ticket reply notice: {ai_e}")
-                        finally:
-                            self._ai_processing_tickets.discard(message.channel.id)
+                            finally:
+                                self._ai_processing_tickets.discard(message.channel.id)
+                            return
+
+                    if can_respond:
+                        if message.channel.id not in self._ai_processing_tickets:
+                            self._ai_processing_tickets.add(message.channel.id)
+                            try:
+                                async with message.channel.typing():
+                                    await asyncio.sleep(0.5)
+                                    sol = await self.generate_ticket_solution(
+                                        query=msg_clean,
+                                        category=ticket.get("category", "General Support"),
+                                        guild=message.guild,
+                                        user=message.author,
+                                        channel_id=message.channel.id,
+                                    )
+                                    c = KyokaContainer(accent_color=0x7C3AED)
+                                    c.add_section(
+                                        content=(
+                                            "💬 **Kyoka (Live Assistant)**\n\n"
+                                            f"{sol}"
+                                        )
+                                    )
+                                    c.add_separator(divider=True)
+                                    c.add_text("💡 *Problem solved? Tap **Solved My Issue** or **Need Staff Help** below.*")
+                                    await send_container_response(
+                                        message.channel,
+                                        c,
+                                        view=TicketAIReplyView(self, ticket),
+                                purchase_intent = any(term in msg_low for term in (
+                                    "buy", "purchase", "price", "cost", "stock", "available",
+                                    "nitro", "boost", "id", "product", "order",
+                                ))
+                                if purchase_intent and message.channel.id not in self._staff_summoned_tickets:
+                                    await self.summon_ticket_staff(
+                                        message.channel, ticket, requested_by=message.author,
+                                        reason="Member asked about a product, price, stock, or purchase; please confirm availability and fulfillment",
+                                    )
+                                    )
+except Exception as ai_e:
+                                logger.warning("Ticket AI failed in channel %s: %s", message.channel.id, ai_e)
+                                await self.summon_ticket_staff(
+                                    message.channel, ticket, requested_by=message.author,
+                                    reason="Ticket AI could not verify a safe answer; human assistance required",
+                                )
+                                await message.channel.send(
+                                    f"{message.author.mention} I couldn't verify a reliable answer, so I've alerted staff to help.",
+                                    allowed_mentions=discord.AllowedMentions(users=True, roles=False, everyone=False),
+                                )
+                            finally:
+                                self._ai_processing_tickets.discard(message.channel.id)
         except Exception as e:
             logger.debug(f"Ticket on_message AI handler notice: {e}")
 
