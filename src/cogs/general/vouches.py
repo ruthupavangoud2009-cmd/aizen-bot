@@ -1006,7 +1006,8 @@ class Vouches(commands.Cog, name="Vouches"):
 
     # ── 6. VOUCH REMOVAL (STAFF / MOD) ────────────────────────────────────────
     @commands.command(name='vouchremove')
-    @commands.guild_only()    async def vouchremove(self, ctx, vouch_id: int, *, reason: Optional[str] = "Moderator removal"):
+    @commands.guild_only()
+    async def vouchremove(self, ctx, vouch_id: int, *, reason: Optional[str] = "Moderator removal"):
         """Remove a vouch from public records and log the action in the audit trail."""
         if not self.is_bot_staff(ctx):
             return await ctx.reply('❌ Only authorized Bot Staff or administrators can remove vouches.', mention_author=False)
