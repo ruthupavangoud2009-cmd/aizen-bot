@@ -662,7 +662,7 @@ class Vouches(commands.Cog, name="Vouches"):
                 orig_voucher_id = None
                 orig_label = f"`{original_voucher[:40]}`"
 
-        service_type, parsed_reason = self._parse_service_and_reason(clean_reason)
+        service_type, clean_reason = self._parse_service_and_reason(clean_reason)
         now = time.time()
 
         with conn() as c:
