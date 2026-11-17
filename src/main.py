@@ -187,8 +187,35 @@ async def run_bot_loop() -> None:
             active_bot = bot
             logger.info(f"Connecting {Config.BOT_NAME} in [{Config.ENVIRONMENT.upper()}] mode to Discord Gateway ({current_route_name})...")
 
-            async with bot:
-                await bot.start(Config.TOKEN)
+            # Optional scheduled client recycle. This closes the gateway and all
+            # bot-owned resources cleanly; the outer supervisor loop then creates
+            # a fresh client. It does not restart the Render container or promise
+            # a lower network ping. Set BOT_RESTART_INTERVAL_HOURS=0 to disable.
+            try:
+                restart_hours = max(0.0, float(os.getenv("BOT_RESTART_INTERVAL_HOURS", "3")))
+            except (TypeError, ValueError):
+                restart_hours = 3.0
+
+            async def _scheduled_client_restart() -> None:
+                if restart_hours <= 0:
+                    return
+                await asyncio.sleep(restart_hours * 3600)
+                logger.warning(
+                    "Scheduled KYOKA client refresh after %.2f hours; closing cleanly.",
+                    restart_hours,
+                )
+                await bot.close()
+
+            restart_task = asyncio.create_task(
+                _scheduled_client_restart(),
+                name="kyoka-scheduled-client-refresh",
+            )
+            try:
+                async with bot:
+                    await bot.start(Config.TOKEN)
+            finally:
+                restart_task.cancel()
+                await asyncio.gather(restart_task, return_exceptions=True)
 
             # Clean exit / graceful disconnect
             backoff_attempt = 0
