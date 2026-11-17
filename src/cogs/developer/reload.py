@@ -153,7 +153,7 @@ class ReloadCog(commands.Cog, name="Developer-Reload"):
                     matrix = [
                         "================ [ EXTENSION HOT-RELOAD ] ================",
                         f"STATE         SYNCED (100% Operational)",
-                        f"LATENCY       {t_dur:.1f}ms",
+                        f"RELOAD TIME   {t_dur:.1f}ms",
                         f"EXTENSIONS    {len(reloaded)} / {len(all_exts)} cogs live (0 faults)",
                         f"CATEGORIES    {cat_summary}",
                         "=========================================================",
@@ -162,7 +162,7 @@ class ReloadCog(commands.Cog, name="Developer-Reload"):
                     matrix = [
                         "================ [ EXTENSION HOT-RELOAD ] ================",
                         f"STATE         PARTIAL ({len(failed)} Faults)",
-                        f"LATENCY       {t_dur:.1f}ms",
+                        f"RELOAD TIME   {t_dur:.1f}ms",
                         f"RELOADED      {len(reloaded)} / {len(all_exts)} cogs live",
                         "FAULTS:",
                     ]
