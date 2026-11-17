@@ -8,8 +8,8 @@ from src.managers.voice_conversation_manager import VoiceConversationManager, CO
 
 
 @pytest.mark.asyncio
-async def test_get_prefix_supports_question_mark_and_standard_fallbacks():
-    """Verify get_prefix resolves configured prefix as well as ?, +, , fallbacks."""
+async def test_get_prefix_accepts_only_the_configured_prefix():
+    """Verify legacy fallback prefixes are rejected for regular users."""
     mock_bot = mock.MagicMock(spec=KyokaBot)
     mock_bot.user = None
     mock_bot.no_prefix_users = set()
@@ -23,9 +23,7 @@ async def test_get_prefix_supports_question_mark_and_standard_fallbacks():
     mock_msg.author = mock.MagicMock(id=987654321)
 
     prefixes = await get_prefix(mock_bot, mock_msg)
-    assert "?" in prefixes, "? prefix must be supported so ?commands work"
-    assert "+" in prefixes, "+ prefix must be supported"
-    assert "," in prefixes, ", prefix must be supported"
+    assert prefixes == ["+"], "Only the server's configured prefix must be accepted"
     assert "" not in prefixes, "Regular user without noprefix grant must NOT have empty prefix"
 
 
