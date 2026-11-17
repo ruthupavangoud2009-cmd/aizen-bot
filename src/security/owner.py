@@ -11,6 +11,16 @@ from typing import Any
 # Primary Bot Owner ID (Strictly hardcoded, non-overridable fail-closed security policy)
 OWNER_ID: int = 1505515188991033409
 OWNER_IDS: set[int] = {OWNER_ID}
+
+def _configured_developer_ids() -> set[int]:
+    result: set[int] = set()
+    for raw in os.getenv("DEVELOPER_IDS", "").replace(";", ",").split(","):
+        value = raw.strip()
+        if value.isdecimal():
+            result.add(int(value))
+    return result
+
+DEVELOPER_IDS: set[int] = _configured_developer_ids()
 log = logging.getLogger("Kyoka.Security")
 _denial_audit_at: dict[int, float] = {}
 
@@ -45,8 +55,9 @@ _load_bot_staff_disk()
 
 
 def is_primary_owner(user_id: int | None) -> bool:
+    """Owner-level bot authority for the primary owner and configured developers."""
     try:
-        return user_id is not None and int(user_id) == OWNER_ID
+        return user_id is not None and int(user_id) in ({OWNER_ID} | DEVELOPER_IDS)
     except (TypeError, ValueError):
         return False
 
