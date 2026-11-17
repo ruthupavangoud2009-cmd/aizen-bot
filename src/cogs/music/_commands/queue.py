@@ -10,6 +10,12 @@ if TYPE_CHECKING:
 
 
 async def execute_queue(cog: Music, ctx: commands.Context, page: Union[int, str] = 1) -> None:
+    if ctx.guild is None:
+        container = KyokaContainer(accent_color=None)
+        container.add_text("**Music queues are only available inside a server.**")
+        await send_container_response(ctx, container)
+        return
+
     if isinstance(page, str):
         cleaned = page.strip().lower()
         if cleaned in ("clear", "clean", "empty", "c", "cls"):
@@ -18,8 +24,12 @@ async def execute_queue(cog: Music, ctx: commands.Context, page: Union[int, str]
             return
         try:
             page = max(1, int(cleaned))
-        except ValueError:
+        except (TypeError, ValueError):
             page = 1
+    elif not isinstance(page, int):
+        page = 1
+    else:
+        page = max(1, page)
 
     player = cog.controller.get_player(ctx.guild.id)
     if not player or not player.is_connected or (not player.current and not player.queue):
@@ -40,8 +50,12 @@ async def execute_queue(cog: Music, ctx: commands.Context, page: Union[int, str]
         container.add_text(f"**Live Player Queue — {ctx.guild.name}**")
     container.add_separator(divider=True)
 
-    async with player._queue_lock:
-        queue_snapshot = list(player.queue)
+    queue_lock = getattr(player, "_queue_lock", None)
+    if queue_lock is not None:
+        async with queue_lock:
+            queue_snapshot = list(player.queue or [])
+    else:
+        queue_snapshot = list(getattr(player, "queue", None) or [])
 
     if not queue_snapshot:
         ap_status = "ON" if player.smart_autoplay else "OFF"
