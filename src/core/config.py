@@ -120,6 +120,7 @@ class Config:
     # Prefixes & Identity
     BOT_NAME: str = os.getenv("BOT_NAME", "KYOKA 3.0")
     DEFAULT_PREFIX: str = os.getenv("BOT_PREFIX", "+")
+    ENABLE_NO_PREFIX: bool = os.getenv("ENABLE_NO_PREFIX", "true").lower() in ("true", "1", "yes", "on")
     
     # Supreme Premium Engine (Lifetime unrestricted access to all modules)
     SUPREME_PREMIUM: bool = os.getenv("SUPREME_PREMIUM", "true").lower() in ("true", "1", "yes")
