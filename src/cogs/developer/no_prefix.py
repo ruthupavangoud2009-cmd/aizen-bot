@@ -31,7 +31,7 @@ class NoPrefix(commands.Cog):
         description="Owner and Staff only: grant, revoke, or list users allowed to use commands without a prefix.",
     )
     @app_commands.describe(
-        action="Choose add, remove, or list",
+        action="Choose add, remove, list, on, or off",
         member="The Discord member to grant or revoke access for",
     )
     @app_commands.choices(action=[
@@ -51,6 +51,19 @@ class NoPrefix(commands.Cog):
             return
 
         action = action.strip().lower()
+        if action in ("toggle", "enable", "disable", "on", "off"):
+            if not is_primary_owner(ctx.author.id):
+                await ctx.send("⛔ Only the primary bot owner can change the global no-prefix setting.", ephemeral=bool(ctx.interaction))
+                return
+            if action == "toggle":
+                state = getattr(self.bot, "no_prefix_enabled", True)
+                await ctx.send("No-prefix is currently **" + ("ON" if state else "OFF") + "**. Use `noprefix on` or `noprefix off`.")
+                return
+            enabled = action in ("enable", "on")
+            self.bot.no_prefix_enabled = enabled
+            await ctx.send("✅ Global no-prefix commands are now **" + ("ENABLED" if enabled else "DISABLED") + "**. " + ("Authorized users can invoke commands without a prefix." if enabled else "Everyone must use the server prefix or slash commands."))
+            return
+
         if action in ("grant", "add"):
             action = "add"
         elif action in ("revoke", "remove", "delete"):
@@ -58,7 +71,7 @@ class NoPrefix(commands.Cog):
         elif action in ("list", "show", "all"):
             action = "list"
         else:
-            await ctx.send("Usage: `noprefix add @member`, `noprefix remove @member`, or `noprefix list`.")
+            await ctx.send("Usage: `noprefix add @member`, `noprefix remove @member`, or `noprefix list`, `noprefix on`, or `noprefix off`.")
             return
 
         if action == "list":
