@@ -28,7 +28,12 @@ class ReloadCog(commands.Cog, name="Developer-Reload"):
         """Discover all valid cog module strings from disk."""
         modules = []
         for file in self.cogs_dir.rglob("*.py"):
-            if any(part.startswith("_") for part in file.relative_to(self.cogs_dir).parts):
+            relative_parts = file.relative_to(self.cogs_dir).parts
+            # The canonical no-prefix module is developer/no_prefix.py.
+            # Skip historical duplicates to prevent Cog/command collisions.
+            if relative_parts in {("noprefix.py",), ("developer", "noprefix.py")}:
+                continue
+            if any(part.startswith("_") for part in relative_parts):
                 continue
             rel = file.relative_to(self.root_dir)
             mod = ".".join(rel.with_suffix("").parts)
