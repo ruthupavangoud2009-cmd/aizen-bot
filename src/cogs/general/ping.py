@@ -83,7 +83,7 @@ class Ping(commands.Cog):
         if hasattr(self.bot, "db") and self.bot.db:
             try:
                 start_db = time.perf_counter()
-                await asyncio.wait_for(self.bot.db.fetch_one("SELECT 1;"), timeout=2.0)
+                await asyncio.wait_for(self.bot.db.fetch_one("SELECT 1;"), timeout=0.45)
                 db_ms = (time.perf_counter() - start_db) * 1000
                 db_str = f"Healthy (`{db_ms:.2f}ms`)"
             except Exception:
