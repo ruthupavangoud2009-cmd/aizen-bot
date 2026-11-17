@@ -63,23 +63,19 @@ async def get_prefix(bot: KyokaBot, message: discord.Message) -> list[str]:
         except Exception:
             logger.exception("Could not resolve guild prefix; using the configured default.")
 
-    # Primary configured prefix for the guild, with universal fallback prefixes (?, +, ,)
+    # Exactly one active text prefix per server. No legacy fallback prefixes.
     prefixes: list[str] = [configured_prefix]
-    for p_fallback in ("?", "+", ","):
-        if p_fallback not in prefixes:
-            prefixes.append(p_fallback)
 
     author_id = message.author.id if message.author else None
     no_prefix_users = getattr(bot, "no_prefix_users", set())
-    # No-prefix execution is strictly restricted to hardcoded primary owner, authorized bot staff,
-    # and explicit users granted in the persistent no-prefix registry.
+    no_prefix_enabled = getattr(bot, "no_prefix_enabled", Config.ENABLE_NO_PREFIX)
     is_no_prefix = bool(
-        author_id is not None
+        no_prefix_enabled
+        and author_id is not None
         and (is_primary_owner(author_id) or is_bot_staff(author_id) or author_id in no_prefix_users)
     )
     if is_no_prefix:
         prefixes.append("")
-
     # Keep mention commands available even if the normal prefix is misconfigured.
     if bot.user:
         return commands.when_mentioned_or(*prefixes)(bot, message)
@@ -193,6 +189,7 @@ class KyokaBot(commands.Bot):
         self.command_registry: CommandRegistry = CommandRegistry(self)
         self.custom_emojis: EmojiRegistry = EmojiRegistry(self)
         self.no_prefix_users: set[int] = set()
+        self.no_prefix_enabled: bool = Config.ENABLE_NO_PREFIX
         self.custom_status: str | None = None
         self.failed_extensions: dict[str, str] = {}
 
