@@ -201,4 +201,4 @@ class Profile(commands.Cog):
 
 
 async def setup(bot: KyokaBot) -> None:
-    await bot.add_cog(Profile(bot))
+    await bot.add_cog(Profile(bot), override=True)
