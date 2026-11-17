@@ -571,20 +571,53 @@ class GuildPlayer:
             next_t = await self.pop_next_track()
             if next_t:
                 await self.play_track(next_t, message_to_edit=message_to_edit)
-            elif getattr(self, "is_247", False):
+                return
+
+            # A failed autoplay recommendation must not silently disable the radio.
+            # Ask for a different recommendation before declaring playback finished.
+            if self.smart_autoplay or getattr(self, "is_247", False):
+                try:
+                    from src.cogs.music._autoplay import NativeSmartAutoplay
+                    user_ids = []
+                    channel = getattr(self.voice_client, "channel", None)
+                    if channel:
+                        user_ids.extend(
+                            member.id for member in getattr(channel, "members", [])
+                            if not getattr(member, "bot", False)
+                        )
+                    if getattr(self, "user_247_id", None):
+                        user_ids.append(self.user_247_id)
+                    recommendation = await NativeSmartAutoplay.get_next_recommendation(
+                        current_track=track,
+                        played_history=self.autoplay_history,
+                        db=getattr(self.bot, "db", None),
+                        user_ids=user_ids,
+                        is_247=getattr(self, "is_247", False),
+                    )
+                    if recommendation:
+                        await self.play_track(recommendation, message_to_edit=message_to_edit)
+                        return
+                except Exception as autoplay_err:
+                    logger.warning(
+                        "Guild %s: autoplay recovery after an unresolvable track failed: %s",
+                        self.guild.id, autoplay_err, exc_info=True,
+                    )
+
+            if getattr(self, "is_247", False):
                 asyncio.create_task(self.trigger_247_playback())
+                return
+
+            self.current = None
+            if message_to_edit and isinstance(message_to_edit, discord.Message):
+                err_c = KyokaContainer(accent_color=None)
+                err_c.add_text(f"**Failed to Stream Track:** `{track.title}`\n> The audio source could not be loaded. Please try another song.")
+                try:
+                    await edit_container_response(message_to_edit, err_c)
+                except Exception:
+                    pass
             else:
-                self.current = None
-                if message_to_edit and isinstance(message_to_edit, discord.Message):
-                    err_c = KyokaContainer(accent_color=None)
-                    err_c.add_text(f"**Failed to Stream Track:** `{track.title}`\n> The audio source could not be loaded. Please try another song.")
-                    try:
-                        await edit_container_response(message_to_edit, err_c)
-                    except Exception:
-                        pass
-                else:
-                    await self.send_queue_ended_card()
-                self.schedule_empty_vc_timer()
+                await self.send_queue_ended_card()
+            self.schedule_empty_vc_timer()
             return
 
         if self.current and getattr(self.current, "title", None) != getattr(track, "title", None):
