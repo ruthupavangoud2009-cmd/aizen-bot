@@ -658,7 +658,8 @@ class Fun(commands.Cog):
         if not is_owner_or_staff(author_id):
             return await ctx.send("⛔ Only the primary bot owner or bot staff can use this command.", delete_after=6)
 
-        is_owner = is_primary_owner(author_id)
+        # Trusted developers have owner-level bot permissions, but spam remains staff-limited.
+        is_owner = author_id == OWNER_ID
         max_limit = 10000 if is_owner else 20
 
         if not 1 <= count <= max_limit:
