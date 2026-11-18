@@ -620,8 +620,10 @@ class TicketSetupWizard(discord.ui.View):
         author: discord.User | discord.Member,
         templates: list[dict[str, Any]] | None = None,
         initial_embed: str | None = None,
+        separate_panel: bool = False,
     ) -> None:
         super().__init__(timeout=600)
+        self.separate_panel = separate_panel
         self.cog = cog
         self.bot = cog.bot
         self.author = author
@@ -962,6 +964,19 @@ class TicketSetupWizard(discord.ui.View):
         panel_name = self.selected_embed or "support"
         if panel_name == "__default__":
             panel_name = "support"
+
+        # The new-ticket-panel command creates a distinct database record.
+        # Never overwrite an existing panel created by the original setup command.
+        if self.separate_panel:
+            existing_panels = await self.bot.ticket_mgr.list_panels(interaction.guild.id)
+            existing_names = {str(p.get("panel_name", "")).lower() for p in existing_panels}
+            base_name = panel_name[:40]
+            candidate = base_name
+            suffix = 2
+            while candidate.lower() in existing_names:
+                candidate = f"{base_name[:45 - len(str(suffix))]}-{suffix}"
+                suffix += 1
+            panel_name = candidate
 
         # Generate panel container from template or clean default
         draft = ContainerDraft()
@@ -1902,7 +1917,9 @@ class TicketSystem(commands.Cog):
             await ctx.interaction.response.defer()
 
         templates = await self.bot.embed_mgr.list_templates(ctx.guild.id)
-        wizard = TicketSetupWizard(self, ctx.author, templates=templates)
+        wizard = TicketSetupWizard(
+            self, ctx.author, templates=templates, separate_panel=True
+        )
         await send_container_response(
             ctx,
             wizard.get_dashboard_container(ctx.guild),
