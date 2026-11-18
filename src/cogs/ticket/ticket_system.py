@@ -1887,6 +1887,28 @@ class TicketSystem(commands.Cog):
         dashboard_container = wizard.get_dashboard_container(ctx.guild)
         await send_container_response(ctx, dashboard_container, view=wizard)
 
+    @commands.hybrid_command(
+        name="newticketpannel",
+        aliases=["newticketpanel"],
+        description="Create a separate customizable ticket panel without changing existing panels.",
+    )
+    @commands.has_permissions(manage_guild=True)
+    async def newticketpannel(self, ctx: CustomContext) -> None:
+        """Launch a new independent ticket-panel setup session."""
+        if ctx.guild is None:
+            return await ctx.send_error("This command can only be used inside a server.")
+
+        if ctx.interaction and not ctx.interaction.response.is_done():
+            await ctx.interaction.response.defer()
+
+        templates = await self.bot.embed_mgr.list_templates(ctx.guild.id)
+        wizard = TicketSetupWizard(self, ctx.author, templates=templates)
+        await send_container_response(
+            ctx,
+            wizard.get_dashboard_container(ctx.guild),
+            view=wizard,
+        )
+
     @ticket_group.command(
         name="close",
         description="Close the active ticket channel with optional reason.",
