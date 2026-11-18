@@ -598,6 +598,53 @@ class TicketAISolvedPromptView(discord.ui.View):
 
 # ─── SLIDE-BASED TICKET DASHBOARD SETUP WIZARD ───────────────────────────────
 
+class TicketPanelButtonModal(discord.ui.Modal, title="Customize Ticket Button"):
+    label = discord.ui.TextInput(
+        label="Button label",
+        placeholder="Create Ticket",
+        min_length=1,
+        max_length=80,
+        required=True,
+    )
+    emoji = discord.ui.TextInput(
+        label="Button emoji (optional)",
+        placeholder="🎫",
+        max_length=100,
+        required=False,
+    )
+    style = discord.ui.TextInput(
+        label="Button style: primary, secondary, success, danger",
+        placeholder="primary",
+        max_length=12,
+        required=True,
+        default="primary",
+    )
+
+    def __init__(self, wizard: "TicketSetupWizard") -> None:
+        super().__init__()
+        self.wizard = wizard
+        self.label.default = wizard.button_label
+        self.emoji.default = wizard.button_emoji or ""
+        self.style.default = wizard.button_style_name
+
+    async def on_submit(self, interaction: discord.Interaction) -> None:
+        style_name = self.style.value.strip().lower()
+        if style_name not in {"primary", "secondary", "success", "danger"}:
+            return await interaction.response.send_message(
+                "Style must be primary, secondary, success, or danger.", ephemeral=True
+            )
+        self.wizard.button_label = self.label.value.strip()
+        self.wizard.button_emoji = self.emoji.value.strip() or None
+        self.wizard.button_style_name = style_name
+        self.wizard.button_style = {
+            "primary": 1, "secondary": 2, "success": 3, "danger": 4
+        }[style_name]
+        self.wizard._build_components_for_slide()
+        await edit_container_response(
+            interaction, self.wizard.get_dashboard_container(interaction.guild), view=self.wizard
+        )
+
+
 class TicketSetupWizard(discord.ui.View):
     """
     Slide-Based Wizard for ?ticket setup:
@@ -638,6 +685,9 @@ class TicketSetupWizard(discord.ui.View):
         self.selected_target_channel_id: int | None = None
         self.naming_format: str = "ticket-{count}"
         self.button_label: str = "Create Ticket"
+        self.button_emoji: str | None = "🎫"
+        self.button_style_name: str = "primary"
+        self.button_style: int = int(discord.ButtonStyle.primary.value)
         self.custom_topics: list[dict[str, Any]] = []
 
         self._build_components_for_slide()
@@ -794,6 +844,16 @@ class TicketSetupWizard(discord.ui.View):
             btn_name.callback = self._on_toggle_naming
             self.add_item(btn_name)
 
+            btn_customize = discord.ui.Button(
+                label="Customize Ticket Button",
+                emoji="🎨",
+                style=discord.ButtonStyle.primary,
+                custom_id="wiz_btn_customize_ticket_button",
+                row=1,
+            )
+            btn_customize.callback = self._on_customize_button
+            self.add_item(btn_customize)
+
             btn_back = discord.ui.Button(
                 label="Back",
                 style=discord.ButtonStyle.secondary,
@@ -878,6 +938,7 @@ class TicketSetupWizard(discord.ui.View):
             f"{arrow} **Ticket Topics:** `{topics_summary}`\n"
             f"{arrow} **Log Channel:** {l_disp}\n"
             f"{arrow} **Naming Format:** `{self.naming_format}`\n"
+            f"{arrow} **Ticket Button:** {self.button_emoji or 'No emoji'} {self.button_label} ({self.button_style_name})\n"
             f"{arrow} **Deploy Target:** {t_disp}"
         )
         container.add_separator(divider=True)
@@ -922,6 +983,9 @@ class TicketSetupWizard(discord.ui.View):
         self.selected_target_channel_id = int(values[0]) if values else None
         self._build_components_for_slide()
         await edit_container_response(interaction, self.get_dashboard_container(interaction.guild), view=self)
+
+    async def _on_customize_button(self, interaction: discord.Interaction) -> None:
+        await interaction.response.send_modal(TicketPanelButtonModal(self))
 
     async def _on_toggle_naming(self, interaction: discord.Interaction) -> None:
         if self.naming_format == "ticket-{count}":
@@ -1012,6 +1076,8 @@ class TicketSetupWizard(discord.ui.View):
             log_channel_id=self.selected_log_channel_id,
             naming_format=self.naming_format,
             button_label=self.button_label,
+            button_style=self.button_style,
+            button_emoji=self.button_emoji,
             created_by=interaction.user.id,
         )
         panel_id = temp_row.get("id", 1)
@@ -1067,14 +1133,15 @@ class TicketSetupWizard(discord.ui.View):
             "components": [
                 {
                     "type": 2,
-                    "style": 1,  # Primary Blurple/Violet
+                    "style": self.button_style,
                     "label": self.button_label or "Create Ticket",
                     "custom_id": f"ticket_open_{panel_id}",
                 }
             ],
         }
-        if ticket_emoji:
-            btn_action_row["components"][0]["emoji"] = ticket_emoji
+        configured_emoji = self.button_emoji or ticket_emoji
+        if configured_emoji:
+            btn_action_row["components"][0]["emoji"] = configured_emoji
 
         if cat_options:
             panel_container.components.append(select_action_row)
@@ -1100,6 +1167,8 @@ class TicketSetupWizard(discord.ui.View):
                 log_channel_id=self.selected_log_channel_id,
                 naming_format=self.naming_format,
                 button_label=self.button_label,
+                button_style=self.button_style,
+                button_emoji=self.button_emoji,
                 created_by=interaction.user.id,
             )
 
