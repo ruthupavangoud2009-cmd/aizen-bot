@@ -603,13 +603,13 @@ class TicketPanelButtonModal(discord.ui.Modal, title="Customize Ticket Button"):
         label="Button label",
         placeholder="Create Ticket",
         min_length=1,
-        max_length=80,
+        max_length=64,
         required=True,
     )
     emoji = discord.ui.TextInput(
         label="Button emoji (optional)",
         placeholder="🎫",
-        max_length=100,
+        max_length=64,
         required=False,
     )
     style = discord.ui.TextInput(
