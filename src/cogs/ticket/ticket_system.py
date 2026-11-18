@@ -1141,7 +1141,17 @@ class TicketSetupWizard(discord.ui.View):
         }
         configured_emoji = self.button_emoji or ticket_emoji
         if configured_emoji:
-            btn_action_row["components"][0]["emoji"] = configured_emoji
+            # Discord component payloads require emoji objects, not bare strings.
+            # Normalize Unicode and custom emoji strings before sending the panel.
+            try:
+                if isinstance(configured_emoji, (discord.Emoji, discord.PartialEmoji)):
+                    btn_action_row["components"][0]["emoji"] = configured_emoji.to_dict()
+                else:
+                    btn_action_row["components"][0]["emoji"] = discord.PartialEmoji.from_str(
+                        str(configured_emoji)
+                    ).to_dict()
+            except (TypeError, ValueError):
+                logger.warning("Ignoring invalid ticket panel button emoji: %r", configured_emoji)
 
         if cat_options:
             panel_container.components.append(select_action_row)
