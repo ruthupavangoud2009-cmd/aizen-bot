@@ -82,7 +82,8 @@ async def send_guild_welcome_card(bot: KyokaBot, guild: discord.Guild) -> None:
             f"├・Prefix commands: `{prefix}help`\n"
             "├・Slash commands: `/`\n"
             "╰・Use the support button below if you need help.\n\n"
-            "**Tip:** Make sure KYOKA has permission to view and send messages in your chosen channel."
+            f"**Optional server protection:** Run `{prefix}automod setup` to enable official Discord AutoMod rules.\n"
+            "**Tip:** AutoMod is opt-in and only changes this server after an administrator enables it."
         ), color=discord.Color.from_rgb(100, 55, 180)
     )
     if bot.user:
