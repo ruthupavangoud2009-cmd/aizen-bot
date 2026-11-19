@@ -1464,9 +1464,9 @@ class TopAIManager(commands.Cog, name="TopAIManager"):
         try:
             parsed = self.top_mgr.parse_top_query(query)
         except KeyError as ke:
-            # Check if Gemini AI can interpret free-form pricing questions or strategy inquiries
+            # Use KYŌKA's shared Groq-first AI router for natural-language pricing questions
             ai_mgr = getattr(self.bot, "ai_mgr", None)
-            api_key = os.getenv("GEMINI_API_KEY", "").strip()
+            api_key = os.getenv("GROQ_API_KEY", "").strip() or os.getenv("GEMINI_API_KEY", "").strip()
             if ai_mgr and api_key:
                 try:
                     system_prompt = (
