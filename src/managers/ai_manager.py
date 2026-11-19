@@ -627,6 +627,7 @@ class AIManager:
                 models.append(model)
 
         timeout = aiohttp.ClientTimeout(total=max(self.response_timeout, 25.0))
+        self._total_requests += 1
         retry_delays = (1.0, 2.0)
         last_error = "Gemini did not return a response."
 
