@@ -249,16 +249,6 @@ class HelpView(discord.ui.View):
             )
         )
 
-        bot_name = "Kyoka"
-        branding = None
-        if hasattr(self.cog.bot, "branding_mgr"):
-            mgr = getattr(self.cog.bot, "branding_mgr", None)
-            if hasattr(mgr, "_cache") and isinstance(mgr._cache, dict):
-                branding = mgr._cache.get(self.ctx.guild.id if self.ctx.guild else None)
-        raw_display = branding.get("display_name") if isinstance(branding, dict) else None
-        if isinstance(raw_display, str) and raw_display.strip():
-            bot_name = raw_display.strip()
-
         invite_url = (
             Config.INVITE_URL
             or (
@@ -1118,60 +1108,78 @@ class Help(commands.Cog):
         ctx: CustomContext,
         visible_categories: dict[str, list[commands.Command]],
     ) -> discord.Embed:
-        """Render a compact, clean home card matching the approved Kyro-style reference."""
+        """Render KYŌKA's premium command-centre landing page."""
         guild = ctx.guild
         author = ctx.author
         p = self.bot.guild_mgr.get_prefix(guild.id if guild else None)
-        ws_ping = self._get_latency_ms()
+        latency = self._get_latency_ms()
         total_commands = sum(len(cmds) for cmds in visible_categories.values())
+        bot_user = getattr(self.bot, "user", None)
 
+        # Per-server display names are intentionally NOT used here. A server
+        # nickname must never overwrite the bot's product identity in its UI.
+        embed = discord.Embed(
+            title="COMMAND CENTER",
+            description=(
+                "**KYŌKA 3.0**  ·  Server management, security and intelligence\n"
+                "A unified command hub for your server. Choose a module below or search for a command."
+            ),
+            color=0x6D28D9,
+        )
+
+        if bot_user:
+            embed.set_author(
+                name="KYŌKA 3.0  /  CONTROL PANEL",
+                icon_url=bot_user.display_avatar.url,
+            )
+
+        # A restrained status strip instead of a long line of oversized pills.
+        embed.add_field(
+            name="PREFIX",
+            value=f"`{p}`",
+            inline=True,
+        )
+        embed.add_field(
+            name="COMMANDS",
+            value=f"`{total_commands:,}`",
+            inline=True,
+        )
+        embed.add_field(
+            name="MODULES",
+            value=f"`{len(visible_categories):,}`",
+            inline=True,
+        )
+        embed.add_field(
+            name="QUICK START",
+            value=(
+                f"`{p}help moderation`  Browse a module\n"
+                f"`{p}help ban`  Find command details\n"
+                f"`{p}help ai`  Open AI commands"
+            ),
+            inline=False,
+        )
+        embed.add_field(
+            name="SYSTEM",
+            value=f"`● ONLINE`   ·   `{latency} ms` latency",
+            inline=False,
+        )
+
+        # Keep server-specific avatar customization, but never trust its
+        # display_name or bio as the global product title/copy.
         branding = None
         manager = getattr(self.bot, "branding_mgr", None)
         if manager:
             cache = getattr(manager, "_cache", None)
             if isinstance(cache, dict):
                 branding = cache.get(guild.id if guild else None)
-            if not isinstance(branding, dict):
-                getter = getattr(manager, "get_default_branding", None)
-                if callable(getter):
-                    try:
-                        branding = getter()
-                    except Exception:
-                        branding = None
-
-        if not isinstance(branding, dict):
-            branding = {}
-
-        raw_display = branding.get("display_name")
-        display_name = (
-            raw_display.strip()
-            if isinstance(raw_display, str) and raw_display.strip()
-            else (getattr(getattr(self.bot, "user", None), "display_name", None) or "Kyoka")
-        )
-        raw_bio = branding.get("bio")
-        bio = (
-            raw_bio.strip()
-            if isinstance(raw_bio, str) and raw_bio.strip()
-            else "Built for our community — keeping your server safe, active, and effortlessly connected."
-        )
-
-        embed = discord.Embed(
-            title=f"{display_name} ⛩️ • Help Menu",
-            description=(
-                f"`{p}` Prefix  •  `{total_commands}` Commands  •  `{len(visible_categories)}` Categories  •  `{ws_ping}ms` Ping\n"
-                f"> Select a category from the menu below or use `{p}help <cmd>`"
-            ),
-            color=0x7C3AED,
-        )
-
-        avatar_url = branding.get("avatar_url")
+        avatar_url = branding.get("avatar_url") if isinstance(branding, dict) else None
         if isinstance(avatar_url, str) and avatar_url.strip():
             embed.set_thumbnail(url=avatar_url.strip())
-        elif getattr(self.bot, "user", None):
-            embed.set_thumbnail(url=self.bot.user.display_avatar.url)
+        elif bot_user:
+            embed.set_thumbnail(url=bot_user.display_avatar.url)
 
         embed.set_footer(
-            text=f"Requested by {author.display_name}",
+            text=f"Requested by {author.display_name}  ·  KYŌKA COMMAND SYSTEM",
             icon_url=author.display_avatar.url if getattr(author, "display_avatar", None) else None,
         )
         return embed
@@ -1266,7 +1274,7 @@ class Help(commands.Cog):
         embed = discord.Embed(
             title=f"{cat_emoji} {clean_cat_title} ({len(unique_cmds)})",
             description=f"> *{cat_desc}*\n\n" + "\n".join(lines),
-            color=0x7C3AED,
+            color=0x6D28D9,
         )
 
         embed.set_footer(
