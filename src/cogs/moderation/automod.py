@@ -52,7 +52,7 @@ class AutoModCog(commands.Cog, name="AutoMod"):
                 "**Protection installed by setup**\n"
                 "• Discord spam detection\n"
                 "• Mention-spam and raid protection\n"
-                "• Discord harmful-link detection\n"
+                "• Discord harmful-link detection (native trigger type 8)\n"
                 "• Profanity, sexual-content and slur presets\n\n"
                 "**Commands**\n"
                 f"• `{prefix}automod setup` — install protection\n"

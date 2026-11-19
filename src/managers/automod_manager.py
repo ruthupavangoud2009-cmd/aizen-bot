@@ -86,7 +86,7 @@ class AutoModManager:
             ),
             (
                 "Harmful Link Shield",
-                discord.AutoModTrigger(type=discord.AutoModRuleTriggerType.harmful_link),
+                discord.AutoModTrigger(type=discord.AutoModRuleTriggerType(8)),
             ),
             (
                 "Keyword Presets",
