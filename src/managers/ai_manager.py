@@ -326,8 +326,8 @@ class AIManager:
     - Rolling latency and diagnostic tracking
     - Asynchronous memory-safe cooldown tracking
     """
-    DEFAULT_MODEL = "gemini-3.8-flash"
-    FALLBACK_MODELS = ("gemini-3.5-flash-lite",)
+    DEFAULT_MODEL = "openai/gpt-oss-120b"
+    FALLBACK_MODELS = ("gemini-flash-lite-latest",)
 
     def __init__(self, db: PostgresDatabase) -> None:
         self.db = db
@@ -356,7 +356,8 @@ class AIManager:
         self._total_requests: int = 0
         self._total_errors: int = 0
         self._total_timeouts: int = 0
-        self._active_model: str = os.getenv("GEMINI_MODEL", self.DEFAULT_MODEL)
+        self._active_provider: str = "Groq (primary)"
+        self._active_model: str = os.getenv("GROQ_MODEL", self.DEFAULT_MODEL)
 
     @property
     def timeout_seconds(self) -> float:
@@ -609,6 +610,81 @@ class AIManager:
         return "\n".join(lines)
 
     # ─── CORE REQUEST EXECUTION ──────────────────────────────────────────────
+
+    async def _execute_groq_call(self, session: aiohttp.ClientSession, body: dict[str, Any]) -> str:
+        """Call Groq's OpenAI-compatible Chat Completions API."""
+        api_key = os.getenv("GROQ_API_KEY", "").strip()
+        if not api_key or api_key.lower().startswith(("replace_", "your_", "paste_")):
+            raise RuntimeError("GROQ_API_KEY is missing or still a placeholder.")
+        model = os.getenv("GROQ_MODEL", self.DEFAULT_MODEL).strip()
+        messages: list[dict[str, str]] = []
+        system_parts = body.get("system_instruction", {}).get("parts", [])
+        system_text = "\\n".join(p.get("text", "") for p in system_parts if isinstance(p, dict)).strip()
+        if system_text:
+            messages.append({"role": "system", "content": system_text})
+        for turn in body.get("contents", []):
+            role = "assistant" if turn.get("role") in ("model", "assistant") else "user"
+            content = "\\n".join(p.get("text", "") for p in turn.get("parts", []) if isinstance(p, dict) and isinstance(p.get("text"), str)).strip()
+            if content:
+                messages.append({"role": role, "content": content})
+        if not messages:
+            raise RuntimeError("Groq request contained no messages.")
+        generation = body.get("generationConfig", {})
+        request_body = {"model": model, "messages": messages,
+                        "temperature": float(generation.get("temperature", 0.75)),
+                        "max_tokens": int(generation.get("maxOutputTokens", 1000))}
+        timeout = aiohttp.ClientTimeout(total=max(self.response_timeout, 25.0))
+        async with self._semaphore:
+            started = time.monotonic()
+            try:
+                async with session.post("https://api.groq.com/openai/v1/chat/completions",
+                    json=request_body,
+                    headers={"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"},
+                    timeout=timeout) as response:
+                    latency_ms = round((time.monotonic() - started) * 1000, 1)
+                    payload = await response.json(content_type=None)
+                    if response.status != 200:
+                        error = payload.get("error", {}) if isinstance(payload, dict) else {}
+                        raise RuntimeError(f"Groq HTTP {response.status}: {str(error.get('message') or payload)[:700]}")
+                    choices = payload.get("choices", []) if isinstance(payload, dict) else []
+                    answer = choices[0].get("message", {}).get("content", "") if choices else ""
+                    if not isinstance(answer, str) or not answer.strip():
+                        raise RuntimeError("Groq returned no generated text.")
+                    self._last_latency_ms = latency_ms
+                    self._latency_samples.append(latency_ms)
+                    self._last_success_time = time.time()
+                    self._active_provider = "Groq"
+                    self._active_model = model
+                    return answer.strip()
+            except asyncio.TimeoutError as exc:
+                self._total_timeouts += 1
+                raise RuntimeError(f"Groq request timed out after {timeout.total}s.") from exc
+            except aiohttp.ClientError as exc:
+                raise RuntimeError(f"Groq network error: {exc}") from exc
+
+    async def _execute_ai_call(self, session: aiohttp.ClientSession, body: dict[str, Any]) -> str:
+        """Use Groq first, then Gemini as the automatic backup."""
+        groq_key = os.getenv("GROQ_API_KEY", "").strip()
+        gemini_key = os.getenv("GEMINI_API_KEY", "").strip()
+        errors: list[str] = []
+        if groq_key and not groq_key.lower().startswith(("replace_", "your_", "paste_")):
+            try:
+                return await self._execute_groq_call(session, body)
+            except Exception as exc:
+                self._total_errors += 1
+                errors.append(str(exc))
+                logger.warning("Primary Groq provider failed; trying Gemini backup: %s", exc)
+        if gemini_key and not gemini_key.lower().startswith(("replace_", "your_", "paste_")):
+            try:
+                answer = await self._execute_ai_call(session, body)
+                self._active_provider = "Gemini (backup)"
+                return answer
+            except Exception as exc:
+                errors.append(str(exc))
+                logger.error("Gemini backup provider failed: %s", exc)
+        if not groq_key and not gemini_key:
+            raise RuntimeError("AI is not configured. Add GROQ_API_KEY to Render; GEMINI_API_KEY is the optional backup.")
+        raise RuntimeError("All configured AI providers failed: " + " | ".join(errors)[:1200])
 
     async def _execute_gemini_call(
         self,
