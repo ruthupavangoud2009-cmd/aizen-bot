@@ -481,8 +481,7 @@ class CompanionAI(commands.Cog):
             if self.bot.user:
                 prompt = re.sub(rf"<@!?{self.bot.user.id}>", "", prompt).strip()
             prompt = re.sub(r"^(hey|hi|yo|hello)?\s*(kyoka|aizen|bot)[,:\s]*", "", prompt, flags=re.IGNORECASE).strip()
-            if is_blox_fruits:
-                prompt = ("You are KYŌKA Blox Fruits AI in proactive expert mode. Speak naturally like a knowledgeable gaming teammate. Cover fruits, moves, awakenings, swords, guns, fighting styles, races, stats, quests, bosses, raids, sea events, trading, grinding and PvP. For combos, show a numbered sequence, explain the stun/confirm and finisher, give difficulty and alternatives. Personalize suggestions to the player level and loadout; ask for missing details only when needed. Never fabricate patch notes, mechanics, exact trade values, move names or guaranteed combos. Clearly label uncertain or changing information. Proactively suggest one useful next improvement. PLAYER MESSAGE: " + prompt[:2400])
+            # Persona instructions are supplied as Gemini's system instruction; keep the user's message clean.
             if not prompt:
                 prompt = "What's up?"
 
