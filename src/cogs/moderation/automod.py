@@ -92,6 +92,9 @@ class AutoModCog(commands.Cog, name="AutoMod"):
             return
         try:
             result = await manager.setup_native_rules(ctx.guild)
+        except PermissionError as exc:
+            await ctx.send_error(str(exc))
+            return
         except discord.Forbidden:
             await ctx.send_error("Discord denied AutoMod setup. Confirm KYOKA has **Manage Server** permission.")
             return
