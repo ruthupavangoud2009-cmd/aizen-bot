@@ -103,7 +103,7 @@ CATEGORY_DESCRIPTIONS: dict[str, str] = {
     "🍎・BLOX FRUITS AI": "Specialized Blox Fruits AI, fruit guides, trade calculator & builds",
     "🎙️・AI VOICE": "Neural Text-To-Speech, voice channel interaction, AI speech responses & diagnostics",
     "📊・LEVELING & LEADERBOARDS": "Optional XP progression (disabled by default), rank cards & leaderboards",
-    "🤖・ARTIFICIAL INTELLIGENCE": "Aizen Gemini AI engine, 10 personalities & auto channels",
+    "🤖・ARTIFICIAL INTELLIGENCE": "KYŌKA AI engine (Groq primary, Gemini backup), 10 personalities & auto channels",
     "🖼️・IMAGES & AVATARS": "Anime reaction GIFs, avatar grabbers, banners & memes",
     "💬・SOCIAL & FUN": "Mini-games, truth-or-dare, relationship stats & trivia",
     "💎・PREMIUM": "Kyoka Prime licenses, high-resolution AI & premium perks",
@@ -980,7 +980,7 @@ class Help(commands.Cog):
         custom_id_prefix: str,
         selected_val: str = "home",
     ) -> KyokaContainer:
-        """Construct the Signature Kyoka Overview Container Card."""
+        """Construct the signature KYŌKA overview card."""
         guild = ctx.guild
         author = ctx.author
         current_prefix = self.bot.guild_mgr.get_prefix(guild.id if guild else None)
@@ -993,7 +993,7 @@ class Help(commands.Cog):
         container = KyokaContainer(accent_color=None)
         container.add_section(
             content=(
-                f"**Hey, I'm Kyoka 3.0**\n"
+                f"**Hey, I'm KYŌKA 3.0**\n"
                 f"> Built for our community — keeping your server safe, active, and effortlessly connected."
             )
         )
@@ -1027,8 +1027,8 @@ class Help(commands.Cog):
             container.add_section(
                 content=(
                     f"**{cat_icon_prefix}AIZEN AI SYSTEM MODULE**\n"
-                    f"> High-performance conversational AI engine powered by Google Gemini.\n"
-                    f"> Fast async execution (~800ms) with 10 distinct personalities, natural automatic channel conversations, and real-time reachability diagnostics."
+                    f"> High-performance KYŌKA AI engine powered by Groq, with Gemini as the automatic backup.\n"
+                    f"> Natural conversations, 10 distinct personalities, per-user memory, automatic channel chat, and live provider diagnostics."
                 )
             )
             container.add_separator(divider=True)
