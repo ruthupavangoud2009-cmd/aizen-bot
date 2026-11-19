@@ -22,19 +22,19 @@ logger = logging.getLogger("Kyoka.UI")
 # ─────────────────────────────────────────────────────────────────────────────
 class AizenPalette:
     """Standardized color palette for Kyoka x Sosuke Aizen supernatural cyber theme."""
-    VOID_BLACK: int = 0x101116      # Pitch midnight abyss
-    DEEP_PURPLE: int = 0x20212B     # Midnight velvet
-    ROYAL_VIOLET: int = 0x8878C7    # KYŌKA signature violet
-    ELECTRIC_PURPLE: int = 0xA99BDF # Soft luminous purple
-    LAVENDER_GLOW: int = 0xD7D1F0   # Soft lavender accent
-    CRIMSON: int = 0xD96C82         # Laser crimson / Kyoka blade
+    VOID_BLACK: int = 0x0A0A0F      # Pitch midnight abyss
+    DEEP_PURPLE: int = 0x1A0933     # Midnight velvet
+    ROYAL_VIOLET: int = 0xA855F7    # KYŌKA signature violet
+    ELECTRIC_PURPLE: int = 0xC084FC # Soft luminous purple
+    LAVENDER_GLOW: int = 0xE9D5FF   # Soft lavender accent
+    CRIMSON: int = 0xFF3366         # Laser crimson / Kyoka blade
     BLOOD_MOON: int = 0xDC2626      # Deep danger crimson
     AMBER_WARN: int = 0xF59E0B      # Alert amber
     EMERALD_SUCCESS: int = 0x10B981 # Verified / success green
-    CYBER_CYAN: int = 0x6FADBD      # Telemetry / info cyan
-    INDIGO_INFO: int = 0x8188C8     # General info
+    CYBER_CYAN: int = 0x06B6D4      # Telemetry / info cyan
+    INDIGO_INFO: int = 0x6366F1     # General info
     BLADE_SILVER: int = 0xE2E8F0    # Metallic white / silver
-    MUTED_GRAY: int = 0x9296A5      # Secondary footer text
+    MUTED_GRAY: int = 0x64748B      # Secondary footer text
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -90,7 +90,7 @@ class KyokaEmbed(discord.Embed):
         super().__init__(
             title=title,
             description=description,
-            color=color if color is not None else AizenPalette.ROYAL_VIOLET,
+            color=color or AizenPalette.ROYAL_VIOLET,
             url=url,
             timestamp=timestamp or discord.utils.utcnow(),
         )
