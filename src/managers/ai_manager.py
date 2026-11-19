@@ -619,12 +619,12 @@ class AIManager:
         model = os.getenv("GROQ_MODEL", self.DEFAULT_MODEL).strip()
         messages: list[dict[str, str]] = []
         system_parts = body.get("system_instruction", {}).get("parts", [])
-        system_text = "\\n".join(p.get("text", "") for p in system_parts if isinstance(p, dict)).strip()
+        system_text = "\n".join(p.get("text", "") for p in system_parts if isinstance(p, dict)).strip()
         if system_text:
             messages.append({"role": "system", "content": system_text})
         for turn in body.get("contents", []):
             role = "assistant" if turn.get("role") in ("model", "assistant") else "user"
-            content = "\\n".join(p.get("text", "") for p in turn.get("parts", []) if isinstance(p, dict) and isinstance(p.get("text"), str)).strip()
+            content = "\n".join(p.get("text", "") for p in turn.get("parts", []) if isinstance(p, dict) and isinstance(p.get("text"), str)).strip()
             if content:
                 messages.append({"role": role, "content": content})
         if not messages:
