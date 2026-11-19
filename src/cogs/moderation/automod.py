@@ -10,7 +10,6 @@ import logging
 from typing import TYPE_CHECKING
 
 import discord
-from discord import app_commands
 from discord.ext import commands
 
 from src.core.context import CustomContext
@@ -103,6 +102,7 @@ class AutoModCog(commands.Cog, name="AutoMod"):
             await ctx.send_error(f"Discord could not complete AutoMod setup: {getattr(exc, 'text', None) or 'API error'}.")
             return
 
+        prefix = self.bot.guild_mgr.get_prefix(ctx.guild.id)
         lines = []
         if result["created"]:
             lines.append("**Created:** " + ", ".join(result["created"]))
@@ -118,7 +118,7 @@ class AutoModCog(commands.Cog, name="AutoMod"):
                 "KYOKA has configured genuine rules using Discord's official Auto Moderation API.\n\n"
                 + "\n".join(lines)
                 + f"\n\n**KYOKA rules in this server:** {result['total']}\n"
-                "Rules are server-specific. Other servers are untouched. Use `?automod config` to review them."
+                f"Rules are server-specific. Other servers are untouched. Use `{prefix}automod config` to review them."
             ),
             color=0x7C3AED,
         )
