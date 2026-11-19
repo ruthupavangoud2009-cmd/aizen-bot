@@ -132,8 +132,10 @@ class HelpCategorySelect(discord.ui.Select):
         help_view: HelpView,
         visible_categories: dict[str, list[commands.Command]],
         current_selection: str = "home",
+        category_page: int = 0,
     ) -> None:
         self.help_view = help_view
+        self.category_page = max(0, category_page)
 
         options: list[discord.SelectOption] = [
             discord.SelectOption(
@@ -145,7 +147,12 @@ class HelpCategorySelect(discord.ui.Select):
             )
         ]
 
-        for cat_name, cmds in visible_categories.items():
+        category_items = list(visible_categories.items())
+        page_size = 24
+        page_count = max(1, math.ceil(len(category_items) / page_size))
+        self.category_page = min(self.category_page, page_count - 1)
+        page_items = category_items[self.category_page * page_size:(self.category_page + 1) * page_size]
+        for cat_name, cmds in page_items:
             # Clean display label matching Screenshot 2
             raw_title = cat_name.split("・", 1)[1] if "・" in cat_name else cat_name
             clean_label = raw_title.title() if raw_title.isupper() else raw_title
@@ -232,6 +239,7 @@ class HelpView(discord.ui.View):
         self.category_keys = list(visible_categories.keys())
         self.current_category = current_category
         self.current_page = current_page
+        self.category_page = 0
         self.message: discord.Message | None = None
 
         self._build_components()
@@ -246,6 +254,7 @@ class HelpView(discord.ui.View):
                 self,
                 self.visible_categories,
                 current_selection=self.current_category,
+                category_page=self.category_page,
             )
         )
 
@@ -258,6 +267,15 @@ class HelpView(discord.ui.View):
             )
         )
         support_url = Config.SUPPORT_URL or "https://discord.gg/7q4tn6dA6V"
+
+        if len(self.category_keys) > 24:
+            page_count = max(1, math.ceil(len(self.category_keys) / 24))
+            btn_modules_prev = discord.ui.Button(label="Module list ‹", style=discord.ButtonStyle.secondary, row=2, disabled=self.category_page <= 0)
+            btn_modules_prev.callback = self.btn_module_page_prev
+            self.add_item(btn_modules_prev)
+            btn_modules_next = discord.ui.Button(label=f"Module list ›  ({self.category_page + 1}/{page_count})", style=discord.ButtonStyle.secondary, row=2, disabled=self.category_page >= page_count - 1)
+            btn_modules_next.callback = self.btn_module_page_next
+            self.add_item(btn_modules_next)
 
         if self.current_category == "home":
             btn_search = discord.ui.Button(
@@ -350,6 +368,9 @@ class HelpView(discord.ui.View):
         """Switch current view page and refresh UI components with category artwork."""
         self.current_category = selected_val
         self.current_page = 1
+        if selected_val != "home":
+            selected_index = next((i for i, key in enumerate(self.category_keys) if key.lower() == selected_val.lower()), 0)
+            self.category_page = selected_index // 24
         self._build_components()
         embed, banner_file = self.cog.build_embed_for_selection(self.ctx, self.visible_categories, selected_val, page=1)
         if banner_file:
@@ -421,6 +442,17 @@ class HelpView(discord.ui.View):
             else:
                 new_cat = self.category_keys[0]
         await self.switch_category(interaction, new_cat)
+
+    async def btn_module_page_prev(self, interaction: discord.Interaction) -> None:
+        self.category_page = max(0, self.category_page - 1)
+        self._build_components()
+        await interaction.response.edit_message(view=self)
+
+    async def btn_module_page_next(self, interaction: discord.Interaction) -> None:
+        page_count = max(1, math.ceil(len(self.category_keys) / 24))
+        self.category_page = min(page_count - 1, self.category_page + 1)
+        self._build_components()
+        await interaction.response.edit_message(view=self)
 
     async def btn_search_callback(self, interaction: discord.Interaction) -> None:
         """Prompt command search modal."""
@@ -1138,6 +1170,15 @@ class Help(commands.Cog):
             value=f"**{total_commands:,}** commands  ·  **{len(visible_categories):,}** modules",
             inline=False,
         )
+        module_lines = []
+        for category_name, category_commands in visible_categories.items():
+            module_title = category_name.split("・", 1)[-1].title()
+            module_emoji = self._get_category_emoji(category_name)
+            module_lines.append(f"{module_emoji} **{module_title}**  ·  `{len(category_commands)}`")
+        module_chunks = [module_lines[i:i + 9] for i in range(0, len(module_lines), 9)]
+        for index, chunk in enumerate(module_chunks[:3], start=1):
+            embed.add_field(name=f"MODULE DIRECTORY  /  {index}", value="\n".join(chunk)[:1024] or "No modules available.", inline=True)
+
         embed.add_field(
             name="QUICK ACCESS",
             value=(
@@ -1452,7 +1493,7 @@ class Help(commands.Cog):
                 title="KYŌKA • HELP DIRECTORY",
                 description=(
                     "The interactive help panel encountered a temporary problem. "
-                    "Here is a safe fallback so you can still access commands.\\n\\n"
+                    "Here is a safe fallback so you can still access commands.\n\n"
                     "**Try:** `help moderation`, `help ai`, `help music`, "
                     "or `hca` for the full command archive."
                 ),
