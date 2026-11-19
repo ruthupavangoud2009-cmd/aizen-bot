@@ -1166,7 +1166,7 @@ class Help(commands.Cog):
         )
         return embed
 
-        def build_search_results_embed(
+    def build_search_results_embed(
         self,
         ctx: CustomContext,
         visible_categories: dict[str, list[commands.Command]],
@@ -1218,7 +1218,7 @@ class Help(commands.Cog):
         )
         return embed
 
-        def build_category_embed(
+    def build_category_embed(
         self,
         ctx: CustomContext,
         cat_name: str,
@@ -1260,7 +1260,7 @@ class Help(commands.Cog):
         )
         return embed
 
-        def build_command_embed(self, ctx: CustomContext, cmd: commands.Command) -> discord.Embed:
+    def build_command_embed(self, ctx: CustomContext, cmd: commands.Command) -> discord.Embed:
         """Show a consistent, readable command detail screen."""
         guild = ctx.guild
         prefix = self.bot.guild_mgr.get_prefix(guild.id if guild else None)
@@ -1294,7 +1294,7 @@ class Help(commands.Cog):
         )
         return embed
 
-        def build_embed_for_selection(
+    def build_embed_for_selection(
         self,
         ctx: CustomContext,
         visible_categories: dict[str, list[commands.Command]],
