@@ -823,6 +823,24 @@ class AIManager:
         clean = (prompt or "").lower().strip()
         p_canon = resolve_persona(persona_key)["key"]
 
+        # Dedicated Blox Fruits fallback: never fall through to generic companion chatter.
+        if p_canon == "blox_fruits_expert":
+            if any(word in clean for word in ("hey", "hi", "hello", "yo", "sup", "what's up", "wassup")):
+                return random.choice((
+                    "Yo 😄 what are you working on in Blox Fruits right now?",
+                    "Hey! You grinding, trading, or getting ready for PvP?",
+                    "Yoo, what's your current fruit and level? Let's cook up a plan.",
+                ))
+            if any(word in clean for word in ("thanks", "thank you", "thx", "ty")):
+                return "Anytime bro 🤝 Need help with a build or combo, just say the word."
+            if any(word in clean for word in ("combo", "pvp", "one shot", "stun")):
+                return "Bet, let's build something nasty 😈 What fruit, fighting style, sword and gun are you using? I'll match the combo to your loadout."
+            if any(word in clean for word in ("trade", "value", "worth", "perm")):
+                return "I can help judge that trade. What are you giving and what are you getting? Values move around, so I'll explain the trade rather than make up a live price."
+            if any(word in clean for word in ("level", "grind", "farm", "xp", "buddha", "quest")):
+                return "Got you. What's your level, fruit and current sea? I'll help you pick the quickest sensible grind route."
+            return "I'm here 😄 We can talk Blox Fruits, builds, trading or PvP. What are you trying to do in-game?"
+
         # 1. Greetings
         if any(re.search(rf"\b{w}\b", clean) for w in ("hey", "hi", "hello", "yo", "sup", "what's up", "wassup", "gm", "gn", "good morning", "good evening", "howdy")):
             if p_canon == "normal":
