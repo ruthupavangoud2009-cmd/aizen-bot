@@ -887,7 +887,7 @@ class AIManager:
             try:
                 text = await self._execute_ai_call(session, body)
             except Exception as e:
-                logger.warning(f"Gemini API call failed ({e}); switching to smart natural conversation fallback.")
+                logger.warning(f"AI provider call failed ({e}); switching to local natural conversation fallback.")
                 text = self.get_smart_fallback(prompt, p_def["key"])
 
             history.append({"role": "user", "text": prompt[:3000]})
