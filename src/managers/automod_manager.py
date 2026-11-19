@@ -58,10 +58,7 @@ class AutoModManager:
         """Install an idempotent, opt-in set of genuine Discord AutoMod rules."""
         bot_member = guild.me
         if bot_member is None or not bot_member.guild_permissions.manage_guild:
-            raise discord.Forbidden(
-                response=None,
-                message="KYOKA needs the Manage Server permission to create Discord AutoMod rules.",
-            )
+            raise PermissionError("KYOKA needs the Manage Server permission to create Discord AutoMod rules.")
 
         existing = await self.fetch_native_rules(guild)
         existing_names = {rule.name for rule in existing}
