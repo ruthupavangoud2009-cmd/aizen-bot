@@ -1,192 +1,208 @@
 """
-Kyoka Discord Bot - AutoMod Moderation Cog
-Registers listeners and management commands for real-time chat protection.
+KYOKA official Discord AutoMod integration.
+
+AutoMod is opt-in per guild. Rules are created through Discord's native Auto
+Moderation API and are only changed/deleted when their names carry KYOKA's prefix.
 """
 from __future__ import annotations
 
 import logging
-from typing import TYPE_CHECKING, Optional
+from typing import TYPE_CHECKING
 
 import discord
 from discord import app_commands
 from discord.ext import commands
 
 from src.core.context import CustomContext
-from src.utils.containers import KyokaContainer, send_container_response
 
 if TYPE_CHECKING:
     from src.core.bot import KyokaBot
 
 logger = logging.getLogger("Kyoka.Cogs.AutoMod")
+RULE_PREFIX = "KYOKA • "
 
 
 class AutoModCog(commands.Cog, name="AutoMod"):
-    """Server chat moderation and automated rule enforcement."""
+    """Opt-in management commands for Discord's native AutoMod rules."""
 
     def __init__(self, bot: KyokaBot) -> None:
         self.bot = bot
 
-    # ─── MESSAGE LISTENER ─────────────────────────────────────────────────────
+    def _manager(self):
+        return getattr(self.bot, "automod_mgr", None)
 
-    @commands.Cog.listener()
-    async def on_message(self, message: discord.Message) -> None:
-        """Inspect all messages against server AutoMod filters."""
-        if not message.guild or message.author.bot:
+    async def _send_status(self, ctx: CustomContext) -> None:
+        if not ctx.guild:
             return
-
-        # Ensure automod manager exists on bot
-        mgr = getattr(self.bot, "automod_mgr", None)
-        if not mgr:
+        manager = self._manager()
+        if not manager:
+            await ctx.send_error("AutoMod is still initializing. Please try again shortly.")
             return
-
-        cfg = await mgr.get_settings(message.guild.id)
-        if not cfg.get("enabled"):
+        try:
+            rules = await manager.fetch_native_rules(ctx.guild)
+        except discord.Forbidden:
+            await ctx.send_error("KYOKA cannot view AutoMod rules. Please check its **Manage Server** permission.")
             return
-
-        # Check exemptions
-        member = message.author if isinstance(message.author, discord.Member) else message.guild.get_member(message.author.id)
-        if not member:
-            return
-
-        if mgr.is_exempt(member, message.channel, cfg):
-            return
-
-        mentions_count = len(message.mentions) + len(message.role_mentions)
-        violation, filter_name, reason = mgr.check_content(
-            message.content,
-            user_id=member.id,
-            guild_id=message.guild.id,
-            cfg=cfg,
-            mentions_count=mentions_count,
+        enabled = [rule for rule in rules if rule.enabled]
+        prefix = self.bot.guild_mgr.get_prefix(ctx.guild.id)
+        embed = discord.Embed(
+            title="🛡️ KYOKA • Official Discord AutoMod",
+            description=(
+                f"**Status:** {'🟢 Enabled' if enabled else '⚪ Not enabled'}\n"
+                f"**KYOKA rules:** {len(rules)} total • {len(enabled)} active\n\n"
+                "**Protection installed by setup**\n"
+                "• Discord spam detection\n"
+                "• Mention-spam and raid protection\n"
+                "• Discord harmful-link detection\n"
+                "• Profanity, sexual-content and slur presets\n\n"
+                "**Commands**\n"
+                f"• `{prefix}automod setup` — install protection\n"
+                f"• `{prefix}automod enable` / `disable`\n"
+                f"• `{prefix}automod config` — show native rules\n"
+                f"• `{prefix}automod reset` — remove KYOKA rules only"
+            ),
+            color=0x7C3AED,
         )
-
-        if violation and filter_name and reason:
-            await mgr.execute_action(
-                guild=message.guild,
-                member=member,
-                channel=message.channel,
-                message=message,
-                filter_name=filter_name,
-                reason=reason,
-                cfg=cfg,
-            )
-
-    # ─── AUTOMOD COMMANDS ─────────────────────────────────────────────────────
+        embed.set_footer(text=f"{ctx.guild.name} • Discord-native AutoMod")
+        await ctx.send(embed=embed)
 
     @commands.hybrid_group(
         name="automod",
         aliases=["am"],
         invoke_without_command=True,
-        description="Inspect or configure server AutoMod rules.",
+        description="Configure official Discord AutoMod protection for this server.",
     )
-    @commands.has_permissions(manage_guild=True)
+    @commands.guild_only()
+    @commands.has_guild_permissions(manage_guild=True)
     async def automod_group(self, ctx: CustomContext) -> None:
-        """Show current AutoMod status and active protection filters."""
+        await self._send_status(ctx)
+
+    @automod_group.command(name="setup", description="Install KYOKA's official Discord AutoMod rules.")
+    @commands.has_guild_permissions(manage_guild=True)
+    async def automod_setup(self, ctx: CustomContext) -> None:
         if not ctx.guild:
             return
-
-        mgr = getattr(self.bot, "automod_mgr", None)
-        if not mgr:
-            await ctx.send_error("AutoMod system is currently initializing.")
+        manager = self._manager()
+        if not manager:
+            await ctx.send_error("AutoMod is still initializing.")
+            return
+        bot_member = ctx.guild.me
+        if not bot_member or not bot_member.guild_permissions.manage_guild:
+            await ctx.send_error("KYOKA needs the **Manage Server** permission to create official Discord AutoMod rules.")
+            return
+        try:
+            result = await manager.setup_native_rules(ctx.guild)
+        except discord.Forbidden:
+            await ctx.send_error("Discord denied AutoMod setup. Confirm KYOKA has **Manage Server** permission.")
+            return
+        except discord.HTTPException as exc:
+            logger.exception("Native AutoMod setup failed in guild %s", ctx.guild.id)
+            await ctx.send_error(f"Discord could not complete AutoMod setup: {getattr(exc, 'text', None) or 'API error'}.")
             return
 
-        cfg = await mgr.get_settings(ctx.guild.id)
-        p = self.bot.guild_mgr.get_prefix(ctx.guild.id)
-
-        status_str = "🟢 **Enabled**" if cfg.get("enabled") else "🔴 **Disabled**"
-        action_str = str(cfg.get("action", "delete")).upper()
-
-        filters = [
-            f"• **Anti-Spam:** {'✅' if cfg.get('anti_spam') else '❌'} (`{cfg.get('spam_threshold')} msgs/4s`)",
-            f"• **Mass Mentions:** {'✅' if cfg.get('anti_mentions') else '❌'} (`threshold: {cfg.get('mention_threshold')}`)",
-            f"• **Anti-Invites:** {'✅' if cfg.get('anti_invites') else '❌'}",
-            f"• **Bad Words:** {'✅' if cfg.get('anti_badwords') else '❌'} (`{len(cfg.get('badwords_list', []))} words`)",
-            f"• **Repeated Text:** {'✅' if cfg.get('anti_repeated') else '❌'}",
-            f"• **Anti-Caps:** {'✅' if cfg.get('anti_caps') else '❌'} (`>{cfg.get('caps_threshold')}%`)",
-        ]
-
+        lines = []
+        if result["created"]:
+            lines.append("**Created:** " + ", ".join(result["created"]))
+        if result["skipped"]:
+            lines.append("**Already installed:** " + ", ".join(result["skipped"]))
+        if result["errors"]:
+            lines.append("**Could not install:** " + "; ".join(result["errors"]))
+        if not lines:
+            lines.append("No rules were changed.")
         embed = discord.Embed(
-            title="🛡️ Kyoka AutoMod Engine",
+            title="🛡️ KYOKA AutoMod setup",
             description=(
-                f"Status: {status_str}\n"
-                f"Punishment Action: **{action_str}**\n\n"
-                f"**Active Protection Modules:**\n" + "\n".join(filters) + "\n\n"
-                f"**Management Commands:**\n"
-                f"• `{p}automod enable` / `{p}automod disable`\n"
-                f"• `{p}automod action <delete|warn|timeout>`\n"
-                f"• `{p}automod test <message text>` — Diagnostic dry run"
+                "KYOKA has configured genuine rules using Discord's official Auto Moderation API.\n\n"
+                + "\n".join(lines)
+                + f"\n\n**KYOKA rules in this server:** {result['total']}\n"
+                "Rules are server-specific. Other servers are untouched. Use `?automod config` to review them."
             ),
             color=0x7C3AED,
         )
-        embed.set_footer(text=f"{ctx.guild.name} • Kyoka 3.0 AutoMod")
         await ctx.send(embed=embed)
 
-    @automod_group.command(name="enable", description="Enable server AutoMod chat filtering.")
-    @commands.has_permissions(manage_guild=True)
+    @automod_group.command(name="enable", description="Enable KYOKA's Discord AutoMod rules.")
+    @commands.has_guild_permissions(manage_guild=True)
     async def automod_enable(self, ctx: CustomContext) -> None:
-        mgr = getattr(self.bot, "automod_mgr", None)
-        if not mgr or not ctx.guild:
+        if not ctx.guild:
             return
-        await mgr.update_settings(ctx.guild.id, enabled=True)
-        await ctx.send_success("AutoMod protection has been **enabled** for this server.")
+        manager = self._manager()
+        if not manager:
+            await ctx.send_error("AutoMod is still initializing.")
+            return
+        try:
+            rules = await manager.fetch_native_rules(ctx.guild)
+            if not rules:
+                await ctx.send_warning("No KYOKA rules are installed. Run `?automod setup` first.")
+                return
+            changed = await manager.set_native_rules_enabled(ctx.guild, True)
+            await ctx.send_success(f"Official Discord AutoMod is enabled. Updated **{changed}** rule(s).")
+        except discord.Forbidden:
+            await ctx.send_error("KYOKA needs **Manage Server** permission to manage its AutoMod rules.")
+        except discord.HTTPException as exc:
+            await ctx.send_error(f"Discord could not enable AutoMod: {getattr(exc, 'text', None) or 'API error'}.")
 
-    @automod_group.command(name="disable", description="Disable server AutoMod chat filtering.")
-    @commands.has_permissions(manage_guild=True)
+    @automod_group.command(name="disable", description="Disable KYOKA's Discord AutoMod rules.")
+    @commands.has_guild_permissions(manage_guild=True)
     async def automod_disable(self, ctx: CustomContext) -> None:
-        mgr = getattr(self.bot, "automod_mgr", None)
-        if not mgr or not ctx.guild:
+        if not ctx.guild:
             return
-        await mgr.update_settings(ctx.guild.id, enabled=False)
-        await ctx.send_warning("AutoMod protection has been **disabled** for this server.")
-
-    @automod_group.command(name="action", description="Set the default AutoMod punishment action.")
-    @app_commands.describe(action="Punishment to execute: delete, warn, or timeout")
-    @commands.has_permissions(manage_guild=True)
-    async def automod_action(self, ctx: CustomContext, action: str) -> None:
-        action = action.lower().strip()
-        if action not in ("delete", "warn", "timeout"):
-            await ctx.send_error("Invalid action. Supported actions: `delete`, `warn`, `timeout`.")
+        manager = self._manager()
+        if not manager:
+            await ctx.send_error("AutoMod is still initializing.")
             return
+        try:
+            changed = await manager.set_native_rules_enabled(ctx.guild, False)
+            await ctx.send_warning(f"KYOKA's official AutoMod rules are disabled. Updated **{changed}** rule(s).")
+        except discord.Forbidden:
+            await ctx.send_error("KYOKA needs **Manage Server** permission to manage its AutoMod rules.")
+        except discord.HTTPException as exc:
+            await ctx.send_error(f"Discord could not disable AutoMod: {getattr(exc, 'text', None) or 'API error'}.")
 
-        mgr = getattr(self.bot, "automod_mgr", None)
-        if not mgr or not ctx.guild:
+    @automod_group.command(name="config", description="View KYOKA's official Discord AutoMod rules.")
+    @commands.has_guild_permissions(manage_guild=True)
+    async def automod_config(self, ctx: CustomContext) -> None:
+        if not ctx.guild:
             return
-
-        await mgr.update_settings(ctx.guild.id, action=action)
-        await ctx.send_success(f"Default AutoMod action updated to **{action.upper()}**.")
-
-    @automod_group.command(name="test", description="Test a message string against AutoMod filters without punishing.")
-    @app_commands.describe(message_text="Text content to simulate against filters")
-    @commands.has_permissions(manage_guild=True)
-    async def automod_test(self, ctx: CustomContext, *, message_text: str) -> None:
-        mgr = getattr(self.bot, "automod_mgr", None)
-        if not mgr or not ctx.guild:
+        manager = self._manager()
+        if not manager:
+            await ctx.send_error("AutoMod is still initializing.")
             return
-
-        cfg = await mgr.get_settings(ctx.guild.id)
-        # Enable temporarily for test evaluation
-        test_cfg = dict(cfg)
-        test_cfg["enabled"] = True
-
-        violation, filter_name, reason = mgr.check_content(
-            message_text,
-            user_id=ctx.author.id,
-            guild_id=ctx.guild.id,
-            cfg=test_cfg,
-            mentions_count=0,
-        )
-
-        if violation:
-            await ctx.send_warning(
-                f"⚠️ **Violation Triggered!**\n"
-                f"• **Filter:** `{filter_name}`\n"
-                f"• **Reason:** {reason}\n"
-                f"• **Expected Action:** `{cfg.get('action', 'delete').upper()}`"
+        try:
+            rules = await manager.fetch_native_rules(ctx.guild)
+        except discord.Forbidden:
+            await ctx.send_error("KYOKA cannot view AutoMod rules. Check **Manage Server** permission.")
+            return
+        if not rules:
+            await ctx.send_warning("No KYOKA AutoMod rules are installed. Run `?automod setup` to opt in.")
+            return
+        embed = discord.Embed(title="⚙️ KYOKA AutoMod configuration", color=0x7C3AED)
+        for rule in rules:
+            embed.add_field(
+                name=rule.name.removeprefix(RULE_PREFIX),
+                value=f"{'🟢 Enabled' if rule.enabled else '⚪ Disabled'} • Discord rule ID: `{rule.id}`",
+                inline=False,
             )
-        else:
+        await ctx.send(embed=embed)
+
+    @automod_group.command(name="reset", description="Delete only AutoMod rules created by KYOKA.")
+    @commands.has_guild_permissions(manage_guild=True)
+    async def automod_reset(self, ctx: CustomContext) -> None:
+        if not ctx.guild:
+            return
+        manager = self._manager()
+        if not manager:
+            await ctx.send_error("AutoMod is still initializing.")
+            return
+        try:
+            deleted = await manager.delete_native_rules(ctx.guild)
             await ctx.send_success(
-                f"✅ **Clean Message!** No active AutoMod filters were triggered by this text."
+                f"Removed **{deleted}** KYOKA AutoMod rule(s). Other server AutoMod rules were left untouched."
             )
+        except discord.Forbidden:
+            await ctx.send_error("KYOKA needs **Manage Server** permission to remove its AutoMod rules.")
+        except discord.HTTPException as exc:
+            await ctx.send_error(f"Discord could not reset AutoMod: {getattr(exc, 'text', None) or 'API error'}.")
 
 
 async def setup(bot: KyokaBot) -> None:
