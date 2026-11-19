@@ -1321,85 +1321,118 @@ class Help(commands.Cog):
     )
     async def help_command(self, ctx: CustomContext, *, command_or_module: str | None = None) -> None:
         """Interactive help menu filtered by user permissions and organized into categories."""
-        if ctx.interaction and not ctx.interaction.response.is_done():
-            await ctx.interaction.response.defer()
+        try:
+            if ctx.interaction and not ctx.interaction.response.is_done():
+                await ctx.interaction.response.defer()
 
-        t_start = time.perf_counter()
-        if hasattr(self.bot, "branding_mgr"):
-            await self.bot.branding_mgr.get_branding(ctx.guild.id if ctx.guild else None)
-        visible_categories = await self._get_visible_categories(ctx)
-        t_categories = time.perf_counter()
+            t_start = time.perf_counter()
+            if hasattr(self.bot, "branding_mgr"):
+                await self.bot.branding_mgr.get_branding(ctx.guild.id if ctx.guild else None)
+            visible_categories = await self._get_visible_categories(ctx)
+            t_categories = time.perf_counter()
 
-        # Direct command or module lookup
-        if command_or_module:
-            query = command_or_module.lower().strip()
+            # Direct command or module lookup
+            if command_or_module:
+                query = command_or_module.lower().strip()
 
-            target_cmd = self.bot.get_command(query)
-            if target_cmd and self._can_run_command(target_cmd, ctx):
-                embed = self.build_command_embed(ctx, target_cmd)
-                await ctx.send(embed=embed)
-                return
-
-            # Direct module / category lookup
-            target_cat_name = self.CATEGORY_ALIASES.get(query)
-            if not target_cat_name:
-                cat_meta = get_category_by_query(query)
-                if cat_meta and cat_meta.tag in visible_categories:
-                    target_cat_name = cat_meta.tag
-                else:
-                    target_cat_name = next(
-                        (c for c in visible_categories.keys() if c.lower() == query or query in c.lower()),
-                        None,
-                    )
-
-            if target_cat_name:
-                matched_cat = next((c for c in visible_categories.keys() if c.lower() == target_cat_name.lower()), None)
-                if matched_cat:
-                    view = HelpView(
-                        cog=self,
-                        ctx=ctx,
-                        visible_categories=visible_categories,
-                        current_category=matched_cat,
-                    )
-                    embed = self.build_category_embed(ctx, matched_cat, visible_categories[matched_cat], visible_categories)
-                    banner_file = getattr(embed, "banner_file", None)
-                    if banner_file:
-                        msg = await ctx.send(embed=embed, file=banner_file, view=view)
-                    else:
-                        msg = await ctx.send(embed=embed, view=view)
-                    if getattr(ctx, "interaction", None):
-                        try:
-                            view.message = await ctx.interaction.original_response()
-                        except Exception:
-                            pass
-                    else:
-                        view.message = msg
+                target_cmd = self.bot.get_command(query)
+                if target_cmd and self._can_run_command(target_cmd, ctx):
+                    embed = self.build_command_embed(ctx, target_cmd)
+                    await ctx.send(embed=embed)
                     return
 
-            # Command or category not found — return clear error and attach HelpView
-            p = self.bot.guild_mgr.get_prefix(ctx.guild.id if ctx.guild else None)
-            embed = discord.Embed(
-                title="❌ Command or Category Not Found",
-                description=(
-                    f"No command or category matching **`{command_or_module}`** was found.\n\n"
-                    f"**Suggestions:**\n"
-                    f"• Browse all categories using the dropdown menu below\n"
-                    f"• Type `{p}help` to view the main console overview\n"
-                    f"• Type `{p}hca` for the complete public command archive"
-                ),
-                color=0xED4245,
-            )
-            embed.set_footer(
-                text=f"Requested by {ctx.author.display_name} • Kyoka 3.0",
-                icon_url=ctx.author.display_avatar.url if ctx.author.display_avatar else None,
-            )
+                # Direct module / category lookup
+                target_cat_name = self.CATEGORY_ALIASES.get(query)
+                if not target_cat_name:
+                    cat_meta = get_category_by_query(query)
+                    if cat_meta and cat_meta.tag in visible_categories:
+                        target_cat_name = cat_meta.tag
+                    else:
+                        target_cat_name = next(
+                            (c for c in visible_categories.keys() if c.lower() == query or query in c.lower()),
+                            None,
+                        )
+
+                if target_cat_name:
+                    matched_cat = next((c for c in visible_categories.keys() if c.lower() == target_cat_name.lower()), None)
+                    if matched_cat:
+                        view = HelpView(
+                            cog=self,
+                            ctx=ctx,
+                            visible_categories=visible_categories,
+                            current_category=matched_cat,
+                        )
+                        embed = self.build_category_embed(ctx, matched_cat, visible_categories[matched_cat], visible_categories)
+                        banner_file = getattr(embed, "banner_file", None)
+                        if banner_file:
+                            msg = await ctx.send(embed=embed, file=banner_file, view=view)
+                        else:
+                            msg = await ctx.send(embed=embed, view=view)
+                        if getattr(ctx, "interaction", None):
+                            try:
+                                view.message = await ctx.interaction.original_response()
+                            except Exception:
+                                pass
+                        else:
+                            view.message = msg
+                        return
+
+                # Command or category not found — return clear error and attach HelpView
+                p = self.bot.guild_mgr.get_prefix(ctx.guild.id if ctx.guild else None)
+                embed = discord.Embed(
+                    title="❌ Command or Category Not Found",
+                    description=(
+                        f"No command or category matching **`{command_or_module}`** was found.\n\n"
+                        f"**Suggestions:**\n"
+                        f"• Browse all categories using the dropdown menu below\n"
+                        f"• Type `{p}help` to view the main console overview\n"
+                        f"• Type `{p}hca` for the complete public command archive"
+                    ),
+                    color=0xED4245,
+                )
+                embed.set_footer(
+                    text=f"Requested by {ctx.author.display_name} • Kyoka 3.0",
+                    icon_url=ctx.author.display_avatar.url if ctx.author.display_avatar else None,
+                )
+                view = HelpView(
+                    cog=self,
+                    ctx=ctx,
+                    visible_categories=visible_categories,
+                    current_category="home",
+                )
+                msg = await ctx.send(embed=embed, view=view)
+                if getattr(ctx, "interaction", None):
+                    try:
+                        view.message = await ctx.interaction.original_response()
+                    except Exception:
+                        pass
+                else:
+                    view.message = msg
+                return
+
+            # Main Help Console (Home Overview)
             view = HelpView(
                 cog=self,
                 ctx=ctx,
                 visible_categories=visible_categories,
                 current_category="home",
             )
-            msg = await ctx.send(embed=embed, view=view)
+            embed = self.build_home_embed(ctx, visible_categories)
+            t_embed = time.perf_counter()
+            banner_file = getattr(embed, "banner_file", None)
+            if banner_file:
+                msg = await ctx.send(embed=embed, file=banner_file, view=view)
+            else:
+                msg = await ctx.send(embed=embed, view=view)
+            t_send = time.perf_counter()
+
+            logger.info(
+                f"⚡ [Help Timing] Total: {(t_send - t_start)*1000:.1f}ms | "
+                f"Categories: {(t_categories - t_start)*1000:.1f}ms | "
+                f"Embed: {(t_embed - t_categories)*1000:.1f}ms | "
+                f"Send: {(t_send - t_embed)*1000:.1f}ms"
+            )
+
             if getattr(ctx, "interaction", None):
                 try:
                     view.message = await ctx.interaction.original_response()
@@ -1407,38 +1440,28 @@ class Help(commands.Cog):
                     pass
             else:
                 view.message = msg
-            return
 
-        # Main Help Console (Home Overview)
-        view = HelpView(
-            cog=self,
-            ctx=ctx,
-            visible_categories=visible_categories,
-            current_category="home",
-        )
-        embed = self.build_home_embed(ctx, visible_categories)
-        t_embed = time.perf_counter()
-        banner_file = getattr(embed, "banner_file", None)
-        if banner_file:
-            msg = await ctx.send(embed=embed, file=banner_file, view=view)
-        else:
-            msg = await ctx.send(embed=embed, view=view)
-        t_send = time.perf_counter()
-
-        logger.info(
-            f"⚡ [Help Timing] Total: {(t_send - t_start)*1000:.1f}ms | "
-            f"Categories: {(t_categories - t_start)*1000:.1f}ms | "
-            f"Embed: {(t_embed - t_categories)*1000:.1f}ms | "
-            f"Send: {(t_send - t_embed)*1000:.1f}ms"
-        )
-
-        if getattr(ctx, "interaction", None):
+        except Exception:
+            logger.exception(
+                "❌ [HELP MENU] Help command failed; serving emergency fallback. "
+                "guild_id=%s user_id=%s",
+                getattr(ctx.guild, "id", None),
+                getattr(ctx.author, "id", None),
+            )
+            fallback = discord.Embed(
+                title="KYŌKA • HELP DIRECTORY",
+                description=(
+                    "The interactive help panel encountered a temporary problem. "
+                    "Here is a safe fallback so you can still access commands.\\n\\n"
+                    "**Try:** `help moderation`, `help ai`, `help music`, "
+                    "or `hca` for the full command archive."
+                ),
+                color=0x2B0938,
+            )
             try:
-                view.message = await ctx.interaction.original_response()
+                await ctx.send(embed=fallback)
             except Exception:
-                pass
-        else:
-            view.message = msg
+                logger.exception("❌ [HELP MENU] Emergency fallback could not be sent.")
 
     @commands.command(
         name="premium",
