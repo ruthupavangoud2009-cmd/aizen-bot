@@ -139,7 +139,7 @@ class HelpCategorySelect(discord.ui.Select):
             discord.SelectOption(
                 label="Home",
                 value="home",
-                description="Kyoka overview, quickstart & navigation guide",
+                description="KYŌKA command center and quick access",
                 emoji="🏠",
                 default=(current_selection == "home"),
             )
@@ -188,7 +188,7 @@ class HelpCategorySelect(discord.ui.Select):
         await self.help_view.switch_category(interaction, selected)
 
 
-class HelpSearchModal(discord.ui.Modal, title="⛩️ Search Kyoka Commands"):
+class HelpSearchModal(discord.ui.Modal, title="KYŌKA  •  COMMAND SEARCH"):
     """Interactive modal allowing instant search across all registered commands."""
     query_input = discord.ui.TextInput(
         label="Command Name or Keyword",
@@ -261,9 +261,9 @@ class HelpView(discord.ui.View):
 
         if self.current_category == "home":
             btn_search = discord.ui.Button(
-                label="Search",
-                emoji="🔍",
-                style=discord.ButtonStyle.secondary,
+                label="Search commands",
+                emoji="⌕",
+                style=discord.ButtonStyle.primary,
                 row=1,
             )
             btn_search.callback = self.btn_search_callback
@@ -288,8 +288,8 @@ class HelpView(discord.ui.View):
         else:
             # On Category: 4 clean, compact buttons on Row 1 (no Row 2)
             btn_back = discord.ui.Button(
-                label="Back",
-                emoji="◀️",
+                label="Previous",
+                emoji="‹",
                 style=discord.ButtonStyle.secondary,
                 row=1,
             )
@@ -297,8 +297,8 @@ class HelpView(discord.ui.View):
             self.add_item(btn_back)
 
             btn_home = discord.ui.Button(
-                label="Home",
-                emoji="🏠",
+                label="Overview",
+                emoji="⌂",
                 style=discord.ButtonStyle.primary,
                 row=1,
             )
@@ -307,7 +307,7 @@ class HelpView(discord.ui.View):
 
             btn_next = discord.ui.Button(
                 label="Next",
-                emoji="▶️",
+                emoji="›",
                 style=discord.ButtonStyle.secondary,
                 row=1,
             )
@@ -432,7 +432,7 @@ class HelpView(discord.ui.View):
         embed = discord.Embed(
             title="🔒 Help Session Closed",
             description=f"> This help menu has been closed.\\n> Type `{self.cog.bot.guild_mgr.get_prefix(self.ctx.guild.id if self.ctx.guild else None)}help` or `/help` whenever you need guidance.",
-            color=0x2B0938,
+            color=0x211B2D,
         )
         for item in self.children:
             if getattr(item, "style", None) != discord.ButtonStyle.link:
@@ -483,7 +483,7 @@ class HCACategorySelect(discord.ui.Select):
             )
 
         super().__init__(
-            placeholder="Select a category to view all commands...",
+            placeholder="KYŌKA  •  Browse the archive",
             min_values=1,
             max_values=1,
             options=options[:25],
@@ -1468,7 +1468,7 @@ class Help(commands.Cog):
                 f"**Status / Expiry:** `{expiry_str}`\n\n"
                 f"> Kyoka separates core server stability features (free to all servers) from advanced visual and enterprise customization (premium)."
             ),
-            color=0x7C3AED,
+            color=0x211B2D,
         )
 
         embed.add_field(
