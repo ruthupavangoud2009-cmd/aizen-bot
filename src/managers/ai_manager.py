@@ -798,10 +798,13 @@ class AIManager:
                 "system_instruction": {"parts": [{"text": system_instruction}]},
                 "contents": contents,
                 "generationConfig": {
-                    "temperature": 0.8,
-                    "maxOutputTokens": 900,
+                    "temperature": 0.85 if p_def["key"] == "blox_fruits_expert" else 0.75,
+                    "maxOutputTokens": 1400 if p_def["key"] == "blox_fruits_expert" else 900,
                 },
             }
+            # Ground game-specific answers in current web results where available.
+            if p_def["key"] == "blox_fruits_expert":
+                body["tools"] = [{"google_search": {}}]
 
             try:
                 text = await self._execute_gemini_call(session, body)
