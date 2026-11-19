@@ -486,7 +486,8 @@ class CompanionAI(commands.Cog):
             if not prompt:
                 prompt = "What's up?"
 
-            should_gif = send_gifs and (
+            # Blox Fruits chat should never be interrupted by unrelated reaction GIFs.
+            should_gif = (not is_blox_fruits) and send_gifs and (
                 random.random() < 0.22
                 or any(kw in prompt.lower() for kw in ("gif", "show me", "hug", "kiss", "look", "smile", "tease"))
             ) and bool(p_def.get("gif_category"))
