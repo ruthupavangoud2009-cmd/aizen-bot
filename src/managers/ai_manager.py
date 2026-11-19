@@ -630,15 +630,31 @@ class AIManager:
         if not messages:
             raise RuntimeError("Groq request contained no messages.")
         generation = body.get("generationConfig", {})
-        request_body = {"model": model, "messages": messages,
-                        "temperature": float(generation.get("temperature", 0.75)),
-                        "max_tokens": int(generation.get("maxOutputTokens", 1000))}
-        timeout = aiohttp.ClientTimeout(total=max(self.response_timeout, 25.0))
+        timeout = aiohttp.ClientTimeout(total=max(self.response_timeout, 35.0))
+        # Blox Fruits persona requests opt into Groq's built-in browser search
+        # through the Responses API; regular chat stays on the faster Chat API.
+        use_browser_search = bool(body.get("tools"))
+        if use_browser_search:
+            request_body = {
+                "model": model,
+                "instructions": system_text,
+                "input": [message for message in messages if message["role"] != "system"],
+                "tools": [{"type": "browser_search"}],
+                "tool_choice": "auto",
+                "max_output_tokens": int(generation.get("maxOutputTokens", 1400)),
+            }
+            endpoint = "https://api.groq.com/openai/v1/responses"
+        else:
+            request_body = {
+                "model": model, "messages": messages,
+                "temperature": float(generation.get("temperature", 0.75)),
+                "max_tokens": int(generation.get("maxOutputTokens", 1000)),
+            }
+            endpoint = "https://api.groq.com/openai/v1/chat/completions"
         async with self._semaphore:
             started = time.monotonic()
             try:
-                async with session.post("https://api.groq.com/openai/v1/chat/completions",
-                    json=request_body,
+                async with session.post(endpoint, json=request_body,
                     headers={"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"},
                     timeout=timeout) as response:
                     latency_ms = round((time.monotonic() - started) * 1000, 1)
@@ -646,8 +662,19 @@ class AIManager:
                     if response.status != 200:
                         error = payload.get("error", {}) if isinstance(payload, dict) else {}
                         raise RuntimeError(f"Groq HTTP {response.status}: {str(error.get('message') or payload)[:700]}")
-                    choices = payload.get("choices", []) if isinstance(payload, dict) else []
-                    answer = choices[0].get("message", {}).get("content", "") if choices else ""
+                    if use_browser_search:
+                        answer = payload.get("output_text", "") if isinstance(payload, dict) else ""
+                        if not answer and isinstance(payload, dict):
+                            output = payload.get("output", [])
+                            chunks = []
+                            for item in output:
+                                if item.get("type") == "message":
+                                    chunks.extend(part.get("text", "") for part in item.get("content", [])
+                                                  if part.get("type") in ("output_text", "text"))
+                            answer = "\\n".join(chunks)
+                    else:
+                        choices = payload.get("choices", []) if isinstance(payload, dict) else []
+                        answer = choices[0].get("message", {}).get("content", "") if choices else ""
                     if not isinstance(answer, str) or not answer.strip():
                         raise RuntimeError("Groq returned no generated text.")
                     self._last_latency_ms = latency_ms
