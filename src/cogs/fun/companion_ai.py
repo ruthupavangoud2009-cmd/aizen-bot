@@ -651,25 +651,28 @@ class CompanionAI(commands.Cog):
 
     @ai.command(name="setup")
     @commands.guild_only()
-    async def ai_setup(
-        self,
-        ctx: CustomContext,
-        channel: Optional[discord.TextChannel] = None,
-        persona: str = "aizen",
-    ) -> None:
-        """Admin: Configure automatic natural AI chat in a channel."""
+    async def ai_setup(self, ctx: CustomContext, *, args: str = "") -> None:
+        """Configure normal AI or the dedicated Blox Fruits expert channel."""
         if not self._is_admin_or_owner(ctx.author, ctx.guild):
             return await ctx.send("❌ Administrator permissions are required to configure AI channels.")
-        target = channel or ctx.channel
+        tokens = args.split()
+        is_blox = bool(tokens and tokens[0].lower() in {"bloxfruits", "blox", "blox_fruits"})
+        persona = "blox_fruits_expert" if is_blox else "aizen"
+        channel_arg = tokens[1] if is_blox and len(tokens) > 1 else None
+        if not is_blox:
+            for token in tokens:
+                if token.startswith("<#") or token.isdigit(): channel_arg = token
+                else: persona = token
+        target = ctx.channel
+        if channel_arg:
+            try: target = await commands.TextChannelConverter().convert(ctx, channel_arg)
+            except commands.BadArgument: return await ctx.send("❌ Channel not found. Mention it like #blox-fruits.")
         if not isinstance(target, discord.TextChannel):
             return await ctx.send("❌ Target must be a standard text channel.")
-
         p_def = resolve_persona(persona)
         if p_def["key"] == "special":
             authorized = await authorize_adult(ctx, action_name="aispecial_setup")
-            if not authorized:
-                return
-
+            if not authorized: return
         embed = await self._setup_channel(ctx.guild, target, persona=p_def["key"], user_id=ctx.author.id)
         await ctx.send(embed=embed)
 
