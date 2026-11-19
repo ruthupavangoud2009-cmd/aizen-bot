@@ -17,7 +17,7 @@ logger = logging.getLogger("Kyoka.Containers")
 class KyokaContainer:
     """Builder for Discord Components V2 Container cards with a shared KYŌKA accent."""
 
-    DEFAULT_ACCENT_COLOR = 0x8B5CF6
+    DEFAULT_ACCENT_COLOR = 0xA855F7
 
     def __init__(self, accent_color: int | None = None) -> None:
         self.components: list[dict[str, Any]] = []
