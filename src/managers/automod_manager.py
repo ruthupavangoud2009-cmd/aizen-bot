@@ -47,6 +47,121 @@ class AutoModManager:
         # Cooldown per user to prevent duplicate action spam: (guild_id, user_id) -> timestamp
         self._action_cooldowns: Dict[Tuple[int, int], float] = {}
 
+    KYOKA_RULE_PREFIX = "KYOKA • "
+
+    async def fetch_native_rules(self, guild: discord.Guild) -> List[discord.AutoModRule]:
+        """Return only AutoMod rules created by KYOKA, never rules owned by the server."""
+        rules = await guild.fetch_automod_rules()
+        return [rule for rule in rules if rule.name.startswith(self.KYOKA_RULE_PREFIX)]
+
+    async def setup_native_rules(self, guild: discord.Guild) -> Dict[str, Any]:
+        """Install an idempotent, opt-in set of genuine Discord AutoMod rules."""
+        bot_member = guild.me
+        if bot_member is None or not bot_member.guild_permissions.manage_guild:
+            raise discord.Forbidden(
+                response=None,
+                message="KYOKA needs the Manage Server permission to create Discord AutoMod rules.",
+            )
+
+        existing = await self.fetch_native_rules(guild)
+        existing_names = {rule.name for rule in existing}
+        block_action = discord.AutoModRuleAction(
+            type=discord.AutoModRuleActionType.block_message,
+            custom_message="This message was blocked by this server's KYOKA AutoMod protection.",
+        )
+        presets = discord.AutoModPresets(
+            profanity=True,
+            sexual_content=True,
+            slurs=True,
+        )
+        definitions = [
+            (
+                "Spam Shield",
+                discord.AutoModTrigger(type=discord.AutoModRuleTriggerType.spam),
+            ),
+            (
+                "Mention Raid Guard",
+                discord.AutoModTrigger(
+                    type=discord.AutoModRuleTriggerType.mention_spam,
+                    mention_limit=5,
+                    mention_raid_protection=True,
+                ),
+            ),
+            (
+                "Harmful Link Shield",
+                discord.AutoModTrigger(type=discord.AutoModRuleTriggerType.harmful_link),
+            ),
+            (
+                "Keyword Presets",
+                discord.AutoModTrigger(
+                    type=discord.AutoModRuleTriggerType.keyword_preset,
+                    presets=presets,
+                ),
+            ),
+        ]
+
+        created: List[str] = []
+        skipped: List[str] = []
+        errors: List[str] = []
+        for label, trigger in definitions:
+            name = f"{self.KYOKA_RULE_PREFIX}{label}"
+            if name in existing_names:
+                skipped.append(label)
+                continue
+            try:
+                await guild.create_automod_rule(
+                    name=name,
+                    event_type=discord.AutoModRuleEventType.message_send,
+                    trigger=trigger,
+                    actions=[block_action],
+                    enabled=True,
+                    reason="Enabled by a server administrator with ?automod setup.",
+                )
+                created.append(label)
+            except discord.HTTPException as exc:
+                logger.warning(
+                    "Could not create native AutoMod rule %r in guild %s: %s",
+                    name, guild.id, exc,
+                )
+                errors.append(f"{label}: {getattr(exc, 'text', None) or type(exc).__name__}")
+
+        # Keep the older local listener disabled so it cannot double-punish messages.
+        if self.db:
+            await self.update_settings(guild.id, enabled=False)
+
+        return {
+            "created": created,
+            "skipped": skipped,
+            "errors": errors,
+            "total": len(existing) + len(created),
+        }
+
+    async def set_native_rules_enabled(self, guild: discord.Guild, enabled: bool) -> int:
+        """Enable or disable only KYOKA-owned native Discord AutoMod rules."""
+        rules = await self.fetch_native_rules(guild)
+        changed = 0
+        for rule in rules:
+            if rule.enabled != enabled:
+                await rule.edit(
+                    enabled=enabled,
+                    reason=f"KYOKA AutoMod {'enabled' if enabled else 'disabled'} by a server administrator.",
+                )
+                changed += 1
+        if self.db:
+            await self.update_settings(guild.id, enabled=False)
+        return changed
+
+    async def delete_native_rules(self, guild: discord.Guild) -> int:
+        """Delete only rules with KYOKA's ownership prefix; leave all other rules untouched."""
+        rules = await self.fetch_native_rules(guild)
+        deleted = 0
+        for rule in rules:
+            await rule.delete(reason="KYOKA AutoMod reset requested by a server administrator.")
+            deleted += 1
+        if self.db:
+            await self.update_settings(guild.id, enabled=False)
+        return deleted
+
     def invalidate_cache(self, guild_id: int) -> None:
         """Evict guild AutoMod configuration from memory cache."""
         self._cache.pop(guild_id, None)
