@@ -11,16 +11,16 @@ class KyokaTheme:
     """KYOKA: Eclipse Interface visual styling constants, color tokens, and layout guidelines."""
 
     # Eclipse Interface Surface & Atmosphere Palette
-    ECLIPSE_BLACK: int = 0x101116     # Pure obsidian surface
-    SURFACE_DARK: int = 0x181A22      # Charcoal violet backdrop
-    DEEP_VIOLET: int = 0x20212B       # Midnight violet container
-    PRIMARY: int = 0x252735           # Aizen signature deep violet (primary embed color)
-    SECONDARY: int = 0x20232D         # Charcoal violet secondary
-    ACCENT: int = 0x8878C7            # Electric purple spiritual pressure
-    HIGHLIGHT: int = 0xA99BDF         # Indigo / purple shimmer
-    ELECTRIC_PURPLE: int = 0x8878C7   # Vivid spiritual pressure
+    ECLIPSE_BLACK: int = 0x0A0A0F     # Pure obsidian surface
+    SURFACE_DARK: int = 0x120C1F      # Charcoal violet backdrop
+    DEEP_VIOLET: int = 0x1A0933       # Midnight violet container
+    PRIMARY: int = 0x2B0938           # Aizen signature deep violet (primary embed color)
+    SECONDARY: int = 0x1A092A         # Charcoal violet secondary
+    ACCENT: int = 0x7C3AED            # Electric purple spiritual pressure
+    HIGHLIGHT: int = 0x9333EA         # Indigo / purple shimmer
+    ELECTRIC_PURPLE: int = 0x7C3AED   # Vivid spiritual pressure
     BLADE_SILVER: int = 0xE2E8F0      # Silver-white typography
-    MUTED_SLATE: int = 0x9296A5       # Subtitle & footer muted text
+    MUTED_SLATE: int = 0x64748B       # Subtitle & footer muted text
 
     # Semantic Status & Accent Colors
     SUCCESS: int = 0x10B981           # Emerald green for confirmed actions
@@ -57,7 +57,7 @@ class KyokaTheme:
     AIZEN_BANNER_URL: str = "https://media.discordapp.net/attachments/1234567890/kyoka_banner.png"
 
     # Standard Footers
-    FOOTER_TEXT: str = "KYŌKA 3.0  •  ECLIPSE INTERFACE"
+    FOOTER_TEXT: str = "KYOKA 3.0 • Eclipse Interface"
     TICKET_FOOTER: str = "KYOKA Portal • Security & Transcripts Guaranteed"
     MUSIC_FOOTER: str = "KYOKA Audio Engine • Zero Loss Playback"
 
