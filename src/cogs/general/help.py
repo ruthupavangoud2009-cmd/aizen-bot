@@ -1108,64 +1108,46 @@ class Help(commands.Cog):
         ctx: CustomContext,
         visible_categories: dict[str, list[commands.Command]],
     ) -> discord.Embed:
-        """Render KYŌKA's premium command-centre landing page."""
+        """Build the compact KYŌKA command-centre landing screen."""
         guild = ctx.guild
         author = ctx.author
-        p = self.bot.guild_mgr.get_prefix(guild.id if guild else None)
+        prefix = self.bot.guild_mgr.get_prefix(guild.id if guild else None)
         latency = self._get_latency_ms()
-        total_commands = sum(len(cmds) for cmds in visible_categories.values())
+        total_commands = sum(len(items) for items in visible_categories.values())
         bot_user = getattr(self.bot, "user", None)
 
-        # Per-server display names are intentionally NOT used here. A server
-        # nickname must never overwrite the bot's product identity in its UI.
         embed = discord.Embed(
-            title="COMMAND CENTER",
+            title="KYŌKA  /  COMMAND CENTER",
             description=(
-                "**KYŌKA 3.0**  ·  Server management, security and intelligence\n"
-                "A unified command hub for your server. Choose a module below or search for a command."
+                "Your server, one control panel.\n"
+                "Browse a module, search a command, or jump straight to a feature."
             ),
-            color=0x6D28D9,
+            color=0x211B2D,
         )
-
         if bot_user:
             embed.set_author(
-                name="KYŌKA 3.0  /  CONTROL PANEL",
+                name="KYŌKA 3.0  •  GAMING & COMMUNITY",
                 icon_url=bot_user.display_avatar.url,
             )
 
-        # A restrained status strip instead of a long line of oversized pills.
+        embed.add_field(name="STATUS", value="🟢  **ONLINE**", inline=True)
+        embed.add_field(name="LATENCY", value=f"`{latency} ms`", inline=True)
+        embed.add_field(name="PREFIX", value=f"`{prefix}`  ·  `/`", inline=True)
         embed.add_field(
-            name="PREFIX",
-            value=f"`{p}`",
-            inline=True,
+            name="COMMAND LIBRARY",
+            value=f"**{total_commands:,}** commands  ·  **{len(visible_categories):,}** modules",
+            inline=False,
         )
         embed.add_field(
-            name="COMMANDS",
-            value=f"`{total_commands:,}`",
-            inline=True,
-        )
-        embed.add_field(
-            name="MODULES",
-            value=f"`{len(visible_categories):,}`",
-            inline=True,
-        )
-        embed.add_field(
-            name="QUICK START",
+            name="QUICK ACCESS",
             value=(
-                f"`{p}help moderation`  Browse a module\n"
-                f"`{p}help ban`  Find command details\n"
-                f"`{p}help ai`  Open AI commands"
+                f"`{prefix}help moderation`  Moderation tools\n"
+                f"`{prefix}help ai`  AI features\n"
+                f"`{prefix}help music`  Music controls"
             ),
             inline=False,
         )
-        embed.add_field(
-            name="SYSTEM",
-            value=f"`● ONLINE`   ·   `{latency} ms` latency",
-            inline=False,
-        )
 
-        # Keep server-specific avatar customization, but never trust its
-        # display_name or bio as the global product title/copy.
         branding = None
         manager = getattr(self.bot, "branding_mgr", None)
         if manager:
@@ -1173,69 +1155,70 @@ class Help(commands.Cog):
             if isinstance(cache, dict):
                 branding = cache.get(guild.id if guild else None)
         avatar_url = branding.get("avatar_url") if isinstance(branding, dict) else None
-        if isinstance(avatar_url, str) and avatar_url.strip():
+        if avatar_url and isinstance(avatar_url, str):
             embed.set_thumbnail(url=avatar_url.strip())
         elif bot_user:
             embed.set_thumbnail(url=bot_user.display_avatar.url)
 
         embed.set_footer(
-            text=f"Requested by {author.display_name}  ·  KYŌKA COMMAND SYSTEM",
+            text=f"Requested by {author.display_name}  •  KYŌKA CONTROL SYSTEM",
             icon_url=author.display_avatar.url if getattr(author, "display_avatar", None) else None,
         )
         return embed
 
-    def build_search_results_embed(
+        def build_search_results_embed(
         self,
         ctx: CustomContext,
         visible_categories: dict[str, list[commands.Command]],
         query: str,
     ) -> discord.Embed:
-        """Construct interactive search results embed matching commands against user query."""
+        """Render compact, readable command search results."""
         guild = ctx.guild
-        p = self.bot.guild_mgr.get_prefix(guild.id if guild else None)
+        prefix = self.bot.guild_mgr.get_prefix(guild.id if guild else None)
         clean_query = query.lower().strip()
-
         matched: list[tuple[commands.Command, str]] = []
         for cat_name, cmd_list in visible_categories.items():
             for cmd in cmd_list:
-                cname = cmd.qualified_name.lower()
+                name = cmd.qualified_name.lower()
                 desc = (cmd.description or cmd.help or "").lower()
-                aliases = [a.lower() for a in getattr(cmd, "aliases", [])]
-                if clean_query == cname or clean_query in cname or any(clean_query in a for a in aliases) or clean_query in desc:
+                aliases = [alias.lower() for alias in getattr(cmd, "aliases", [])]
+                if clean_query in name or any(clean_query in alias for alias in aliases) or clean_query in desc:
                     matched.append((cmd, cat_name))
 
+        matched.sort(key=lambda item: (
+            0 if item[0].qualified_name.lower() == clean_query else
+            1 if item[0].qualified_name.lower().startswith(clean_query) else 2,
+            item[0].qualified_name.lower(),
+        ))
         embed = discord.Embed(
-            title=f"🔍 Search Results for: `{clean_query}`",
-            color=0x2B0938,
+            title="SEARCH  /  COMMANDS",
+            description=f"Results for `{clean_query[:50]}`",
+            color=0x211B2D if matched else 0x7F1D1D,
         )
-
         if not matched:
-            embed.description = f"> No commands matching **`{clean_query}`** were found.\n> Use the dropdown below or click **Home**."
-            embed.color = 0xED4245
-        else:
-            matched.sort(
-                key=lambda item: (
-                    0 if item[0].qualified_name.lower() == clean_query else (
-                        1 if item[0].qualified_name.lower().startswith(clean_query) else 2
-                    ),
-                    item[0].qualified_name.lower(),
-                )
+            embed.add_field(
+                name="NO MATCHES",
+                value=f"Nothing matched `{clean_query[:50]}`. Try a shorter keyword or browse the module selector.",
+                inline=False,
             )
-            lines = []
-            for cmd, cat in matched[:10]:
-                desc = (cmd.description or cmd.help or "No description").strip().split("\n")[0][:45]
-                lines.append(f"`{p}{cmd.qualified_name}` — {desc}")
-
-            extra = f"\n*+ {len(matched) - 10} more matches.*" if len(matched) > 10 else ""
-            embed.description = f"**{len(matched)}** command(s) matching `{clean_query}`:\n\n" + "\n".join(lines) + extra
-
+        else:
+            for cmd, cat in matched[:8]:
+                desc = (cmd.description or cmd.help or "No description available.").strip().split("\n")[0][:90]
+                category = cat.split("・", 1)[-1].title()
+                embed.add_field(
+                    name=f"`{prefix}{cmd.qualified_name}`",
+                    value=f"{desc}\n-# {category}",
+                    inline=False,
+                )
+            if len(matched) > 8:
+                embed.add_field(name="MORE RESULTS", value=f"+{len(matched) - 8} additional matches.", inline=False)
         embed.set_footer(
-            text=f"Requested by {ctx.author.display_name} • Type {p}help <cmd> for full details",
+            text=f"{len(matched)} matches  •  {prefix}help <command> for full details",
             icon_url=ctx.author.display_avatar.url if ctx.author.display_avatar else None,
         )
         return embed
 
-    def build_category_embed(
+        def build_category_embed(
         self,
         ctx: CustomContext,
         cat_name: str,
@@ -1243,104 +1226,75 @@ class Help(commands.Cog):
         visible_categories: dict[str, list[commands.Command]],
         page: int = 1,
     ) -> discord.Embed:
-        """Ultra-compact category embed — crisp single-card layout."""
+        """Build a clean module page with concise command rows."""
         guild = ctx.guild
-        p = self.bot.guild_mgr.get_prefix(guild.id if guild else None)
+        prefix = self.bot.guild_mgr.get_prefix(guild.id if guild else None)
+        title = cat_name.split("・", 1)[-1].title()
+        emoji = self._get_category_emoji(cat_name)
+        description = CATEGORY_DESCRIPTIONS.get(cat_name, f"{title} tools and commands.")
 
-        clean_cat_title = cat_name.split("・", 1)[1] if "・" in cat_name else cat_name
-        cat_emoji = self._get_category_emoji(cat_name)
-        cat_desc = CATEGORY_DESCRIPTIONS.get(cat_name, f"{clean_cat_title} commands.")
-
-        # Deduplicate and sort
-        seen: set[str] = set()
-        unique_cmds: list[commands.Command] = []
-        for c in commands_list:
-            if c.qualified_name not in seen:
-                seen.add(c.qualified_name)
-                unique_cmds.append(c)
-        unique_cmds.sort(key=lambda c: c.qualified_name)
-
-        per_page = 12
-        total_pages = max(1, math.ceil(len(unique_cmds) / per_page))
-        safe_page = max(1, min(page, total_pages))
-        start_idx = (safe_page - 1) * per_page
-        page_cmds = unique_cmds[start_idx: start_idx + per_page]
-
-        lines = []
-        for c in page_cmds:
-            desc = (c.description or getattr(c, "help", None) or "No description.").strip().split("\n")[0][:45]
-            lines.append(f"`{p}{c.qualified_name}` — {desc}")
+        unique: dict[str, commands.Command] = {cmd.qualified_name: cmd for cmd in commands_list}
+        commands_sorted = sorted(unique.values(), key=lambda cmd: cmd.qualified_name.lower())
+        per_page = 10
+        pages = max(1, math.ceil(len(commands_sorted) / per_page))
+        page = max(1, min(page, pages))
+        selected = commands_sorted[(page - 1) * per_page: page * per_page]
 
         embed = discord.Embed(
-            title=f"{cat_emoji} {clean_cat_title} ({len(unique_cmds)})",
-            description=f"> *{cat_desc}*\n\n" + "\n".join(lines),
-            color=0x6D28D9,
+            title=f"{emoji}  {title.upper()}",
+            description=f"{description[:180]}\n-# MODULE DIRECTORY  ·  {len(commands_sorted)} commands",
+            color=0x211B2D,
         )
+        for cmd in selected:
+            summary = (cmd.description or cmd.help or "No description available.").strip().split("\n")[0][:100]
+            signature = f" {cmd.signature}" if cmd.signature else ""
+            badge = self._get_badge(cmd).strip()
+            value = f"{summary}\n`{prefix}{cmd.qualified_name}{signature}`"
+            if badge:
+                value += f"  ·  {badge}"
+            embed.add_field(name=cmd.qualified_name, value=value[:900], inline=False)
 
         embed.set_footer(
-            text=f"Page {safe_page}/{total_pages} • {len(unique_cmds)} commands • {p}help <cmd>",
-            icon_url=ctx.author.display_avatar.url if ctx.author and ctx.author.display_avatar else None,
+            text=f"PAGE {page}/{pages}  ·  {len(commands_sorted)} COMMANDS  ·  {prefix}help <command>",
+            icon_url=ctx.author.display_avatar.url if ctx.author.display_avatar else None,
         )
         return embed
 
-    def build_command_embed(self, ctx: CustomContext, cmd: commands.Command) -> discord.Embed:
-        """Compact minimal single-command detail embed."""
+        def build_command_embed(self, ctx: CustomContext, cmd: commands.Command) -> discord.Embed:
+        """Show a consistent, readable command detail screen."""
         guild = ctx.guild
-        p = self.bot.guild_mgr.get_prefix(guild.id if guild else None)
+        prefix = self.bot.guild_mgr.get_prefix(guild.id if guild else None)
         cat = self._resolve_category(cmd)
         cat_emoji = self._get_category_emoji(cat)
-        cat_label = cat.split("・", 1)[1] if "・" in cat else cat
-
-        desc = (cmd.description or cmd.help or "No description provided.").strip().split("\n")[0][:200]
-        sig = f" {cmd.signature}" if cmd.signature else ""
-        badge = self._get_badge(cmd)
-        aliases = " · ".join(f"`{a}`" for a in cmd.aliases) if cmd.aliases else "none"
-        is_hybrid = isinstance(cmd, commands.HybridCommand) or getattr(cmd, "app_command", None) is not None
+        cat_label = cat.split("・", 1)[-1].title()
+        desc = (cmd.description or cmd.help or "No description provided.").strip().split("\n")[0][:220]
+        signature = f" {cmd.signature}" if cmd.signature else ""
+        aliases = " · ".join(f"`{alias}`" for alias in cmd.aliases) if cmd.aliases else "None"
+        hybrid = isinstance(cmd, commands.HybridCommand) or getattr(cmd, "app_command", None) is not None
 
         embed = discord.Embed(
-            title=f"`{p}{cmd.qualified_name}{sig}`{badge}",
-            description=f"> {desc}",
-            color=0x2B0938,
+            title=f"COMMAND  /  {cmd.qualified_name.upper()}",
+            description=f"{desc}\n\n`{prefix}{cmd.qualified_name}{signature}`",
+            color=0x211B2D,
         )
-
-        # Info row as one compact field
-        info_parts = [
-            f"**Category:** {cat_emoji} {cat_label}",
-            f"**Aliases:** {aliases}",
-        ]
-        if is_hybrid:
-            info_parts.append(f"**Slash:** `/{cmd.qualified_name}`")
-        embed.add_field(name="Info", value="  ·  ".join(info_parts), inline=False)
-
-        # Subcommands if group
+        embed.add_field(name="MODULE", value=f"{cat_emoji} {cat_label}", inline=True)
+        embed.add_field(name="ALIASES", value=aliases[:900], inline=True)
+        if hybrid:
+            embed.add_field(name="SLASH COMMAND", value=f"`/{cmd.qualified_name}`", inline=True)
         if isinstance(cmd, commands.Group) and cmd.commands:
-            subcmds = "  ·  ".join(f"`{sc.name}`" for sc in sorted(cmd.commands, key=lambda s: s.name))
-            embed.add_field(name="Subcommands", value=subcmds, inline=False)
+            children = "  ·  ".join(f"`{sub.name}`" for sub in sorted(cmd.commands, key=lambda item: item.name))
+            embed.add_field(name="SUBCOMMANDS", value=children[:1000], inline=False)
 
-        # Branding thumbnail
-        branding = None
-        if hasattr(self.bot, "branding_mgr"):
-            try:
-                branding = self.bot.branding_mgr._cache.get(guild.id if guild else None)
-            except Exception:
-                pass
-        avatar_url = branding.get("avatar_url") if branding else None
-        if not avatar_url and hasattr(self.bot, "user") and self.bot.user:
-            avatar_url = self.bot.user.display_avatar.url
-        if avatar_url:
-            embed.set_thumbnail(url=avatar_url)
-
-        banner_url = branding.get("banner_url") if branding else None
-        if banner_url and str(banner_url).strip():
-            embed.set_image(url=str(banner_url).strip())
-
+        bot_user = getattr(self.bot, "user", None)
+        if bot_user:
+            embed.set_thumbnail(url=bot_user.display_avatar.url)
         embed.set_footer(
-            text=f"Requested by {ctx.author.display_name}  ·  {p}help to go back",
-            icon_url=ctx.author.display_avatar.url if ctx.author and ctx.author.display_avatar else None,
+            text=f"{prefix}help  ·  KYŌKA COMMAND SYSTEM",
+            icon_url=ctx.author.display_avatar.url if ctx.author.display_avatar else None,
         )
         return embed
 
-    def build_embed_for_selection(
+        def build_embed_for_selection(
         self,
         ctx: CustomContext,
         visible_categories: dict[str, list[commands.Command]],
