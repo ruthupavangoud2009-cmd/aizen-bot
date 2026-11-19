@@ -696,7 +696,7 @@ class AIManager:
         if not api_key or api_key.lower().startswith(("replace_", "your_", "paste_")):
             raise RuntimeError("GEMINI_API_KEY is missing. Add a valid Gemini API key to Render Environment.")
 
-        configured_model = os.getenv("GEMINI_MODEL", self.DEFAULT_MODEL).strip().strip("/")
+        configured_model = os.getenv("GEMINI_MODEL", "gemini-flash-lite-latest").strip().strip("/")
         models = []
         for model in (configured_model, "gemini-flash-lite-latest", *self.FALLBACK_MODELS):
             if model and model not in models:
@@ -734,6 +734,7 @@ class AIManager:
                                         self._last_latency_ms = latency_ms
                                         self._latency_samples.append(latency_ms)
                                         self._last_success_time = time.time()
+                                        self._active_provider = "Gemini (backup)"
                                         self._active_model = model_name
                                         return answer
                                     finish = candidate.get("finishReason", "UNKNOWN")
@@ -1040,73 +1041,33 @@ class AIManager:
     # ─── DIAGNOSTICS & CONNECTIVITY ──────────────────────────────────────────
 
     async def test_connectivity(self, session: aiohttp.ClientSession) -> dict[str, Any]:
-        """Run a real, small Gemini generation request and return safe diagnostics."""
-        key = os.getenv("GEMINI_API_KEY", "").strip()
-        env_model = os.getenv("GEMINI_MODEL", self.DEFAULT_MODEL).strip().strip("/")
-        if not key or key.lower().startswith(("replace_", "your_", "paste_")):
-            return {
-                "ok": False,
-                "error": "GEMINI_API_KEY is missing or still a placeholder in the hosting environment.",
-                "configured_model": env_model,
-                "provider": "Google Gemini API",
-            }
-
-        models = []
-        for model in (env_model, self.DEFAULT_MODEL, *self.FALLBACK_MODELS):
-            if model and model not in models:
-                models.append(model)
-        timeout = aiohttp.ClientTimeout(total=25.0)
+        """Run a real request through the provider router without exposing secrets."""
         body = {
-            "contents": [{"role": "user", "parts": [{"text": "Reply with exactly: KYOKA GEMINI ONLINE"}]}],
+            "system_instruction": {"parts": [{"text": "You are a connectivity test."}]},
+            "contents": [{"role": "user", "parts": [{"text": "Reply exactly: KYOKA AI ONLINE"}]}],
             "generationConfig": {"temperature": 0, "maxOutputTokens": 20},
         }
-        last_error = "No Gemini model returned a successful response."
-        for model_name in models:
-            url = f"https://generativelanguage.googleapis.com/v1beta/models/{model_name}:generateContent"
-            started = time.monotonic()
-            try:
-                async with session.post(
-                    url,
-                    json=body,
-                    headers={"x-goog-api-key": key, "Content-Type": "application/json"},
-                    timeout=timeout,
-                ) as response:
-                    latency_ms = round((time.monotonic() - started) * 1000, 1)
-                    payload = await response.json(content_type=None)
-                    if response.status == 200:
-                        candidates = payload.get("candidates", []) if isinstance(payload, dict) else []
-                        if candidates and candidates[0].get("content", {}).get("parts"):
-                            self._active_model = model_name
-                            return {
-                                "ok": True,
-                                "model": model_name,
-                                "configured_model": env_model,
-                                "status": 200,
-                                "latency_ms": latency_ms,
-                                "provider": "Google Gemini API (REST v1beta)",
-                            }
-                        last_error = f"{model_name} returned HTTP 200 but no generated text."
-                        continue
-                    error = payload.get("error", {}) if isinstance(payload, dict) else {}
-                    detail = str(error.get("message") or payload)[:700]
-                    last_error = f"HTTP {response.status} from {model_name}: {detail}"
-                    if response.status in (401, 403, 402, 400):
-                        break
-                    if response.status == 404:
-                        continue
-                    if response.status == 429 or response.status >= 500:
-                        continue
-            except (aiohttp.ClientError, asyncio.TimeoutError) as exc:
-                last_error = f"Connection error for {model_name}: {exc}"
-                continue
-
-        return {
-            "ok": False,
-            "model": env_model,
-            "configured_model": env_model,
-            "error": last_error,
-            "provider": "Google Gemini API",
-        }
+        groq_configured = bool(os.getenv("GROQ_API_KEY", "").strip())
+        gemini_configured = bool(os.getenv("GEMINI_API_KEY", "").strip())
+        if not groq_configured and not gemini_configured:
+            return {"ok": False, "provider": "Not configured",
+                    "error": "Add GROQ_API_KEY to Render. GEMINI_API_KEY is the optional backup."}
+        started = time.monotonic()
+        try:
+            await self._execute_ai_call(session, body)
+            return {
+                "ok": True, "provider": self._active_provider, "model": self._active_model,
+                "configured_model": os.getenv("GROQ_MODEL", self.DEFAULT_MODEL),
+                "latency_ms": round((time.monotonic() - started) * 1000, 1),
+                "groq_configured": groq_configured, "gemini_backup_configured": gemini_configured,
+            }
+        except Exception as exc:
+            return {
+                "ok": False, "provider": "Groq primary / Gemini backup",
+                "configured_model": os.getenv("GROQ_MODEL", self.DEFAULT_MODEL),
+                "groq_configured": groq_configured, "gemini_backup_configured": gemini_configured,
+                "error": str(exc)[:1200],
+            }
 
     async def get_diagnostics(self, session: aiohttp.ClientSession | None = None) -> dict[str, Any]:
         """
