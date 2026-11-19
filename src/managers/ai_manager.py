@@ -676,7 +676,7 @@ class AIManager:
                 logger.warning("Primary Groq provider failed; trying Gemini backup: %s", exc)
         if gemini_key and not gemini_key.lower().startswith(("replace_", "your_", "paste_")):
             try:
-                answer = await self._execute_ai_call(session, body)
+                answer = await self._execute_gemini_call(session, body)
                 self._active_provider = "Gemini (backup)"
                 return answer
             except Exception as exc:
@@ -698,7 +698,7 @@ class AIManager:
 
         configured_model = os.getenv("GEMINI_MODEL", self.DEFAULT_MODEL).strip().strip("/")
         models = []
-        for model in (configured_model, self.DEFAULT_MODEL, *self.FALLBACK_MODELS):
+        for model in (configured_model, "gemini-flash-lite-latest", *self.FALLBACK_MODELS):
             if model and model not in models:
                 models.append(model)
 
