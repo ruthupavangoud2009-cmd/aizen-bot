@@ -836,7 +836,7 @@ class AIManager:
                 },
             }
 
-            text = await self._execute_gemini_call(session, body)
+            text = await self._execute_ai_call(session, body)
             history.append({"role": "user", "text": prompt[:3000]})
             history.append({"role": "model", "text": text})
             return text
@@ -885,7 +885,7 @@ class AIManager:
                 body["tools"] = [{"google_search": {}}]
 
             try:
-                text = await self._execute_gemini_call(session, body)
+                text = await self._execute_ai_call(session, body)
             except Exception as e:
                 logger.warning(f"Gemini API call failed ({e}); switching to smart natural conversation fallback.")
                 text = self.get_smart_fallback(prompt, p_def["key"])
