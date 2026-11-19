@@ -326,8 +326,8 @@ class AIManager:
     - Rolling latency and diagnostic tracking
     - Asynchronous memory-safe cooldown tracking
     """
-    DEFAULT_MODEL = "gemini-flash-lite-latest"
-    FALLBACK_MODELS = ("gemini-flash-lite-latest", "gemini-flash-latest", "gemini-3.8-flash")
+    DEFAULT_MODEL = "gemini-3.8-flash"
+    FALLBACK_MODELS = ("gemini-3.5-flash-lite",)
 
     def __init__(self, db: PostgresDatabase) -> None:
         self.db = db
@@ -615,106 +615,105 @@ class AIManager:
         session: aiohttp.ClientSession,
         body: dict[str, Any],
     ) -> str:
-        """
-        Execute an isolated request to Gemini with semaphore concurrency limiting,
-        timeout control, fast-path primary model, and bounded backoff on 429.
-        """
+        """Call Gemini Developer API with bounded retries and actionable errors."""
         api_key = os.getenv("GEMINI_API_KEY", "").strip()
-        if not api_key or api_key.lower().startswith("replace_"):
-            raise RuntimeError(
-                "AI is not configured. Add a valid GEMINI_API_KEY to your deployment environment."
-            )
+        if not api_key or api_key.lower().startswith(("replace_", "your_", "paste_")):
+            raise RuntimeError("GEMINI_API_KEY is missing. Add a valid Gemini API key to Render Environment.")
 
-        env_model = os.getenv("GEMINI_MODEL", self.DEFAULT_MODEL).strip().strip("/")
-        candidate_models = [env_model]
-        for m in self.FALLBACK_MODELS:
-            if m not in candidate_models:
-                candidate_models.append(m)
-        for safe_m in ("gemini-flash-lite-latest", "gemini-flash-latest", "gemini-3.8-flash"):
-            if safe_m not in candidate_models:
-                candidate_models.append(safe_m)
+        configured_model = os.getenv("GEMINI_MODEL", self.DEFAULT_MODEL).strip().strip("/")
+        models = []
+        for model in (configured_model, self.DEFAULT_MODEL, *self.FALLBACK_MODELS):
+            if model and model not in models:
+                models.append(model)
 
-        timeout = aiohttp.ClientTimeout(total=self.response_timeout)
-        self._total_requests += 1
+        timeout = aiohttp.ClientTimeout(total=max(self.response_timeout, 25.0))
+        retry_delays = (1.0, 2.0)
+        last_error = "Gemini did not return a response."
 
         async with self._semaphore:
-            last_error: Exception | None = None
+            for model_name in models:
+                url = f"https://generativelanguage.googleapis.com/v1beta/models/{model_name}:generateContent"
+                for attempt in range(len(retry_delays) + 1):
+                    started = time.monotonic()
+                    try:
+                        async with session.post(
+                            url,
+                            json=body,
+                            headers={"x-goog-api-key": api_key, "Content-Type": "application/json"},
+                            timeout=timeout,
+                        ) as response:
+                            latency_ms = round((time.monotonic() - started) * 1000, 1)
+                            payload = await response.json(content_type=None)
+                            if response.status == 200:
+                                candidates = payload.get("candidates", []) if isinstance(payload, dict) else []
+                                if candidates:
+                                    candidate = candidates[0]
+                                    parts = candidate.get("content", {}).get("parts", [])
+                                    answer = "".join(
+                                        part.get("text", "") for part in parts
+                                        if isinstance(part, dict) and isinstance(part.get("text"), str)
+                                    ).strip()
+                                    if answer:
+                                        self._last_latency_ms = latency_ms
+                                        self._latency_samples.append(latency_ms)
+                                        self._last_success_time = time.time()
+                                        self._active_model = model_name
+                                        return answer
+                                    finish = candidate.get("finishReason", "UNKNOWN")
+                                    feedback = payload.get("promptFeedback", {})
+                                    raise RuntimeError(
+                                        f"Gemini returned no text (finishReason={finish}; promptFeedback={feedback})."
+                                    )
+                                raise RuntimeError(f"Gemini returned HTTP 200 without candidates: {str(payload)[:700]}")
 
-            for idx, model_name in enumerate(candidate_models):
-                url = (
-                    f"https://generativelanguage.googleapis.com/v1beta/models/"
-                    f"{model_name}:generateContent?key={api_key}"
-                )
-                start_t = time.monotonic()
-                try:
-                    async with session.post(url, json=body, timeout=timeout) as response:
-                        latency_ms = round((time.monotonic() - start_t) * 1000, 1)
+                            error_obj = payload.get("error", {}) if isinstance(payload, dict) else {}
+                            message = str(error_obj.get("message") or payload)[:900]
+                            last_error = f"Gemini {response.status} on {model_name}: {message}"
 
-                        if response.status == 200:
-                            data = await response.json(content_type=None)
-                            candidates = data.get("candidates", []) if isinstance(data, dict) else []
-                            if candidates:
-                                parts = candidates[0].get("content", {}).get("parts", [])
-                                text = "".join(
-                                    part.get("text", "")
-                                    for part in parts
-                                    if isinstance(part, dict)
-                                ).strip()
-                                if text:
-                                    self._last_latency_ms = latency_ms
-                                    self._latency_samples.append(latency_ms)
-                                    self._last_success_time = time.time()
-                                    self._active_model = model_name
-                                    return text
-
-                        elif response.status == 429:
-                            # Bounded retry on primary model once
-                            if idx == 0:
-                                await asyncio.sleep(1.8 + random.uniform(0.1, 0.4))
-                                async with session.post(url, json=body, timeout=timeout) as retry_resp:
-                                    if retry_resp.status == 200:
-                                        data = await retry_resp.json(content_type=None)
-                                        candidates = data.get("candidates", []) if isinstance(data, dict) else []
-                                        if candidates:
-                                            parts = candidates[0].get("content", {}).get("parts", [])
-                                            text = "".join(p.get("text", "") for p in parts if isinstance(p, dict)).strip()
-                                            if text:
-                                                self._last_latency_ms = round((time.monotonic() - start_t) * 1000, 1)
-                                                self._latency_samples.append(self._last_latency_ms)
-                                                self._last_success_time = time.time()
-                                                self._active_model = model_name
-                                                return text
-                            raise RuntimeError("AI service quota reached. Please wait a moment before trying again.")
-
-                        elif response.status in (401, 403):
+                            if response.status in (401, 403):
+                                self._total_errors += 1
+                                raise RuntimeError(
+                                    "Gemini authentication/permission failed. Check that GEMINI_API_KEY is a Gemini Developer API key, "
+                                    "the Generative Language API is enabled, and the key's API restrictions allow it. "
+                                    + last_error
+                                )
+                            if response.status == 404:
+                                # Model unavailable: try the next configured model, not the same one again.
+                                break
+                            if response.status == 400:
+                                self._total_errors += 1
+                                raise RuntimeError(
+                                    "Gemini rejected the request (HTTP 400). Check model compatibility and request settings. "
+                                    + last_error
+                                )
+                            if response.status == 402:
+                                self._total_errors += 1
+                                raise RuntimeError("Gemini billing/prepaid balance issue. Check AI Studio billing. " + last_error)
+                            if response.status == 429 or response.status in (408, 500, 502, 503, 504):
+                                if attempt < len(retry_delays):
+                                    await asyncio.sleep(retry_delays[attempt] + random.uniform(0.0, 0.35))
+                                    continue
+                                # Try another supported model after bounded transient retries.
+                                break
                             self._total_errors += 1
-                            raise RuntimeError("Invalid or unauthorized GEMINI_API_KEY. Please verify your Render environment settings.")
+                            raise RuntimeError(last_error)
 
-                        elif response.status == 404:
-                            last_error = RuntimeError(f"AI model '{model_name}' not available (HTTP 404).")
+                    except asyncio.TimeoutError:
+                        self._total_timeouts += 1
+                        last_error = f"Gemini request timed out after {timeout.total}s on {model_name}."
+                        if attempt < len(retry_delays):
+                            await asyncio.sleep(retry_delays[attempt])
                             continue
-
-                        elif response.status == 400:
-                            last_error = RuntimeError(f"AI API rejected request (HTTP 400) for {model_name}.")
+                        break
+                    except aiohttp.ClientError as exc:
+                        last_error = f"Gemini network error on {model_name}: {exc}"
+                        if attempt < len(retry_delays):
+                            await asyncio.sleep(retry_delays[attempt])
                             continue
-
-                        else:
-                            last_error = RuntimeError(f"AI status {response.status} from {model_name}")
-
-                except asyncio.TimeoutError:
-                    self._total_timeouts += 1
-                    raise RuntimeError(f"AI response timed out after {int(self.response_timeout)}s. Please try again.")
-                except RuntimeError:
-                    self._total_errors += 1
-                    raise
-                except Exception as e:
-                    last_error = e
-                    continue
+                        break
 
             self._total_errors += 1
-            if last_error:
-                raise last_error
-            return "I was unable to formulate a response at this time."
+            raise RuntimeError(last_error)
 
     # ─── RESPONSE GENERATION (GENERAL & DIRECT) ──────────────────────────────
 
