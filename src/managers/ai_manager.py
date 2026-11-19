@@ -671,7 +671,7 @@ class AIManager:
                                 if item.get("type") == "message":
                                     chunks.extend(part.get("text", "") for part in item.get("content", [])
                                                   if part.get("type") in ("output_text", "text"))
-                            answer = "\\n".join(chunks)
+                            answer = "\n".join(chunks)
                     else:
                         choices = payload.get("choices", []) if isinstance(payload, dict) else []
                         answer = choices[0].get("message", {}).get("content", "") if choices else ""
