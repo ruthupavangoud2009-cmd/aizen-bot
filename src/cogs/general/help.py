@@ -1176,7 +1176,7 @@ class Help(commands.Cog):
             module_emoji = self._get_category_emoji(category_name)
             module_lines.append(f"{module_emoji} **{module_title}**  ·  `{len(category_commands)}`")
         module_chunks = [module_lines[i:i + 9] for i in range(0, len(module_lines), 9)]
-        for index, chunk in enumerate(module_chunks[:3], start=1):
+        for index, chunk in enumerate(module_chunks[:10], start=1):
             embed.add_field(name=f"MODULE DIRECTORY  /  {index}", value="\n".join(chunk)[:1024] or "No modules available.", inline=True)
 
         embed.add_field(
