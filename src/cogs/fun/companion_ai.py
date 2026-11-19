@@ -191,9 +191,10 @@ class CompanionAI(commands.Cog):
         }
 
         mode_str = "Mention & Reply Only" if mention_only else "Natural Chat (All Messages)"
+        is_blox = persona_clean == "blox_fruits_expert"
         embed = discord.Embed(
-            title="⛩️ Automatic AI Channel Configured",
-            description=f"**{p_def['name']}** is now active in {channel.mention}!\nMembers can converse naturally without typing command prefixes.",
+            title="🏴‍☠️ Blox Fruits AI Activated" if is_blox else "⛩️ Automatic AI Channel Configured",
+            description=(f"**KYŌKA Blox Fruits AI** is active in {channel.mention}!\nChat naturally for personalized combos, PvP builds, fruit advice, trading, grinding routes, raids and progression.\n\n**Proactive mode:** I can suggest upgrades and ask for your loadout when it matters." if is_blox else f"**{p_def['name']}** is now active in {channel.mention}!\nMembers can converse naturally without typing command prefixes."),
             color=p_def["color"],
         )
         embed.add_field(name="Active Persona", value=f"`{p_def['name']}`", inline=True)
