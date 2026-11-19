@@ -323,11 +323,11 @@ class BloxFruitsAI(commands.Cog):
             return await ctx.reply(f"⏳ Please wait `{rem:.1f}s` before asking another question.", mention_author=False)
 
         async with ctx.typing():
-            # Check if Gemini AI manager is active with valid key
+            # Use the shared KYŌKA AI router (Groq primary, Gemini backup).
             ai_mgr = getattr(self.bot, "ai_mgr", None)
             answer_text = None
 
-            if ai_mgr and os.getenv("GEMINI_API_KEY") and not os.getenv("GEMINI_API_KEY", "").startswith("replace_"):
+            if ai_mgr and (os.getenv("GROQ_API_KEY") or os.getenv("GEMINI_API_KEY")):
                 try:
                     session = getattr(self.bot, "session", None)
                     if session:
@@ -340,12 +340,12 @@ class BloxFruitsAI(commands.Cog):
                             session=session,
                             guild_id=ctx.guild.id if ctx.guild else 0,
                             user_id=ctx.author.id,
-                            persona_key="gaming_expert",
+                            persona_key="blox_fruits_expert",
                             prompt=prompt_enriched,
                             enforce_cooldown=False
                         )
                 except Exception as e:
-                    logger.debug(f"Gemini Blox Fruits fallback triggered: {e}")
+                    logger.debug(f"KYŌKA Blox Fruits AI provider fallback triggered: {e}")
 
             # Offline Fallback matching
             if not answer_text:
