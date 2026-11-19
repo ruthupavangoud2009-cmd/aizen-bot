@@ -524,18 +524,29 @@ class CompanionAI(commands.Cog):
                 embed = discord.Embed(color=p_def["color"])
                 embed.set_image(url=gif_url)
 
-            # Colorful gaming cards for Blox Fruits; preserve normal AI delivery otherwise.
-            chunks = [reply[i : i + 3800] for i in range(0, len(reply), 3800)]
+            # Talk normally by default. Use a clean combo card only when the player asks for a combo/build.
+            wants_game_card = is_blox_fruits and any(
+                term in message.content.lower()
+                for term in ("combo", "build", "loadout", "best stats", "pvp setup")
+            )
+            chunks = [reply[i : i + 1900] for i in range(0, len(reply), 1900)]
             for idx, chunk in enumerate(chunks):
                 is_last = idx == len(chunks) - 1
                 try:
-                    if is_blox_fruits:
-                        card = discord.Embed(title="🏴‍☠️ KYŌKA • BLOX FRUITS AI" if idx == 0 else "⚔️ BLOX FRUITS AI • CONTINUED", description=chunk, color=0x00B4D8, timestamp=discord.utils.utcnow())
-                        card.set_author(name=f"{message.author.display_name} • Player", icon_url=message.author.display_avatar.url)
-                        card.set_footer(text=f"KYŌKA Gaming Intelligence • {idx + 1}/{len(chunks)} • Verify changing values in-game")
+                    if wants_game_card:
+                        card = discord.Embed(
+                            title="⚔️ Combo & Build Guide" if idx == 0 else "⚔️ Continued",
+                            description=chunk,
+                            color=0x00B4D8,
+                        )
                         await message.reply(embed=card, mention_author=False, allowed_mentions=discord.AllowedMentions.none())
                     else:
-                        await message.reply(chunk, embed=embed if is_last else None, mention_author=False, allowed_mentions=discord.AllowedMentions(everyone=False, roles=False, users=True, replied_user=True))
+                        await message.reply(
+                            chunk,
+                            embed=embed if is_last else None,
+                            mention_author=False,
+                            allowed_mentions=discord.AllowedMentions(everyone=False, roles=False, users=True, replied_user=True),
+                        )
                 except Exception as e:
                     logger.debug(f"Failed to deliver auto AI reply: {e}")
                     break
