@@ -157,7 +157,7 @@ class AIInteractions(commands.Cog):
 
         key = os.getenv("GEMINI_API_KEY", "").strip()
         if not key or key.lower().startswith("replace_"):
-            raise RuntimeError("AI is not configured. Add a valid GEMINI_API_KEY to your deployment environment.")
+            raise RuntimeError("AI is not configured. Add GROQ_API_KEY to Render (GEMINI_API_KEY is optional backup).")
         now = time.monotonic()
         if now - self.user_last_call.get(user_id, 0) < 4:
             raise RuntimeError("Give me a moment before asking another question.")
@@ -465,13 +465,16 @@ class AIInteractions(commands.Cog):
 
     @commands.command(name="aistatus", help="Show AI and GIF integration configuration without revealing secrets.")
     async def aistatus(self, ctx: CustomContext):
-        ai = bool(os.getenv("GEMINI_API_KEY", "").strip() and not os.getenv("GEMINI_API_KEY", "").lower().startswith("replace_"))
+        groq = bool(os.getenv("GROQ_API_KEY", "").strip() and not os.getenv("GROQ_API_KEY", "").lower().startswith(("replace_", "your_", "paste_")))
+        gemini = bool(os.getenv("GEMINI_API_KEY", "").strip() and not os.getenv("GEMINI_API_KEY", "").lower().startswith(("replace_", "your_", "paste_")))
+        ai = groq or gemini
+        provider_label = "Groq (primary)" if groq else ("Gemini (fallback only)" if gemini else "Not configured")
         gifs = bool(os.getenv("GIPHY_API_KEY", "").strip() or os.getenv("TENOR_API_KEY", "").strip())
         channel = None
         if ctx.guild:
             row = await self.bot.db.fetch_one("SELECT channel_id FROM kyoka_ai_settings WHERE guild_id = ?;", ctx.guild.id)
             channel = row.get("channel_id") if row else None
-        embed = discord.Embed(title="KYŌKA Integrations", color=PURPLE, description=f"**Gemini AI:** {'Configured' if ai else 'Not configured'}\n**GIF provider:** {'Configured' if gifs else 'Not configured'}\n**Auto-chat channel:** {f'<#{channel}>' if channel else 'Disabled'}")
+        embed = discord.Embed(title="KYŌKA Integrations", color=PURPLE, description=f"**AI Provider:** {provider_label}\n**Gemini Backup:** {'Configured' if gemini else 'Not configured'}\n**GIF provider:** {'Configured' if gifs else 'Not configured'}\n**Auto-chat channel:** {f'<#{channel}>' if channel else 'Disabled'}")
         await ctx.send(embed=embed)
 
     @commands.command(name="gif", help="Search for a real GIF using the configured GIF provider.")
