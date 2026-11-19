@@ -2,7 +2,8 @@
 
 The repository's `.env.example` is a **template**, not a copy of a live `.env`: its token and database URL are placeholders. Do not deploy those placeholder values. Keep your deployment's existing `.env` and Lavalink values untouched; add these optional variables in your hosting provider's environment settings if you want the integrations enabled:
 
-- `GEMINI_API_KEY` — enables actual Gemini responses for `?ai`, `?chat`, `?askai`, `?aizenai`, and automatic replies in a channel configured with `?aisetup #channel`.
+- `GROQ_API_KEY` — primary text AI provider for KYŌKA's shared AI engine, companion chat, Blox Fruits AI, and natural-language TOP assistant. `GROQ_MODEL` optionally overrides the default model (`openai/gpt-oss-120b`).
+- `GEMINI_API_KEY` — automatic backup for the shared text AI engine when Groq is unavailable. Gemini remains required for Gemini-specific multimodal voice processing and any legacy integrations not yet migrated.
 - `GIPHY_API_KEY` — enables GIPHY GIF search; the bot validates returned HTTPS GIPHY URLs.
 - `TENOR_API_KEY` — optional fallback GIF provider if GIPHY is not configured or returns no results.
 
