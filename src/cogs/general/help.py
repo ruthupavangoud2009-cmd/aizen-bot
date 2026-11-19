@@ -432,7 +432,7 @@ class HelpView(discord.ui.View):
         embed = discord.Embed(
             title="🔒 Help Session Closed",
             description=f"> This help menu has been closed.\\n> Type `{self.cog.bot.guild_mgr.get_prefix(self.ctx.guild.id if self.ctx.guild else None)}help` or `/help` whenever you need guidance.",
-            color=0x211B2D,
+            color=0x171923,
         )
         for item in self.children:
             if getattr(item, "style", None) != discord.ButtonStyle.link:
@@ -1117,10 +1117,11 @@ class Help(commands.Cog):
         bot_user = getattr(self.bot, "user", None)
 
         embed = discord.Embed(
-            title="KYŌKA  /  COMMAND CENTER",
+            title="KYŌKA  •  COMMAND CENTRE",
             description=(
-                "Your server, one control panel.\n"
-                "Browse a module, search a command, or jump straight to a feature."
+                "**YOUR SERVER. ONE CONTROL CENTRE.**\n"
+                "Explore modules, find commands, and get straight to the tools you need.\n\n"
+                "Select a module below or use **Search commands** to find a feature instantly."
             ),
             color=0x211B2D,
         )
@@ -1191,7 +1192,7 @@ class Help(commands.Cog):
             item[0].qualified_name.lower(),
         ))
         embed = discord.Embed(
-            title="SEARCH  /  COMMANDS",
+            title="COMMAND SEARCH",
             description=f"Results for `{clean_query[:50]}`",
             color=0x211B2D if matched else 0x7F1D1D,
         )
@@ -1235,7 +1236,7 @@ class Help(commands.Cog):
 
         unique: dict[str, commands.Command] = {cmd.qualified_name: cmd for cmd in commands_list}
         commands_sorted = sorted(unique.values(), key=lambda cmd: cmd.qualified_name.lower())
-        per_page = 10
+        per_page = 8
         pages = max(1, math.ceil(len(commands_sorted) / per_page))
         page = max(1, min(page, pages))
         selected = commands_sorted[(page - 1) * per_page: page * per_page]
@@ -1273,7 +1274,7 @@ class Help(commands.Cog):
         hybrid = isinstance(cmd, commands.HybridCommand) or getattr(cmd, "app_command", None) is not None
 
         embed = discord.Embed(
-            title=f"COMMAND  /  {cmd.qualified_name.upper()}",
+            title=f"{cmd.qualified_name.upper()}",
             description=f"{desc}\n\n`{prefix}{cmd.qualified_name}{signature}`",
             color=0x211B2D,
         )
@@ -1289,7 +1290,7 @@ class Help(commands.Cog):
         if bot_user:
             embed.set_thumbnail(url=bot_user.display_avatar.url)
         embed.set_footer(
-            text=f"{prefix}help  ·  KYŌKA COMMAND SYSTEM",
+            text=f"KYŌKA 3.0  ·  {prefix}help <command>",
             icon_url=ctx.author.display_avatar.url if ctx.author.display_avatar else None,
         )
         return embed
