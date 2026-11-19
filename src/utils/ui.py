@@ -24,9 +24,9 @@ class AizenPalette:
     """Standardized color palette for Kyoka x Sosuke Aizen supernatural cyber theme."""
     VOID_BLACK: int = 0x0A0A0F      # Pitch midnight abyss
     DEEP_PURPLE: int = 0x1A0933     # Midnight velvet
-    ROYAL_VIOLET: int = 0x7C3AED    # Primary Aizen Reiatsu violet
-    ELECTRIC_PURPLE: int = 0x9333EA # Vivid glow purple
-    LAVENDER_GLOW: int = 0xDDD6FE   # Soft lavender accent
+    ROYAL_VIOLET: int = 0xA855F7    # KYŌKA signature violet
+    ELECTRIC_PURPLE: int = 0xC084FC # Soft luminous purple
+    LAVENDER_GLOW: int = 0xE9D5FF   # Soft lavender accent
     CRIMSON: int = 0xFF3366         # Laser crimson / Kyoka blade
     BLOOD_MOON: int = 0xDC2626      # Deep danger crimson
     AMBER_WARN: int = 0xF59E0B      # Alert amber
