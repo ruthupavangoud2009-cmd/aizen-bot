@@ -1102,70 +1102,51 @@ class Help(commands.Cog):
         ctx: CustomContext,
         visible_categories: dict[str, list[commands.Command]],
     ) -> discord.Embed:
-        """Construct compact, clean Default Help Embed matching Kyro specification."""
+        """Build a fast, clean help landing screen with stats and module selector."""
+        import random
+
+        guilds = list(getattr(self.bot, "guilds", ()))
+        member_total = sum(int(getattr(g, "member_count", 0) or 0) for g in guilds)
+        ping = self._get_latency_ms()
+        emoji_registry = getattr(self.bot, "custom_emojis", None)
+        emojis = list(getattr(emoji_registry, "_emojis", {}).values()) if emoji_registry else []
+        animated = [e for e in emojis if getattr(e, "animated", False)]
+        random_mark = str(random.choice(animated or emojis)) if (animated or emojis) else "✦"
+
         guild = ctx.guild
-        author = ctx.author
-        p = self.bot.guild_mgr.get_prefix(guild.id if guild else None)
-        ws_ping = self._get_latency_ms()
-        total_commands = sum(len(cmds) for cmds in visible_categories.values())
-
         branding = None
-        if hasattr(self.bot, "branding_mgr"):
-            mgr = getattr(self.bot, "branding_mgr", None)
-            if hasattr(mgr, "_cache") and isinstance(mgr._cache, dict):
-                branding = mgr._cache.get(guild.id if guild else None)
-            if not isinstance(branding, dict) and hasattr(mgr, "get_default_branding") and callable(mgr.get_default_branding):
+        mgr = getattr(self.bot, "branding_mgr", None)
+        cache = getattr(mgr, "_cache", None) if mgr else None
+        if isinstance(cache, dict):
+            branding = cache.get(guild.id if guild else None)
+        if not isinstance(branding, dict) and mgr and callable(getattr(mgr, "get_default_branding", None)):
+            try:
                 branding = mgr.get_default_branding()
-        if not isinstance(branding, dict):
-            assets = getattr(Config, "ASSETS", None)
-            branding = {
-                "display_name": "Kyoka 3.0",
-                "bio": "Built for our community — keeping your server safe, active, and effortlessly connected.",
-                "avatar_url": getattr(assets, "AIZEN_AVATAR_URL", "") or (self.bot.user.display_avatar.url if getattr(self.bot, "user", None) else ""),
-                "banner_url": "",
-            }
+            except Exception:
+                branding = None
+        branding = branding if isinstance(branding, dict) else {}
 
-        raw_display = branding.get("display_name") if isinstance(branding, dict) else None
-        display_name = raw_display if isinstance(raw_display, str) and raw_display.strip() else "Kyoka 3.0"
-        raw_bio = branding.get("bio") if isinstance(branding, dict) else None
-        bio = raw_bio if isinstance(raw_bio, str) and raw_bio.strip() else "Built for our community — keeping your server safe, active, and effortlessly connected."
-
-        # Compact category directory
-        cat_labels = []
-        for cat_name in visible_categories.keys():
-            clean = cat_name.split("・", 1)[-1].strip().title() if "・" in cat_name else cat_name.strip().title()
-            cat_labels.append(f"`{clean}`")
-        categories_line = " · ".join(cat_labels)
-
-        desc = (
-            f"> {bio}\n\n"
-            f"• **Latency:** `{ws_ping}ms`\n"
-            f"• **Prefix:** `{p}` | **Slash:** `/`\n"
-            f"• **Available Commands:** `{total_commands}`\n\n"
-            f"📁 **Command Modules ({len(visible_categories)}):**\n"
-            f"{categories_line}\n\n"
-            f"⚡ **Essential Commands:**\n"
-            f"`{p}help` · `{p}play` · `{p}ai` · `{p}ticket` · `{p}setup` · `{p}botedit`"
-        )
-
-        embed = KyokaHelpEmbed(
-            title=f"Hey, I'm {display_name}",
-            description=desc,
+        display_name = branding.get("display_name") or "KYŌKA"
+        bio = "Choose a module below to view its commands."
+        embed = discord.Embed(
+            title=f"{random_mark} {display_name} • HELP",
+            description=(
+                f"{bio}\n\n"
+                f"**⚡ Ping:** `{ping} ms`  ·  **👥 Members:** `{member_total:,}`\n"
+                f"**🌐 Servers:** `{len(guilds):,}`  ·  **📚 Modules:** `{len(visible_categories):,}`\n\n"
+                "**Select a module from the dropdown below.**"
+            ),
             color=0x2B0938,
         )
-
-        avatar_url = branding.get("avatar_url") if isinstance(branding, dict) else None
-        if avatar_url and str(avatar_url).strip():
-            embed.set_thumbnail(url=str(avatar_url).strip())
-
-        banner_url = branding.get("banner_url") if isinstance(branding, dict) else None
+        avatar_url = branding.get("avatar_url")
+        if not avatar_url and getattr(self.bot, "user", None):
+            avatar_url = self.bot.user.display_avatar.url
+        if avatar_url:
+            embed.set_thumbnail(url=str(avatar_url))
+        banner_url = branding.get("banner_url")
         if banner_url and str(banner_url).strip():
             embed.set_image(url=str(banner_url).strip())
-
-        embed.set_footer(
-            text=f"Requested by {author.display_name}",
-            icon_url=author.display_avatar.url if author and author.display_avatar else None,
-        )
+        embed.set_footer(text="Creator • Aizen")
         embed.banner_file = None
         return embed
 
@@ -1275,10 +1256,22 @@ class Help(commands.Cog):
             f"> *{cat_desc}*\n",
             f"**Page {safe_page}/{total_pages}** • **{len(unique_cmds)}** commands\n",
         ]
+        command_emojis = {
+            "ban": "🔨", "unban": "🔓", "kick": "👢", "timeout": "⏳", "mute": "🔇",
+            "unmute": "🔊", "warn": "⚠️", "purge": "🧹", "clear": "🧹", "lock": "🔒",
+            "unlock": "🔓", "slowmode": "🐢", "modlog": "📜", "userinfo": "👤",
+            "serverinfo": "🏰", "avatar": "🖼️", "banner": "🎨", "ping": "📡", "stats": "📊",
+            "help": "❓", "play": "🎵", "pause": "⏸️", "resume": "▶️", "skip": "⏭️",
+            "stop": "⏹️", "queue": "📜", "volume": "🔊", "ai": "🤖", "ticket": "🎫",
+            "giveaway": "🎉", "daily": "🎁", "balance": "💰", "work": "💼", "shop": "🛒",
+            "afk": "💤", "remind": "⏰", "calc": "🧮", "setup": "⚙️",
+        }
+        category_mark = self._get_category_emoji(cat_name)
         for c in page_cmds:
             desc_text = (c.description or getattr(c, "help", None) or "No description provided.").strip().split("\n")[0][:90]
             c_name = c.qualified_name if isinstance(getattr(c, "qualified_name", None), str) else (c.name if isinstance(getattr(c, "name", None), str) else str(c))
-            desc_lines.append(f"• **`{c_name}`** — {desc_text}")
+            mark = command_emojis.get(c.name.lower(), category_mark or "•")
+            desc_lines.append(f"{mark} **`{c_name}`** — {desc_text}")
 
         desc_lines.append(f"\n`{p}help <command>` — View details for one command.")
 
@@ -1402,9 +1395,7 @@ class Help(commands.Cog):
     async def help_command(self, ctx: CustomContext, *, command_or_module: str | None = None) -> None:
         """Interactive help menu filtered by user permissions and organized into categories."""
         t_start = time.perf_counter()
-        if hasattr(self.bot, "branding_mgr"):
-            await self.bot.branding_mgr.get_branding(ctx.guild.id if ctx.guild else None)
-        visible_categories = await self._get_visible_categories(ctx)
+        # Help intentionally avoids a network/database branding warm-up for fast response.\n        visible_categories = await self._get_visible_categories(ctx)
         t_categories = time.perf_counter()
 
         # Direct command or module lookup
