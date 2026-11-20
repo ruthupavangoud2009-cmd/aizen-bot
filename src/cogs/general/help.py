@@ -788,7 +788,7 @@ class Help(commands.Cog):
                 "guesshostadd", "guesshostremove", "guesshosts",
                 "eval", "exec", "restart", "shutdown", "sync", "leaveserver", "blacklist",
                 "whitelistuser", "errors", "validateconfig", "maintenance", "systemstatus",
-                "dbstatus", "extstatus", "globalsupport", "setsupport",
+                "dbstatus", "extstatus", "globalsupport", "setsupport", "inf",
             }
             if cmd_name in owner_only and not is_primary_owner(author_id):
                 return False
