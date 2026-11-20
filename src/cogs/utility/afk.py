@@ -131,6 +131,8 @@ class AFKCog(commands.Cog, name="AFK"):
         self.bot = bot
         # In-memory fast cache: (user_id, guild_id) -> AFKData
         self._afk_cache: dict[tuple[int, int], AFKData] = {}
+        # Global AFK applies across every server the bot shares with the user.
+        self._global_afk_cache: dict[int, AFKData] = {}
         # Mention notification cooldown: (guild_id, user_id, channel_id) -> last_notified_timestamp
         self._mention_cooldowns: dict[tuple[int, int, int], float] = {}
         self._loaded = False
@@ -157,6 +159,31 @@ class AFKCog(commands.Cog, name="AFK"):
                 """
             )
             rows = await self.bot.db.fetch_all("SELECT * FROM user_afk;")
+            await self.bot.db.execute("""
+                CREATE TABLE IF NOT EXISTS user_global_afk (
+                    user_id BIGINT PRIMARY KEY,
+                    reason TEXT DEFAULT 'AFK',
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                );
+            """)
+            global_rows = await self.bot.db.fetch_all("SELECT * FROM user_global_afk;")
+            for row in global_rows:
+                raw_created = row.get("created_at")
+                if isinstance(raw_created, datetime.datetime):
+                    created_at = raw_created
+                elif isinstance(raw_created, str):
+                    try:
+                        created_at = datetime.datetime.fromisoformat(raw_created)
+                    except Exception:
+                        created_at = discord.utils.utcnow()
+                else:
+                    created_at = discord.utils.utcnow()
+                self._global_afk_cache[int(row["user_id"])] = AFKData(
+                    user_id=int(row["user_id"]),
+                    guild_id=0,
+                    reason=row.get("reason") or "AFK",
+                    created_at=created_at,
+                )
             for row in rows:
                 user_id = int(row["user_id"])
                 guild_id = int(row["guild_id"])
@@ -184,9 +211,9 @@ class AFKCog(commands.Cog, name="AFK"):
         except Exception as e:
             logger.error(f"Failed to load AFK cache: {e}", exc_info=e)
 
-    @commands.hybrid_command(
+    @commands.command(
         name="afk",
-        description="Set your AFK status with an optional reason.",
+        help="Set a server-local AFK status with an optional reason.",
     )
     @app_commands.describe(reason="Reason for being AFK (optional)")
     @commands.guild_only()
@@ -275,6 +302,37 @@ class AFKCog(commands.Cog, name="AFK"):
 
         await send_container_response(ctx, container)
 
+    @commands.command(name="gafk", help="Activate a global AFK status across all servers.")
+    async def gafk(self, ctx: CustomContext, *, reason: Optional[str] = None) -> None:
+        if not ctx.guild:
+            return
+        final_reason = reason.strip() if reason and reason.strip() else "AFK"
+        final_reason = final_reason[:250]
+        now = discord.utils.utcnow()
+        entry = AFKData(user_id=ctx.author.id, guild_id=0, reason=final_reason, created_at=now)
+        self._global_afk_cache[ctx.author.id] = entry
+        try:
+            await self.bot.db.execute(
+                """
+                INSERT INTO user_global_afk (user_id, reason, created_at)
+                VALUES (?, ?, ?)
+                ON CONFLICT (user_id) DO UPDATE SET
+                    reason = EXCLUDED.reason, created_at = EXCLUDED.created_at;
+                """,
+                ctx.author.id, final_reason, now,
+            )
+        except Exception as error:
+            logger.error("Could not persist global AFK for %s: %s", ctx.author.id, error)
+        embed = discord.Embed(
+            title="🟩 Global AFK Activated",
+            description=f"**{ctx.author.mention}** is now globally AFK.\n\n**Reason:** {final_reason}\n**Scope:** All shared servers",
+            color=0x22C55E,
+            timestamp=now,
+        )
+        embed.set_thumbnail(url=ctx.author.display_avatar.url)
+        embed.set_footer(text="Global AFK • Mentions will be notified in shared servers")
+        await ctx.send(embed=embed)
+
     @commands.Cog.listener()
     async def on_message(self, message: discord.Message) -> None:
         """Monitor messages for AFK authors returning or mentions of AFK members."""
@@ -285,6 +343,28 @@ class AFKCog(commands.Cog, name="AFK"):
         guild_id = message.guild.id
         now = discord.utils.utcnow()
         author_key = (author_id, guild_id)
+
+        # Global AFK clears on the user's first message in any shared server.
+        global_entry = self._global_afk_cache.get(author_id)
+        if global_entry:
+            try:
+                ctx_check = await self.bot.get_context(message)
+                if ctx_check.valid and ctx_check.command and ctx_check.command.name == "gafk":
+                    global_entry = None
+            except Exception:
+                pass
+        if global_entry:
+            self._global_afk_cache.pop(author_id, None)
+            asyncio.create_task(self.bot.db.execute(
+                "DELETE FROM user_global_afk WHERE user_id = ?;", author_id
+            ))
+            elapsed = max((now - global_entry.created_at).total_seconds(), 0.0)
+            embed = discord.Embed(
+                title=f"🟩 Welcome Back, {message.author.display_name}!",
+                description=f"**Global AFK removed**\nReason: {global_entry.reason}\nAway for: {format_duration(elapsed)}",
+                color=0x22C55E,
+            )
+            await message.channel.send(embed=embed)
 
         # ----------------------------------------------------
         # check if the message author was AFK (Welcome back)
@@ -369,6 +449,24 @@ class AFKCog(commands.Cog, name="AFK"):
                 await send_container_response(message.channel, container)
             except Exception as e:
                 logger.debug(f"Failed to send AFK welcome back notice: {e}")
+
+        # Notify mentions of globally AFK users in any server.
+        if message.mentions:
+            for target in message.mentions:
+                if target.bot or target.id == author_id:
+                    continue
+                target_afk = self._global_afk_cache.get(target.id)
+                if target_afk:
+                    embed = discord.Embed(
+                        title=f"🌐 {target.display_name} is Globally AFK",
+                        description=f"**Reason:** {target_afk.reason}\n**Away since:** <t:{int(target_afk.created_at.timestamp())}:R>",
+                        color=0x7C3AED,
+                    )
+                    embed.set_thumbnail(url=target.display_avatar.url)
+                    try:
+                        await message.channel.send(embed=embed)
+                    except Exception as error:
+                        logger.debug("Global AFK mention notice failed: %s", error)
 
         # ----------------------------------------------------
         # check if any mentioned users are AFK
