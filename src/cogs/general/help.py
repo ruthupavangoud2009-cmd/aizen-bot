@@ -1176,6 +1176,13 @@ class Help(commands.Cog):
         embed.add_field(name="📦 Modules", value=f"**{len(visible_categories)}**", inline=True)
         embed.set_footer(text="Creator • Aizen")
 
+        bot_user = getattr(self.bot, "user", None)
+        if bot_user and getattr(bot_user, "display_avatar", None):
+            try:
+                embed.set_thumbnail(url=bot_user.display_avatar.url)
+            except Exception:
+                pass
+
         # Branding is optional: image generation/loading errors should not prevent help.
         try:
             banner = AssetManager.create_branding_file("banner")
@@ -1266,15 +1273,27 @@ class Help(commands.Cog):
             description=f"{description[:180]}\n-# MODULE DIRECTORY  ·  {len(commands_sorted)} commands",
             color=0x211B2D,
         )
-        # Command list stays text-first for reliable Discord rendering on mobile.
+        # Compact command rows with a consistent emoji cue, mobile-friendly.
+        command_emoji = {
+            "ban": "🔨", "unban": "🔓", "kick": "👢", "timeout": "⏳", "mute": "🔇",
+            "unmute": "🔊", "warn": "⚠️", "purge": "🧹", "clear": "🧹", "lock": "🔒",
+            "unlock": "🔓", "slowmode": "🐢", "modlog": "📜", "userinfo": "👤",
+            "serverinfo": "🏰", "avatar": "🖼️", "banner": "🎨", "ping": "📡", "stats": "📊",
+            "help": "❓", "play": "🎵", "pause": "⏸️", "resume": "▶️", "skip": "⏭️",
+            "stop": "⏹️", "queue": "📜", "volume": "🔊", "ai": "🤖", "aidiag": "🧪",
+            "ticket": "🎫", "giveaway": "🎉", "daily": "🎁", "balance": "💰", "work": "💼",
+            "shop": "🛒", "afk": "💤", "remind": "⏰", "calc": "🧮", "setup": "⚙️",
+        }
+        category_emoji = self._get_category_emoji(cat_name)
         for cmd in selected:
             summary = (cmd.description or cmd.help or "No description available.").strip().split("\n")[0][:100]
             signature = f" {cmd.signature}" if cmd.signature else ""
             badge = self._get_badge(cmd).strip()
+            emoji = command_emoji.get(cmd.name.lower(), category_emoji or "•")
             value = f"{summary}\n`{prefix}{cmd.qualified_name}{signature}`"
             if badge:
                 value += f"  ·  {badge}"
-            embed.add_field(name=cmd.qualified_name, value=value[:900], inline=False)
+            embed.add_field(name=f"{emoji} {cmd.qualified_name}", value=value[:900], inline=False)
 
         embed.set_footer(
             text=f"PAGE {page}/{pages}  ·  {len(commands_sorted)} COMMANDS  ·  {prefix}help <command>",
