@@ -126,9 +126,8 @@ class KyokaBot(commands.Bot):
             ),
         )
 
-        # Animated command-processing indicator for prefix and hybrid commands.
-        self.before_invoke(self._start_processing_indicator)
-        self.after_invoke(self._stop_processing_indicator)
+        # No global processing-message hooks: commands respond directly to avoid
+        # the extra send/edit/delete latency and channel clutter.
 
         if Config.CLIENT_ID:
             self._connection.application_id = Config.CLIENT_ID
