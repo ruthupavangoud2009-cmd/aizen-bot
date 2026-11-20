@@ -394,7 +394,7 @@ class HelpView(discord.ui.View):
 
             btn_search = discord.ui.Button(
                 label="Search",
-                emoji="🔍",
+                emoji=None,
                 style=discord.ButtonStyle.secondary,
                 row=1,
             )
@@ -550,7 +550,7 @@ class HCACategorySelect(discord.ui.Select):
                 label="Archive Index",
                 value="home",
                 description="Complete directory index of all categories",
-                emoji="📚",
+                emoji=None,
                 default=(current_selection == "home"),
             )
         ]
@@ -565,7 +565,7 @@ class HCACategorySelect(discord.ui.Select):
                     label=clean_label,
                     value=cat_name.lower(),
                     description=desc,
-                    emoji=emoji_str,
+                    emoji=None,
                     default=(current_selection.lower() == cat_name.lower()),
                 )
             )
@@ -637,7 +637,7 @@ class HCAView(discord.ui.View):
         btn_back.callback = self.btn_back_callback
         self.add_item(btn_back)
 
-        btn_home = discord.ui.Button(label="Index", emoji="📚", style=discord.ButtonStyle.primary, row=1)
+        btn_home = discord.ui.Button(label="Index", emoji=None, style=discord.ButtonStyle.primary, row=1)
         btn_home.callback = self.btn_home_callback
         self.add_item(btn_home)
 
@@ -645,7 +645,7 @@ class HCAView(discord.ui.View):
         btn_next.callback = self.btn_next_callback
         self.add_item(btn_next)
 
-        btn_search = discord.ui.Button(label="Search", emoji="🔍", style=discord.ButtonStyle.secondary, row=1)
+        btn_search = discord.ui.Button(label="Search", emoji=None, style=discord.ButtonStyle.secondary, row=1)
         btn_search.callback = self.btn_search_callback
         self.add_item(btn_search)
 
