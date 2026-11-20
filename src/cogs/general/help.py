@@ -58,7 +58,7 @@ UNICODE_CATEGORY_EMOJIS: dict[str, str] = {
     "⭐・LEVELS & COMMUNITY": "⭐",
     "🎵・MUSIC": "🎵",
     "🎬・WATCH PARTY": "🎬",
-    "💤・AFK": e_reg.get("afk", "💤"),
+    "💤・AFK": "💤",
     "⭐・VOUCHES & REPUTATION": "⭐",
     "🧾・BLOX FRUITS SERVICE BILLS": "🧾",
     "🍎・BLOX FRUITS AI": "🍎",
