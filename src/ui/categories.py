@@ -335,7 +335,7 @@ CATEGORY_SEARCH_ALIASES: dict[str, str] = {
     # Watch Party
     "watch": "watch_party", "watchparty": "watch_party", "watch party": "watch_party", "watch_party": "watch_party",
     # AFK
-    "afk": "afk", "away": "afk",
+    "afk": "afk", "gafk": "afk", "globalafk": "afk", "away": "afk",
     # Vouches
     "vouch": "vouches", "vouches": "vouches", "rep": "vouches", "reputation": "vouches", "trust": "vouches",
     "vlb": "vouches", "vouchinfo": "vouches", "vouchhistory": "vouches", "vouchimport": "vouches",
@@ -367,7 +367,7 @@ CATEGORY_SEARCH_ALIASES: dict[str, str] = {
     "owner": "owner", "dev": "owner", "developer": "owner", "system": "owner", "eval": "owner", "globalsupport": "owner", "setsupport": "owner",
     # Economy, Hunting & Games
     "economy": "economy", "eco": "economy", "cash": "economy", "money": "economy", "bank": "economy",
-    "kyoka casino": "casino", "kyokac casino": "casino", "casino": "casino", "bets": "casino", "bet": "casino",
+    "kyoka casino": "casino", "casino": "casino", "bets": "casino", "bet": "casino",
     "hunting": "hunting", "hunt": "hunting", "animals": "hunting", "catch": "hunting",
     "pets": "pets", "pet": "pets", "zoo": "pets", "collection": "pets",
     "rpg": "rpg", "adventure": "rpg", "dungeon": "rpg", "raid": "rpg", "boss": "rpg",
@@ -588,6 +588,15 @@ def resolve_command_category(cmd: Any) -> CategoryMeta:
             return CATEGORY_BY_ID["verification"]
         if parent_name in ("mod", "warn", "lock"):
             return CATEGORY_BY_ID["moderation"]
+
+    # Prefix-only economy/casino and global AFK commands get explicit modular help placement.
+    root_name = getattr(cmd, "qualified_name", getattr(cmd, "name", "")).lower().split()[0]
+    if root_name in ("casino", "gamble", "bet", "lottery", "lotto"):
+        return CATEGORY_BY_ID["casino"]
+    if root_name in ("inf",):
+        return CATEGORY_BY_ID["owner"]
+    if root_name in ("afk", "gafk", "setafk", "resetafk", "viewafk", "back"):
+        return CATEGORY_BY_ID["afk"]
 
     # 2. Check Cog ownership via COG_MAPPINGS
     cog = getattr(cmd, "cog", None)
