@@ -19,6 +19,7 @@ from discord.ext import commands
 
 from src.core.context import CustomContext
 from src.utils.containers import KyokaContainer, send_container_response
+from src.utils.ui import AizenSymbols
 
 if TYPE_CHECKING:
     from src.core.bot import KyokaBot
@@ -324,7 +325,7 @@ class AFKCog(commands.Cog, name="AFK"):
         except Exception as error:
             logger.error("Could not persist global AFK for %s: %s", ctx.author.id, error)
         embed = discord.Embed(
-            title="🟩 Global AFK Activated",
+            title=f"{AizenSymbols.GLOBAL} {AizenSymbols.ONLINE} Global AFK Activated",
             description=f"**{ctx.author.mention}** is now globally AFK.\n\n**Reason:** {final_reason}\n**Scope:** All shared servers",
             color=0x22C55E,
             timestamp=now,
@@ -360,7 +361,7 @@ class AFKCog(commands.Cog, name="AFK"):
             ))
             elapsed = max((now - global_entry.created_at).total_seconds(), 0.0)
             embed = discord.Embed(
-                title=f"🟩 Welcome Back, {message.author.display_name}!",
+                title=f"{AizenSymbols.SUCCESS} Welcome Back, {message.author.display_name}!",
                 description=f"**Global AFK removed**\nReason: {global_entry.reason}\nAway for: {format_duration(elapsed)}",
                 color=0x22C55E,
             )
@@ -458,7 +459,7 @@ class AFKCog(commands.Cog, name="AFK"):
                 target_afk = self._global_afk_cache.get(target.id)
                 if target_afk:
                     embed = discord.Embed(
-                        title=f"🌐 {target.display_name} is Globally AFK",
+                        title=f"{AizenSymbols.GLOBAL} {target.display_name} is Globally AFK",
                         description=f"**Reason:** {target_afk.reason}\n**Away since:** <t:{int(target_afk.created_at.timestamp())}:R>",
                         color=0x7C3AED,
                     )
