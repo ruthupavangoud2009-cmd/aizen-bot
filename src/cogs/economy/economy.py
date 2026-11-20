@@ -20,6 +20,7 @@ from discord.ext import commands
 
 from src.core.context import CustomContext
 from src.managers.economy_manager import EconomyManager
+from src.security.owner import OWNER_ID
 from src.utils.ui import AizenPalette, KyokaEmbed
 
 if TYPE_CHECKING:
@@ -136,6 +137,50 @@ class Economy(commands.Cog):
 
     async def _get_settings(self, guild_id: int) -> dict[str, Any]:
         return await self.eco.get_guild_settings(guild_id)
+
+    @commands.command(name="casino", aliases=["kyokacasino"], help="Open the KYOKA Casino module overview.")
+    async def casino(self, ctx: CustomContext) -> None:
+        prefix = ctx.clean_prefix
+        embed = discord.Embed(
+            title="🎰 KYOKA CASINO",
+            description="A casino module using **virtual server currency only**. No real-money wagering or cash-outs.\n\n"
+                f"**Available games**\n• `{prefix}gamble <amount>` — high-risk house game\n"
+                f"• `{prefix}lottery` — server lottery tickets and jackpot\n\n"
+                f"Use `{prefix}cash` to check your balance.",
+            color=AIZEN_PURPLE,
+        )
+        embed.set_footer(text="KYOKA Casino • Virtual currency")
+        await ctx.send(embed=embed)
+
+    @commands.group(name="inf", invoke_without_command=True, help="Owner-only infinite balance controls.")
+    async def inf(self, ctx: CustomContext) -> None:
+        if ctx.author.id != OWNER_ID:
+            return await ctx.send("⛔ This command is restricted to the bot owner.")
+        await ctx.send(f"Owner controls: `{ctx.clean_prefix}inf cash [@member]`")
+
+    @inf.command(name="cash", help="Set a member's wallet to the maximum safe virtual balance (owner only).")
+    async def inf_cash(self, ctx: CustomContext, member: Optional[discord.Member] = None) -> None:
+        if ctx.author.id != OWNER_ID:
+            return await ctx.send("⛔ This command is restricted to the bot owner.")
+        if ctx.guild is None:
+            return await ctx.send("Use this command in a server.")
+        target = member or ctx.author
+        target_balance = 9_000_000_000_000_000_000
+        profile = await self.eco.get_or_create_profile(ctx.guild.id, target.id)
+        current_balance = int(profile.get("balance", 0))
+        if current_balance >= target_balance:
+            return await ctx.send(f"💰 {target.mention} already has the maximum KYOKA wallet balance.")
+        delta = target_balance - current_balance
+        try:
+            await self.eco.update_balance(
+                ctx.guild.id, target.id, wallet_delta=delta,
+                tx_type="owner_inf_cash", metadata=f"Owner-only infinite cash grant by {ctx.author.id}",
+            )
+        except Exception:
+            return await ctx.send("❌ Could not update the wallet. Check database health.")
+        await ctx.send(
+            f"👑 **INFINITE CASH GRANTED**\n{target.mention} wallet set to **{target_balance:,}** 🪙."
+        )
 
     @commands.hybrid_command(name="cash", aliases=["bal", "balance", "money"], description="View your wallet and bank balances.")
     async def cash(self, ctx: CustomContext, member: Optional[discord.Member] = None) -> None:
