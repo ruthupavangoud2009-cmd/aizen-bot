@@ -152,8 +152,9 @@ class BotInfo(commands.Cog):
             await ctx.reply("Application ID is not ready yet.", delete_after=8)
             return
         cached = getattr(getattr(self.bot, "custom_emojis", None), "_emojis", {})
-        if len(cached) >= 50:
-            await ctx.reply("KYOKA's application emoji collection is full (50/50). Remove an emoji in the Developer Portal first.", delete_after=10)
+        emoji_count = len({getattr(emoji, "id", id(emoji)) for emoji in cached.values()})
+        if emoji_count >= 2000:
+            await ctx.reply("KYOKA has reached Discord's application emoji limit (2,000/2,000). Delete an application emoji in the Developer Portal before adding another.", delete_after=10)
             return
         attachment = ctx.message.attachments[0] if getattr(ctx, "message", None) and ctx.message.attachments else None
         source_url = attachment.url if attachment else None
