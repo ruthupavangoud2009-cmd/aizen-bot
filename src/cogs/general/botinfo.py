@@ -137,6 +137,60 @@ class BotInfo(commands.Cog):
     def __init__(self, bot: KyokaBot) -> None:
         self.bot = bot
 
+    @commands.command(
+        name="botemojis",
+        aliases=["botemoji", "addbotemoji"],
+        description="Upload a custom emoji to KYOKA's application emoji collection (owner only).",
+    )
+    async def botemojis(self, ctx: CustomContext, emoji_source: str | None = None, *, emoji_name: str | None = None) -> None:
+        """Upload an attached image or server emoji into KYOKA's application emoji collection."""
+        import re
+        if ctx.author.id != OWNER_ID:
+            await ctx.reply("Only the bot creator can manage KYOKA's application emojis.", delete_after=8)
+            return
+        if not self.bot.application_id:
+            await ctx.reply("Application ID is not ready yet.", delete_after=8)
+            return
+        cached = getattr(getattr(self.bot, "custom_emojis", None), "_emojis", {})
+        if len(cached) >= 50:
+            await ctx.reply("KYOKA's application emoji collection is full (50/50). Remove an emoji in the Developer Portal first.", delete_after=10)
+            return
+        attachment = ctx.message.attachments[0] if getattr(ctx, "message", None) and ctx.message.attachments else None
+        source_url = attachment.url if attachment else None
+        default_name = attachment.filename.rsplit(".", 1)[0] if attachment else None
+        if not source_url and emoji_source:
+            match = re.fullmatch(r"<(a?):([A-Za-z0-9_]{2,32}):(\d{15,22})>", emoji_source.strip())
+            if match:
+                default_name = match.group(2)
+                ext = "gif" if match.group(1) == "a" else "png"
+                source_url = f"https://cdn.discordapp.com/emojis/{match.group(3)}.{ext}?quality=lossless"
+        if not source_url:
+            await ctx.reply("Attach a PNG/JPG/GIF image or provide a custom emoji mention. Example: `?botemojis <:name:123456789012345678>`.", delete_after=12)
+            return
+        name = (emoji_name or default_name or "kyoka_emoji").lower()
+        name = re.sub(r"[^a-z0-9_]", "_", name)[:32].strip("_") or "kyoka_emoji"
+        try:
+            if attachment:
+                image_bytes = await attachment.read()
+            else:
+                import aiohttp
+                async with aiohttp.ClientSession() as session:
+                    async with session.get(source_url, timeout=aiohttp.ClientTimeout(total=15)) as response:
+                        if response.status != 200:
+                            await ctx.reply(f"Emoji source download failed (HTTP {response.status}).", delete_after=10)
+                            return
+                        image_bytes = await response.read()
+            if len(image_bytes) > 256 * 1024:
+                await ctx.reply("Emoji file must be 256 KB or smaller.", delete_after=10)
+                return
+            uploaded = await self.bot.create_application_emoji(name=name, image=image_bytes)
+            cached[name] = uploaded
+            await ctx.reply(f"Added {uploaded} as **{name}** to KYOKA's application emojis.")
+        except discord.HTTPException as exc:
+            await ctx.reply(f"Discord rejected this emoji upload: {exc}", delete_after=12)
+        except Exception:
+            await ctx.reply("Emoji upload failed. Check the file, permissions, and Discord's application emoji limits.", delete_after=12)
+
     @commands.hybrid_command(
         name="botinfo",
         aliases=["bi", "about", "info"],
