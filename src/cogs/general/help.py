@@ -251,10 +251,8 @@ class HelpView(discord.ui.View):
         self._build_components()
 
     def _build_components(self) -> None:
-        """Construct the view buttons and select menu matching Kyro clean layout."""
+        """Build the new compact KYOKA help navigator: category picker first, no legacy button clutter."""
         self.clear_items()
-
-        # Row 0: Dropdown
         self.add_item(
             HelpCategorySelect(
                 self,
@@ -264,58 +262,53 @@ class HelpView(discord.ui.View):
             )
         )
 
-        invite_url = (
-            Config.INVITE_URL
-            or (
-                f"https://discord.com/oauth2/authorize?client_id={self.cog.bot.application_id or self.cog.bot.user.id}&permissions=8&scope=bot%20applications.commands"
-                if (hasattr(self.cog.bot, "user") and self.cog.bot.user)
-                else "https://discord.com"
-            )
-        )
-        support_url = Config.SUPPORT_URL or "https://discord.gg/7q4tn6dA6V"
-
+        # Only expose category-list paging when the bot has more than 24 modules.
+        # Category pages are separate from command pages and keep the menu uncluttered.
         if len(self.category_keys) > 24:
             page_count = max(1, math.ceil(len(self.category_keys) / 24))
-            btn_modules_prev = discord.ui.Button(label="Module list ‹", style=discord.ButtonStyle.secondary, row=2, disabled=self.category_page <= 0)
-            btn_modules_prev.callback = self.btn_module_page_prev
-            self.add_item(btn_modules_prev)
-            btn_modules_next = discord.ui.Button(label=f"Module list ›  ({self.category_page + 1}/{page_count})", style=discord.ButtonStyle.secondary, row=2, disabled=self.category_page >= page_count - 1)
-            btn_modules_next.callback = self.btn_module_page_next
-            self.add_item(btn_modules_next)
-
-        if self.current_category == "home":
-            # Home is intentionally dropdown-only to keep the module picker clean.
-            pass
-        else:
-            # On Category: 4 clean, compact buttons on Row 1 (no Row 2)
-            btn_back = discord.ui.Button(
-                label="Previous",
-                emoji="‹",
+            previous = discord.ui.Button(
+                label="‹ Categories",
                 style=discord.ButtonStyle.secondary,
                 row=1,
+                disabled=self.category_page <= 0,
             )
-            btn_back.callback = self.btn_back_callback
-            self.add_item(btn_back)
+            previous.callback = self.btn_module_page_prev
+            self.add_item(previous)
+            next_button = discord.ui.Button(
+                label=f"Categories ›  {self.category_page + 1}/{page_count}",
+                style=discord.ButtonStyle.secondary,
+                row=1,
+                disabled=self.category_page >= page_count - 1,
+            )
+            next_button.callback = self.btn_module_page_next
+            self.add_item(next_button)
 
-            btn_home = discord.ui.Button(
-                label="Overview",
-                emoji="⌂",
+        # A category page keeps only compact command-page controls; the dropdown
+        # remains the sole way to switch modules.
+        if self.current_category != "home":
+            previous_cmds = discord.ui.Button(
+                label="‹ Commands",
+                style=discord.ButtonStyle.secondary,
+                row=2,
+                disabled=self.current_page <= 1,
+            )
+            previous_cmds.callback = self.btn_back_callback
+            self.add_item(previous_cmds)
+            home = discord.ui.Button(
+                label="Home",
+                emoji="🏠",
                 style=discord.ButtonStyle.primary,
-                row=1,
+                row=2,
             )
-            btn_home.callback = self.btn_home_callback
-            self.add_item(btn_home)
-
-            btn_next = discord.ui.Button(
-                label="Next",
-                emoji="›",
+            home.callback = self.btn_home_callback
+            self.add_item(home)
+            next_cmds = discord.ui.Button(
+                label="Commands ›",
                 style=discord.ButtonStyle.secondary,
-                row=1,
+                row=2,
             )
-            btn_next.callback = self.btn_next_callback
-            self.add_item(btn_next)
-
-            # Category view keeps only previous, overview, and next navigation.
+            next_cmds.callback = self.btn_next_callback
+            self.add_item(next_cmds)
 
     async def interaction_check(self, interaction: discord.Interaction) -> bool:
         """Ensure only the command requester can control this session."""
