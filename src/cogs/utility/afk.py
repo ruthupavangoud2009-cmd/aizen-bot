@@ -158,8 +158,8 @@ class AFKCog(commands.Cog, name="AFK"):
         self._loaded = False
 
     async def cog_load(self) -> None:
-        """Load persistent AFK states from database into memory on cog startup."""
-        asyncio.create_task(self._load_afk_cache())
+        """Load persistent AFK states before the cog begins handling messages."""
+        await self._load_afk_cache()
 
     async def _load_afk_cache(self) -> None:
         """Initialize AFK table and populate in-memory cache."""
