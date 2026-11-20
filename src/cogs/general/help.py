@@ -98,7 +98,7 @@ CATEGORY_DESCRIPTIONS: dict[str, str] = {
     "⭐・LEVELS & COMMUNITY": "Optional XP progression (disabled by default), custom rank cards & leaderboards",
     "🎵・MUSIC": "High-fidelity audio playback, queues, volume, filters & 24/7 radio",
     "🎬・WATCH PARTY": "Invited web rooms with synchronized browser video and host-controlled playback",
-    "💤・AFK": "Status notices, AFK reason tracking, mentions & return alerts",
+    "💤・AFK": "Server AFK (`afk`) and cross-server global AFK (`gafk`), mentions & return alerts",
     "⭐・VOUCHES & REPUTATION": "Verified member vouches, Blox Fruits trust profiles & leaderboards",
     "🧾・BLOX FRUITS SERVICE BILLS": "Blox Fruits service invoices, itemized receipts, fruits & Robux payment",
     "🍎・BLOX FRUITS AI": "Specialized Blox Fruits AI, fruit guides, trade calculator & builds",
@@ -791,6 +791,8 @@ class Help(commands.Cog):
                 "dbstatus", "extstatus", "globalsupport", "setsupport",
             }
             if cmd_name in owner_only and not is_primary_owner(author_id):
+                return False
+            if str(getattr(cmd, "qualified_name", "")).lower().startswith("inf ") and not is_primary_owner(author_id):
                 return False
 
         # Adult-humor allowlist restriction check
