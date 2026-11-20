@@ -127,20 +127,19 @@ class HelpCategorySelect(discord.ui.Select):
             )
         ]
 
-        for cat_name, cmds in visible_categories.items():
-            # Clean display label matching Screenshot 2
+        for category_index, (cat_name, cmds) in enumerate(visible_categories.items()):
+            # Use compact stable values instead of the full emoji-heavy category key.
             raw_title = cat_name.split("・", 1)[1] if "・" in cat_name else cat_name
             clean_label = raw_title.title() if raw_title.isupper() else raw_title
             clean_label = clean_label.strip()
 
-            # Short module-specific description
             desc = CATEGORY_DESCRIPTIONS.get(cat_name, f"{len(cmds)} accessible commands")[:100]
             emoji_str = UNICODE_CATEGORY_EMOJIS.get(cat_name, "📁")
 
             options.append(
                 discord.SelectOption(
                     label=clean_label[:100],
-                    value=cat_name.lower(),
+                    value=f"cat_{category_index}",
                     description=desc,
                     emoji=emoji_str,
                     default=(current_selection.lower() == cat_name.lower()),
@@ -166,8 +165,28 @@ class HelpCategorySelect(discord.ui.Select):
         )
 
     async def callback(self, interaction: discord.Interaction) -> None:
-        selected = self.values[0]
-        await self.help_view.switch_category(interaction, selected)
+        selected_value = self.values[0]
+        if selected_value == "home":
+            await self.help_view.switch_category(interaction, "home")
+            return
+
+        # Resolve the selected option by its stable index back to the real category key.
+        if selected_value.startswith("cat_"):
+            try:
+                index = int(selected_value[4:])
+                category_keys = list(self.help_view.visible_categories.keys())
+                selected_category = category_keys[index]
+            except (ValueError, IndexError):
+                await interaction.response.send_message(
+                    "That category is unavailable. Please reopen help.", ephemeral=True
+                )
+                return
+            await self.help_view.switch_category(interaction, selected_category)
+            return
+
+        await interaction.response.send_message(
+            "That category is unavailable. Please reopen help.", ephemeral=True
+        )
 
 
 class HelpSearchModal(discord.ui.Modal, title="⛩️ Search Kyoka Commands"):
