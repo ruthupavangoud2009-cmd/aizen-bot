@@ -57,7 +57,7 @@ class EmojiRegistry:
                         from PIL import Image
                         pack = json.loads(pack_file.read_text(encoding="utf-8"))
                         for emoji_name, svg_source in pack.items():
-                            if emoji_name in self._emojis or len(self._emojis) >= 50:
+                            if emoji_name in self._emojis or len(self._emojis) >= 2000:
                                 continue
                             try:
                                 png_data = cairosvg.svg2png(bytestring=svg_source.encode("utf-8"), output_width=128, output_height=128)
@@ -95,7 +95,7 @@ class EmojiRegistry:
                 if "icons_download" not in self._emojis:
                     from pathlib import Path
                     dl_path = Path(__file__).resolve().parent.parent.parent / "assets" / "emoji" / "icons_Download.png"
-                    if dl_path.exists() and len(self._emojis) < 50:
+                    if dl_path.exists() and len(self._emojis) < 2000:
                         try:
                             with open(dl_path, "rb") as f:
                                 data = f.read()
@@ -258,6 +258,8 @@ class EmojiRegistry:
         uploaded = 0
 
         asset_dirs = [
+            # Animated custom emoji assets take priority in the central registry.
+            Path(__file__).resolve().parent.parent.parent / "assets" / "emoji_animated",
             Path(__file__).resolve().parent.parent.parent / "assets" / "music",
             Path(__file__).resolve().parent.parent.parent / "assets" / "emoji",
             Path(__file__).resolve().parent.parent.parent / "assets" / "emoji2",
