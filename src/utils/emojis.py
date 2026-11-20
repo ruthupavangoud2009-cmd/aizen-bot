@@ -397,7 +397,17 @@ class EmojiRegistry:
 
         if emoji:
             return str(emoji)
+        # Standard Unicode pack fallback: bot UI remains expressive even when
+        # custom application emojis are missing or unavailable in this server.
+        try:
+            from src.utils.emoji_pack import EMOJI_PACK
+            unicode_emoji = EMOJI_PACK.get(name_clean)
+            if unicode_emoji:
+                return unicode_emoji
+        except Exception:
+            pass
         return fallback
+
 
     def get_emoji_obj(self, name: str) -> discord.Emoji | discord.PartialEmoji | str | None:
         """
