@@ -166,16 +166,14 @@ class HelpCategorySelect(discord.ui.Select):
 
             # Short module-specific description
             desc = CATEGORY_DESCRIPTIONS.get(cat_name, f"{len(cmds)} accessible commands")[:100]
-            emoji_str = UNICODE_CATEGORY_EMOJIS.get(cat_name, "📁")
             custom_select_emoji = self.help_view.cog._get_category_select_emoji(cat_name)
-            select_emoji = custom_select_emoji or emoji_str
 
             options.append(
                 discord.SelectOption(
                     label=clean_label[:100],
                     value=cat_name.lower(),
                     description=desc,
-                    emoji=select_emoji,
+                    emoji=custom_select_emoji,
                     default=(current_selection.lower() == cat_name.lower()),
                 )
             )
@@ -286,31 +284,8 @@ class HelpView(discord.ui.View):
             self.add_item(btn_modules_next)
 
         if self.current_category == "home":
-            btn_search = discord.ui.Button(
-                label="Search commands",
-                emoji="⌕",
-                style=discord.ButtonStyle.primary,
-                row=1,
-            )
-            btn_search.callback = self.btn_search_callback
-            self.add_item(btn_search)
-
-            self.add_item(
-                discord.ui.Button(
-                    label="Invite",
-                    url=invite_url,
-                    style=discord.ButtonStyle.link,
-                    row=1,
-                )
-            )
-            self.add_item(
-                discord.ui.Button(
-                    label="Support",
-                    url=support_url,
-                    style=discord.ButtonStyle.link,
-                    row=1,
-                )
-            )
+            # Home is intentionally dropdown-only to keep the module picker clean.
+            pass
         else:
             # On Category: 4 clean, compact buttons on Row 1 (no Row 2)
             btn_back = discord.ui.Button(
@@ -340,14 +315,7 @@ class HelpView(discord.ui.View):
             btn_next.callback = self.btn_next_callback
             self.add_item(btn_next)
 
-            btn_search = discord.ui.Button(
-                label="Search",
-                emoji="🔍",
-                style=discord.ButtonStyle.secondary,
-                row=1,
-            )
-            btn_search.callback = self.btn_search_callback
-            self.add_item(btn_search)
+            # Category view keeps only previous, overview, and next navigation.
 
     async def interaction_check(self, interaction: discord.Interaction) -> bool:
         """Ensure only the command requester can control this session."""
