@@ -1499,10 +1499,32 @@ class Help(commands.Cog):
                 ),
                 color=0x2B0938,
             )
-            try:
-                await ctx.send(embed=fallback)
-            except Exception:
-                logger.exception("❌ [HELP MENU] Emergency fallback could not be sent.")
+            # Prefer a direct interaction follow-up if the slash response was already deferred.
+            sent = False
+            interaction = getattr(ctx, "interaction", None)
+            if interaction:
+                try:
+                    if interaction.response.is_done():
+                        await interaction.followup.send(embed=fallback)
+                    else:
+                        await interaction.response.send_message(embed=fallback)
+                    sent = True
+                except Exception:
+                    logger.exception("Help fallback interaction send failed; trying context send.")
+            if not sent:
+                try:
+                    await ctx.send(embed=fallback)
+                    sent = True
+                except Exception:
+                    logger.exception("Help fallback embed send failed; trying plain text.")
+            if not sent:
+                try:
+                    await ctx.send(
+                        "KYOKA HELP • Commands: `help moderation`, `help ai`, "
+                        "`help music`, or `hca` (full command archive)."
+                    )
+                except Exception:
+                    logger.exception("Help plain-text fallback send failed.")
 
     @commands.command(
         name="premium",
