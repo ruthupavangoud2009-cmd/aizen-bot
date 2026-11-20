@@ -13,6 +13,28 @@ from src.ui.theme import KyokaTheme
 logger = logging.getLogger("Kyoka.ErrorHandler")
 
 
+def _error_emoji(bot: commands.Bot, *names: str, fallback: str = "") -> str:
+    """Resolve an emoji defensively; prefer animated custom application emojis."""
+    registry = getattr(bot, "custom_emojis", None)
+    if registry is None:
+        return fallback
+    for name in names:
+        try:
+            emoji = registry.get_emoji_obj(name)
+            if emoji is not None and getattr(emoji, "animated", False):
+                return str(emoji)
+        except Exception:
+            continue
+    for name in names:
+        try:
+            emoji = registry.get_emoji_obj(name)
+            if emoji is not None:
+                return str(emoji)
+        except Exception:
+            continue
+    return fallback
+
+
 class ErrorHandler(commands.Cog, name="ErrorHandler"):
     """Global listener for prefix, hybrid, and slash command errors with secure diagnostic incident tracking."""
 
@@ -62,11 +84,10 @@ class ErrorHandler(commands.Cog, name="ErrorHandler"):
                     pass
             return
 
-        e_reg = getattr(self.bot, "custom_emojis", None)
-        err_icon = f"{e_reg.get('icons_wrong', e_reg.get('icon_x', '❌'))} " if e_reg else "❌ "
-        warn_icon = f"{e_reg.get('icons_warning', '⚠️')} " if e_reg else "⚠️ "
-        clock_icon = f"{e_reg.get('icons_clock', '⏳')} " if e_reg else "⏳ "
-        lock_icon = f"{e_reg.get('icons_locked', e_reg.get('icon_lock', '🔒'))} " if e_reg else "🔒 "
+        err_icon = _error_emoji(self.bot, "icons_wrong", "icon_x", "error", fallback="❌")
+        warn_icon = _error_emoji(self.bot, "icons_warning", "icon_warning", "warning", fallback="⚠️")
+        clock_icon = _error_emoji(self.bot, "icons_clock", "clock", "loading", fallback="⏳")
+        lock_icon = _error_emoji(self.bot, "icons_locked", "icon_lock", "locked", fallback="🔒")
 
         container = KyokaContainer(accent_color=None)
 
@@ -211,8 +232,12 @@ class ErrorHandler(commands.Cog, name="ErrorHandler"):
 
         try:
             await send_container_response(ctx, container, ephemeral=True)
-        except Exception as e:
-            logger.debug(f"Failed to deliver error response container: {e}")
+        except Exception as send_error:
+            logger.warning("Failed to deliver error container; attempting plain-text fallback: %s", type(send_error).__name__)
+            try:
+                await ctx.reply("KYOKA encountered an error while handling this command. Please try again.", mention_author=False)
+            except Exception as fallback_error:
+                logger.debug("Plain-text command error fallback also failed: %s", type(fallback_error).__name__)
 
     async def on_app_command_error(
         self, interaction: discord.Interaction, error: app_commands.AppCommandError
