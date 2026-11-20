@@ -1143,13 +1143,32 @@ class Help(commands.Cog):
         ctx: CustomContext,
         visible_categories: dict[str, list[commands.Command]],
     ) -> discord.Embed:
-        """Render a minimal help landing page; categories are shown only after selection."""
+        """Render a compact help home with banner, live bot stats, creator, and a random animated emoji."""
+        import random
+
+        guilds = list(getattr(self.bot, "guilds", ()))
+        members = sum(int(getattr(g, "member_count", 0) or 0) for g in guilds)
+        latency = getattr(self.bot, "latency", float("nan"))
+        ping = f"{round(latency * 1000)}ms" if isinstance(latency, (int, float)) and math.isfinite(latency) else "N/A"
+
+        registry = getattr(self.bot, "custom_emojis", None)
+        emojis = list(getattr(registry, "_emojis", {}).values()) if registry else []
+        animated = [emoji for emoji in emojis if getattr(emoji, "animated", False)]
+        mark = str(random.choice(animated)) if animated else "💜"
+
         embed = discord.Embed(
-            title="💜 KYŌKA HELP",
+            title=f"{mark} KYŌKA HELP",
             description="Choose a category from the menu below to view its commands.",
             color=0x6D28D9,
         )
-        embed.set_footer(text="Select a category • Only you can control this menu")
+        embed.add_field(name="📡 Ping", value=f"**{ping}**", inline=True)
+        embed.add_field(name="🌐 Network Members", value=f"**{members:,}**", inline=True)
+        embed.set_footer(text="Creator • Aizen")
+
+        banner = AssetManager.create_branding_file("banner")
+        if banner:
+            embed.set_image(url=f"attachment://{banner.filename}")
+            embed.banner_file = banner
         return embed
 
     def build_search_results_embed(
