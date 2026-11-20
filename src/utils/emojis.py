@@ -411,6 +411,17 @@ class EmojiRegistry:
         return fallback
 
 
+    def animated(self, *names: str, fallback: str = "") -> str:
+        """Resolve only registered animated custom emojis; never return a static emoji."""
+        for name in names:
+            try:
+                emoji = self.get_emoji_obj(name)
+                if emoji is not None and getattr(emoji, "animated", False):
+                    return str(emoji)
+            except Exception:
+                continue
+        return fallback
+
     def get_emoji_obj(self, name: str) -> discord.Emoji | discord.PartialEmoji | str | None:
         """
         Get a discord.Emoji or discord.PartialEmoji object for UI buttons or components.
