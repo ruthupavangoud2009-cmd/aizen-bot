@@ -167,7 +167,8 @@ class BotInfo(commands.Cog):
         if not source_url:
             await ctx.reply("Attach a PNG/JPG/GIF image or provide a custom emoji mention. Example: `?botemojis <:name:123456789012345678>`.", delete_after=12)
             return
-        name = (emoji_name or default_name or "kyoka_emoji").lower()
+        requested_name = emoji_name or (emoji_source.strip().strip(":") if attachment and emoji_source else None) or default_name or "kyoka_emoji"
+        name = requested_name.lower()
         name = re.sub(r"[^a-z0-9_]", "_", name)[:32].strip("_") or "kyoka_emoji"
         try:
             if attachment:
