@@ -532,7 +532,7 @@ class Economy(commands.Cog):
         embed.set_footer(text=f"Total Item Stacks: {len(inv)} • Open crates with ?crate <crate_id>")
         await ctx.send(embed=embed)
 
-    @commands.hybrid_command(name="gamble", aliases=["bet"], description="Wager currency in fair high-stakes gambling.")
+    @commands.command(name="gamble", aliases=["bet"], help="Wager virtual currency in the casino.")
     async def gamble(self, ctx: CustomContext, amount: int) -> None:
         if amount <= 0:
             return await ctx.send("Wager must be a positive integer!")
@@ -631,7 +631,7 @@ class Economy(commands.Cog):
             return await ctx.send(f"❌ {res['error']}")
         await ctx.send(f"🎉 **Quest Completed!** Claimed **+{res['reward']:,}** {curr_emoji} {curr_name}!")
 
-    @commands.hybrid_command(name="lottery", aliases=["lotto"], description="View or participate in the server lottery jackpot.")
+    @commands.command(name="lottery", aliases=["lotto"], help="View or participate in the virtual server lottery jackpot.")
     async def lottery(self, ctx: CustomContext, tickets: int = 0) -> None:
         guild_id = ctx.guild.id if ctx.guild else 0
         settings = await self._get_settings(guild_id)
