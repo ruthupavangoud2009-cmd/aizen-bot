@@ -1468,51 +1468,41 @@ class Help(commands.Cog):
                 getattr(ctx.guild, "id", None),
                 getattr(ctx.author, "id", None),
             )
-            # Independent fallback: a compact home embed with the same category selector.
-            # Never dump category names as plain text and never show a dead-end error.
+            # Recovery reuses the category snapshot already built above. Re-fetching
+            # categories here can repeat the original failure and leave help blank.
             try:
-                fallback_categories = await self._get_visible_categories(ctx)
-                fallback_view = HelpView(self, ctx, fallback_categories, current_category="home")
-                import random
-                guilds = list(getattr(self.bot, "guilds", ()) or ())
-                member_total = sum(max(0, int(getattr(g, "member_count", 0) or 0)) for g in guilds)
-                latency = getattr(self.bot, "latency", None)
-                try:
-                    ping = f"{round(float(latency) * 1000)}ms" if latency is not None and math.isfinite(float(latency)) else "N/A"
-                except (TypeError, ValueError, OverflowError):
-                    ping = "N/A"
-                registry = getattr(self.bot, "custom_emojis", None)
-                emojis = getattr(registry, "_emojis", {}) if registry else {}
-                animated = [e for e in getattr(emojis, "values", lambda: [])() if getattr(e, "animated", False)]
-                mark = str(random.choice(animated)) if animated else "💜"
-                fallback_embed = discord.Embed(
-                    title=f"{mark} KYŌKA HELP",
-                    description="Choose a category below to see its commands. The home stays clean—no command dump.",
-                    color=0x6D28D9,
-                )
-                fallback_embed.add_field(name="📡 Ping", value=f"**{ping}**", inline=True)
-                fallback_embed.add_field(name="🌐 Members across servers", value=f"**{member_total:,}**", inline=True)
-                fallback_embed.add_field(name="📦 Modules", value=f"**{len(fallback_categories)}**", inline=True)
-                fallback_embed.set_footer(text="Creator • Aizen")
-                try:
-                    banner = AssetManager.create_branding_file("banner")
-                    if banner:
-                        fallback_embed.set_image(url=f"attachment://{banner.filename}")
-                        fallback_embed.banner_file = banner
-                except Exception:
-                    logger.warning("Fallback help banner unavailable; keeping compact home.", exc_info=True)
+                safe_categories = locals().get("visible_categories") or {}
+                fallback_view = HelpView(self, ctx, safe_categories, current_category="home")
+                fallback_embed = self.build_home_embed(ctx, safe_categories)
                 fallback_banner = getattr(fallback_embed, "banner_file", None)
-                msg = await ctx.send(embed=fallback_embed, file=fallback_banner, view=fallback_view) if fallback_banner else await ctx.send(embed=fallback_embed, view=fallback_view)
-                if getattr(ctx, "interaction", None):
+                interaction = getattr(ctx, "interaction", None)
+                if interaction is not None and interaction.response.is_done():
+                    if fallback_banner:
+                        await interaction.followup.send(embed=fallback_embed, file=fallback_banner, view=fallback_view)
+                    else:
+                        await interaction.followup.send(embed=fallback_embed, view=fallback_view)
                     try:
-                        fallback_view.message = await ctx.interaction.original_response()
+                        fallback_view.message = await interaction.original_response()
                     except Exception:
                         pass
                 else:
+                    if fallback_banner:
+                        msg = await ctx.send(embed=fallback_embed, file=fallback_banner, view=fallback_view)
+                    else:
+                        msg = await ctx.send(embed=fallback_embed, view=fallback_view)
                     fallback_view.message = msg
             except Exception:
-                # No legacy list or generic failure sentence: keep logs for diagnosis.
-                logger.exception("Help fallback home failed to render.")
+                logger.exception("Help recovery render/send failed.")
+                # For slash interactions, acknowledge the error only if no response
+                # has been sent yet; never attempt a second initial response.
+                interaction = getattr(ctx, "interaction", None)
+                try:
+                    if interaction is not None and not interaction.response.is_done():
+                        await interaction.response.send_message(
+                            "Help is temporarily unavailable. Please try again.", ephemeral=True
+                        )
+                except Exception:
+                    logger.exception("Help recovery acknowledgement failed.")
 
     @commands.command(
         name="premium",
