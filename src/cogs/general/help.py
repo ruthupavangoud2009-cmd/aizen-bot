@@ -78,6 +78,7 @@ UNICODE_CATEGORY_EMOJIS: dict[str, str] = {
     "🐾・PETS & COLLECTION": "🐾",
     "⚔️・ADVENTURE & RPG": "⚔️",
     "🎰・CASINO & GAMBLING": "🎰",
+    "🎰・KYOKA CASINO": "🎰",
     "🎮・MULTIPLAYER GAMES": "🎮",
     "🎉・SOCIAL & PARTY GAMES": "🎉",
     "📜・QUESTS & ACHIEVEMENTS": "📜",
@@ -106,6 +107,11 @@ CATEGORY_DESCRIPTIONS: dict[str, str] = {
     "🤖・ARTIFICIAL INTELLIGENCE": "KYŌKA AI engine (Groq primary, Gemini backup), 10 personalities & auto channels",
     "🖼️・IMAGES & AVATARS": "Anime reaction GIFs, avatar grabbers, banners & memes",
     "💬・SOCIAL & FUN": "Mini-games, truth-or-dare, relationship stats & trivia",
+    "🎰・KYOKA CASINO": "KYOKA Casino games, virtual wagers, game history & casino statistics",
+    "🪙・ECONOMY": "Wallet, bank, daily rewards, work, shop, inventory & transfers",
+    "🏹・HUNTING & ANIMALS": "Hunt creatures, capture drops, rarity rolls & expeditions",
+    "🐾・PETS & COLLECTION": "Pets, feeding, trading, equipment upgrades & collection progress",
+    "⚔️・ADVENTURE & RPG": "Dungeons, raids, bosses, mining, fishing & exploration",
     "💎・PREMIUM": "Kyoka Prime licenses, high-resolution AI & premium perks",
     "⚙️・SERVER ADMINISTRATION": "Prefix management, server wizards, custom help & diagnostics",
     "⚙️・SERVER CONFIGURATION": "Prefix management, server wizards, custom help & diagnostics",
@@ -722,6 +728,12 @@ class Help(commands.Cog):
         "🎵・MUSIC",
         "🎬・WATCH PARTY",
         "💬・SOCIAL & FUN",
+        "💤・AFK",
+        "🪙・ECONOMY",
+        "🎰・KYOKA CASINO",
+        "🏹・HUNTING & ANIMALS",
+        "🐾・PETS & COLLECTION",
+        "⚔️・ADVENTURE & RPG",
         "💎・PREMIUM",
         "⚙️・SERVER ADMINISTRATION",
         "🔧・UTILITIES",
@@ -2301,4 +2313,4 @@ class Help(commands.Cog):
 async def setup(bot: KyokaBot) -> None:
     cog = Help(bot)
     await bot.add_cog(cog)
-    logger.info("⛩️ [KYOKA CONTROL] Aizen Premium Help Dashboard loaded successfully (Hybrid Prefix & Slash).")
+    logger.info("⛩️ [KYOKA CONTROL] Aizen Modular Help Dashboard loaded successfully (Prefix command modules).")
