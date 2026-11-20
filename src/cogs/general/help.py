@@ -1175,20 +1175,31 @@ class Help(commands.Cog):
         ctx: CustomContext,
         visible_categories: dict[str, list[commands.Command]],
     ) -> discord.Embed:
-        """Build a tiny, instant help landing embed; category details are loaded only on selection."""
-        guild = ctx.guild
-        prefix = self.bot.guild_mgr.get_prefix(guild.id if guild else None)
+        """Build a compact, randomized bot overview with the modular help selector."""
+        import random
+        guilds = list(getattr(self.bot, "guilds", ()))
+        members = sum(int(getattr(g, "member_count", 0) or 0) for g in guilds)
+        latency = getattr(self.bot, "latency", float("nan"))
+        ping = f"{round(latency * 1000)} ms" if isinstance(latency, (int, float)) and math.isfinite(latency) else "N/A"
+        emoji_registry = getattr(self.bot, "custom_emojis", None)
+        custom = list(getattr(emoji_registry, "_emojis", {}).values()) if emoji_registry else []
+        animated = [e for e in custom if getattr(e, "animated", False)]
+        pool = animated or custom
+        random_emoji = str(random.choice(pool)) if pool else "✦"
         total_commands = sum(len(items) for items in visible_categories.values())
         embed = discord.Embed(
-            title="KYŌKA HELP",
+            title=f"{random_emoji} KYŌKA HELP",
             description=(
-                f"Select a category from the menu below to view its commands.\n"
-                f"**{total_commands:,} commands** across **{len(visible_categories):,} categories**\n\n"
-                f"Use `{prefix}help <command>` for command details."
+                "Choose a category from the menu below to browse commands.\n\n"
+                f"{random_emoji} **Servers:** {len(guilds):,}\n"
+                f"{random_emoji} **Members across servers:** {members:,}\n"
+                f"{random_emoji} **Bot ping:** {ping}\n"
+                f"{random_emoji} **Creator:** <@1505515188991033409>\n\n"
+                f"**{total_commands:,} commands** · **{len(visible_categories):,} categories**"
             ),
             color=0x211B2D,
         )
-        embed.set_footer(text="⚡ Fast help • Choose a category below")
+        embed.set_footer(text="KYŌKA • Modular command center")
         return embed
 
     def build_search_results_embed(
