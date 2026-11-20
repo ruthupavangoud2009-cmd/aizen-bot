@@ -1167,83 +1167,50 @@ class Help(commands.Cog):
         container.add_text(f"-# **Requested by {ctx.author.display_name} • Type {p}help <command> for syntax & examples**")
         return container
 
-    def build_home_embed(
-        self,
-        ctx: CustomContext,
-        visible_categories: dict[str, list[commands.Command]],
-    ) -> discord.Embed:
-        """Build a fast, clean help landing screen with stats and module selector."""
+    def build_home_embed(self, ctx: CustomContext, visible_categories: dict[str, list[commands.Command]]) -> discord.Embed:
+        """Lightweight, failure-resistant help landing page. Uses only KYOKA application emojis."""
         import random
-
-        guilds = list(getattr(self.bot, "guilds", ()))
-        member_total = sum(int(getattr(g, "member_count", 0) or 0) for g in guilds)
-        ping = self._get_latency_ms()
-        emoji_registry = getattr(self.bot, "custom_emojis", None)
-        # Help home uses only KYOKA's own application emojis—no stock Unicode icons.
-        emojis = list(getattr(emoji_registry, "_emojis", {}).values()) if emoji_registry else []
-        animated = [e for e in emojis if getattr(e, "animated", False)]
-        random_mark = str(random.choice(animated or emojis)) if (animated or emojis) else ""
-        def custom_icon(*names: str) -> str:
-            if not emoji_registry:
+        reg = getattr(self.bot, "custom_emojis", None)
+        def custom(*names: str) -> str:
+            if not reg:
                 return ""
-            for emoji_name in names:
+            for name in names:
                 try:
-                    emoji_obj = emoji_registry.get_emoji_obj(emoji_name)
-                    if emoji_obj:
-                        return str(emoji_obj)
+                    obj = reg.get_emoji_obj(name)
+                    if obj:
+                        return str(obj)
                 except Exception:
                     continue
             return ""
-
-        guild = ctx.guild
-        branding = None
-        mgr = getattr(self.bot, "branding_mgr", None)
-        cache = getattr(mgr, "_cache", None) if mgr else None
-        if isinstance(cache, dict):
-            branding = cache.get(guild.id if guild else None)
-        if not isinstance(branding, dict) and mgr and callable(getattr(mgr, "get_default_branding", None)):
-            try:
-                branding = mgr.get_default_branding()
-            except Exception:
-                branding = None
-        branding = branding if isinstance(branding, dict) else {}
-
-        display_name = branding.get("display_name") or "KYŌKA"
-        bio = "Choose a module below to view its commands."
+        guilds = list(getattr(self.bot, "guilds", ()) or ())
+        members = sum(int(getattr(g, "member_count", 0) or 0) for g in guilds)
+        ping = self._get_latency_ms()
+        own_emojis = list(getattr(reg, "_emojis", {}).values()) if reg else []
+        animated = [e for e in own_emojis if getattr(e, "animated", False)]
+        random_custom = str(random.choice(animated or own_emojis)) if own_emojis else ""
+        title_mark = random_custom
+        prefix = self.bot.guild_mgr.get_prefix(ctx.guild.id if ctx.guild else None)
         embed = discord.Embed(
-            title=f"{random_mark} {display_name} • HELP CENTER",
-            description=(
-                f"*Power isn't given. It's taken.* — **Aizen**\n\n"
-                "Choose a category from the menu to browse commands. The home screen stays clean—"
-                "command lists only appear after you select a category."
-            ),
+            title=f"{title_mark} KYOKA • HELP CENTER".strip(),
+            description=("Choose a category below to view its commands. This home screen stays clean; "
+                        "command lists appear only after you select a category."),
             color=0x2B0938,
         )
-        embed.add_field(name=f"{custom_icon('icon_ping', 'icons_ping')} Bot Ping".strip(), value=f"`{ping} ms`", inline=True)
-        embed.add_field(name=f"{custom_icon('icon_server', 'icons_server', 'icon_guild')} Servers".strip(), value=f"`{len(guilds):,}`", inline=True)
-        embed.add_field(name=f"{custom_icon('icon_users', 'icons_users', 'icon_members')} Members Across Servers".strip(), value=f"`{member_total:,}`", inline=True)
-        embed.add_field(name=f"{custom_icon('icon_stats', 'icons_stats', 'icon_category')} Categories".strip(), value=f"`{len(visible_categories):,}`", inline=True)
-        embed.add_field(name=f"{custom_icon('icon_owner', 'icons_owner', 'icon_creator')} Creator".strip(), value="**Aizen**", inline=True)
-        embed.add_field(name=f"{custom_icon('icon_arrow', 'icons_arrow', 'icons_rightarrow')} Navigation".strip(), value="Select a category below to view its commands and custom command emojis.", inline=False)
-        avatar_url = branding.get("avatar_url")
-        if not avatar_url and getattr(self.bot, "user", None):
-            avatar_url = self.bot.user.display_avatar.url
-        if avatar_url:
-            embed.set_thumbnail(url=str(avatar_url))
-        banner_url = branding.get("banner_url")
-        banner_file = None
-        if banner_url and str(banner_url).strip():
-            embed.set_image(url=str(banner_url).strip())
-        else:
-            banner_file = AssetManager.create_branding_file("banner")
-            if banner_file:
-                embed.set_image(url=f"attachment://{banner_file.filename}")
-            else:
-                banner_file = AssetManager.create_help_file("home")
-                if banner_file:
-                    embed.set_image(url=f"attachment://{banner_file.filename}")
-        embed.set_footer(text="Creator • Aizen")
-        embed.banner_file = banner_file
+        stats = [
+            (custom("icon_ping", "icons_ping", "icon_latency"), "Ping", f"{ping} ms"),
+            (custom("icon_server", "icons_server", "icon_guild"), "Servers", f"{len(guilds):,}"),
+            (custom("icon_users", "icons_users", "icon_members"), "Members", f"{members:,}"),
+            (custom("icon_stats", "icons_stats", "icon_category"), "Categories", f"{len(visible_categories):,}"),
+        ]
+        for emoji, label, value in stats:
+            embed.add_field(name=f"{emoji} {label}".strip(), value=f"`{value}`", inline=True)
+        creator_icon = custom("icon_owner", "icons_owner", "icon_creator")
+        embed.add_field(name=f"{creator_icon} Creator".strip(), value="**Aizen**", inline=True)
+        embed.add_field(name=f"{custom('icon_arrow', 'icons_arrow', 'icons_rightarrow')} Navigation".strip(),
+                        value="Select a category from the dropdown to browse commands.", inline=False)
+        if getattr(self.bot, "user", None):
+            embed.set_thumbnail(url=self.bot.user.display_avatar.url)
+        embed.set_footer(text=f"Prefix: {prefix}help • KYOKA Aizen Edition")
         return embed
 
     def build_search_results_embed(
@@ -1310,86 +1277,60 @@ class Help(commands.Cog):
         )
         return embed
 
-    def build_category_embed(
-        self,
-        ctx: CustomContext,
-        cat_name: str,
-        commands_list: list[commands.Command],
-        visible_categories: dict[str, list[commands.Command]],
-        page: int = 1,
-    ) -> discord.Embed:
-        """Construct compact, clean category embed (10 commands per page, single line descriptions)."""
-        guild = ctx.guild
-        p = self.bot.guild_mgr.get_prefix(guild.id if guild else None)
-
-        clean_cat_title = cat_name.split("・", 1)[1] if "・" in cat_name else cat_name
-        cat_desc = CATEGORY_DESCRIPTIONS.get(cat_name, f"Accessible commands for {clean_cat_title}.")
-
-        # Retrieve guild branding for avatar
-        branding = None
-        if hasattr(self.bot, "branding_mgr"):
-            branding = self.bot.branding_mgr._cache.get(guild.id if guild else None)
-        avatar_url = branding.get("avatar_url") if branding else None
-        if not avatar_url and hasattr(self.bot, "user") and self.bot.user:
-            avatar_url = self.bot.user.display_avatar.url
-
-        # Collect unique command names
-        seen: set[str] = set()
-        unique_cmds: list[commands.Command] = []
-        for c in commands_list:
-            if c.qualified_name not in seen:
-                seen.add(c.qualified_name)
-                unique_cmds.append(c)
-        unique_cmds.sort(key=lambda c: c.qualified_name)
-
-        per_page = 10
-        total_pages = max(1, math.ceil(len(unique_cmds) / per_page))
-        safe_page = max(1, min(page, total_pages))
-        start_idx = (safe_page - 1) * per_page
-        page_cmds = unique_cmds[start_idx : start_idx + per_page]
-
-        desc_lines = [
-            f"> *{cat_desc}*\n",
-            f"**Page {safe_page}/{total_pages}** • **{len(unique_cmds)}** commands\n",
-        ]
-        command_emojis = {
-            "ban": "🔨", "unban": "🔓", "kick": "👢", "timeout": "⏳", "mute": "🔇",
-            "unmute": "🔊", "warn": "⚠️", "purge": "🧹", "clear": "🧹", "lock": "🔒",
-            "unlock": "🔓", "slowmode": "🐢", "modlog": "📜", "userinfo": "👤",
-            "serverinfo": "🏰", "avatar": "🖼️", "banner": "🎨", "ping": "📡", "stats": "📊",
-            "help": "❓", "play": "🎵", "pause": "⏸️", "resume": "▶️", "skip": "⏭️",
-            "stop": "⏹️", "queue": "📜", "volume": "🔊", "ai": "🤖", "ticket": "🎫",
-            "giveaway": "🎉", "daily": "🎁", "balance": "💰", "work": "💼", "shop": "🛒",
-            "afk": "💤", "remind": "⏰", "calc": "🧮", "setup": "⚙️",
+    def build_category_embed(self, ctx: CustomContext, cat_name: str, commands_list: list[commands.Command],
+                              visible_categories: dict[str, list[commands.Command]], page: int = 1) -> discord.Embed:
+        """Rebuilt compact category page using KYOKA custom emojis only."""
+        reg = getattr(self.bot, "custom_emojis", None)
+        def custom(*names: str) -> str:
+            if not reg:
+                return ""
+            for name in names:
+                try:
+                    obj = reg.get_emoji_obj(name)
+                    if obj:
+                        return str(obj)
+                except Exception:
+                    pass
+            return ""
+        prefix = self.bot.guild_mgr.get_prefix(ctx.guild.id if ctx.guild else None)
+        title = cat_name.split("・", 1)[-1].strip()
+        unique = []
+        seen = set()
+        for cmd in commands_list:
+            if cmd.qualified_name not in seen:
+                seen.add(cmd.qualified_name)
+                unique.append(cmd)
+        unique.sort(key=lambda x: x.qualified_name.casefold())
+        per_page = HELP_COMMANDS_PER_PAGE
+        pages = max(1, math.ceil(len(unique) / per_page))
+        page = max(1, min(int(page), pages))
+        entries = unique[(page - 1) * per_page:page * per_page]
+        cat_icon = self._get_category_emoji(cat_name)
+        lines = [f"> {CATEGORY_DESCRIPTIONS.get(cat_name, 'Commands in this module.')}",
+                 f"**Page {page}/{pages}** • **{len(unique)} commands**", ""]
+        command_icons = {
+            "ban": ("icon_ban", "icon_moderation"), "kick": ("icon_kick", "icon_moderation"),
+            "timeout": ("icon_timeout", "icon_moderation"), "warn": ("icon_warning", "icon_moderation"),
+            "purge": ("icon_delete", "icons_delete"), "lock": ("icon_lock", "icons_locked"),
+            "unlock": ("icon_unlock", "icon_lock"), "play": ("icon_music", "music"),
+            "pause": ("icon_pause", "paused"), "skip": ("icon_skip", "skip"),
+            "queue": ("icon_queue", "queue"), "ticket": ("icon_ticket", "ticket_nox"),
+            "ai": ("icon_ai", "ai"), "help": ("icon_info", "icon_home"),
+            "ping": ("icon_ping", "icons_ping"), "stats": ("icon_stats", "icons_stats"),
         }
-        category_mark = self._get_category_emoji(cat_name)
-        for c in page_cmds:
-            desc_text = (c.description or getattr(c, "help", None) or "No description provided.").strip().split("\n")[0][:90]
-            c_name = c.qualified_name if isinstance(getattr(c, "qualified_name", None), str) else (c.name if isinstance(getattr(c, "name", None), str) else str(c))
-            mark = command_emojis.get(c.name.lower(), category_mark or "•")
-            desc_lines.append(f"{mark} **`{c_name}`** — {desc_text}")
-
-        desc_lines.append(f"\n`{p}help <command>` — View details for one command.")
-
-        embed = KyokaHelpEmbed(
-            title=f"{self._get_category_emoji(cat_name)} {cat_name}",
-            description="\n".join(desc_lines),
-            color=0x2B0938,
-        )
-
-        embed.banner_file = None
-
-        if avatar_url:
-            embed.set_thumbnail(url=avatar_url)
-
-        banner_url = branding.get("banner_url") if branding else None
-        if banner_url and str(banner_url).strip():
-            embed.set_image(url=str(banner_url).strip())
-
-        embed.set_footer(
-            text=f"Page {safe_page}/{total_pages} • Requested by {ctx.author.display_name}",
-            icon_url=ctx.author.display_avatar.url if ctx.author and ctx.author.display_avatar else None,
-        )
+        for cmd in entries:
+            name = cmd.qualified_name
+            description = (cmd.description or cmd.help or "No description provided.").strip().splitlines()[0][:90]
+            icon = custom(*command_icons.get(cmd.name.lower(), ()), "icon_command", "icon_info")
+            if not icon:
+                icon = cat_icon if isinstance(cat_icon, str) and cat_icon.startswith("<") else ""
+            lines.append(f"{icon} **`{name}`** — {description}".strip())
+        lines.append("")
+        lines.append(f"Use `{prefix}help <command>` for command details.")
+        embed = discord.Embed(title=f"{cat_icon} {title}".strip(), description="\n".join(lines), color=0x2B0938)
+        if getattr(self.bot, "user", None):
+            embed.set_thumbnail(url=self.bot.user.display_avatar.url)
+        embed.set_footer(text=f"Page {page}/{pages} • Requested by {ctx.author.display_name}")
         return embed
 
     def build_command_embed(self, ctx: CustomContext, cmd: commands.Command) -> discord.Embed:
