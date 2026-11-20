@@ -1489,18 +1489,38 @@ class Help(commands.Cog):
                 getattr(ctx.guild, "id", None),
                 getattr(ctx.author, "id", None),
             )
+            prefix = self.bot.guild_mgr.get_prefix(ctx.guild.id if ctx.guild else None)
             fallback = discord.Embed(
-                title="KYŌKA • HELP DIRECTORY",
+                title="⛩️ KYŌKA • HELP CENTER",
                 description=(
-                    "The interactive help panel encountered a temporary problem. "
-                    "Here is a safe fallback so you can still access commands.\n\n"
-                    "**Try:** `help moderation`, `help ai`, `help music`, "
-                    "or `hca` for the full command archive."
+                    "**Welcome to the command hub.**\n"
+                    "Browse features by module and open a category to see its commands, "
+                    "usage, and navigation controls.\n\n"
+                    "━━━━━━━━━━━━━━━━━━━━\n"
+                    f"**Prefix:** `{prefix}`  •  **Slash:** `/`\n"
+                    f"**Modules available:** `{len(visible_categories) if 'visible_categories' in locals() else 0}`\n"
+                    "**Quick access**\n"
+                    f"• `{prefix}help moderation` — Moderation\n"
+                    f"• `{prefix}help ai` — AI tools\n"
+                    f"• `{prefix}help music` — Music\n"
+                    f"• `{prefix}hca` — Full command archive"
                 ),
-                color=0x2B0938,
+                color=0x6B3FA0,
             )
+            fallback.set_footer(text=f"KYŌKA • Modular command directory • Requested by {ctx.author.display_name}")
+            fallback_view = None
             try:
-                await ctx.send(embed=fallback)
+                if 'visible_categories' in locals() and visible_categories:
+                    fallback_view = HelpView(
+                        cog=self,
+                        ctx=ctx,
+                        visible_categories=visible_categories,
+                        current_category="home",
+                    )
+            except Exception:
+                logger.exception("Help fallback module view could not be initialized.")
+            try:
+                await ctx.send(embed=fallback, view=fallback_view)
             except Exception:
                 logger.exception("❌ [HELP MENU] Emergency fallback could not be sent.")
 
