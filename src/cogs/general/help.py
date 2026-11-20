@@ -1478,7 +1478,6 @@ class Help(commands.Cog):
     )
     async def help_command(self, ctx: CustomContext, *, command_or_module: str | None = None) -> None:
         """Interactive help menu filtered by user permissions and organized into categories."""
-        t_start = time.perf_counter()
         try:
             t_start = time.perf_counter()
             # Help intentionally avoids a network/database branding warm-up for fast response.
@@ -1595,299 +1594,299 @@ class Help(commands.Cog):
             else:
                 view.message = msg
     
-        @commands.command(
-            name="premium",
-            aliases=["plan", "tier", "subscription", "perks"],
-            description="View this server's subscription plan, expiry, and Free vs Premium feature matrix.",
-        )
-        async def view_plan(self, ctx: CustomContext) -> None:
-            """Display this server's current tier and the comprehensive Free vs Premium feature matrix."""
-            guild = ctx.guild
-            p = self.bot.guild_mgr.get_prefix(guild.id if guild else None)
-    
-            is_prem = False
-            expiry_str = "N/A (Standard Free)"
-            tier_title = "Standard Free Tier"
-            if guild and hasattr(self.bot, "premium_mgr") and self.bot.premium_mgr:
-                is_prem = self.bot.premium_mgr.is_guild_premium(guild.id)
-                if is_prem:
-                    info = self.bot.premium_mgr.get_guild_info(guild.id)
-                    tier_title = f"💎 Kyoka {info.get('tier', 'Premium')}"
-                    expiry_str = info.get("remaining_str", "Active")
-    
-            embed = discord.Embed(
-                title="⛩️ KYOKA 3.0 • PLAN & FEATURE ACCESS MATRIX",
-                description=(
-                    f"**Current Server:** `{guild.name if guild else 'Direct Message'}`\n"
-                    f"**Active Entitlement:** `{tier_title}`\n"
-                    f"**Status / Expiry:** `{expiry_str}`\n\n"
-                    f"> Kyoka separates core server stability features (free to all servers) from advanced visual and enterprise customization (premium)."
-                ),
-                color=0x7C3AED,
-            )
-    
-            embed.add_field(
-                name="🛡️ FREE TIER (Available to Every Server)",
-                value=(
-                    "• **Core Moderation:** `ban`, `kick`, `timeout`, `warn`, `purge`, `lock`, `unlock`, `slowmode`\n"
-                    "• **Utility & Info:** `calc`, `remind`, `avatar`, `banner`, `userinfo`, `serverinfo`, `ping`\n"
-                    "• **Welcome & Departures:** Standard welcome cards, leave announcements, autoroles\n"
-                    "• **Gatekeeper Security:** Button and captcha verification gate\n"
-                    "• **Support Tickets:** Standard ticket panel, claims, and closures\n"
-                    "• **Giveaways:** Timers, automatic roll, and winner rerolls\n"
-                    "• **Audio Playback:** High-fidelity Lavalink v4 music player\n"
-                    "• **Community & Fun:** AFK notices, anime actions, 8ball, trivia, truth-or-dare\n"
-                    "• **Server Administration:** Isolated single prefix (`setprefix`, `resetprefix`)"
-                ),
-                inline=False,
-            )
-    
-            embed.add_field(
-                name="💎 PREMIUM TIER (Requires Server Subscription)",
-                value=(
-                    "• **Custom Bot Avatar:** Upload custom server-specific avatar (`setbotavatar`)\n"
-                    "• **24/7 Music Radio:** Continuous voice stay mode that never disconnects (`247`, `halloween`)\n"
-                    "• **Aizen Visual Palette:** Custom hex embed colors and server author icons\n"
-                    "• **Animated Welcome Cards:** Cyber Sakura, Celestial Nebula & Hueco Mundo themes\n"
-                    "• **Multi-Panel Tickets:** Multi-department routing and HTML transcripts\n"
-                    "• **Role-Gated Giveaways:** Bonus entries, bypass roles, and multi-winner raffles\n"
-                    "• **Priority Gemini AI:** ~600ms latency, all 10 AI personas simultaneously\n"
-                    "• **Extended Leveling:** Custom rank card backgrounds and XP multipliers\n"
-                    "• **Modular Logging:** Anti-ghostping tracking and dedicated channel routing"
-                ),
-                inline=False,
-            )
-    
-            assets = getattr(Config, "ASSETS", None)
-            thumb = getattr(assets, "AIZEN_AVATAR_URL", "")
-            if thumb and thumb.strip():
-                embed.set_thumbnail(url=thumb.strip())
-    
-            embed.set_footer(
-                text=f"Requested by {ctx.author.display_name} • KYOKA 3.0 — Aizen Edition",
-                icon_url=ctx.author.display_avatar.url if ctx.author.display_avatar else None,
-            )
-    
-            view = discord.ui.View(timeout=180.0)
-            view.add_item(
-                discord.ui.Button(
-                    label="Upgrade to Premium",
-                    style=discord.ButtonStyle.link,
-                    url="https://aizen-bot.pages.dev/premium",
-                    emoji="💎",
-                )
-            )
-            if Config.SUPPORT_URL:
-                view.add_item(
-                    discord.ui.Button(
-                        label="Join Support Server",
-                        style=discord.ButtonStyle.link,
-                        url=Config.SUPPORT_URL,
-                        emoji="💜",
-                    )
-                )
-            view.add_item(
-                discord.ui.Button(
-                    label="Web Dashboard",
-                    style=discord.ButtonStyle.link,
-                    url="https://aizen-bot.pages.dev/dashboard",
-                    emoji="⚡",
-                )
-            )
-    
-            await ctx.send(embed=embed, view=view)
-    
-        # ─── HELP COMMAND ARCHIVE (HCA) PUBLIC DIRECTORY ─────────────────────────
-        def build_hca_index_embed(
-            self,
-            ctx: CustomContext,
-            all_categories: dict[str, list[commands.Command]],
-        ) -> tuple[discord.Embed, Optional[discord.File]]:
-            """Construct the master Help Command Archive (HCA) index directory embed with Aizen artwork."""
-            guild = ctx.guild
-            p = self.bot.guild_mgr.get_prefix(guild.id if guild else None)
-            total_commands = sum(len(cmds) for cmds in all_categories.values())
-    
-            embed = discord.Embed(
-                title="📚 KYOKA 3.0 — Help Command Archive (HCA)",
-                description=(
-                    "> **Complete Public Command Directory & Architecture Index**\n"
-                    "> Accessible to every server member. Explore all loaded features, aliases, and syntax.\n\n"
-                    f"• **Global Prefix:** `{p}<command>` · **Slash Support:** `/<command>`\n"
-                    f"• **Total Commands:** `{total_commands}` across `{len(all_categories)}` active modules\n"
-                    f"• **Legend:** `[+]` Prefix · `[/]` Slash · `[Public]` Everyone · `[Mod]` Staff · `[Admin]` Admin · `[Owner]` Dev\n\n"
-                    f"💡 *Select a module from the dropdown or click **Search** to find any command.*"
-                ),
-                color=0x2B0938,
-            )
-    
-            for cat_name, cmds in list(all_categories.items())[:12]:
-                clean_title = cat_name.split("・", 1)[1] if "・" in cat_name else cat_name
-                cat_icon = self._get_category_emoji(cat_name)
-                preview_names = [f"`{c.name}`" for c in cmds[:4]]
-                preview_str = ", ".join(preview_names)
-                if len(cmds) > 4:
-                    preview_str += f", +{len(cmds) - 4} more"
-                embed.add_field(
-                    name=f"{cat_icon} {clean_title} ({len(cmds)})",
-                    value=f"> {preview_str}",
-                    inline=True,
-                )
-    
-            banner_file = AssetManager.attach_help_banner(embed, "home")
-            embed.set_footer(
-                text=f"Help Command Archive (HCA) • Requested by {ctx.author.display_name} • Type {p}hca <module>",
-                icon_url=ctx.author.display_avatar.url if ctx.author.display_avatar else None,
-            )
-            return embed, banner_file
-    
-        def build_hca_category_embed(
-            self,
-            ctx: CustomContext,
-            cat_name: str,
-            commands_list: list[commands.Command],
-            all_categories: dict[str, list[commands.Command]],
-            page: int = 1,
-        ) -> tuple[discord.Embed, Optional[discord.File]]:
-            """Construct a paginated category archive card for HCA with distinct feature artwork."""
-            p = self.bot.guild_mgr.get_prefix(ctx.guild.id if ctx.guild else None)
-            clean_cat_title = cat_name.split("・", 1)[1] if "・" in cat_name else cat_name
-            cat_desc = CATEGORY_DESCRIPTIONS.get(cat_name, f"All registered commands for {clean_cat_title}.")
-            cat_icon = self._get_category_emoji(cat_name)
-            cat_meta = CATEGORY_BY_TAG.get(cat_name) or get_category_by_query(clean_cat_title)
-    
-            seen: set[str] = set()
-            unique_cmds: list[commands.Command] = []
-            for c in commands_list:
-                if c.qualified_name not in seen:
-                    seen.add(c.qualified_name)
-                    unique_cmds.append(c)
-            unique_cmds.sort(key=lambda c: c.qualified_name)
-    
-            per_page = 10
-            total_pages = max(1, math.ceil(len(unique_cmds) / per_page))
-            safe_page = max(1, min(page, total_pages))
-            start_idx = (safe_page - 1) * per_page
-            page_cmds = unique_cmds[start_idx : start_idx + per_page]
-    
-            desc_lines = [
-                f"> {cat_desc}\n",
-                f"**Category:** `{cat_name}` • **Page {safe_page}/{total_pages}** • **{len(unique_cmds)}** total commands\n",
-            ]
-    
-            for c in page_cmds:
-                badge = self._get_badge(c) or " `[Public]`"
-                is_slash = getattr(c, "app_command", None) is not None or hasattr(c, "app_command")
-                type_tag = "`[+ /]`" if is_slash else "`[+]`"
-                sig = f" {c.signature}" if c.signature else ""
-                desc = (c.description or getattr(c, "help", None) or "No detailed description provided.").strip().split("\n")[0][:90]
-                alias_str = f" · *Aliases:* {', '.join(f'`{a}`' for a in c.aliases)}" if c.aliases else ""
-                desc_lines.append(f"**`{p}{c.qualified_name}{sig}`** {type_tag}{badge}")
-                desc_lines.append(f"> {desc}{alias_str}\n")
-    
-            embed = discord.Embed(
-                title=f"{cat_icon} Archive — {cat_name}",
-                description="\n".join(desc_lines),
-                color=0x2B0938,
-            )
-            image_key = cat_meta.image_key if cat_meta else "general"
-            banner_file = AssetManager.attach_help_banner(embed, image_key)
-            embed.set_footer(
-                text=f"Page {safe_page}/{total_pages} • {len(unique_cmds)} Commands • Public Archive • KYOKA 3.0",
-                icon_url=ctx.author.display_avatar.url if ctx.author.display_avatar else None,
-            )
-            return embed, banner_file
-    
-        def build_hca_search_embed(
-            self,
-            ctx: CustomContext,
-            all_categories: dict[str, list[commands.Command]],
-            query: str,
-        ) -> discord.Embed:
-            """Construct search results embed for the Help Command Archive."""
-            p = self.bot.guild_mgr.get_prefix(ctx.guild.id if ctx.guild else None)
-            clean_query = query.lower().strip()
-    
-            matched: list[tuple[commands.Command, str]] = []
-            for cat_name, cmd_list in all_categories.items():
-                for cmd in cmd_list:
-                    cname = cmd.qualified_name.lower()
-                    desc = (cmd.description or cmd.help or "").lower()
-                    aliases = [a.lower() for a in getattr(cmd, "aliases", [])]
-                    if clean_query == cname or clean_query in cname or any(clean_query in a for a in aliases) or clean_query in desc:
-                        if (cmd, cat_name) not in matched:
-                            matched.append((cmd, cat_name))
-    
-            embed = discord.Embed(
-                title=f"🔍 Archive Search Results: `{clean_query}`",
-                color=0x2B0938,
-            )
-    
-            if not matched:
-                embed.description = (
-                    f"> No registered commands matching **`{clean_query}`** were found in the archive.\n\n"
-                    f"**Suggestions:**\n"
-                    f"• Try keywords: `music`, `ban`, `ticket`, `fruit`, `voice`, `bill`, `level`\n"
-                    f"• Use the dropdown category selector to browse the entire directory\n"
-                    f"• Type `{p}hca` to view the master index"
-                )
-                embed.color = 0xED4245
-            else:
-                embed.description = f"Found **{len(matched)}** command(s) matching `{clean_query}`:\n\n"
-                matched.sort(
-                    key=lambda item: (
-                        0 if item[0].qualified_name.lower() == clean_query else (
-                            1 if item[0].qualified_name.lower().startswith(clean_query) else 2
-                        ),
-                        item[0].qualified_name.lower(),
-                    )
-                )
-    
-                for cmd, cat in matched[:10]:
-                    badge = self._get_badge(cmd) or " `[Public]`"
-                    is_slash = getattr(cmd, "app_command", None) is not None or hasattr(cmd, "app_command")
-                    type_tag = "`[+ /]`" if is_slash else "`[+]`"
-                    desc = (cmd.description or cmd.help or "No description.").strip().split("\n")[0][:100]
-                    sig = f" {cmd.signature}" if cmd.signature else ""
-                    embed.add_field(
-                        name=f"`{p}{cmd.qualified_name}{sig}` {type_tag}{badge}",
-                        value=f"> {desc}\n> *Module:* {cat}",
-                        inline=False,
-                    )
-    
-                if len(matched) > 10:
-                    embed.description += f"*(Showing top 10 of {len(matched)} matches.)*\n\n"
-    
-            AssetManager.attach_help_banner(embed, "home")
-            embed.set_footer(
-                text=f"Archive Search • Requested by {ctx.author.display_name} • KYOKA 3.0",
-                icon_url=ctx.author.display_avatar.url if ctx.author.display_avatar else None,
-            )
-            return embed
-    
-        def build_hca_embed_for_selection(
-            self,
-            ctx: CustomContext,
-            all_categories: dict[str, list[commands.Command]],
-            selected_val: str,
-            page: int = 1,
-        ) -> tuple[discord.Embed, Optional[discord.File]]:
-            """Route HCA selection to index or category embed with artwork."""
-            if selected_val == "home":
-                return self.build_hca_index_embed(ctx, all_categories)
-            matched_cat = next((c for c in all_categories.keys() if c.lower() == selected_val.lower()), None)
-            if matched_cat:
-                return self.build_hca_category_embed(
-                    ctx, matched_cat, all_categories[matched_cat], all_categories, page=page
-                )
-            return self.build_hca_index_embed(ctx, all_categories)
-    
         except Exception as exc:
             logger.exception("Help command failed (prefix=%s, guild=%s, user=%s)", getattr(ctx, 'prefix', '?'), getattr(ctx.guild, 'id', None), getattr(ctx.author, 'id', None))
             try:
-                await ctx.reply("❌ KYOKA help failed to load. The full traceback is now logged in the bot hosting logs. Please retry in a moment.", mention_author=False)
+                await ctx.reply("❌ KYOKA help failed to load. The traceback is logged in hosting logs.", mention_author=False)
             except Exception:
                 logger.exception("Could not send help-command diagnostic reply")
+
+    @commands.command(
+        name="premium",
+        aliases=["plan", "tier", "subscription", "perks"],
+        description="View this server's subscription plan, expiry, and Free vs Premium feature matrix.",
+    )
+    async def view_plan(self, ctx: CustomContext) -> None:
+        """Display this server's current tier and the comprehensive Free vs Premium feature matrix."""
+        guild = ctx.guild
+        p = self.bot.guild_mgr.get_prefix(guild.id if guild else None)
+
+        is_prem = False
+        expiry_str = "N/A (Standard Free)"
+        tier_title = "Standard Free Tier"
+        if guild and hasattr(self.bot, "premium_mgr") and self.bot.premium_mgr:
+            is_prem = self.bot.premium_mgr.is_guild_premium(guild.id)
+            if is_prem:
+                info = self.bot.premium_mgr.get_guild_info(guild.id)
+                tier_title = f"💎 Kyoka {info.get('tier', 'Premium')}"
+                expiry_str = info.get("remaining_str", "Active")
+
+        embed = discord.Embed(
+            title="⛩️ KYOKA 3.0 • PLAN & FEATURE ACCESS MATRIX",
+            description=(
+                f"**Current Server:** `{guild.name if guild else 'Direct Message'}`\n"
+                f"**Active Entitlement:** `{tier_title}`\n"
+                f"**Status / Expiry:** `{expiry_str}`\n\n"
+                f"> Kyoka separates core server stability features (free to all servers) from advanced visual and enterprise customization (premium)."
+            ),
+            color=0x7C3AED,
+        )
+
+        embed.add_field(
+            name="🛡️ FREE TIER (Available to Every Server)",
+            value=(
+                "• **Core Moderation:** `ban`, `kick`, `timeout`, `warn`, `purge`, `lock`, `unlock`, `slowmode`\n"
+                "• **Utility & Info:** `calc`, `remind`, `avatar`, `banner`, `userinfo`, `serverinfo`, `ping`\n"
+                "• **Welcome & Departures:** Standard welcome cards, leave announcements, autoroles\n"
+                "• **Gatekeeper Security:** Button and captcha verification gate\n"
+                "• **Support Tickets:** Standard ticket panel, claims, and closures\n"
+                "• **Giveaways:** Timers, automatic roll, and winner rerolls\n"
+                "• **Audio Playback:** High-fidelity Lavalink v4 music player\n"
+                "• **Community & Fun:** AFK notices, anime actions, 8ball, trivia, truth-or-dare\n"
+                "• **Server Administration:** Isolated single prefix (`setprefix`, `resetprefix`)"
+            ),
+            inline=False,
+        )
+
+        embed.add_field(
+            name="💎 PREMIUM TIER (Requires Server Subscription)",
+            value=(
+                "• **Custom Bot Avatar:** Upload custom server-specific avatar (`setbotavatar`)\n"
+                "• **24/7 Music Radio:** Continuous voice stay mode that never disconnects (`247`, `halloween`)\n"
+                "• **Aizen Visual Palette:** Custom hex embed colors and server author icons\n"
+                "• **Animated Welcome Cards:** Cyber Sakura, Celestial Nebula & Hueco Mundo themes\n"
+                "• **Multi-Panel Tickets:** Multi-department routing and HTML transcripts\n"
+                "• **Role-Gated Giveaways:** Bonus entries, bypass roles, and multi-winner raffles\n"
+                "• **Priority Gemini AI:** ~600ms latency, all 10 AI personas simultaneously\n"
+                "• **Extended Leveling:** Custom rank card backgrounds and XP multipliers\n"
+                "• **Modular Logging:** Anti-ghostping tracking and dedicated channel routing"
+            ),
+            inline=False,
+        )
+
+        assets = getattr(Config, "ASSETS", None)
+        thumb = getattr(assets, "AIZEN_AVATAR_URL", "")
+        if thumb and thumb.strip():
+            embed.set_thumbnail(url=thumb.strip())
+
+        embed.set_footer(
+            text=f"Requested by {ctx.author.display_name} • KYOKA 3.0 — Aizen Edition",
+            icon_url=ctx.author.display_avatar.url if ctx.author.display_avatar else None,
+        )
+
+        view = discord.ui.View(timeout=180.0)
+        view.add_item(
+            discord.ui.Button(
+                label="Upgrade to Premium",
+                style=discord.ButtonStyle.link,
+                url="https://aizen-bot.pages.dev/premium",
+                emoji="💎",
+            )
+        )
+        if Config.SUPPORT_URL:
+            view.add_item(
+                discord.ui.Button(
+                    label="Join Support Server",
+                    style=discord.ButtonStyle.link,
+                    url=Config.SUPPORT_URL,
+                    emoji="💜",
+                )
+            )
+        view.add_item(
+            discord.ui.Button(
+                label="Web Dashboard",
+                style=discord.ButtonStyle.link,
+                url="https://aizen-bot.pages.dev/dashboard",
+                emoji="⚡",
+            )
+        )
+
+        await ctx.send(embed=embed, view=view)
+
+    # ─── HELP COMMAND ARCHIVE (HCA) PUBLIC DIRECTORY ─────────────────────────
+    def build_hca_index_embed(
+        self,
+        ctx: CustomContext,
+        all_categories: dict[str, list[commands.Command]],
+    ) -> tuple[discord.Embed, Optional[discord.File]]:
+        """Construct the master Help Command Archive (HCA) index directory embed with Aizen artwork."""
+        guild = ctx.guild
+        p = self.bot.guild_mgr.get_prefix(guild.id if guild else None)
+        total_commands = sum(len(cmds) for cmds in all_categories.values())
+
+        embed = discord.Embed(
+            title="📚 KYOKA 3.0 — Help Command Archive (HCA)",
+            description=(
+                "> **Complete Public Command Directory & Architecture Index**\n"
+                "> Accessible to every server member. Explore all loaded features, aliases, and syntax.\n\n"
+                f"• **Global Prefix:** `{p}<command>` · **Slash Support:** `/<command>`\n"
+                f"• **Total Commands:** `{total_commands}` across `{len(all_categories)}` active modules\n"
+                f"• **Legend:** `[+]` Prefix · `[/]` Slash · `[Public]` Everyone · `[Mod]` Staff · `[Admin]` Admin · `[Owner]` Dev\n\n"
+                f"💡 *Select a module from the dropdown or click **Search** to find any command.*"
+            ),
+            color=0x2B0938,
+        )
+
+        for cat_name, cmds in list(all_categories.items())[:12]:
+            clean_title = cat_name.split("・", 1)[1] if "・" in cat_name else cat_name
+            cat_icon = self._get_category_emoji(cat_name)
+            preview_names = [f"`{c.name}`" for c in cmds[:4]]
+            preview_str = ", ".join(preview_names)
+            if len(cmds) > 4:
+                preview_str += f", +{len(cmds) - 4} more"
+            embed.add_field(
+                name=f"{cat_icon} {clean_title} ({len(cmds)})",
+                value=f"> {preview_str}",
+                inline=True,
+            )
+
+        banner_file = AssetManager.attach_help_banner(embed, "home")
+        embed.set_footer(
+            text=f"Help Command Archive (HCA) • Requested by {ctx.author.display_name} • Type {p}hca <module>",
+            icon_url=ctx.author.display_avatar.url if ctx.author.display_avatar else None,
+        )
+        return embed, banner_file
+
+    def build_hca_category_embed(
+        self,
+        ctx: CustomContext,
+        cat_name: str,
+        commands_list: list[commands.Command],
+        all_categories: dict[str, list[commands.Command]],
+        page: int = 1,
+    ) -> tuple[discord.Embed, Optional[discord.File]]:
+        """Construct a paginated category archive card for HCA with distinct feature artwork."""
+        p = self.bot.guild_mgr.get_prefix(ctx.guild.id if ctx.guild else None)
+        clean_cat_title = cat_name.split("・", 1)[1] if "・" in cat_name else cat_name
+        cat_desc = CATEGORY_DESCRIPTIONS.get(cat_name, f"All registered commands for {clean_cat_title}.")
+        cat_icon = self._get_category_emoji(cat_name)
+        cat_meta = CATEGORY_BY_TAG.get(cat_name) or get_category_by_query(clean_cat_title)
+
+        seen: set[str] = set()
+        unique_cmds: list[commands.Command] = []
+        for c in commands_list:
+            if c.qualified_name not in seen:
+                seen.add(c.qualified_name)
+                unique_cmds.append(c)
+        unique_cmds.sort(key=lambda c: c.qualified_name)
+
+        per_page = 10
+        total_pages = max(1, math.ceil(len(unique_cmds) / per_page))
+        safe_page = max(1, min(page, total_pages))
+        start_idx = (safe_page - 1) * per_page
+        page_cmds = unique_cmds[start_idx : start_idx + per_page]
+
+        desc_lines = [
+            f"> {cat_desc}\n",
+            f"**Category:** `{cat_name}` • **Page {safe_page}/{total_pages}** • **{len(unique_cmds)}** total commands\n",
+        ]
+
+        for c in page_cmds:
+            badge = self._get_badge(c) or " `[Public]`"
+            is_slash = getattr(c, "app_command", None) is not None or hasattr(c, "app_command")
+            type_tag = "`[+ /]`" if is_slash else "`[+]`"
+            sig = f" {c.signature}" if c.signature else ""
+            desc = (c.description or getattr(c, "help", None) or "No detailed description provided.").strip().split("\n")[0][:90]
+            alias_str = f" · *Aliases:* {', '.join(f'`{a}`' for a in c.aliases)}" if c.aliases else ""
+            desc_lines.append(f"**`{p}{c.qualified_name}{sig}`** {type_tag}{badge}")
+            desc_lines.append(f"> {desc}{alias_str}\n")
+
+        embed = discord.Embed(
+            title=f"{cat_icon} Archive — {cat_name}",
+            description="\n".join(desc_lines),
+            color=0x2B0938,
+        )
+        image_key = cat_meta.image_key if cat_meta else "general"
+        banner_file = AssetManager.attach_help_banner(embed, image_key)
+        embed.set_footer(
+            text=f"Page {safe_page}/{total_pages} • {len(unique_cmds)} Commands • Public Archive • KYOKA 3.0",
+            icon_url=ctx.author.display_avatar.url if ctx.author.display_avatar else None,
+        )
+        return embed, banner_file
+
+    def build_hca_search_embed(
+        self,
+        ctx: CustomContext,
+        all_categories: dict[str, list[commands.Command]],
+        query: str,
+    ) -> discord.Embed:
+        """Construct search results embed for the Help Command Archive."""
+        p = self.bot.guild_mgr.get_prefix(ctx.guild.id if ctx.guild else None)
+        clean_query = query.lower().strip()
+
+        matched: list[tuple[commands.Command, str]] = []
+        for cat_name, cmd_list in all_categories.items():
+            for cmd in cmd_list:
+                cname = cmd.qualified_name.lower()
+                desc = (cmd.description or cmd.help or "").lower()
+                aliases = [a.lower() for a in getattr(cmd, "aliases", [])]
+                if clean_query == cname or clean_query in cname or any(clean_query in a for a in aliases) or clean_query in desc:
+                    if (cmd, cat_name) not in matched:
+                        matched.append((cmd, cat_name))
+
+        embed = discord.Embed(
+            title=f"🔍 Archive Search Results: `{clean_query}`",
+            color=0x2B0938,
+        )
+
+        if not matched:
+            embed.description = (
+                f"> No registered commands matching **`{clean_query}`** were found in the archive.\n\n"
+                f"**Suggestions:**\n"
+                f"• Try keywords: `music`, `ban`, `ticket`, `fruit`, `voice`, `bill`, `level`\n"
+                f"• Use the dropdown category selector to browse the entire directory\n"
+                f"• Type `{p}hca` to view the master index"
+            )
+            embed.color = 0xED4245
+        else:
+            embed.description = f"Found **{len(matched)}** command(s) matching `{clean_query}`:\n\n"
+            matched.sort(
+                key=lambda item: (
+                    0 if item[0].qualified_name.lower() == clean_query else (
+                        1 if item[0].qualified_name.lower().startswith(clean_query) else 2
+                    ),
+                    item[0].qualified_name.lower(),
+                )
+            )
+
+            for cmd, cat in matched[:10]:
+                badge = self._get_badge(cmd) or " `[Public]`"
+                is_slash = getattr(cmd, "app_command", None) is not None or hasattr(cmd, "app_command")
+                type_tag = "`[+ /]`" if is_slash else "`[+]`"
+                desc = (cmd.description or cmd.help or "No description.").strip().split("\n")[0][:100]
+                sig = f" {cmd.signature}" if cmd.signature else ""
+                embed.add_field(
+                    name=f"`{p}{cmd.qualified_name}{sig}` {type_tag}{badge}",
+                    value=f"> {desc}\n> *Module:* {cat}",
+                    inline=False,
+                )
+
+            if len(matched) > 10:
+                embed.description += f"*(Showing top 10 of {len(matched)} matches.)*\n\n"
+
+        AssetManager.attach_help_banner(embed, "home")
+        embed.set_footer(
+            text=f"Archive Search • Requested by {ctx.author.display_name} • KYOKA 3.0",
+            icon_url=ctx.author.display_avatar.url if ctx.author.display_avatar else None,
+        )
+        return embed
+
+    def build_hca_embed_for_selection(
+        self,
+        ctx: CustomContext,
+        all_categories: dict[str, list[commands.Command]],
+        selected_val: str,
+        page: int = 1,
+    ) -> tuple[discord.Embed, Optional[discord.File]]:
+        """Route HCA selection to index or category embed with artwork."""
+        if selected_val == "home":
+            return self.build_hca_index_embed(ctx, all_categories)
+        matched_cat = next((c for c in all_categories.keys() if c.lower() == selected_val.lower()), None)
+        if matched_cat:
+            return self.build_hca_category_embed(
+                ctx, matched_cat, all_categories[matched_cat], all_categories, page=page
+            )
+        return self.build_hca_index_embed(ctx, all_categories)
 
     @commands.command(
         name="hca",
