@@ -38,7 +38,7 @@ class CustomContext(commands.Context):
     ) -> Any:
         """Send a formatted success container card."""
         e_reg = getattr(self.bot, "custom_emojis", None)
-        icon = e_reg.get("success", e_reg.get("icons_correct", "✅")) if e_reg else "✅"
+        icon = (e_reg.animated("success", "icons_correct", fallback="") or e_reg.get("success", e_reg.get("icons_correct", "✅"))) if e_reg else "✅"
         icon_str = f"{icon} " if icon else ""
 
         container = KyokaContainer(accent_color=None)
@@ -58,7 +58,7 @@ class CustomContext(commands.Context):
     ) -> Any:
         """Send a formatted error container card."""
         e_reg = getattr(self.bot, "custom_emojis", None)
-        icon = e_reg.get("error", e_reg.get("icons_wrong", e_reg.get("icon_x", "❌"))) if e_reg else "❌"
+        icon = (e_reg.animated("error", "icons_wrong", "icon_x", fallback="") or e_reg.get("error", e_reg.get("icons_wrong", e_reg.get("icon_x", "❌")))) if e_reg else "❌"
         icon_str = f"{icon} " if icon else ""
 
         container = KyokaContainer(accent_color=None)
@@ -78,7 +78,7 @@ class CustomContext(commands.Context):
     ) -> Any:
         """Send a formatted warning container card."""
         e_reg = getattr(self.bot, "custom_emojis", None)
-        icon = e_reg.get("warning", e_reg.get("icons_warning", e_reg.get("icon_warning", "⚠️"))) if e_reg else "⚠️"
+        icon = (e_reg.animated("warning", "icons_warning", "icon_warning", fallback="") or e_reg.get("warning", e_reg.get("icons_warning", e_reg.get("icon_warning", "⚠️")))) if e_reg else "⚠️"
         icon_str = f"{icon} " if icon else ""
 
         container = KyokaContainer(accent_color=None)
