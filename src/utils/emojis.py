@@ -24,6 +24,11 @@ class EmojiRegistry:
         self.bot = bot
         self._emojis: dict[str, discord.Emoji] = {}
 
+    @property
+    def emoji_count(self) -> int:
+        """Count unique application emoji IDs, not cache aliases."""
+        return len({getattr(emoji, "id", id(emoji)) for emoji in self._emojis.values()})
+
     async def load(self) -> None:
         """Fetch all application emojis from Discord API and cache them."""
         try:
@@ -57,7 +62,7 @@ class EmojiRegistry:
                         from PIL import Image
                         pack = json.loads(pack_file.read_text(encoding="utf-8"))
                         for emoji_name, svg_source in pack.items():
-                            if emoji_name in self._emojis or len(self._emojis) >= 2000:
+                            if emoji_name in self._emojis or self.emoji_count >= 2000:
                                 continue
                             try:
                                 png_data = cairosvg.svg2png(bytestring=svg_source.encode("utf-8"), output_width=128, output_height=128)
@@ -95,7 +100,7 @@ class EmojiRegistry:
                 if "icons_download" not in self._emojis:
                     from pathlib import Path
                     dl_path = Path(__file__).resolve().parent.parent.parent / "assets" / "emoji" / "icons_Download.png"
-                    if dl_path.exists() and len(self._emojis) < 2000:
+                    if dl_path.exists() and self.emoji_count < 2000:
                         try:
                             with open(dl_path, "rb") as f:
                                 data = f.read()
@@ -123,7 +128,7 @@ class EmojiRegistry:
                 from pathlib import Path
                 emoji2_dir = Path(__file__).resolve().parent.parent.parent / "assets" / "emoji2"
                 for sw_name in ("icon_switch_on", "icon_switch_off"):
-                    if sw_name not in self._emojis and len(self._emojis) < 50:
+                    if sw_name not in self._emojis and self.emoji_count < 2000:
                         sw_file = emoji2_dir / f"{sw_name}.png"
                         if sw_file.exists():
                             try:
@@ -136,7 +141,7 @@ class EmojiRegistry:
                                 logger.debug(f"Could not auto-upload {sw_name}: {e}")
 
                 # Auto-sync media emoji from assets/emoji
-                if "media" not in self._emojis and len(self._emojis) < 50:
+                if "media" not in self._emojis and self.emoji_count < 2000:
                     media_path = Path(__file__).resolve().parent.parent.parent / "assets" / "emoji" / "media.png"
                     if media_path.exists():
                         try:
@@ -149,7 +154,7 @@ class EmojiRegistry:
                             logger.debug(f"Could not auto-upload media emoji: {e}")
 
                 # Auto-sync giveaway emoji from assets/emoji
-                if "giveaway" not in self._emojis and len(self._emojis) < 50:
+                if "giveaway" not in self._emojis and self.emoji_count < 2000:
                     gw_path = Path(__file__).resolve().parent.parent.parent / "assets" / "emoji" / "GiveAway.png"
                     if gw_path.exists():
                         try:
@@ -162,7 +167,7 @@ class EmojiRegistry:
                             logger.debug(f"Could not auto-upload giveaway emoji: {e}")
 
                 # Auto-sync discord_giveaway emoji from assets/emoji
-                if "discord_giveaway" not in self._emojis and len(self._emojis) < 50:
+                if "discord_giveaway" not in self._emojis and self.emoji_count < 2000:
                     dg_path = Path(__file__).resolve().parent.parent.parent / "assets" / "emoji" / "discord_giveaway.png"
                     if dg_path.exists():
                         try:
@@ -175,7 +180,7 @@ class EmojiRegistry:
                             logger.debug(f"Could not auto-upload discord_giveaway emoji: {e}")
 
                 # Auto-sync s_giveaway emoji from assets/emoji
-                if "s_giveaway" not in self._emojis and len(self._emojis) < 50:
+                if "s_giveaway" not in self._emojis and self.emoji_count < 2000:
                     sg_path = Path(__file__).resolve().parent.parent.parent / "assets" / "emoji" / "S_Giveaway.png"
                     if sg_path.exists():
                         try:
@@ -188,7 +193,7 @@ class EmojiRegistry:
                             logger.debug(f"Could not auto-upload s_giveaway emoji: {e}")
 
                 # Auto-sync gpp_winner emoji from assets/emoji
-                if "gpp_winner" not in self._emojis and len(self._emojis) < 50:
+                if "gpp_winner" not in self._emojis and self.emoji_count < 2000:
                     win_path = Path(__file__).resolve().parent.parent.parent / "assets" / "emoji" / "GPp_Winner.png"
                     if win_path.exists():
                         try:
@@ -202,7 +207,7 @@ class EmojiRegistry:
                             logger.debug(f"Could not auto-upload gpp_winner emoji: {e}")
 
                 # Auto-sync heart_dot emoji from assets/emoji
-                if "heart_dot" not in self._emojis and len(self._emojis) < 50:
+                if "heart_dot" not in self._emojis and self.emoji_count < 2000:
                     hd_path = Path(__file__).resolve().parent.parent.parent / "assets" / "emoji" / "heart_dot.png"
                     if hd_path.exists():
                         try:
@@ -225,7 +230,7 @@ class EmojiRegistry:
                     ("icons_loop", "icons_loop"),
                     ("queue", "queue"),
                 ]:
-                    if m_name not in self._emojis and len(self._emojis) < 50:
+                    if m_name not in self._emojis and self.emoji_count < 2000:
                         m_file = music_dir / f"{file_stem}.png"
                         if m_file.exists():
                             try:
@@ -271,9 +276,9 @@ class EmojiRegistry:
             for pattern in ("*.png", "*.gif"):
                 for img_file in sorted(adir.glob(pattern)):
                     # Discord application emoji hard limit is 50 for non-partner bots
-                    if len(self._emojis) >= 50:
-                        logger.info(f"Application emoji capacity reached ({len(self._emojis)} emojis cached). Stopping sync.")
-                        return uploaded, len(self._emojis)
+                    if self.emoji_count >= 2000:
+                        logger.info(f"Application emoji capacity reached ({self.emoji_count} unique emojis cached). Stopping sync.")
+                        return uploaded, self.emoji_count
 
                     raw_name = img_file.stem.lower()
                     clean_name = re.sub(r"[^a-zA-Z0-9_]", "_", raw_name)
@@ -311,16 +316,16 @@ class EmojiRegistry:
                         except discord.HTTPException as e:
                             if e.status == 429:
                                 logger.warning(f"Rate limited by Discord while uploading emoji {clean_name}. Aborting sync.")
-                                return uploaded, len(self._emojis)
+                                return uploaded, self.emoji_count
                             elif getattr(e, "code", 0) in (30007, 50035) or "maximum" in str(e).lower():
-                                logger.warning(f"Maximum application emojis reached. Aborting sync.")
-                                return uploaded, len(self._emojis)
+                                logger.warning(f"Maximum application emojis (2,000) reached. Aborting sync.")
+                                return uploaded, self.emoji_count
                             else:
                                 logger.debug(f"Could not upload emoji {clean_name}: {e}")
                         except Exception as e:
                             logger.debug(f"Could not upload emoji {clean_name}: {e}")
 
-        return uploaded, len(self._emojis)
+        return uploaded, self.emoji_count
 
     def get(self, name: str, fallback: str = "") -> str:
         """
