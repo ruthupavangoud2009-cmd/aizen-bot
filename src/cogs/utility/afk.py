@@ -439,7 +439,7 @@ class AFKCog(commands.Cog, name="AFK"):
                 logger.debug(f"Failed to fetch AFK notes: {e}")
 
             # Send welcome back card immediately
-                heart_dot = _afk_emoji(self.bot, "heart_dot", "success", "kyoka")
+            heart_dot = _afk_emoji(self.bot, "heart_dot", "success", "kyoka")
             status_emoji = _afk_emoji(self.bot, "success", "icon_success", "kyoka")
             dot_str = f"{heart_dot} " if heart_dot else ""
             elapsed_seconds = max((now - afk_data.created_at).total_seconds(), 0.0)
