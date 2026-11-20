@@ -291,6 +291,19 @@ class HelpView(discord.ui.View):
     def _build_components(self) -> None:
         """Construct the view buttons and select menu matching Kyro clean layout."""
         self.clear_items()
+        emoji_registry = getattr(self.cog.bot, "custom_emojis", None)
+
+        def custom_button_emoji(*names: str):
+            if not emoji_registry:
+                return None
+            for name in names:
+                try:
+                    obj = emoji_registry.get_emoji_obj(name)
+                    if obj:
+                        return obj
+                except Exception:
+                    continue
+            return None
 
         # Row 0: Dropdown
         self.add_item(
@@ -324,7 +337,7 @@ class HelpView(discord.ui.View):
         if self.current_category == "home":
             btn_search = discord.ui.Button(
                 label="Search",
-                emoji="🔍",
+                emoji=custom_button_emoji("icon_search", "icons_search"),
                 style=discord.ButtonStyle.secondary,
                 row=1,
             )
@@ -351,7 +364,7 @@ class HelpView(discord.ui.View):
             # On Category: Clean Navigation Buttons + Link Buttons
             btn_back = discord.ui.Button(
                 label="Back",
-                emoji="◀️",
+                emoji=custom_button_emoji("icons_leftarrow", "icon_arrow_left"),
                 style=discord.ButtonStyle.secondary,
                 disabled=(self.current_page <= 1),
                 row=1,
@@ -361,7 +374,7 @@ class HelpView(discord.ui.View):
 
             btn_home = discord.ui.Button(
                 label="Home",
-                emoji="🏠",
+                emoji=custom_button_emoji("icon_home"),
                 style=discord.ButtonStyle.primary,
                 row=1,
             )
@@ -370,7 +383,7 @@ class HelpView(discord.ui.View):
 
             btn_next = discord.ui.Button(
                 label="Next",
-                emoji="▶️",
+                emoji=custom_button_emoji("icons_rightarrow", "icon_arrow"),
                 style=discord.ButtonStyle.secondary,
                 row=1,
             )
