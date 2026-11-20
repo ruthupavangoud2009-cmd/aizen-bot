@@ -1352,8 +1352,6 @@ class Help(commands.Cog):
                 await ctx.interaction.response.defer()
 
             t_start = time.perf_counter()
-            if hasattr(self.bot, "branding_mgr"):
-                await self.bot.branding_mgr.get_branding(ctx.guild.id if ctx.guild else None)
             visible_categories = await self._get_visible_categories(ctx)
             t_categories = time.perf_counter()
 
