@@ -56,20 +56,31 @@ class HelpRenderer:
         )
 
         embed.add_field(
-            name="📊 System Status & Metrics",
+            name="📊 Command Library",
             value=(
-                f"• **Prefix:** `{prefix}` | **Slash:** `/[cmd]`\n"
-                f"• **Available Commands:** `{total_commands}` across `{total_categories}` categories"
+                f"**{total_commands} commands** · **{total_categories} modules**\n"
+                f"Prefix `{prefix}`  •  Slash commands available where supported"
             ),
             inline=False,
         )
 
         embed.add_field(
-            name="✨ Core Navigation",
+            name="🧩 Modular Navigation",
             value=(
-                "• Use the **Category Dropdown** below to inspect a module.\n"
-                "• Use **◀️ / ▶️** buttons to page through commands (5–15 per page).\n"
-                f"• Type `{prefix}help <command>` for syntax, aliases, and permissions.\n"
+                "Choose a module from the selector below to open its command shelf. "
+                "Each page keeps commands grouped, with usage and aliases at a glance.\n"
+                "━━━━━━━━━━━━━━━━━━━━\n"
+                "◀ **Previous**  ·  **Home**  ·  **Next** ▶"
+            ),
+            inline=False,
+        )
+
+        embed.add_field(
+            name="🔎 Quick Lookup",
+            value=(
+                f"Search from the panel, or run `{prefix}help <command>` for a command's "
+                "syntax, aliases, type, and permission details.\n"
+                f"Full archive: `{prefix}hca`"
             ),
             inline=False,
         )
