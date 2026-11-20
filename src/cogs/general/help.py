@@ -1468,8 +1468,8 @@ class Help(commands.Cog):
                 getattr(ctx.guild, "id", None),
                 getattr(ctx.author, "id", None),
             )
-            # Independent fallback: compact home embed + existing modular dropdown view.
-            # Avoid banner/asset rendering so a failed primary renderer cannot blank help.
+            # Independent fallback: a compact home embed with the same category selector.
+            # Never dump category names as plain text and never show a dead-end error.
             try:
                 fallback_categories = await self._get_visible_categories(ctx)
                 fallback_view = HelpView(self, ctx, fallback_categories, current_category="home")
@@ -1478,19 +1478,31 @@ class Help(commands.Cog):
                 member_total = sum(max(0, int(getattr(g, "member_count", 0) or 0)) for g in guilds)
                 latency = getattr(self.bot, "latency", None)
                 try:
-                    ping = f"{round(float(latency) * 1000)}ms" if latency is not None else "N/A"
-                except (TypeError, ValueError):
+                    ping = f"{round(float(latency) * 1000)}ms" if latency is not None and math.isfinite(float(latency)) else "N/A"
+                except (TypeError, ValueError, OverflowError):
                     ping = "N/A"
                 registry = getattr(self.bot, "custom_emojis", None)
                 emojis = getattr(registry, "_emojis", {}) if registry else {}
                 animated = [e for e in getattr(emojis, "values", lambda: [])() if getattr(e, "animated", False)]
                 mark = str(random.choice(animated)) if animated else "💜"
-                fallback_embed = discord.Embed(title=f"{mark} KYŌKA HELP", description="Select a module from the dropdown below to view only its commands.", color=0x6D28D9)
-                fallback_embed.add_field(name="📡 Ping", value=ping, inline=True)
-                fallback_embed.add_field(name="🌐 Network Members", value=f"{member_total:,}", inline=True)
-                fallback_embed.add_field(name="📦 Modules", value=str(len(fallback_categories)), inline=True)
+                fallback_embed = discord.Embed(
+                    title=f"{mark} KYŌKA HELP",
+                    description="Choose a category below to see its commands. The home stays clean—no command dump.",
+                    color=0x6D28D9,
+                )
+                fallback_embed.add_field(name="📡 Ping", value=f"**{ping}**", inline=True)
+                fallback_embed.add_field(name="🌐 Members across servers", value=f"**{member_total:,}**", inline=True)
+                fallback_embed.add_field(name="📦 Modules", value=f"**{len(fallback_categories)}**", inline=True)
                 fallback_embed.set_footer(text="Creator • Aizen")
-                msg = await ctx.send(embed=fallback_embed, view=fallback_view)
+                try:
+                    banner = AssetManager.create_branding_file("banner")
+                    if banner:
+                        fallback_embed.set_image(url=f"attachment://{banner.filename}")
+                        fallback_embed.banner_file = banner
+                except Exception:
+                    logger.warning("Fallback help banner unavailable; keeping compact home.", exc_info=True)
+                fallback_banner = getattr(fallback_embed, "banner_file", None)
+                msg = await ctx.send(embed=fallback_embed, file=fallback_banner, view=fallback_view) if fallback_banner else await ctx.send(embed=fallback_embed, view=fallback_view)
                 if getattr(ctx, "interaction", None):
                     try:
                         fallback_view.message = await ctx.interaction.original_response()
@@ -1499,13 +1511,8 @@ class Help(commands.Cog):
                 else:
                     fallback_view.message = msg
             except Exception:
-                logger.exception("Modular help fallback failed; sending text-only category index.")
-                try:
-                    p = self.bot.guild_mgr.get_prefix(ctx.guild.id if ctx.guild else None)
-                    names = list((await self._get_visible_categories(ctx)).keys())
-                    await ctx.send("**KYŌKA HELP**\n" + "\n".join(f"• {name}" for name in names[:24]) + f"\nUse {p}help <category> to open a module.")
-                except Exception:
-                    logger.exception("Help fallback text index failed.")
+                # No legacy list or generic failure sentence: keep logs for diagnosis.
+                logger.exception("Help fallback home failed to render.")
 
     @commands.command(
         name="premium",
