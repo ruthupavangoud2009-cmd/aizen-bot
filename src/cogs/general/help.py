@@ -1484,48 +1484,79 @@ class Help(commands.Cog):
 
         except Exception:
             logger.exception(
-                "❌ [HELP MENU] Help command failed; serving emergency fallback. "
+                "❌ [HELP MENU] Help command failed; serving modular emergency panel. "
                 "guild_id=%s user_id=%s",
                 getattr(ctx.guild, "id", None),
                 getattr(ctx.author, "id", None),
             )
+            # Rebuild categories independently so the help menu remains navigable
+            # even if the original embed/rendering path is the source of the error.
+            safe_categories = {}
+            try:
+                safe_categories = await self._get_visible_categories(ctx)
+            except Exception:
+                logger.exception("Help fallback could not rebuild visible categories.")
+            prefix = "?"
+            try:
+                prefix = self.bot.guild_mgr.get_prefix(ctx.guild.id if ctx.guild else None)
+            except Exception:
+                pass
             fallback = discord.Embed(
-                title="KYŌKA • HELP DIRECTORY",
+                title="⛩️ KYŌKA • MODULAR HELP",
                 description=(
-                    "The interactive help panel encountered a temporary problem. "
-                    "Here is a safe fallback so you can still access commands.\n\n"
-                    "**Try:** `help moderation`, `help ai`, `help music`, "
-                    "or `hca` for the full command archive."
+                    "Select a module below to browse its commands.\n"
+                    "Use the navigation controls to return to the overview."
                 ),
-                color=0x2B0938,
+                color=0x6B3FA0,
             )
-            # Prefer a direct interaction follow-up if the slash response was already deferred.
-            sent = False
-            interaction = getattr(ctx, "interaction", None)
-            if interaction:
+            fallback.add_field(name="COMMAND HUB", value=f"Prefix: `{prefix}`  •  Slash: `/`", inline=False)
+            if safe_categories:
+                module_lines = [
+                    f"{self._get_category_emoji(name)} **{name.split('・', 1)[-1].title()}** · `{len(cmds)} commands`"
+                    for name, cmds in safe_categories.items()
+                ]
+                for index in range(0, len(module_lines), 9):
+                    fallback.add_field(
+                        name=f"MODULES {index // 9 + 1}",
+                        value="\n".join(module_lines[index:index + 9])[:1024],
+                        inline=True,
+                    )
+            else:
+                fallback.add_field(
+                    name="QUICK ACCESS",
+                    value=f"`{prefix}help moderation` · `{prefix}help ai` · `{prefix}help music` · `{prefix}hca`",
+                    inline=False,
+                )
+            fallback.set_footer(text=f"KYŌKA MODULAR DIRECTORY • Requested by {ctx.author.display_name}")
+            fallback_view = None
+            if safe_categories:
                 try:
-                    if interaction.response.is_done():
-                        await interaction.followup.send(embed=fallback)
-                    else:
-                        await interaction.response.send_message(embed=fallback)
-                    sent = True
-                except Exception:
-                    logger.exception("Help fallback interaction send failed; trying context send.")
-            if not sent:
-                try:
-                    await ctx.send(embed=fallback)
-                    sent = True
-                except Exception:
-                    logger.exception("Help fallback embed send failed; trying plain text.")
-            if not sent:
-                try:
-                    await ctx.send(
-                        "KYOKA HELP • Commands: `help moderation`, `help ai`, "
-                        "`help music`, or `hca` (full command archive)."
+                    fallback_view = HelpView(
+                        cog=self,
+                        ctx=ctx,
+                        visible_categories=safe_categories,
+                        current_category="home",
                     )
                 except Exception:
-                    logger.exception("Help plain-text fallback send failed.")
-
+                    logger.exception("Could not initialize modular fallback controls.")
+            try:
+                interaction = getattr(ctx, "interaction", None)
+                if interaction:
+                    if interaction.response.is_done():
+                        await interaction.followup.send(embed=fallback, view=fallback_view)
+                    else:
+                        await interaction.response.send_message(embed=fallback, view=fallback_view)
+                else:
+                    await ctx.send(embed=fallback, view=fallback_view)
+            except Exception:
+                logger.exception("Modular help fallback failed; sending plain text.")
+                try:
+                    await ctx.send(
+                        f"KYŌKA HELP: `{prefix}help moderation`, `{prefix}help ai`, "
+                        f"`{prefix}help music`, `{prefix}hca`."
+                    )
+                except Exception:
+                    logger.exception("Plain text help fallback failed.")
     @commands.command(
         name="premium",
         aliases=["plan", "tier", "subscription", "perks"],
