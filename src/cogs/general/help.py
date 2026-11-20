@@ -1143,44 +1143,13 @@ class Help(commands.Cog):
         ctx: CustomContext,
         visible_categories: dict[str, list[commands.Command]],
     ) -> discord.Embed:
-        """Render a compact help home with live bot stats and the official banner."""
-        import random
-
-        guilds = list(getattr(self.bot, "guilds", ()))
-        members = sum(int(getattr(g, "member_count", 0) or 0) for g in guilds)
-        latency = getattr(self.bot, "latency", float("nan"))
-        ping = f"{round(latency * 1000)}ms" if isinstance(latency, (int, float)) and math.isfinite(latency) else "N/A"
-
-        registry = getattr(self.bot, "custom_emojis", None)
-        emojis = list(getattr(registry, "_emojis", {}).values()) if registry else []
-        animated = [emoji for emoji in emojis if getattr(emoji, "animated", False)]
-        pool = animated or emojis
-        mark = str(random.choice(pool)) if pool else "✦"
-        command_count = sum(len(commands_list) for commands_list in visible_categories.values())
-
+        """Render a minimal help landing page; categories are shown only after selection."""
         embed = discord.Embed(
-            title=f"{mark} KYŌKA",
-            description=(
-                "Select a module below to browse commands.\n"
-                f"-# {command_count:,} commands · {len(visible_categories):,} modules"
-            ),
-            color=0x211B2D,
+            title="💜 KYŌKA HELP",
+            description="Choose a category from the menu below to view its commands.",
+            color=0x6D28D9,
         )
-        embed.add_field(name="Servers", value=f"**{len(guilds):,}**", inline=True)
-        embed.add_field(name="Network members", value=f"**{members:,}**", inline=True)
-        embed.add_field(name="Ping", value=f"**{ping}**", inline=True)
-        embed.set_footer(text="Creator • Aizen", icon_url=ctx.author.display_avatar.url if ctx.author.display_avatar else None)
-
-        banner = AssetManager.create_branding_file("banner")
-        if banner:
-            embed.set_image(url=f"attachment://{banner.filename}")
-            embed.banner_file = banner
-        else:
-            # If the branding banner is missing, use the repository's help-home art.
-            banner = AssetManager.create_help_file("home")
-            if banner:
-                embed.set_image(url=f"attachment://{banner.filename}")
-                embed.banner_file = banner
+        embed.set_footer(text="Select a category • Only you can control this menu")
         return embed
 
     def build_search_results_embed(
