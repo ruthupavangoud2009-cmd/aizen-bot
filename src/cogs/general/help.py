@@ -126,7 +126,8 @@ class HelpCategorySelect(discord.ui.Select):
             # Prefer the bot's uploaded application emojis; never substitute stock Unicode.
             try:
                 if not category_name or category_name == "home":
-                    return emoji_registry.get_emoji_obj("icon_home")
+                    obj = emoji_registry.get_emoji_obj("icon_home")
+                    return obj if obj is not None and getattr(obj, "animated", False) else None
             except Exception:
                 return None
             category_emoji_names = {
@@ -163,7 +164,8 @@ class HelpCategorySelect(discord.ui.Select):
             if not emoji_name:
                 return None
             try:
-                return emoji_registry.get_emoji_obj(emoji_name)
+                obj = emoji_registry.get_emoji_obj(emoji_name)
+                return obj if obj is not None and getattr(obj, "animated", False) else None
             except Exception:
                 # A missing custom emoji is harmless; the selector remains functional.
                 return None
