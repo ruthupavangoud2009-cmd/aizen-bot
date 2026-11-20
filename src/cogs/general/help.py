@@ -1034,32 +1034,35 @@ class Help(commands.Cog):
         custom_id_prefix: str,
         selected_val: str = "home",
     ) -> KyokaContainer:
-        """Construct the signature KYŌKA overview card."""
+        """Create a clean, selection-first help landing page for mobile."""
         guild = ctx.guild
         author = ctx.author
         current_prefix = self.bot.guild_mgr.get_prefix(guild.id if guild else None)
         ws_ping = self._get_latency_ms()
         total_commands = sum(len(cmds) for cmds in visible_categories.values())
-        e_reg = getattr(self.bot, "custom_emojis", None)
-
-        dot = e_reg.get("heart_dot", e_reg.get("icons_rightarrow", "•")) if e_reg else "•"
 
         container = KyokaContainer(accent_color=None)
         container.add_section(
             content=(
-                f"**Hey, I'm KYŌKA 3.0**\n"
-                f"> Built for our community — keeping your server safe, active, and effortlessly connected."
+                "👑 **KYŌKA COMMAND CENTER**\\n"
+                "━━━━━━━━━━━━━━━━━━━━\\n"
+                "Choose a module from the **dropdown above** to see only the commands you need. "
+                "No giant command dump — each module has its own clean page."
             )
         )
         container.add_separator(divider=True)
-
         container.add_text(
-            f"{dot} **Latency:** `{ws_ping}ms`\n"
-            f"{dot} **Prefix:** `{current_prefix}` | **Slash:** `/`\n"
-            f"{dot} **Available Commands:** `{total_commands}`"
+            "🔎 **Find a command** — use Search Commands\\n"
+            "📚 **Browse modules** — select General, Moderation, AI, Music, Casino, Economy, AFK, Tickets, or another module\\n"
+            "↔️ **Navigate** — use Previous / Next to browse command pages and Overview to return here"
         )
         container.add_separator(divider=True)
-        container.add_text(f"-# **Requested by {author.display_name} • Type {current_prefix}help <command> for details**")
+        container.add_text(
+            f"🟢 **Online**  •  📡 **{ws_ping}ms**\\n"
+            f"⚙️ **Prefix:** `{current_prefix}`  •  **Slash:** `/`\\n"
+            f"📦 **{len(visible_categories)} modules**  •  **{total_commands} commands**\\n"
+            f"-# Requested by {author.display_name}"
+        )
         return container
 
     def _build_category_container(
