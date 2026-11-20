@@ -1129,15 +1129,20 @@ class Help(commands.Cog):
         display_name = branding.get("display_name") or "KYŌKA"
         bio = "Choose a module below to view its commands."
         embed = discord.Embed(
-            title=f"{random_mark} {display_name} • HELP",
+            title=f"{random_mark} {display_name} • HELP CENTER",
             description=(
-                f"{bio}\n\n"
-                f"**⚡ Ping:** `{ping} ms`  ·  **👥 Members:** `{member_total:,}`\n"
-                f"**🌐 Servers:** `{len(guilds):,}`  ·  **📚 Modules:** `{len(visible_categories):,}`\n\n"
-                "**Select a module from the dropdown below.**"
+                f"*Power isn't given. It's taken.* — **Aizen**\n\n"
+                "Choose a category from the menu to browse commands. The home screen stays clean—"
+                "command lists only appear after you select a category."
             ),
             color=0x2B0938,
         )
+        embed.add_field(name="⚡ Bot Ping", value=f"`{ping} ms`", inline=True)
+        embed.add_field(name="🌐 Servers", value=f"`{len(guilds):,}`", inline=True)
+        embed.add_field(name="👥 Members Across Servers", value=f"`{member_total:,}`", inline=True)
+        embed.add_field(name="📚 Categories", value=f"`{len(visible_categories):,}`", inline=True)
+        embed.add_field(name="👑 Creator", value="**Aizen**", inline=True)
+        embed.add_field(name="🧭 Navigation", value="Select a category below to view its commands and custom command emojis.", inline=False)
         avatar_url = branding.get("avatar_url")
         if not avatar_url and getattr(self.bot, "user", None):
             avatar_url = self.bot.user.display_avatar.url
