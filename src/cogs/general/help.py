@@ -1300,6 +1300,18 @@ class Help(commands.Cog):
             description=f"{description[:180]}\n-# MODULE DIRECTORY  ·  {len(commands_sorted)} commands",
             color=0x211B2D,
         )
+        # Each help module has its own KYOKA artwork banner.
+        module_art = {
+            "GENERAL & UTILITY": "core", "MODERATION": "moderation",
+            "ECONOMY": "economy", "KYOKA CASINO": "casino", "CASINO & GAMBLING": "casino",
+            "MUSIC": "music", "ARTIFICIAL INTELLIGENCE": "ai", "AI & FUN": "ai",
+            "TICKETS & SUPPORT": "tickets", "PETS & COLLECTION": "pets",
+            "LEVELING & LEADERBOARDS": "leveling", "GIVEAWAYS & EVENTS": "giveaways",
+            "SOCIAL & FUN": "games", "SERVER CONFIGURATION": "settings",
+        }
+        art_slug = module_art.get(title.upper())
+        if art_slug:
+            embed.set_image(url=f"https://raw.githubusercontent.com/ruthupavangoud2009-cmd/aizen-bot/main/assets/help/modules/{art_slug}.svg")
         for cmd in selected:
             summary = (cmd.description or cmd.help or "No description available.").strip().split("\n")[0][:100]
             signature = f" {cmd.signature}" if cmd.signature else ""
