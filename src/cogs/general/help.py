@@ -58,7 +58,7 @@ UNICODE_CATEGORY_EMOJIS: dict[str, str] = {
     "⭐・LEVELS & COMMUNITY": "⭐",
     "🎵・MUSIC": "🎵",
     "🎬・WATCH PARTY": "🎬",
-    "💤・AFK": "💤",
+    "💤・AFK": e_reg.get("afk", "💤"),
     "⭐・VOUCHES & REPUTATION": "⭐",
     "🧾・BLOX FRUITS SERVICE BILLS": "🧾",
     "🍎・BLOX FRUITS AI": "🍎",
@@ -958,11 +958,11 @@ class Help(commands.Cog):
             return UNICODE_CATEGORY_EMOJIS.get(cat_name, "•")
         mapping = {
             "🏠・GENERAL & UTILITY": e_reg.get("icon_home", "🏠"),
-            "🛡️・MODERATION": e_reg.get("icon_moderation", "🛡️"),
+            "🛡️・MODERATION": e_reg.get("moderation", e_reg.get("icon_moderation", "🛡️")),
             "🔒・AUTOMOD & SECURITY": e_reg.get("icon_shield", "🔒"),
             "👋・WELCOME & GOODBYE": e_reg.get("icon_shield", "👋"),
             "🛡️・VERIFICATION": e_reg.get("icon_shield", "🛡️"),
-            "🎫・TICKETS & SUPPORT": e_reg.get("icon_ticket", "🎫"),
+            "🎫・TICKETS & SUPPORT": e_reg.get("ticket", e_reg.get("icon_ticket", "🎫")),
             "🎭・REACTION ROLES": e_reg.get("icon_settings", "🎭"),
             "🎉・GIVEAWAYS & EVENTS": e_reg.get("discord_giveaway", "🎉"),
             "🎵・MUSIC": e_reg.get("music", e_reg.get("icon_music", "🎵")),
@@ -975,9 +975,9 @@ class Help(commands.Cog):
             "🤖・ARTIFICIAL INTELLIGENCE": e_reg.get("icon_sparkles", "🤖"),
             "🖼️・IMAGES & AVATARS": e_reg.get("icon_image", "🖼️"),
             "💬・SOCIAL & FUN": e_reg.get("icon_heart", "💬"),
-            "💎・PREMIUM": e_reg.get("verified_premium", "💎"),
+            "💎・PREMIUM": e_reg.get("premium", e_reg.get("verified_premium", "💎")),
             "⚙️・SERVER CONFIGURATION": e_reg.get("icon_settings", "⚙️"),
-            "👑・OWNER & DEVELOPER": e_reg.get("icon_crown", "👑"),
+            "👑・OWNER & DEVELOPER": e_reg.get("owner", e_reg.get("icon_crown", "👑")),
         }
         return mapping.get(cat_name, UNICODE_CATEGORY_EMOJIS.get(cat_name, "•"))
 
@@ -996,6 +996,12 @@ class Help(commands.Cog):
             "🎭・REACTION ROLES": "icon_settings",
             "🎉・GIVEAWAYS & EVENTS": "discord_giveaway",
             "🎵・MUSIC": "music",
+            "💤・AFK": "afk",
+            "🎰・KYOKA CASINO": "casino",
+            "🛡️・MODERATION": "moderation",
+            "🎫・TICKETS & SUPPORT": "ticket",
+            "💎・PREMIUM": "premium",
+            "👑・OWNER & DEVELOPER": "owner",
             "⭐・VOUCHES & REPUTATION": "icon_chart",
             "📊・LEVELING & LEADERBOARDS": "icon_chart",
             "🤖・ARTIFICIAL INTELLIGENCE": "icon_sparkles",
