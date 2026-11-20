@@ -29,7 +29,7 @@ def _afk_emoji(bot, *names: str) -> str:
     for name in names:
         try:
             emoji = registry.get_emoji_obj(name)
-            if emoji:
+            if emoji is not None and getattr(emoji, "animated", False):
                 return str(emoji)
         except Exception:
             continue
