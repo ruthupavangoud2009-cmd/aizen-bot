@@ -1395,7 +1395,8 @@ class Help(commands.Cog):
     async def help_command(self, ctx: CustomContext, *, command_or_module: str | None = None) -> None:
         """Interactive help menu filtered by user permissions and organized into categories."""
         t_start = time.perf_counter()
-        # Help intentionally avoids a network/database branding warm-up for fast response.\n        visible_categories = await self._get_visible_categories(ctx)
+        # Help intentionally avoids a network/database branding warm-up for fast response.
+        visible_categories = await self._get_visible_categories(ctx)
         t_categories = time.perf_counter()
 
         # Direct command or module lookup
