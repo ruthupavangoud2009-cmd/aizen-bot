@@ -1175,76 +1175,20 @@ class Help(commands.Cog):
         ctx: CustomContext,
         visible_categories: dict[str, list[commands.Command]],
     ) -> discord.Embed:
-        """Build the compact KYŌKA command-centre landing screen."""
+        """Build a tiny, instant help landing embed; category details are loaded only on selection."""
         guild = ctx.guild
-        author = ctx.author
         prefix = self.bot.guild_mgr.get_prefix(guild.id if guild else None)
-        latency = self._get_latency_ms()
         total_commands = sum(len(items) for items in visible_categories.values())
-        bot_user = getattr(self.bot, "user", None)
-
         embed = discord.Embed(
-            title="KYŌKA  /  COMMAND CENTER",
+            title="KYŌKA HELP",
             description=(
-                "Your server, one control panel.\n"
-                "Browse a module, search a command, or jump straight to a feature."
+                f"Select a category from the menu below to view its commands.\n"
+                f"**{total_commands:,} commands** across **{len(visible_categories):,} categories**\n\n"
+                f"Use `{prefix}help <command>` for command details."
             ),
             color=0x211B2D,
         )
-        if bot_user:
-            embed.set_author(
-                name="KYŌKA 3.0  •  GAMING & COMMUNITY",
-                icon_url=bot_user.display_avatar.url,
-            )
-
-        embed.add_field(name="STATUS", value="🟢  **ONLINE**", inline=True)
-        embed.add_field(name="LATENCY", value=f"`{latency} ms`", inline=True)
-        embed.add_field(name="PREFIX", value=f"`{prefix}`  ·  `/`", inline=True)
-        embed.add_field(
-            name="COMMAND LIBRARY",
-            value=f"**{total_commands:,}** commands  ·  **{len(visible_categories):,}** modules",
-            inline=False,
-        )
-        module_lines = []
-        for category_name, category_commands in visible_categories.items():
-            module_title = category_name.split("・", 1)[-1].title()
-            module_emoji = self._get_category_emoji(category_name)
-            module_lines.append(f"{module_emoji} **{module_title}**  ·  `{len(category_commands)}`")
-        # Mobile-friendly module directory: compact single-column sections.
-        module_chunks = [module_lines[i:i + 12] for i in range(0, len(module_lines), 12)]
-        for index, chunk in enumerate(module_chunks[:10], start=1):
-            embed.add_field(
-                name=f"📚 MODULE DIRECTORY  /  {index}",
-                value="\n".join(chunk)[:1024] or "No modules available.",
-                inline=False,
-            )
-
-        embed.add_field(
-            name="QUICK ACCESS",
-            value=(
-                f"`{prefix}help moderation`  Moderation tools\n"
-                f"`{prefix}help ai`  AI features\n"
-                f"`{prefix}help music`  Music controls"
-            ),
-            inline=False,
-        )
-
-        branding = None
-        manager = getattr(self.bot, "branding_mgr", None)
-        if manager:
-            cache = getattr(manager, "_cache", None)
-            if isinstance(cache, dict):
-                branding = cache.get(guild.id if guild else None)
-        avatar_url = branding.get("avatar_url") if isinstance(branding, dict) else None
-        if avatar_url and isinstance(avatar_url, str):
-            embed.set_thumbnail(url=avatar_url.strip())
-        elif bot_user:
-            embed.set_thumbnail(url=bot_user.display_avatar.url)
-
-        embed.set_footer(
-            text=f"Requested by {author.display_name}  •  KYŌKA CONTROL SYSTEM",
-            icon_url=author.display_avatar.url if getattr(author, "display_avatar", None) else None,
-        )
+        embed.set_footer(text="⚡ Fast help • Choose a category below")
         return embed
 
     def build_search_results_embed(
