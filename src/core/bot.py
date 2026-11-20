@@ -126,6 +126,10 @@ class KyokaBot(commands.Bot):
             ),
         )
 
+        # Animated command-processing indicator for prefix and hybrid commands.
+        self.before_invoke(self._start_processing_indicator)
+        self.after_invoke(self._stop_processing_indicator)
+
         if Config.CLIENT_ID:
             self._connection.application_id = Config.CLIENT_ID
 
@@ -195,6 +199,40 @@ class KyokaBot(commands.Bot):
 
         # Attach Global Command Guard
         self.add_check(self._global_command_check)
+
+    async def _start_processing_indicator(self, ctx: CustomContext) -> None:
+        """Show a lightweight animated spinner while a command is running."""
+        if getattr(ctx, "interaction", None) and not ctx.interaction.response.is_done():
+            # Do not race commands that need to send their own initial interaction response.
+            return
+        frames = ("⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏")
+        try:
+            message = await ctx.send(f"{frames[0]} **KYŌKA is processing...**")
+        except Exception:
+            return
+        ctx._kyoka_processing_message = message
+        async def animate() -> None:
+            index = 1
+            try:
+                while True:
+                    await asyncio.sleep(0.55)
+                    await message.edit(content=f"{frames[index % len(frames)]} **KYŌKA is processing...**")
+                    index += 1
+            except (asyncio.CancelledError, discord.NotFound, discord.Forbidden, discord.HTTPException):
+                return
+        ctx._kyoka_processing_task = asyncio.create_task(animate())
+
+    async def _stop_processing_indicator(self, ctx: CustomContext) -> None:
+        """Stop and remove the processing indicator after command completion."""
+        task = getattr(ctx, "_kyoka_processing_task", None)
+        if task:
+            task.cancel()
+        message = getattr(ctx, "_kyoka_processing_message", None)
+        if message:
+            try:
+                await message.delete(delay=0.15)
+            except (discord.NotFound, discord.Forbidden, discord.HTTPException):
+                pass
 
     async def get_context(
         self, origin: discord.Message | discord.Interaction, *, cls: type[CustomContext] = CustomContext
