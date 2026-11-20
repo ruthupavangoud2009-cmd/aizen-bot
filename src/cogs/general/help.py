@@ -1168,9 +1168,10 @@ class Help(commands.Cog):
         return container
 
     def build_home_embed(self, ctx: CustomContext, visible_categories: dict[str, list[commands.Command]]) -> discord.Embed:
-        """Lightweight, failure-resistant help landing page. Uses only KYOKA application emojis."""
+        """Compact Greed-inspired help landing page, using KYOKA custom emojis."""
         import random
         reg = getattr(self.bot, "custom_emojis", None)
+
         def custom(*names: str) -> str:
             if not reg:
                 return ""
@@ -1182,35 +1183,33 @@ class Help(commands.Cog):
                 except Exception:
                     continue
             return ""
+
         guilds = list(getattr(self.bot, "guilds", ()) or ())
         members = sum(int(getattr(g, "member_count", 0) or 0) for g in guilds)
         ping = self._get_latency_ms()
-        own_emojis = list(getattr(reg, "_emojis", {}).values()) if reg else []
+        own_emojis = list({str(e): e for e in getattr(reg, "_emojis", {}).values()}.values()) if reg else []
         animated = [e for e in own_emojis if getattr(e, "animated", False)]
         random_custom = str(random.choice(animated or own_emojis)) if own_emojis else ""
-        title_mark = random_custom
         prefix = self.bot.guild_mgr.get_prefix(ctx.guild.id if ctx.guild else None)
+
+        stats_line = (
+            f"{custom('icon_ping', 'icons_ping', 'icon_latency')} **{ping}ms**  "
+            f"{custom('icon_server', 'icons_server', 'icon_guild')} **{len(guilds):,} servers**  "
+            f"{custom('icon_users', 'icons_users', 'icon_members')} **{members:,} members**"
+        ).strip()
         embed = discord.Embed(
-            title=f"{title_mark} KYOKA • HELP CENTER".strip(),
-            description=("Choose a category below to view its commands. This home screen stays clean; "
-                        "command lists appear only after you select a category."),
+            title=f"{random_custom} KYOKA HELP".strip(),
+            description=(
+                "Pick a module from the menu to browse commands.\n"
+                f"{stats_line}\n\n"
+                f"{custom('icon_owner', 'icons_owner', 'icon_creator')} **Aizen**  •  "
+                f"{custom('icon_category', 'icons_category', 'icon_stats')} **{len(visible_categories)} modules**"
+            ),
             color=0x2B0938,
         )
-        stats = [
-            (custom("icon_ping", "icons_ping", "icon_latency"), "Ping", f"{ping} ms"),
-            (custom("icon_server", "icons_server", "icon_guild"), "Servers", f"{len(guilds):,}"),
-            (custom("icon_users", "icons_users", "icon_members"), "Members", f"{members:,}"),
-            (custom("icon_stats", "icons_stats", "icon_category"), "Categories", f"{len(visible_categories):,}"),
-        ]
-        for emoji, label, value in stats:
-            embed.add_field(name=f"{emoji} {label}".strip(), value=f"`{value}`", inline=True)
-        creator_icon = custom("icon_owner", "icons_owner", "icon_creator")
-        embed.add_field(name=f"{creator_icon} Creator".strip(), value="**Aizen**", inline=True)
-        embed.add_field(name=f"{custom('icon_arrow', 'icons_arrow', 'icons_rightarrow')} Navigation".strip(),
-                        value="Select a category from the dropdown to browse commands.", inline=False)
         if getattr(self.bot, "user", None):
             embed.set_thumbnail(url=self.bot.user.display_avatar.url)
-        embed.set_footer(text=f"Prefix: {prefix}help • KYOKA Aizen Edition")
+        embed.set_footer(text=f"{prefix}help <command> • KYOKA Aizen Edition")
         return embed
 
     def build_search_results_embed(
@@ -1279,8 +1278,11 @@ class Help(commands.Cog):
 
     def build_category_embed(self, ctx: CustomContext, cat_name: str, commands_list: list[commands.Command],
                               visible_categories: dict[str, list[commands.Command]], page: int = 1) -> discord.Embed:
-        """Rebuilt compact category page using KYOKA custom emojis only."""
+        """Compact category page: every command line uses KYOKA's own custom emoji."""
+        import hashlib
         reg = getattr(self.bot, "custom_emojis", None)
+        emoji_items = list({str(e): e for e in getattr(reg, "_emojis", {}).values()}.values()) if reg else []
+
         def custom(*names: str) -> str:
             if not reg:
                 return ""
@@ -1290,8 +1292,9 @@ class Help(commands.Cog):
                     if obj:
                         return str(obj)
                 except Exception:
-                    pass
+                    continue
             return ""
+
         prefix = self.bot.guild_mgr.get_prefix(ctx.guild.id if ctx.guild else None)
         title = cat_name.split("・", 1)[-1].strip()
         unique = []
@@ -1306,6 +1309,7 @@ class Help(commands.Cog):
         page = max(1, min(int(page), pages))
         entries = unique[(page - 1) * per_page:page * per_page]
         cat_icon = self._get_category_emoji(cat_name)
+        cat_custom = cat_icon if isinstance(cat_icon, str) and cat_icon.startswith("<") else custom("icon_command", "icon_info")
         lines = [f"> {CATEGORY_DESCRIPTIONS.get(cat_name, 'Commands in this module.')}",
                  f"**Page {page}/{pages}** • **{len(unique)} commands**", ""]
         command_icons = {
@@ -1322,12 +1326,16 @@ class Help(commands.Cog):
             name = cmd.qualified_name
             description = (cmd.description or cmd.help or "No description provided.").strip().splitlines()[0][:90]
             icon = custom(*command_icons.get(cmd.name.lower(), ()), "icon_command", "icon_info")
+            if not icon and emoji_items:
+                # Guarantee a bot-owned emoji for every command row; stable assignment avoids flicker.
+                index = int(hashlib.sha256(name.casefold().encode()).hexdigest()[:8], 16) % len(emoji_items)
+                icon = str(emoji_items[index])
             if not icon:
-                icon = cat_icon if isinstance(cat_icon, str) and cat_icon.startswith("<") else ""
+                icon = cat_custom
             lines.append(f"{icon} **`{name}`** — {description}".strip())
         lines.append("")
         lines.append(f"Use `{prefix}help <command>` for command details.")
-        embed = discord.Embed(title=f"{cat_icon} {title}".strip(), description="\n".join(lines), color=0x2B0938)
+        embed = discord.Embed(title=f"{cat_custom} {title}".strip(), description="\n".join(lines), color=0x2B0938)
         if getattr(self.bot, "user", None):
             embed.set_thumbnail(url=self.bot.user.display_avatar.url)
         embed.set_footer(text=f"Page {page}/{pages} • Requested by {ctx.author.display_name}")
