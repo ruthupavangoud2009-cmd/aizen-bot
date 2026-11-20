@@ -93,7 +93,7 @@ class KyokaBot(commands.Bot):
         intents = discord.Intents.default()
         intents.message_content = True
         intents.members = True
-        intents.presences = True
+        intents.presences = False  # Presence Intent is disabled in the Discord Developer Portal
 
         if proxy is _DEFAULT_PROXY_SENTINEL:
             proxy_url = Config.DISCORD_PROXY or os.getenv("DISCORD_PROXY", "").strip() or None
