@@ -341,7 +341,15 @@ class HelpView(discord.ui.View):
             selected_index = next((i for i, key in enumerate(self.category_keys) if key.lower() == selected_val.lower()), 0)
             self.category_page = selected_index // 24
         self._build_components()
-        embed, banner_file = self.cog.build_embed_for_selection(self.ctx, self.visible_categories, selected_val, page=1)
+        try:
+            embed, banner_file = self.cog.build_embed_for_selection(self.ctx, self.visible_categories, selected_val, page=1)
+        except Exception:
+            logger.exception("Help category renderer failed; using banner-free fallback category embed.")
+            if selected_val == "home":
+                embed, banner_file = self.cog.build_home_embed(self.ctx, self.visible_categories), None
+            else:
+                cat = next((name for name in self.visible_categories if name.lower() == selected_val.lower()), selected_val)
+                embed, banner_file = self.cog.build_category_embed(self.ctx, cat, self.visible_categories.get(cat, []), self.visible_categories, page=1), None
         if banner_file:
             await interaction.response.edit_message(embed=embed, attachments=[banner_file], view=self)
         else:
