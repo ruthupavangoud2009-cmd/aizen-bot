@@ -28,7 +28,7 @@ def _afk_emoji(bot, *names: str) -> str:
         return ""
     for name in names:
         try:
-            emoji = registry.get(name, "")
+            emoji = registry.get_emoji_obj(name)
             if emoji:
                 return str(emoji)
         except Exception:
