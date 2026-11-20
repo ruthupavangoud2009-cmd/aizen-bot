@@ -1478,13 +1478,9 @@ class Help(commands.Cog):
                 interaction = getattr(ctx, "interaction", None)
                 if interaction is not None and interaction.response.is_done():
                     if fallback_banner:
-                        await interaction.followup.send(embed=fallback_embed, file=fallback_banner, view=fallback_view)
+                        fallback_view.message = await interaction.followup.send(embed=fallback_embed, file=fallback_banner, view=fallback_view, wait=True)
                     else:
-                        await interaction.followup.send(embed=fallback_embed, view=fallback_view)
-                    try:
-                        fallback_view.message = await interaction.original_response()
-                    except Exception:
-                        pass
+                        fallback_view.message = await interaction.followup.send(embed=fallback_embed, view=fallback_view, wait=True)
                 else:
                     if fallback_banner:
                         msg = await ctx.send(embed=fallback_embed, file=fallback_banner, view=fallback_view)
