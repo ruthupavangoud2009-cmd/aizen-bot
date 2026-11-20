@@ -21,6 +21,21 @@ from src.core.context import CustomContext
 from src.utils.containers import KyokaContainer, send_container_response
 from src.utils.ui import AizenSymbols
 
+def _afk_emoji(bot, *names: str) -> str:
+    """Return a real KYOKA custom emoji; never substitute Unicode emoji."""
+    registry = getattr(bot, "custom_emojis", None)
+    if not registry:
+        return ""
+    for name in names:
+        try:
+            emoji = registry.get(name, "")
+            if emoji:
+                return str(emoji)
+        except Exception:
+            continue
+    return ""
+
+
 if TYPE_CHECKING:
     from src.core.bot import KyokaBot
 
@@ -80,8 +95,11 @@ class AFKNoteModal(discord.ui.Modal):
 
     async def on_submit(self, interaction: discord.Interaction) -> None:
         note_text = self.note_input.value.strip()
+        note_emoji = _afk_emoji(self.bot, "ticket", "icon_ticket")
+        error_emoji = _afk_emoji(self.bot, "error", "icon_error")
+        success_emoji = _afk_emoji(self.bot, "success", "icon_success")
         if not note_text:
-            await interaction.response.send_message("Note cannot be empty.", ephemeral=True)
+            await interaction.response.send_message(f"{error_emoji} Note cannot be empty.", ephemeral=True)
             return
 
         try:
@@ -97,12 +115,12 @@ class AFKNoteModal(discord.ui.Modal):
                 note_text,
             )
             await interaction.response.send_message(
-                f"Your note for **{self.target_name}** has been saved! They will receive it as soon as they return.",
+                f"{success_emoji} Your note for **{self.target_name}** has been saved! They will receive it as soon as they return.",
                 ephemeral=True,
             )
         except Exception as e:
             logger.error(f"Failed to save AFK note: {e}")
-            await interaction.response.send_message("Failed to save note due to an internal error.", ephemeral=True)
+            await interaction.response.send_message(f"{error_emoji} Failed to save note due to an internal error.", ephemeral=True)
 
 
 class AFKLeaveNoteView(discord.ui.View):
@@ -115,10 +133,11 @@ class AFKLeaveNoteView(discord.ui.View):
         self.target_name = target_name
         self.guild_id = guild_id
 
-    @discord.ui.button(label="Leave a Note", emoji="📝", style=discord.ButtonStyle.secondary, custom_id="afk_leave_note_btn")
+    @discord.ui.button(label="Leave a Note", style=discord.ButtonStyle.secondary, custom_id="afk_leave_note_btn")
     async def leave_note_btn(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+        note_emoji = _afk_emoji(self.bot, "ticket", "icon_ticket")
         if interaction.user.id == self.target_id:
-            await interaction.response.send_message("You cannot leave a note for yourself.", ephemeral=True)
+            await interaction.response.send_message(f"{note_emoji} You cannot leave a note for yourself.", ephemeral=True)
             return
         modal = AFKNoteModal(self.bot, self.target_id, self.target_name, self.guild_id)
         await interaction.response.send_modal(modal)
@@ -278,19 +297,23 @@ class AFKCog(commands.Cog, name="AFK"):
 
         # Dispatch confirmation container
         e_reg = getattr(self.bot, "custom_emojis", None)
-        heart_dot = e_reg.get("heart_dot", "") if e_reg else ""
+        heart_dot = _afk_emoji(self.bot, "heart_dot", "success", "kyoka")
+        status_emoji = _afk_emoji(self.bot, "afk", "loading", "kyoka")
         dot_str = f"{heart_dot} " if heart_dot else ""
 
         container = KyokaContainer(accent_color=None)
         # Title: Username AFK (no @tag)
-        container.add_text(f"### {ctx.author.name} AFK")
+        container.add_text(f"### {status_emoji} {ctx.author.name} AFK".strip())
         container.add_separator(divider=True)
 
         # Description: Reason, Went AFK, Tag with heart_dot
+        reason_emoji = _afk_emoji(self.bot, "command", "icon_info")
+        time_emoji = _afk_emoji(self.bot, "ping", "icon_ping")
+        user_emoji = _afk_emoji(self.bot, "members", "icon_users")
         body_lines = [
-            f"{dot_str}**Reason:** {final_reason}",
-            f"{dot_str}**Went AFK:** <t:{int(now.timestamp())}:R>",
-            f"{dot_str}**Tag:** {ctx.author.mention}",
+            f"{reason_emoji} **Reason:** {final_reason}",
+            f"{time_emoji} **Went AFK:** <t:{int(now.timestamp())}:R>",
+            f"{user_emoji} **Tag:** {ctx.author.mention}",
         ]
         container.add_section(content="\n".join(body_lines))
 
@@ -324,8 +347,10 @@ class AFKCog(commands.Cog, name="AFK"):
             )
         except Exception as error:
             logger.error("Could not persist global AFK for %s: %s", ctx.author.id, error)
+        afk_icon = _afk_emoji(self.bot, "afk", "loading", "kyoka")
+        success_icon = _afk_emoji(self.bot, "success", "icon_success")
         embed = discord.Embed(
-            title=f"{AizenSymbols.GLOBAL} {AizenSymbols.ONLINE} Global AFK Activated",
+            title=f"{afk_icon} {success_icon} Global AFK Activated",
             description=f"**{ctx.author.mention}** is now globally AFK.\n\n**Reason:** {final_reason}\n**Scope:** All shared servers",
             color=0x22C55E,
             timestamp=now,
@@ -414,8 +439,8 @@ class AFKCog(commands.Cog, name="AFK"):
                 logger.debug(f"Failed to fetch AFK notes: {e}")
 
             # Send welcome back card immediately
-            e_reg = getattr(self.bot, "custom_emojis", None)
-            heart_dot = e_reg.get("heart_dot", "") if e_reg else ""
+                heart_dot = _afk_emoji(self.bot, "heart_dot", "success", "kyoka")
+            status_emoji = _afk_emoji(self.bot, "success", "icon_success", "kyoka")
             dot_str = f"{heart_dot} " if heart_dot else ""
             elapsed_seconds = max((now - afk_data.created_at).total_seconds(), 0.0)
             duration_str = format_duration(elapsed_seconds)
@@ -424,22 +449,26 @@ class AFKCog(commands.Cog, name="AFK"):
             reason_val = raw_reason if (raw_reason and raw_reason.lower() != "afk") else "None"
 
             container = KyokaContainer(accent_color=None)
-            container.add_text(f"### Welcome Back, {message.author.name}!")
+            container.add_text(f"### {status_emoji} Welcome Back, {message.author.name}!")
             container.add_separator(divider=True)
 
+            reason_emoji = _afk_emoji(self.bot, "command", "icon_info")
+            duration_emoji = _afk_emoji(self.bot, "ping", "icon_ping")
             body_lines = [
-                f"{dot_str}**Reason:** {reason_val}",
-                f"{dot_str}**AFK Removed:** `{duration_str}`",
+                f"{reason_emoji} **Reason:** {reason_val}",
+                f"{duration_emoji} **AFK Removed:** `{duration_str}`",
             ]
 
             if pending_notes:
-                body_lines.append(f"{dot_str}**Notes:** {len(pending_notes)} Note{'s' if len(pending_notes) > 1 else ''}")
+                note_emoji = _afk_emoji(self.bot, "ticket", "icon_ticket")
+                body_lines.append(f"{note_emoji} **Notes:** {len(pending_notes)} Note{'s' if len(pending_notes) > 1 else ''}")
                 for n in pending_notes:
                     s_name = n.get("sender_name", "Someone")
                     note_msg = n.get("note", "")
                     body_lines.append(f"> **{s_name}:** {note_msg}")
             else:
-                body_lines.append(f"{dot_str}**Notes:** None")
+                note_emoji = _afk_emoji(self.bot, "ticket", "icon_ticket")
+                body_lines.append(f"{note_emoji} **Notes:** None")
 
             container.add_section(content="\n".join(body_lines))
             container.add_thumbnail(message.author.display_avatar.url)
@@ -459,7 +488,7 @@ class AFKCog(commands.Cog, name="AFK"):
                 target_afk = self._global_afk_cache.get(target.id)
                 if target_afk:
                     embed = discord.Embed(
-                        title=f"{AizenSymbols.GLOBAL} {target.display_name} is Globally AFK",
+                        title=f"{_afk_emoji(self.bot, 'afk', 'loading', 'kyoka')} {target.display_name} is Globally AFK",
                         description=f"**Reason:** {target_afk.reason}\n**Away since:** <t:{int(target_afk.created_at.timestamp())}:R>",
                         color=0x7C3AED,
                     )
@@ -488,21 +517,24 @@ class AFKCog(commands.Cog, name="AFK"):
                     self._mention_cooldowns[cooldown_key] = now_ts
 
                     target_afk = self._afk_cache[mentioned_key]
-                    e_reg = getattr(self.bot, "custom_emojis", None)
-                    heart_dot = e_reg.get("heart_dot", "") if e_reg else ""
+                    heart_dot = _afk_emoji(self.bot, "heart_dot", "success", "kyoka")
                     dot_str = f"{heart_dot} " if heart_dot else ""
 
                     raw_reason = target_afk.reason.strip() if target_afk.reason else ""
                     reason_val = raw_reason if (raw_reason and raw_reason.lower() != "afk") else "None"
 
                     container = KyokaContainer(accent_color=None)
-                    container.add_text(f"### {mentioned_user.name}'s AFK")
+                    afk_icon = _afk_emoji(self.bot, "afk", "loading", "kyoka")
+                    container.add_text(f"### {afk_icon} {mentioned_user.name}'s AFK".strip())
                     container.add_separator(divider=True)
 
+                    reason_emoji = _afk_emoji(self.bot, "command", "icon_info")
+                    time_emoji = _afk_emoji(self.bot, "ping", "icon_ping")
+                    user_emoji = _afk_emoji(self.bot, "members", "icon_users")
                     body_lines = [
-                        f"{dot_str}**Reason:** {reason_val}",
-                        f"{dot_str}**Went AFK:** <t:{int(target_afk.created_at.timestamp())}:R>",
-                        f"{dot_str}**Tag:** {mentioned_user.mention}",
+                        f"{reason_emoji} **Reason:** {reason_val}",
+                        f"{time_emoji} **Went AFK:** <t:{int(target_afk.created_at.timestamp())}:R>",
+                        f"{user_emoji} **Tag:** {mentioned_user.mention}",
                     ]
                     container.add_section(content="\n".join(body_lines))
 
