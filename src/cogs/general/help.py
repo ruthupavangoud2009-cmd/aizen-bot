@@ -1440,71 +1440,20 @@ class Help(commands.Cog):
 
         except Exception:
             logger.exception(
-                "❌ [HELP MENU] Help command failed; serving modular emergency panel. "
+                "❌ [HELP MENU] The single help interface failed. "
                 "guild_id=%s user_id=%s",
                 getattr(ctx.guild, "id", None),
                 getattr(ctx.author, "id", None),
             )
-            # Rebuild categories independently so the help menu remains navigable
-            # even if the original embed/rendering path is the source of the error.
-            safe_categories = {}
+            # No second UI, emergency panel, or duplicate help menu.
+            # If the primary renderer fails, return a plain text notice only.
             try:
-                safe_categories = await self._get_visible_categories(ctx)
+                await ctx.send(
+                    "KYŌKA help could not load. Please try `help` again in a moment."
+                )
             except Exception:
-                logger.exception("Help fallback could not rebuild visible categories.")
-            prefix = "?"
-            try:
-                prefix = self.bot.guild_mgr.get_prefix(ctx.guild.id if ctx.guild else None)
-            except Exception:
-                pass
-            # Emergency help fallback is intentionally compact. The previous fallback
-            # duplicated every module in a long list and looked like the legacy help UI.
-            guilds = list(getattr(self.bot, "guilds", ()))
-            network_members = sum(int(getattr(g, "member_count", 0) or 0) for g in guilds)
-            latency = getattr(self.bot, "latency", float("nan"))
-            ping = f"{round(latency * 1000)}ms" if isinstance(latency, (int, float)) and math.isfinite(latency) else "N/A"
-            fallback = discord.Embed(
-                title="💜 KYŌKA • HELP",
-                description=(
-                    "Choose a category from the menu to open only its commands.\\n"
-                    "No command dump — browse one module at a time."
-                ),
-                color=0x6D28D9,
-            )
-            fallback.add_field(name="⚡ Gateway Ping", value=f"**{ping}**", inline=True)
-            fallback.add_field(name="🌐 Network Members", value=f"**{network_members:,}**", inline=True)
-            fallback.add_field(name="🧩 Modules", value=f"**{len(safe_categories)} available**", inline=True)
-            fallback.add_field(name="⌨️ Command Hub", value=f"Prefix: `{prefix}`  •  Slash: `/`", inline=False)
-            fallback.set_footer(text="Creator • Aizen")
-            fallback_view = None
-            if safe_categories:
-                try:
-                    fallback_view = HelpView(
-                        cog=self,
-                        ctx=ctx,
-                        visible_categories=safe_categories,
-                        current_category="home",
-                    )
-                except Exception:
-                    logger.exception("Could not initialize modular fallback controls.")
-            try:
-                interaction = getattr(ctx, "interaction", None)
-                if interaction:
-                    if interaction.response.is_done():
-                        await interaction.followup.send(embed=fallback, view=fallback_view)
-                    else:
-                        await interaction.response.send_message(embed=fallback, view=fallback_view)
-                else:
-                    await ctx.send(embed=fallback, view=fallback_view)
-            except Exception:
-                logger.exception("Modular help fallback failed; sending plain text.")
-                try:
-                    await ctx.send(
-                        f"KYŌKA HELP: `{prefix}help moderation`, `{prefix}help ai`, "
-                        f"`{prefix}help music`, `{prefix}hca`."
-                    )
-                except Exception:
-                    logger.exception("Plain text help fallback failed.")
+                logger.exception("Help failure notice could not be sent.")
+
     @commands.command(
         name="premium",
         aliases=["plan", "tier", "subscription", "perks"],
