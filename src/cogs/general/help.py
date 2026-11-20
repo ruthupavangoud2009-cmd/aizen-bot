@@ -1179,9 +1179,21 @@ class Help(commands.Cog):
         member_total = sum(int(getattr(g, "member_count", 0) or 0) for g in guilds)
         ping = self._get_latency_ms()
         emoji_registry = getattr(self.bot, "custom_emojis", None)
+        # Help home uses only KYOKA's own application emojis—no stock Unicode icons.
         emojis = list(getattr(emoji_registry, "_emojis", {}).values()) if emoji_registry else []
         animated = [e for e in emojis if getattr(e, "animated", False)]
-        random_mark = str(random.choice(animated or emojis)) if (animated or emojis) else "✦"
+        random_mark = str(random.choice(animated or emojis)) if (animated or emojis) else ""
+        def custom_icon(*names: str) -> str:
+            if not emoji_registry:
+                return ""
+            for emoji_name in names:
+                try:
+                    emoji_obj = emoji_registry.get_emoji_obj(emoji_name)
+                    if emoji_obj:
+                        return str(emoji_obj)
+                except Exception:
+                    continue
+            return ""
 
         guild = ctx.guild
         branding = None
@@ -1207,12 +1219,12 @@ class Help(commands.Cog):
             ),
             color=0x2B0938,
         )
-        embed.add_field(name="⚡ Bot Ping", value=f"`{ping} ms`", inline=True)
-        embed.add_field(name="🌐 Servers", value=f"`{len(guilds):,}`", inline=True)
-        embed.add_field(name="👥 Members Across Servers", value=f"`{member_total:,}`", inline=True)
-        embed.add_field(name="📚 Categories", value=f"`{len(visible_categories):,}`", inline=True)
-        embed.add_field(name="👑 Creator", value="**Aizen**", inline=True)
-        embed.add_field(name="🧭 Navigation", value="Select a category below to view its commands and custom command emojis.", inline=False)
+        embed.add_field(name=f"{custom_icon('icon_ping', 'icons_ping')} Bot Ping".strip(), value=f"`{ping} ms`", inline=True)
+        embed.add_field(name=f"{custom_icon('icon_server', 'icons_server', 'icon_guild')} Servers".strip(), value=f"`{len(guilds):,}`", inline=True)
+        embed.add_field(name=f"{custom_icon('icon_users', 'icons_users', 'icon_members')} Members Across Servers".strip(), value=f"`{member_total:,}`", inline=True)
+        embed.add_field(name=f"{custom_icon('icon_stats', 'icons_stats', 'icon_category')} Categories".strip(), value=f"`{len(visible_categories):,}`", inline=True)
+        embed.add_field(name=f"{custom_icon('icon_owner', 'icons_owner', 'icon_creator')} Creator".strip(), value="**Aizen**", inline=True)
+        embed.add_field(name=f"{custom_icon('icon_arrow', 'icons_arrow', 'icons_rightarrow')} Navigation".strip(), value="Select a category below to view its commands and custom command emojis.", inline=False)
         avatar_url = branding.get("avatar_url")
         if not avatar_url and getattr(self.bot, "user", None):
             avatar_url = self.bot.user.display_avatar.url
