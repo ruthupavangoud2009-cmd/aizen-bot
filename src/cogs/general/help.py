@@ -167,13 +167,15 @@ class HelpCategorySelect(discord.ui.Select):
             # Short module-specific description
             desc = CATEGORY_DESCRIPTIONS.get(cat_name, f"{len(cmds)} accessible commands")[:100]
             emoji_str = UNICODE_CATEGORY_EMOJIS.get(cat_name, "📁")
+            custom_select_emoji = self.help_view.cog._get_category_select_emoji(cat_name)
+            select_emoji = custom_select_emoji or emoji_str
 
             options.append(
                 discord.SelectOption(
                     label=clean_label[:100],
                     value=cat_name.lower(),
                     description=desc,
-                    emoji=emoji_str,
+                    emoji=select_emoji,
                     default=(current_selection.lower() == cat_name.lower()),
                 )
             )
@@ -1205,9 +1207,14 @@ class Help(commands.Cog):
             module_title = category_name.split("・", 1)[-1].title()
             module_emoji = self._get_category_emoji(category_name)
             module_lines.append(f"{module_emoji} **{module_title}**  ·  `{len(category_commands)}`")
-        module_chunks = [module_lines[i:i + 9] for i in range(0, len(module_lines), 9)]
+        # Mobile-friendly module directory: compact single-column sections.
+        module_chunks = [module_lines[i:i + 12] for i in range(0, len(module_lines), 12)]
         for index, chunk in enumerate(module_chunks[:10], start=1):
-            embed.add_field(name=f"MODULE DIRECTORY  /  {index}", value="\n".join(chunk)[:1024] or "No modules available.", inline=True)
+            embed.add_field(
+                name=f"📚 MODULE DIRECTORY  /  {index}",
+                value="\n".join(chunk)[:1024] or "No modules available.",
+                inline=False,
+            )
 
         embed.add_field(
             name="QUICK ACCESS",
