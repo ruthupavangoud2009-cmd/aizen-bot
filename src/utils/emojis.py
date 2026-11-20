@@ -45,10 +45,38 @@ class EmojiRegistry:
                 self._emojis = {e.name.lower(): e for e in emojis}
                 logger.info(f"Successfully cached {len(self._emojis)} custom Application Emoji(s).")
 
-                # Auto-sync the KYOKA custom emoji pack (PNG and animated GIF assets).
-                # GIF uploads become animated Discord application emojis when supported.
+                # Convert the source SVG pack into real Discord PNG/GIF application emojis.
                 from pathlib import Path
+                import io
+                import json
                 custom_dir = Path(__file__).resolve().parent.parent.parent / "assets" / "emoji_custom"
+                pack_file = custom_dir / "pack.json"
+                if pack_file.exists():
+                    try:
+                        import cairosvg
+                        from PIL import Image
+                        pack = json.loads(pack_file.read_text(encoding="utf-8"))
+                        for emoji_name, svg_source in pack.items():
+                            if emoji_name in self._emojis or len(self._emojis) >= 50:
+                                continue
+                            try:
+                                png_data = cairosvg.svg2png(bytestring=svg_source.encode("utf-8"), output_width=128, output_height=128)
+                                if emoji_name == "loading":
+                                    base = Image.open(io.BytesIO(png_data)).convert("RGBA")
+                                    frames = [base.rotate(angle, resample=Image.Resampling.BICUBIC) for angle in range(0, 360, 45)]
+                                    gif_buffer = io.BytesIO()
+                                    frames[0].save(gif_buffer, format="GIF", save_all=True, append_images=frames[1:], duration=90, loop=0, disposal=2, transparency=0)
+                                    upload_data = gif_buffer.getvalue()
+                                else:
+                                    upload_data = png_data
+                                uploaded = await self.bot.create_application_emoji(name=emoji_name, image=upload_data)
+                                self._emojis[emoji_name] = uploaded
+                                logger.info("Uploaded KYOKA custom emoji: %s", emoji_name)
+                            except Exception as error:
+                                logger.warning("Could not upload KYOKA emoji %s: %s", emoji_name, error)
+                    except Exception as error:
+                        logger.warning("KYOKA emoji pack conversion unavailable: %s", error)
+
                 if custom_dir.exists():
                     for asset_path in sorted(custom_dir.iterdir()):
                         if asset_path.suffix.lower() not in {".png", ".gif"}:
@@ -57,8 +85,7 @@ class EmojiRegistry:
                         if emoji_name in self._emojis or len(self._emojis) >= 50:
                             continue
                         try:
-                            asset_data = asset_path.read_bytes()
-                            uploaded = await self.bot.create_application_emoji(name=emoji_name, image=asset_data)
+                            uploaded = await self.bot.create_application_emoji(name=emoji_name, image=asset_path.read_bytes())
                             self._emojis[emoji_name] = uploaded
                             logger.info("Auto-uploaded KYOKA emoji asset: %s", emoji_name)
                         except Exception as error:
