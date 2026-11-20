@@ -1144,10 +1144,19 @@ class Help(commands.Cog):
         if avatar_url:
             embed.set_thumbnail(url=str(avatar_url))
         banner_url = branding.get("banner_url")
+        banner_file = None
         if banner_url and str(banner_url).strip():
             embed.set_image(url=str(banner_url).strip())
+        else:
+            banner_file = AssetManager.create_branding_file("banner")
+            if banner_file:
+                embed.set_image(url=f"attachment://{banner_file.filename}")
+            else:
+                banner_file = AssetManager.create_help_file("home")
+                if banner_file:
+                    embed.set_image(url=f"attachment://{banner_file.filename}")
         embed.set_footer(text="Creator • Aizen")
-        embed.banner_file = None
+        embed.banner_file = banner_file
         return embed
 
     def build_search_results_embed(
