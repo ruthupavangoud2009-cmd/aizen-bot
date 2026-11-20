@@ -1457,33 +1457,25 @@ class Help(commands.Cog):
                 prefix = self.bot.guild_mgr.get_prefix(ctx.guild.id if ctx.guild else None)
             except Exception:
                 pass
+            # Emergency help fallback is intentionally compact. The previous fallback
+            # duplicated every module in a long list and looked like the legacy help UI.
+            guilds = list(getattr(self.bot, "guilds", ()))
+            network_members = sum(int(getattr(g, "member_count", 0) or 0) for g in guilds)
+            latency = getattr(self.bot, "latency", float("nan"))
+            ping = f"{round(latency * 1000)}ms" if isinstance(latency, (int, float)) and math.isfinite(latency) else "N/A"
             fallback = discord.Embed(
-                title="⛩️ KYŌKA • MODULAR HELP",
+                title="💜 KYŌKA • HELP",
                 description=(
-                    "Select a module below to browse its commands.\n"
-                    "Use the navigation controls to return to the overview."
+                    "Choose a category from the menu to open only its commands.\\n"
+                    "No command dump — browse one module at a time."
                 ),
-                color=0x6B3FA0,
+                color=0x6D28D9,
             )
-            fallback.add_field(name="COMMAND HUB", value=f"Prefix: `{prefix}`  •  Slash: `/`", inline=False)
-            if safe_categories:
-                module_lines = [
-                    f"{self._get_category_emoji(name)} **{name.split('・', 1)[-1].title()}** · `{len(cmds)} commands`"
-                    for name, cmds in safe_categories.items()
-                ]
-                for index in range(0, len(module_lines), 9):
-                    fallback.add_field(
-                        name=f"MODULES {index // 9 + 1}",
-                        value="\n".join(module_lines[index:index + 9])[:1024],
-                        inline=True,
-                    )
-            else:
-                fallback.add_field(
-                    name="QUICK ACCESS",
-                    value=f"`{prefix}help moderation` · `{prefix}help ai` · `{prefix}help music` · `{prefix}hca`",
-                    inline=False,
-                )
-            fallback.set_footer(text=f"KYŌKA MODULAR DIRECTORY • Requested by {ctx.author.display_name}")
+            fallback.add_field(name="⚡ Gateway Ping", value=f"**{ping}**", inline=True)
+            fallback.add_field(name="🌐 Network Members", value=f"**{network_members:,}**", inline=True)
+            fallback.add_field(name="🧩 Modules", value=f"**{len(safe_categories)} available**", inline=True)
+            fallback.add_field(name="⌨️ Command Hub", value=f"Prefix: `{prefix}`  •  Slash: `/`", inline=False)
+            fallback.set_footer(text="Creator • Aizen")
             fallback_view = None
             if safe_categories:
                 try:
