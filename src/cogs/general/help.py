@@ -120,11 +120,15 @@ class HelpCategorySelect(discord.ui.Select):
         emoji_registry = getattr(help_view.cog.bot, "custom_emojis", None)
 
         def menu_emoji(category_name: str | None = None) -> Any:
-            if not emoji_registry:
+            # Emoji resolution must never crash the Help command.
+            if not emoji_registry or not callable(getattr(emoji_registry, "get_emoji_obj", None)):
                 return None
             # Prefer the bot's uploaded application emojis; never substitute stock Unicode.
-            if not category_name or category_name == "home":
-                return emoji_registry.get_emoji_obj("icon_home")
+            try:
+                if not category_name or category_name == "home":
+                    return emoji_registry.get_emoji_obj("icon_home")
+            except Exception:
+                return None
             category_emoji_names = {
                 "MODERATION": "icon_moderation",
                 "AUTOMOD & SECURITY": "icon_shield",
@@ -156,7 +160,13 @@ class HelpCategorySelect(discord.ui.Select):
             }
             raw_category = category_name.split("・", 1)[-1].upper()
             emoji_name = category_emoji_names.get(raw_category)
-            return emoji_registry.get_emoji_obj(emoji_name) if emoji_name else None
+            if not emoji_name:
+                return None
+            try:
+                return emoji_registry.get_emoji_obj(emoji_name)
+            except Exception:
+                # A missing custom emoji is harmless; the selector remains functional.
+                return None
 
         options: list[discord.SelectOption] = [
             discord.SelectOption(
