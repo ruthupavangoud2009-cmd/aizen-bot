@@ -21,7 +21,7 @@ from discord.ext import commands
 from src.core.context import CustomContext
 from src.managers.economy_manager import EconomyManager
 from src.security.owner import OWNER_ID
-from src.utils.ui import AizenPalette, KyokaEmbed
+from src.utils.ui import AizenPalette, AizenSymbols, KyokaEmbed
 
 if TYPE_CHECKING:
     from src.core.bot import KyokaBot
@@ -142,11 +142,11 @@ class Economy(commands.Cog):
     async def casino(self, ctx: CustomContext) -> None:
         prefix = ctx.clean_prefix
         embed = discord.Embed(
-            title="🎰 KYOKA CASINO",
+            title=f"{AizenSymbols.CASINO} KYOKA CASINO",
             description="A casino module using **virtual server currency only**. No real-money wagering or cash-outs.\n\n"
-                f"**Available games**\n• `{prefix}gamble <amount>` — high-risk house game\n"
-                f"• `{prefix}lottery` — server lottery tickets and jackpot\n\n"
-                f"Use `{prefix}cash` to check your balance.",
+                f"{AizenSymbols.BET} **Available games**\n• `{prefix}gamble <amount>` — high-risk house game\n"
+                f"• `{prefix}lottery` — server lottery tickets and jackpot\n\n{AizenSymbols.MONEY} **Virtual currency only**\n\n"
+                f"{AizenSymbols.WALLET} Use `{prefix}cash` to check your balance.",
             color=AIZEN_PURPLE,
         )
         embed.set_footer(text="KYOKA Casino • Virtual currency")
