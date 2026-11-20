@@ -117,12 +117,53 @@ class HelpCategorySelect(discord.ui.Select):
     ) -> None:
         self.help_view = help_view
 
+        emoji_registry = getattr(help_view.cog.bot, "custom_emojis", None)
+
+        def menu_emoji(category_name: str | None = None) -> Any:
+            if not emoji_registry:
+                return None
+            # Prefer the bot's uploaded application emojis; never substitute stock Unicode.
+            if not category_name or category_name == "home":
+                return emoji_registry.get_emoji_obj("icon_home")
+            category_emoji_names = {
+                "MODERATION": "icon_moderation",
+                "AUTOMOD & SECURITY": "icon_shield",
+                "VERIFICATION": "icon_verified",
+                "TICKETS & SUPPORT": "icon_ticket",
+                "REACTION ROLES": "icon_settings",
+                "GIVEAWAYS & EVENTS": "discord_giveaway",
+                "MUSIC": "icon_music",
+                "ARTIFICIAL INTELLIGENCE": "ai",
+                "AI VOICE": "ai",
+                "UTILITIES": "icons_utility",
+                "GENERAL & UTILITY": "icon_home",
+                "OWNER & DEVELOPER": "icon_owner",
+                "SERVER ADMINISTRATION": "icon_settings",
+                "SERVER CONFIGURATION": "icon_settings",
+                "WELCOME & GOODBYE": "icon_bot",
+                "WELCOME & AUTOMOD": "icon_bot",
+                "IMAGES & AVATARS": "icons_image",
+                "SOCIAL & FUN": "icon_chat",
+                "PREMIUM": "icon_premium",
+                "AFK": "afk",
+                "VOUCHES & REPUTATION": "icon_award",
+                "BLOX FRUITS AI": "ai",
+                "BLOX FRUITS SERVICE BILLS": "icon_dollar",
+                "STAFF APPLICATIONS": "icons_staff",
+                "LEVELS & COMMUNITY": "icon_stats",
+                "LEVELING & LEADERBOARDS": "icon_stats",
+                "GETTING STARTED": "icon_info",
+            }
+            raw_category = category_name.split("・", 1)[-1].upper()
+            emoji_name = category_emoji_names.get(raw_category)
+            return emoji_registry.get_emoji_obj(emoji_name) if emoji_name else None
+
         options: list[discord.SelectOption] = [
             discord.SelectOption(
                 label="Home",
                 value="home",
                 description="Kyoka overview, quickstart & navigation guide",
-                emoji="🏠",
+                emoji=menu_emoji(),
                 default=(current_selection == "home"),
             )
         ]
@@ -141,7 +182,7 @@ class HelpCategorySelect(discord.ui.Select):
                     label=clean_label[:100],
                     value=f"cat_{category_index}",
                     description=desc,
-                    emoji=emoji_str,
+                    emoji=menu_emoji(cat_name),
                     default=(current_selection.lower() == cat_name.lower()),
                 )
             )
