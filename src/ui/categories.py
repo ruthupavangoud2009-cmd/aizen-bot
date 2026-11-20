@@ -271,10 +271,10 @@ CATEGORIES: list[CategoryMeta] = [
     ),
     CategoryMeta(
         id="casino",
-        name="Casino",
-        tag="🎰・CASINO & GAMBLING",
+        name="Kyoka Casino",
+        tag="🎰・KYOKA CASINO",
         emoji="🎰",
-        description="Slots, coinflip, blackjack, roulette, dice, higher-lower, wheel of fortune & scratch cards",
+        description="KYOKA Casino: virtual-credit games, wagers, coinflip, slots, dice, and casino statistics",
         image_key="general",
         priority=28,
     ),
@@ -367,6 +367,7 @@ CATEGORY_SEARCH_ALIASES: dict[str, str] = {
     "owner": "owner", "dev": "owner", "developer": "owner", "system": "owner", "eval": "owner", "globalsupport": "owner", "setsupport": "owner",
     # Economy, Hunting & Games
     "economy": "economy", "eco": "economy", "cash": "economy", "money": "economy", "bank": "economy",
+    "kyoka casino": "casino", "kyokac casino": "casino", "casino": "casino", "bets": "casino", "bet": "casino",
     "hunting": "hunting", "hunt": "hunting", "animals": "hunting", "catch": "hunting",
     "pets": "pets", "pet": "pets", "zoo": "pets", "collection": "pets",
     "rpg": "rpg", "adventure": "rpg", "dungeon": "rpg", "raid": "rpg", "boss": "rpg",
