@@ -326,8 +326,8 @@ class AIManager:
     - Rolling latency and diagnostic tracking
     - Asynchronous memory-safe cooldown tracking
     """
-    DEFAULT_MODEL = "openai/gpt-oss-120b"
-    FALLBACK_MODELS = ("gemini-flash-lite-latest",)
+    DEFAULT_MODEL = "llama-3.3-70b-versatile"
+    FALLBACK_MODELS = ("gemini-2.0-flash", "gemini-1.5-flash", "gemini-flash-lite-latest")
 
     def __init__(self, db: PostgresDatabase) -> None:
         self.db = db

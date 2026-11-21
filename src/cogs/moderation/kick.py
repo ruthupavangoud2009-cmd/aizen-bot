@@ -7,7 +7,7 @@ from discord.ext import commands
 
 from src.core.context import CustomContext
 from src.cogs.moderation._helpers import check_hierarchy, dispatch_mod_log
-from src.utils.containers import KyokaContainer, send_container_response
+from src.ui.response import KyokaResponse, send_response
 
 if TYPE_CHECKING:
     from src.core.bot import KyokaBot
@@ -32,38 +32,27 @@ class KickCog(commands.Cog):
         """Kick a member from the server."""
         allowed, err_msg = check_hierarchy(self.bot, ctx, member)
         if not allowed:
-            container = KyokaContainer(accent_color=None)
-            container.add_section(content=f"**Cannot Moderate Member**\n> {err_msg}")
-            await send_container_response(ctx, container)
+            resp = KyokaResponse.permission("Cannot Moderate Member", err_msg or "Hierarchy check failed.")
+            await send_response(ctx, resp, ephemeral=True)
             return
 
         try:
-            dm_container = KyokaContainer(accent_color=None)
-            dm_container.add_section(
-                content=(
-                    f"**You were kicked from {ctx.guild.name}**\n"
-                    f"> Moderator: **{ctx.author}**\n"
-                    f"> Reason: `{reason}`"
-                )
+            dm_resp = KyokaResponse.moderation(
+                action="kicked",
+                target=member,
+                moderator=ctx.author,
+                reason=reason,
+                extra_fields=[("Server", ctx.guild.name, True)],
             )
-            await send_container_response(member, dm_container)
+            await send_response(member, dm_resp)
         except Exception:
             pass
 
         await member.kick(reason=f"{ctx.author} ({ctx.author.id}): {reason}")
         await dispatch_mod_log(self.bot, ctx.guild, "Member Kick", member, ctx.author, reason)
 
-        e_reg = self.bot.custom_emojis
-        dot = e_reg.get("heart_dot", "-")
-        container = KyokaContainer(accent_color=None)
-        container.add_section(content="**Member Kicked**")
-        container.add_separator(divider=True)
-        container.add_text(
-            f"{dot} **Target:** **{member.display_name}** `「{member.id}」`\n"
-            f"{dot} **Moderator:** **{ctx.author.display_name}**\n"
-            f"{dot} **Reason:** `{reason}`"
-        )
-        await send_container_response(ctx, container)
+        resp = KyokaResponse.moderation("kick", member, ctx.author, reason)
+        await send_response(ctx, resp)
 
     @commands.command(
         name="nick",
@@ -77,9 +66,8 @@ class KickCog(commands.Cog):
         """Change or reset a member's nickname."""
         allowed, err_msg = check_hierarchy(self.bot, ctx, member)
         if not allowed:
-            container = KyokaContainer(accent_color=None)
-            container.add_section(content=f"**Cannot Moderate Member**\n> {err_msg}")
-            return await send_container_response(ctx, container)
+            resp = KyokaResponse.permission("Cannot Moderate Member", err_msg or "Hierarchy check failed.")
+            return await send_response(ctx, resp, ephemeral=True)
 
         old_nick = member.display_name
         new_nick = nickname.strip() if nickname else None
@@ -87,25 +75,26 @@ class KickCog(commands.Cog):
         try:
             await member.edit(nick=new_nick, reason=f"{ctx.author} ({ctx.author.id}) changed nickname")
         except discord.Forbidden:
-            container = KyokaContainer(accent_color=None)
-            container.add_section(content="**Permission Denied**\n> I lack the necessary permissions or role hierarchy to modify this user's nickname.")
-            return await send_container_response(ctx, container)
+            resp = KyokaResponse.permission(
+                "Permission Denied",
+                "I lack the necessary permissions or role hierarchy to modify this user's nickname.",
+            )
+            return await send_response(ctx, resp, ephemeral=True)
 
         action_name = "Nickname Reset" if not new_nick else "Nickname Changed"
         await dispatch_mod_log(self.bot, ctx.guild, action_name, member, ctx.author, f"From '{old_nick}' to '{new_nick or member.name}'")
 
-        e_reg = self.bot.custom_emojis
-        dot = e_reg.get("heart_dot", "-")
-        container = KyokaContainer(accent_color=None)
-        container.add_section(content=f"**{action_name}**")
-        container.add_separator(divider=True)
-        container.add_text(
-            f"{dot} **Target:** **{member.mention}** `「{member.id}」`\n"
-            f"{dot} **Previous Nick:** `{old_nick}`\n"
-            f"{dot} **New Nick:** `{new_nick or member.name}`\n"
-            f"{dot} **Moderator:** **{ctx.author.display_name}**"
+        resp = KyokaResponse.success(
+            title=action_name,
+            description=f"Successfully updated nickname for {member.mention}.",
+            fields=[
+                ("Target", f"**{member}** `「{member.id}」`", True),
+                ("Previous Nick", f"`{old_nick}`", True),
+                ("New Nick", f"`{new_nick or member.name}`", True),
+            ],
+            author=ctx.author,
         )
-        await send_container_response(ctx, container)
+        await send_response(ctx, resp)
 
 
 async def setup(bot: KyokaBot) -> None:

@@ -12,7 +12,7 @@ from src.core.context import CustomContext
 from src.cogs.moderation._helpers import dispatch_mod_log
 from src.cogs.moderation._commands.purge_bot import execute_purge_bot
 from src.cogs.moderation._commands.purge_human import execute_purge_human
-from src.utils.containers import KyokaContainer, send_container_response
+from src.ui.response import KyokaResponse, send_response
 
 if TYPE_CHECKING:
     from src.core.bot import KyokaBot
@@ -60,25 +60,21 @@ class PurgeCog(commands.Cog):
     ) -> None:
         """Core bulk deletion engine with history search for filtered purges, rate-limit safety, and minimal notices."""
         if count < 1 or count > 100:
-            container = KyokaContainer(accent_color=None)
-            container.add_section(
-                content=(
-                    "**Invalid Count**\n"
-                    "> Message purge count must be between **1** and **100**."
-                )
+            resp = KyokaResponse.warning(
+                title="Invalid Count",
+                description="Message purge count must be between **1** and **100**.",
+                author=ctx.author,
             )
-            await send_container_response(ctx, container)
+            await send_response(ctx, resp, ephemeral=True)
             return
 
         if not hasattr(ctx.channel, "purge"):
-            container = KyokaContainer(accent_color=None)
-            container.add_section(
-                content=(
-                    "**Unsupported Channel**\n"
-                    "> Purge command can only be executed in server text channels."
-                )
+            resp = KyokaResponse.warning(
+                title="Unsupported Channel",
+                description="Purge command can only be executed in server text channels.",
+                author=ctx.author,
             )
-            await send_container_response(ctx, container)
+            await send_response(ctx, resp, ephemeral=True)
             return
 
         # Defer interaction for slash commands to prevent 3-second timeout
@@ -192,15 +188,12 @@ class PurgeCog(commands.Cog):
                         pass
 
         except discord.Forbidden:
-            container = KyokaContainer(accent_color=None)
-            container.add_section(
-                content=(
-                    "**Permission Denied**\n"
-                    "> I need `Manage Messages` and `Read Message History` permissions in this channel."
-                )
+            resp = KyokaResponse.permission(
+                title="Permission Denied",
+                description="I need `Manage Messages` and `Read Message History` permissions in this channel.",
             )
             try:
-                await send_container_response(ctx, container)
+                await send_response(ctx, resp, ephemeral=True)
             except Exception:
                 await ctx.channel.send("I do not have permission to delete messages in this channel.")
             return
@@ -210,24 +203,21 @@ class PurgeCog(commands.Cog):
                 notice = "Those messages no longer exist (already deleted). Nothing to purge."
             else:
                 notice = f"Discord API notice: `{e}`"
-            container = KyokaContainer(accent_color=None)
-            container.add_section(content=f"**Purge Failed**\n> {notice}")
+            resp = KyokaResponse.error(title="Purge Failed", description=notice, author=ctx.author)
             try:
-                await send_container_response(ctx, container)
+                await send_response(ctx, resp, ephemeral=True)
             except Exception:
                 pass
             return
         except Exception as e:
             logger.error(f"Unexpected error in purge: {e}", exc_info=e)
-            container = KyokaContainer(accent_color=None)
-            container.add_section(content=f"**Purge Error**\n> An unexpected error occurred: `{e}`")
+            resp = KyokaResponse.error(title="Purge Error", description=f"An unexpected error occurred: `{e}`", author=ctx.author)
             try:
-                await send_container_response(ctx, container)
+                await send_response(ctx, resp, ephemeral=True)
             except Exception:
                 pass
             return
 
-        # Ultra-clean, minimal Components V2 notification (zero redundant text)
         type_label = ""
         if filter_type == "bot":
             type_label = "Bot "
@@ -236,27 +226,29 @@ class PurgeCog(commands.Cog):
         elif member:
             type_label = f"{member.display_name}'s "
 
-        container = KyokaContainer(accent_color=None)
         if len(deleted) == 0:
-            container.add_section(
-                content=(
-                    f"**No {type_label}Messages Found**\n"
-                    f"> No eligible messages found to delete."
-                )
+            resp = KyokaResponse.info(
+                title=f"No {type_label}Messages Found",
+                description="No eligible messages found to delete.",
+                author=ctx.author,
             )
         else:
-            container.add_section(
-                content=(
-                    f"**Purged {len(deleted)} {type_label}Message{'s' if len(deleted) != 1 else ''}**\n"
-                    f"> Cleared `{len(deleted)}` message(s) in {ctx.channel.mention}."
-                )
+            resp = KyokaResponse.success(
+                title=f"Purged {len(deleted)} {type_label}Message{'s' if len(deleted) != 1 else ''}",
+                description=f"Cleared `{len(deleted)}` message(s) in {ctx.channel.mention}.",
+                fields=[
+                    ("Channel", ctx.channel.mention, True),
+                    ("Count", f"`{len(deleted)}`", True),
+                    ("Moderator", f"**{ctx.author.display_name}**", True),
+                ],
+                author=ctx.author,
             )
 
         res = None
         try:
-            res = await send_container_response(ctx, container)
+            res = await send_response(ctx, resp)
         except Exception as e:
-            logger.error(f"Failed to send purge confirmation container: {e}")
+            logger.error(f"Failed to send purge confirmation: {e}")
             try:
                 res = await ctx.channel.send(f"Cleared `{len(deleted)}` message(s).")
             except Exception:
@@ -389,45 +381,36 @@ class PurgeCog(commands.Cog):
                         return
 
         prefix_str = ctx.prefix or ""
-        container = KyokaContainer(accent_color=None)
         if isinstance(original, commands.MissingPermissions):
             missing = ", ".join(f"`{p}`" for p in original.missing_permissions)
-            container.add_section(
-                content=(
-                    "**Permission Denied**\n"
-                    f"> You need the following permissions to execute this command:\n> {missing}"
-                )
+            resp = KyokaResponse.permission(
+                title="Permission Denied",
+                description=f"You need the following permissions to execute this command:\n{missing}",
+                missing_perms=list(original.missing_permissions),
             )
         elif isinstance(original, commands.BotMissingPermissions):
             missing = ", ".join(f"`{p}`" for p in original.missing_permissions)
-            container.add_section(
-                content=(
-                    "**Bot Missing Permissions**\n"
-                    f"> I need the following permissions in this channel to purge:\n> {missing}"
-                )
+            resp = KyokaResponse.permission(
+                title="Bot Missing Permissions",
+                description=f"I need the following permissions in this channel to purge:\n{missing}",
+                missing_perms=list(original.missing_permissions),
             )
         elif isinstance(original, commands.NoPrivateMessage):
-            container.add_section(
-                content=(
-                    "**Server Only**\n"
-                    "> Purge command can only be used in a server channel."
-                )
-            )
+            resp = KyokaResponse.warning("Server Only", "Purge command can only be used in a server channel.", author=ctx.author)
         else:
-            container.add_section(
-                content=(
-                    "**Purge Usage Error**\n"
-                    f"> `{original}`\n\n"
-                    f"> Usage:\n"
-                    f"> • `{prefix_str}purge [count: 1-100] [@user]`\n"
-                    f"> • `{prefix_str}purge bot [count: 1-100]`\n"
-                    f"> • `{prefix_str}purge human [count: 1-100]`"
-                )
+            resp = KyokaResponse.error(
+                title="Purge Usage Error",
+                description=(
+                    f"`{original}`\n\n"
+                    f"**Usage:**\n"
+                    f"• `{prefix_str}purge [count: 1-100] [@user]`\n"
+                    f"• `{prefix_str}purge bot [count: 1-100]`\n"
+                    f"• `{prefix_str}purge human [count: 1-100]`"
+                ),
+                author=ctx.author,
             )
-        container.add_separator(divider=True)
-        container.add_text(f"-# Requested by {ctx.author.display_name}")
         try:
-            await send_container_response(ctx, container, ephemeral=True)
+            await send_response(ctx, resp, ephemeral=True)
         except Exception:
             try:
                 await ctx.send(f"**Purge Error**: `{original}`")

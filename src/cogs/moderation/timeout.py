@@ -8,7 +8,7 @@ from discord.ext import commands
 
 from src.core.context import CustomContext
 from src.cogs.moderation._helpers import check_hierarchy, parse_duration, dispatch_mod_log
-from src.utils.containers import KyokaContainer, send_container_response
+from src.ui.response import KyokaResponse, send_response
 
 if TYPE_CHECKING:
     from src.core.bot import KyokaBot
@@ -45,50 +45,41 @@ class TimeoutCog(commands.Cog):
         """Timeout/mute a member."""
         allowed, err_msg = check_hierarchy(self.bot, ctx, member)
         if not allowed:
-            container = KyokaContainer(accent_color=None)
-            container.add_section(content=f"**Cannot Moderate Member**\n> {err_msg}")
-            await send_container_response(ctx, container)
+            resp = KyokaResponse.permission("Cannot Moderate Member", err_msg or "Hierarchy check failed.")
+            await send_response(ctx, resp, ephemeral=True)
             return
 
         delta = parse_duration(duration)
         if not delta:
-            container = KyokaContainer(accent_color=None)
-            container.add_section(
-                content=(
-                    "**Invalid Duration Format**\n"
-                    "> Please use format: `10s`, `15m`, `2h`, or `7d` (Max: `28d`)."
-                )
+            resp = KyokaResponse.warning(
+                title="Invalid Duration Format",
+                description="Please use format: `10s`, `15m`, `2h`, or `7d` (Max: `28d`).",
+                author=ctx.author,
             )
-            await send_container_response(ctx, container)
+            await send_response(ctx, resp, ephemeral=True)
             return
 
         if delta > datetime.timedelta(days=28):
-            container = KyokaContainer(accent_color=None)
-            container.add_section(
-                content=(
-                    "**Duration Exceeded**\n"
-                    "> Discord maximum timeout duration is 28 days."
-                )
+            resp = KyokaResponse.warning(
+                title="Duration Exceeded",
+                description="Discord maximum timeout duration is 28 days.",
+                author=ctx.author,
             )
-            await send_container_response(ctx, container)
+            await send_response(ctx, resp, ephemeral=True)
             return
 
         until = discord.utils.utcnow() + delta
         await member.timeout(until, reason=f"{ctx.author} ({ctx.author.id}): {reason}")
         await dispatch_mod_log(self.bot, ctx.guild, "Member Timeout", member, ctx.author, reason, extra=f"Duration: {duration}")
 
-        e_reg = self.bot.custom_emojis
-        dot = e_reg.get("heart_dot", "-")
-        container = KyokaContainer(accent_color=None)
-        container.add_section(content="**Member Timed Out**")
-        container.add_separator(divider=True)
-        container.add_text(
-            f"{dot} **Target:** **{member.display_name}** `「{member.id}」`\n"
-            f"{dot} **Duration:** `{duration}` (Expires: <t:{int(until.timestamp())}:R>)\n"
-            f"{dot} **Moderator:** **{ctx.author.display_name}**\n"
-            f"{dot} **Reason:** `{reason}`"
+        resp = KyokaResponse.moderation(
+            action="timeout",
+            target=member,
+            moderator=ctx.author,
+            reason=reason,
+            extra_fields=[("Duration", f"`{duration}` (Expires: <t:{int(until.timestamp())}:R>)", False)],
         )
-        await send_container_response(ctx, container)
+        await send_response(ctx, resp)
 
     @commands.hybrid_command(
         name="unmute",
@@ -109,25 +100,20 @@ class TimeoutCog(commands.Cog):
         """Remove timeout/unmute a member."""
         allowed, err_msg = check_hierarchy(self.bot, ctx, member)
         if not allowed:
-            container = KyokaContainer(accent_color=None)
-            container.add_section(content=f"**Cannot Moderate Member**\n> {err_msg}")
-            await send_container_response(ctx, container)
+            resp = KyokaResponse.permission("Cannot Moderate Member", err_msg or "Hierarchy check failed.")
+            await send_response(ctx, resp, ephemeral=True)
             return
 
         await member.timeout(None, reason=f"{ctx.author} ({ctx.author.id}): {reason}")
         await dispatch_mod_log(self.bot, ctx.guild, "Timeout Removed", member, ctx.author, reason)
 
-        e_reg = self.bot.custom_emojis
-        dot = e_reg.get("heart_dot", "-")
-        container = KyokaContainer(accent_color=None)
-        container.add_section(content="**Timeout Removed**")
-        container.add_separator(divider=True)
-        container.add_text(
-            f"{dot} **Target:** **{member.display_name}** `「{member.id}」`\n"
-            f"{dot} **Moderator:** **{ctx.author.display_name}**\n"
-            f"{dot} **Reason:** `{reason}`"
+        resp = KyokaResponse.moderation(
+            action="untimeout",
+            target=member,
+            moderator=ctx.author,
+            reason=reason,
         )
-        await send_container_response(ctx, container)
+        await send_response(ctx, resp)
 
 
 async def setup(bot: KyokaBot) -> None:

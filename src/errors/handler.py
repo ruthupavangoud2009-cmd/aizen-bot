@@ -84,10 +84,15 @@ class ErrorHandler(commands.Cog, name="ErrorHandler"):
                     pass
             return
 
-        err_icon = _error_emoji(self.bot, "icons_wrong", "icon_x", "error", fallback="❌")
-        warn_icon = _error_emoji(self.bot, "icons_warning", "icon_warning", "warning", fallback="⚠️")
-        clock_icon = _error_emoji(self.bot, "icons_clock", "clock", "loading", fallback="⏳")
-        lock_icon = _error_emoji(self.bot, "icons_locked", "icon_lock", "locked", fallback="🔒")
+        err_icon = _error_emoji(self.bot, "ERROR", "icons_wrong", "icon_x", fallback="")
+        warn_icon = _error_emoji(self.bot, "WARNING", "icons_warning", "icon_warning", fallback="")
+        clock_icon = _error_emoji(self.bot, "TIME", "icons_clock", "loading", fallback="")
+        lock_icon = _error_emoji(self.bot, "LOCK", "icons_locked", "icon_lock", fallback="")
+
+        err_sp = f"{err_icon} " if err_icon else ""
+        warn_sp = f"{warn_icon} " if warn_icon else ""
+        clock_sp = f"{clock_icon} " if clock_icon else ""
+        lock_sp = f"{lock_icon} " if lock_icon else ""
 
         container = KyokaContainer(accent_color=None)
 
@@ -95,7 +100,7 @@ class ErrorHandler(commands.Cog, name="ErrorHandler"):
             missing_perms = ", ".join(f"`{p}`" for p in error.missing_permissions)
             container.add_section(
                 content=(
-                    f"**{lock_icon}Permission Denied**\n"
+                    f"**{lock_sp}Permission Denied**\n"
                     f"> You need the following permissions to execute this command:\n> {missing_perms}"
                 )
             )
@@ -104,7 +109,7 @@ class ErrorHandler(commands.Cog, name="ErrorHandler"):
             missing_perms = ", ".join(f"`{p}`" for p in error.missing_permissions)
             container.add_section(
                 content=(
-                    f"**{lock_icon}Bot Missing Permissions**\n"
+                    f"**{lock_sp}Bot Missing Permissions**\n"
                     f"> I need the following permissions in this channel:\n> {missing_perms}"
                 )
             )
@@ -112,7 +117,7 @@ class ErrorHandler(commands.Cog, name="ErrorHandler"):
         elif isinstance(error, commands.CommandOnCooldown):
             container.add_section(
                 content=(
-                    f"**{clock_icon}Cooldown Active**\n"
+                    f"**{clock_sp}Cooldown Active**\n"
                     f"> This command is currently on cooldown. Try again in `{error.retry_after:.1f}s`."
                 )
             )
@@ -123,7 +128,7 @@ class ErrorHandler(commands.Cog, name="ErrorHandler"):
         elif isinstance(error, (commands.NotOwner, commands.CheckFailure)):
             container.add_section(
                 content=(
-                    f"**{lock_icon}Access Denied**\n"
+                    f"**{lock_sp}Access Denied**\n"
                     f"> {str(error) or 'You do not have permission to use this command.'}"
                 )
             )
@@ -131,7 +136,7 @@ class ErrorHandler(commands.Cog, name="ErrorHandler"):
         elif isinstance(error, commands.MissingRequiredArgument):
             container.add_section(
                 content=(
-                    f"**{warn_icon}Invalid Command Usage**\n"
+                    f"**{warn_sp}Invalid Command Usage**\n"
                     f"> Missing required parameter: `{error.param.name}`\n"
                     f"> Usage: `{ctx.prefix}{ctx.command.qualified_name} {ctx.command.signature}`"
                 )
@@ -140,7 +145,7 @@ class ErrorHandler(commands.Cog, name="ErrorHandler"):
         elif isinstance(error, (commands.MemberNotFound, commands.UserNotFound)):
             container.add_section(
                 content=(
-                    f"**{warn_icon}User Not Found**\n"
+                    f"**{warn_sp}User Not Found**\n"
                     f"> Could not find a member or user matching `{discord.utils.escape_markdown(str(error.argument))}`.\n"
                     f"> *Tip: Try mentioning the user (@User) or providing their 17–19 digit Discord ID.*"
                 )
@@ -149,7 +154,7 @@ class ErrorHandler(commands.Cog, name="ErrorHandler"):
         elif isinstance(error, commands.ChannelNotFound):
             container.add_section(
                 content=(
-                    f"**{warn_icon}Channel Not Found**\n"
+                    f"**{warn_sp}Channel Not Found**\n"
                     f"> Could not find channel `{discord.utils.escape_markdown(str(error.argument))}`."
                 )
             )
@@ -157,7 +162,7 @@ class ErrorHandler(commands.Cog, name="ErrorHandler"):
         elif isinstance(error, commands.RoleNotFound):
             container.add_section(
                 content=(
-                    f"**{warn_icon}Role Not Found**\n"
+                    f"**{warn_sp}Role Not Found**\n"
                     f"> Could not find role `{discord.utils.escape_markdown(str(error.argument))}`."
                 )
             )
@@ -165,7 +170,7 @@ class ErrorHandler(commands.Cog, name="ErrorHandler"):
         elif isinstance(error, commands.BadUnionArgument):
             container.add_section(
                 content=(
-                    f"**{warn_icon}Invalid Argument**\n"
+                    f"**{warn_sp}Invalid Argument**\n"
                     f"> Could not resolve `{error.param.name}`. Please mention a valid user/role or provide an ID."
                 )
             )
@@ -174,7 +179,7 @@ class ErrorHandler(commands.Cog, name="ErrorHandler"):
             options = ", ".join(f"`{opt}`" for opt in error.literals)
             container.add_section(
                 content=(
-                    f"**{warn_icon}Invalid Choice**\n"
+                    f"**{warn_sp}Invalid Choice**\n"
                     f"> Valid options for `{error.param.name}` are: {options}"
                 )
             )
@@ -182,7 +187,7 @@ class ErrorHandler(commands.Cog, name="ErrorHandler"):
         elif isinstance(error, commands.RangeError):
             container.add_section(
                 content=(
-                    f"**{warn_icon}Value Out of Range**\n"
+                    f"**{warn_sp}Value Out of Range**\n"
                     f"> `{error.value}` is out of range. Must be between `{error.minimum}` and `{error.maximum}`."
                 )
             )
@@ -190,7 +195,7 @@ class ErrorHandler(commands.Cog, name="ErrorHandler"):
         elif isinstance(error, commands.TooManyArguments):
             container.add_section(
                 content=(
-                    f"**{warn_icon}Too Many Arguments**\n"
+                    f"**{warn_sp}Too Many Arguments**\n"
                     f"> Too many arguments were passed to `{ctx.command.qualified_name}`.\n"
                     f"> Usage: `{ctx.prefix}{ctx.command.qualified_name} {ctx.command.signature}`"
                 )
@@ -199,7 +204,7 @@ class ErrorHandler(commands.Cog, name="ErrorHandler"):
         elif isinstance(error, commands.BadArgument):
             container.add_section(
                 content=(
-                    f"**{warn_icon}Invalid Command Argument**\n"
+                    f"**{warn_sp}Invalid Command Argument**\n"
                     f"> {str(error)}\n"
                     f"> Usage: `{ctx.prefix}{ctx.command.qualified_name} {ctx.command.signature}`"
                 )

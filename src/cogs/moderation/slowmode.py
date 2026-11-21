@@ -6,7 +6,7 @@ from discord import app_commands
 from discord.ext import commands
 
 from src.core.context import CustomContext
-from src.utils.containers import KyokaContainer, send_container_response
+from src.ui.response import KyokaResponse, send_response
 
 if TYPE_CHECKING:
     from src.core.bot import KyokaBot
@@ -38,39 +38,43 @@ class SlowmodeCog(commands.Cog):
     ) -> None:
         """Set channel slowmode delay."""
         if seconds < 0 or seconds > 21600:
-            container = KyokaContainer(accent_color=None)
-            container.add_section(
-                content=(
-                    "**Invalid Seconds**\n"
-                    "> Slowmode seconds must be between `0` and `21600` (6 hours)."
-                )
+            resp = KyokaResponse.warning(
+                title="Invalid Seconds",
+                description="Slowmode seconds must be between `0` and `21600` (6 hours).",
+                author=ctx.author,
             )
-            await send_container_response(ctx, container)
+            await send_response(ctx, resp, ephemeral=True)
             return
 
         target_channel = channel or ctx.channel
         if not isinstance(target_channel, discord.TextChannel):
-            container = KyokaContainer(accent_color=None)
-            container.add_section(content="**Error**\n> Slowmode only applies to text channels.")
-            await send_container_response(ctx, container)
+            resp = KyokaResponse.warning(
+                title="Error",
+                description="Slowmode only applies to text channels.",
+                author=ctx.author,
+            )
+            await send_response(ctx, resp, ephemeral=True)
             return
 
         await target_channel.edit(slowmode_delay=seconds, reason=f"Slowmode set by {ctx.author}")
 
-        e_reg = self.bot.custom_emojis
-        dot = e_reg.get("heart_dot", "-")
-        container = KyokaContainer(accent_color=None)
-        if seconds == 0:
-            container.add_section(content="**Slowmode Disabled**")
-        else:
-            container.add_section(content="**Slowmode Updated**")
-        container.add_separator(divider=True)
-        container.add_text(
-            f"{dot} **Channel:** {target_channel.mention}\n"
-            f"{dot} **Delay:** `{seconds} seconds`\n"
-            f"{dot} **Moderator:** **{ctx.author.display_name}**"
+        title = "Slowmode Disabled" if seconds == 0 else "Slowmode Updated"
+        desc = (
+            f"Slowmode has been disabled for {target_channel.mention}."
+            if seconds == 0
+            else f"Slowmode set to `{seconds}` seconds in {target_channel.mention}."
         )
-        await send_container_response(ctx, container)
+        resp = KyokaResponse.success(
+            title=title,
+            description=desc,
+            fields=[
+                ("Channel", target_channel.mention, True),
+                ("Delay", f"`{seconds}s`" if seconds > 0 else "`Disabled`", True),
+                ("Moderator", f"**{ctx.author.display_name}**", True),
+            ],
+            author=ctx.author,
+        )
+        await send_response(ctx, resp)
 
 
 async def setup(bot: KyokaBot) -> None:

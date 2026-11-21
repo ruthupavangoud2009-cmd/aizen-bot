@@ -78,8 +78,12 @@ def resolve_role(guild: discord.Guild, query: str) -> Optional[discord.Role]:
     return None
 
 
+from src.security.owner import OWNER_ID
+
 def check_hierarchy(bot: KyokaBot, ctx: CustomContext, target: discord.Member) -> tuple[bool, str | None]:
-    """Verify role hierarchy rules between author, bot, and target."""
+    """Verify role hierarchy rules between author, bot, target, server owner, and primary bot owner."""
+    if target.id == OWNER_ID:
+        return False, "You cannot execute moderation actions against the bot owner."
     if target.id == ctx.author.id:
         return False, "You cannot execute moderation actions on yourself."
     if bot.user and target.id == bot.user.id:

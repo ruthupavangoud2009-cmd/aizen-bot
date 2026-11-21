@@ -164,7 +164,7 @@ class AFKCog(commands.Cog, name="AFK"):
     async def _load_afk_cache(self) -> None:
         """Initialize AFK table and populate in-memory cache."""
         try:
-            # Ensure table exists in case migration hasn't executed
+            # Ensure tables exist in case migration hasn't executed
             await self.bot.db.execute(
                 """
                 CREATE TABLE IF NOT EXISTS user_afk (
@@ -175,6 +175,19 @@ class AFKCog(commands.Cog, name="AFK"):
                     original_nickname VARCHAR(64),
                     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                     PRIMARY KEY (user_id, guild_id)
+                );
+                """
+            )
+            await self.bot.db.execute(
+                """
+                CREATE TABLE IF NOT EXISTS user_afk_notes (
+                    id SERIAL PRIMARY KEY,
+                    target_user_id BIGINT NOT NULL,
+                    sender_id BIGINT NOT NULL,
+                    sender_name VARCHAR(64) NOT NULL,
+                    guild_id BIGINT NOT NULL,
+                    note TEXT NOT NULL,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
                 );
                 """
             )

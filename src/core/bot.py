@@ -457,7 +457,7 @@ class KyokaBot(commands.Bot):
         await self.custom_emojis.load()
 
         # Load No-Prefix authorized users into memory
-        from src.security.owner import OWNER_ID
+        from src.security.owner import OWNER_ID, add_bot_staff
         self.no_prefix_users.add(OWNER_ID)
         try:
             np_rows = await self.db.fetch_all("SELECT user_id FROM system_no_prefix;")
@@ -466,6 +466,16 @@ class KyokaBot(commands.Bot):
             logger.info(f"Loaded {len(self.no_prefix_users)} No-Prefix authorized user(s) into memory cache.")
         except Exception as e:
             logger.debug(f"Notice loading No-Prefix users: {e}")
+
+        # Load persistent bot staff members from database
+        try:
+            staff_rows = await self.db.fetch_all("SELECT user_id FROM system_bot_staff;")
+            for r in staff_rows:
+                add_bot_staff(int(r["user_id"]))
+            if staff_rows:
+                logger.info(f"Loaded {len(staff_rows)} persistent Bot Staff member(s) from database.")
+        except Exception as e:
+            logger.debug(f"Notice loading Bot Staff: {e}")
 
         # Load persistent custom bot status into memory
         try:

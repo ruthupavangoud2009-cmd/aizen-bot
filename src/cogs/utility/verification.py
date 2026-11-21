@@ -82,11 +82,18 @@ class PersistentVerifyView(discord.ui.View):
     def __init__(self, cog: Verification) -> None:
         super().__init__(timeout=None)
         self.cog = cog
+        e_reg = getattr(cog.bot, "custom_emojis", None)
+        if e_reg:
+            v_em = e_reg.get_emoji_obj("icons_verified") or e_reg.get_emoji_obj("icon_verified")
+            if v_em:
+                self.btn_verify.emoji = v_em
+            q_em = e_reg.get_emoji_obj("spy_icons_question") or e_reg.get_emoji_obj("icon_info")
+            if q_em:
+                self.btn_help.emoji = q_em
 
     @discord.ui.button(
         label="Verify Me",
         style=discord.ButtonStyle.success,
-        emoji="🛡️",
         custom_id="kyoka:verify:member",
         row=0,
     )
@@ -467,14 +474,16 @@ class Verification(commands.Cog):
 
         view = PersistentVerifyView(self)
         msg = await send_container_response(target_ch, container, view=view)
+        panel_msg_id = getattr(msg, "id", None) or (msg.get("id") if isinstance(msg, dict) else None)
 
         # Update saved message_id
-        await self.bot.db.execute(
-            "UPDATE kyoka_verification_settings SET panel_message_id = $2, channel_id = $3 WHERE guild_id = $1;",
-            ctx.guild.id,
-            msg.id,
-            target_ch.id,
-        )
+        if panel_msg_id:
+            await self.bot.db.execute(
+                "UPDATE kyoka_verification_settings SET panel_message_id = $2, channel_id = $3 WHERE guild_id = $1;",
+                ctx.guild.id,
+                int(panel_msg_id),
+                target_ch.id,
+            )
 
         if target_ch.id != ctx.channel.id:
             await ctx.send_success(f"Verification panel published in {target_ch.mention}!")

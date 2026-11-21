@@ -178,6 +178,26 @@ class PostgresDatabase(BaseDatabase):
                 value TEXT
             );
             """,
+            # Persistent KYOKA custom emoji category & asset mappings
+            """
+            CREATE TABLE IF NOT EXISTS kyoka_emoji_mappings (
+                category_or_name VARCHAR(64) PRIMARY KEY,
+                raw_str TEXT NOT NULL,
+                emoji_id BIGINT,
+                emoji_name VARCHAR(64),
+                is_animated BOOLEAN DEFAULT FALSE,
+                updated_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
+            );
+            """,
+            # Persistent bot staff table
+            """
+            CREATE TABLE IF NOT EXISTS system_bot_staff (
+                user_id BIGINT PRIMARY KEY,
+                role VARCHAR(32) DEFAULT 'staff',
+                added_by BIGINT,
+                added_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
+            );
+            """,
             # System No-Prefix persistent authorized dispatchers
             """
             CREATE TABLE IF NOT EXISTS system_no_prefix (

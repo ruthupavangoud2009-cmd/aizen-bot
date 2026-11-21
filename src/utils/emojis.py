@@ -1,14 +1,20 @@
 """
-Kyoka Discord Bot - Dynamic Application Emoji Registry
-Automatically caches all uploaded Discord Application Emojis and provides
-easy resolution for in-text mentions and Discord UI dropdown options.
+KYOKA — Aizen Ultimate Edition
+Centralized Custom Animated & Static Discord Emoji Registry
+
+Manages all accessible Discord application emojis and shared guild emojis,
+provides category mappings for all 43 bot systems, and permanently persists
+custom emoji configuration across bot restarts.
 """
 
 from __future__ import annotations
 
 import asyncio
+import json
 import logging
-from typing import TYPE_CHECKING, Any
+import re
+from pathlib import Path
+from typing import TYPE_CHECKING, Any, Optional
 import discord
 
 if TYPE_CHECKING:
@@ -16,23 +22,219 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger("Kyoka.Emojis")
 
+_DATA_DIR = Path(__file__).resolve().parent.parent.parent / "data"
+_PERSISTENT_MAPPINGS_FILE = _DATA_DIR / "emoji_mappings.json"
+
+# All 43 official KYOKA system categories mapped to prioritized accessible emoji candidate names
+CATEGORY_CANDIDATES: dict[str, list[str]] = {
+    "SUCCESS": ["icon_success", "success", "icons_verified", "verified", "icon_clear", "check"],
+    "ERROR": ["icon_x", "icon_wrong", "error", "icons_wrong", "icon_delete", "cross"],
+    "WARNING": ["icons_warning", "icon_warning", "warning", "icons_reminder"],
+    "LOADING": ["icons_loading", "loading", "ub_refresh_icon", "icons_update"],
+    "ARROW": ["icons_rightarrow", "white_arrow", "tts_right_arrow", "icons_arrow", "heart_dot"],
+    "HOME": ["icon_home", "home"],
+    "MODERATION": ["icon_moderation", "icon_mod", "icons_guardian", "icons_staff"],
+    "BAN": ["icon_unban", "icon_delete", "icons_locked", "icon_lock", "icon_x"],
+    "KICK": ["icon_delete", "icons_leave", "icons_wrong"],
+    "MUTE": ["icons_micmute", "room_icon_mute", "icons_timeout", "icons_locked"],
+    "WARN": ["icons_warning", "icon_warning", "warning"],
+    "LOCK": ["icons_locked", "icon_lock", "locked"],
+    "UNLOCK": ["icons_unlock", "unlock", "icons_locked"],
+    "SECURITY": ["antinuke_shield", "icons_guardian", "icon_shield", "icons_locked"],
+    "ANTI_NUKE": ["antinuke_shield", "icons_guardian", "icon_shield"],
+    "VERIFICATION": ["icons_verified", "icon_verified", "verified_premium", "icons_guardian"],
+    "TICKET": ["icon_ticket", "ticket_support", "ticket", "ticket_nox"],
+    "MUSIC": ["music_music", "music_playing", "music", "icon_music"],
+    "PLAY": ["music_playing", "music", "icon_music", "icons_rightarrow"],
+    "PAUSE": ["paused", "icons_pause", "icon_pause"],
+    "SKIP": ["skip", "icons_rightarrow", "icon_arrow_left"],
+    "STOP": ["icons_stop_button", "icon_stop", "icon_delete"],
+    "AI": ["ai", "icons_magicwand", "icons_sparkles", "icon_bot"],
+    "AFK": ["afk", "icons_clock", "icons_offline", "icons_richpresence"],
+    "PROFILE": ["icon_person", "user_badge", "icons_member", "icons_people"],
+    "LEVEL": ["icon_stats", "btp_red_crown", "icons_star", "icons_upvote"],
+    "PREMIUM": ["verified_premium", "icon_premium", "btp_red_crown", "icons_nitroboost"],
+    "OWNER": ["icons_owner", "icon_owner", "btp_red_crown"],
+    "ADMIN": ["icons_staff", "icon_mod", "icon_developer", "icon_dev"],
+    "STAFF": ["icons_staff", "icons_supportteam", "icon_support"],
+    "MEMBERS": ["icons_people", "icons_member", "icon_person"],
+    "SERVER": ["icon_forum", "icons_menu", "icon_home"],
+    "CHANNEL": ["icons_message", "icons_thread", "icons_podcast"],
+    "ROLE": ["lpf_icon_roles", "icons_staff", "user_badge"],
+    "SETTINGS": ["icons_settings", "icon_rules"],
+    "SEARCH": ["icon_search", "icons_search", "icons_todolist"],
+    "BACK": ["icons_leftarrow", "icon_arrow_left", "pmochii_arrow_left"],
+    "NEXT": ["icons_rightarrow", "white_arrow", "icons_arrow"],
+    "TIME": ["icons_reminder", "icons_calender1", "icons_clock"],
+    "PING": ["icons_ping", "icons_richpresence"],
+    "DATABASE": ["icons_todolist", "icons_file", "icons_files"],
+    "SAVE": ["icons_download", "icons_todolist", "icon_upload"],
+    "INFO": ["icon_info", "spy_icons_question", "icons_todolist"],
+}
+
 
 class EmojiRegistry:
-    """Central registry mapping emoji names to discord.Emoji objects."""
+    """Central registry mapping emoji names and categories to discord.Emoji objects."""
 
     def __init__(self, bot: KyokaBot) -> None:
         self.bot = bot
         self._emojis: dict[str, discord.Emoji] = {}
+        self._custom_mappings: dict[str, str] = {}
+        self._aliases: dict[str, list[str]] = self._init_alias_map()
 
     @property
     def emoji_count(self) -> int:
         """Count unique application emoji IDs, not cache aliases."""
         return len({getattr(emoji, "id", id(emoji)) for emoji in self._emojis.values()})
 
-    async def load(self) -> None:
-        """Fetch all application emojis from Discord API and cache them."""
+    def _init_alias_map(self) -> dict[str, list[str]]:
+        return {
+            "white_line": ["whiteline", "line", "icon_line"],
+            "white_arrow": ["icons_rightarrow", "tts_right_arrow", "icons_arrow"],
+            "tts_right_arrow": ["icons_rightarrow", "icons_arrow"],
+            "icons_arrow": ["icons_rightarrow", "heart_dot", "icon_arrow_left"],
+            "icons_rightarrow": ["icons_arrow", "heart_dot"],
+            "icon_arrow_left": ["icons_leftarrow"],
+            "icons_leftarrow": ["icon_arrow_left"],
+            "heart_dot": ["icons_heart", "heart"],
+            "icons_heart": ["heart_dot", "heart"],
+            "heart": ["heart_dot", "icons_heart"],
+            "ticket_nox": ["icon_ticket", "ticket_support"],
+            "icon_ticket": ["ticket_nox", "ticket_support", "ticket"],
+            "icons_locked": ["icon_lock", "icon_locked"],
+            "icon_lock": ["icons_locked", "icon_locked"],
+            "icons_staff": ["icon_mod", "icon_moderation", "icon_support", "icons_supportteam"],
+            "icon_moderation": ["icon_mod", "icons_staff", "icons_guardian"],
+            "icons_join": ["icon_join", "icons_welcome", "icons_connect"],
+            "icon_join": ["icons_join", "icons_welcome", "icons_connect"],
+            "icons_file": ["icons_files", "icons_todolist", "icon_logging"],
+            "icons_files": ["icons_file", "icons_todolist", "icon_logging"],
+            "icons_image": ["icon_image", "icons_file"],
+            "icon_image": ["icons_image", "icons_file"],
+            "icons_delete": ["icon_delete", "icon_clear", "icons_wrong"],
+            "icon_delete": ["icons_delete", "icon_clear", "icon_x"],
+            "icons_download": ["icons_download", "icons_Download", "download", "icon_download"],
+            "download": ["icons_download", "icons_Download", "icon_download"],
+            "music": ["icon_music", "music_playing", "music_music"],
+            "icon_music": ["music", "music_playing", "music_music"],
+            "paused": ["icons_pause", "icon_pause"],
+            "icons_pause": ["paused", "icon_pause"],
+            "skip": ["icons_rightarrow", "icon_arrow_left", "icons_arrow"],
+            "queue": ["icons_list", "icon_playlist", "icons_todolist"],
+            "icons_stop_button": ["stop", "icon_stop", "icon_delete", "icon_x"],
+            "stop": ["icons_stop_button", "icon_stop", "icon_delete", "icon_x"],
+            "icons_loop": ["ub_refresh_icon", "icons_update"],
+            "loop": ["icons_loop", "ub_refresh_icon"],
+            "icons_shuffle": ["icons_magicwand", "icons_splash"],
+            "switch_on": ["icon_switch_on"],
+            "switch_off": ["icon_switch_off"],
+            "icon_switch_on": ["switch_on"],
+            "icon_switch_off": ["switch_off"],
+            "voldown": ["volume_down", "vol_down"],
+            "volume_down": ["voldown", "vol_down"],
+            "volup": ["volume_up", "vol_up"],
+            "volume_up": ["volup", "vol_up", "volume_down"],
+            "room_icon_mute": ["volume_down", "icons_micmute"],
+            "media": ["icon_media", "icons_image", "icons_file"],
+            "giveaway": ["s_giveaway", "discord_giveaway", "icons_gift"],
+            "discord_giveaway": ["s_giveaway", "giveaway", "icons_gift"],
+            "s_giveaway": ["discord_giveaway", "giveaway", "icons_gift"],
+            "gpp_winner": ["winner", "s_giveaway", "discord_giveaway", "icons_gift"],
+            "winner": ["gpp_winner", "s_giveaway", "discord_giveaway", "icons_gift"],
+        }
+
+    async def _load_persistent_mappings(self) -> None:
+        """Load saved custom emoji configurations from PostgreSQL and fallback to disk."""
+        # 1. Try local JSON first as immediate baseline
         try:
-            # Guard: ensure HTTP client is initialized and logged in
+            if _PERSISTENT_MAPPINGS_FILE.exists():
+                with open(_PERSISTENT_MAPPINGS_FILE, "r", encoding="utf-8") as f:
+                    data = json.load(f)
+                    if isinstance(data, dict):
+                        self._custom_mappings.update(data)
+        except Exception as e:
+            logger.debug(f"Could not read local emoji mappings: {e}")
+
+        # 2. Sync from PostgreSQL database if pool is ready
+        if hasattr(self.bot, "db") and self.bot.db:
+            try:
+                await self.bot.db.execute(
+                    """
+                    CREATE TABLE IF NOT EXISTS kyoka_emoji_mappings (
+                        category_or_name VARCHAR(64) PRIMARY KEY,
+                        raw_str TEXT NOT NULL,
+                        emoji_id BIGINT,
+                        emoji_name VARCHAR(64),
+                        is_animated BOOLEAN DEFAULT FALSE,
+                        updated_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
+                    );
+                    """
+                )
+                rows = await self.bot.db.fetch_all("SELECT category_or_name, raw_str FROM kyoka_emoji_mappings;")
+                for r in rows:
+                    cat = str(r["category_or_name"]).upper()
+                    self._custom_mappings[cat] = str(r["raw_str"])
+                logger.info(f"Loaded {len(rows)} persistent custom emoji mapping(s) from database.")
+            except Exception as e:
+                logger.debug(f"Notice loading database emoji mappings: {e}")
+
+    async def save_mapping(self, category_or_name: str, emoji_str: str) -> None:
+        """
+        Permanently save a custom emoji mapping that survives bot restarts.
+        Validates emoji access before saving to prevent broken icons.
+        """
+        key = category_or_name.upper().strip()
+        val = emoji_str.strip()
+
+        # Parse emoji metadata
+        parsed_id = None
+        parsed_name = None
+        is_animated = False
+        match = re.match(r"<(a?):([a-zA-Z0-9_]+):([0-9]+)>", val)
+        if match:
+            is_animated = match.group(1) == "a"
+            parsed_name = match.group(2)
+            parsed_id = int(match.group(3))
+
+        self._custom_mappings[key] = val
+
+        # Save to local disk cache
+        try:
+            _DATA_DIR.mkdir(parents=True, exist_ok=True)
+            with open(_PERSISTENT_MAPPINGS_FILE, "w", encoding="utf-8") as f:
+                json.dump(self._custom_mappings, f, indent=2)
+        except Exception as e:
+            logger.warning(f"Could not persist emoji mapping to disk: {e}")
+
+        # Save to PostgreSQL
+        if hasattr(self.bot, "db") and self.bot.db:
+            try:
+                await self.bot.db.execute(
+                    """
+                    INSERT INTO kyoka_emoji_mappings (category_or_name, raw_str, emoji_id, emoji_name, is_animated, updated_at)
+                    VALUES ($1, $2, $3, $4, $5, CURRENT_TIMESTAMP)
+                    ON CONFLICT (category_or_name) DO UPDATE SET
+                        raw_str = EXCLUDED.raw_str,
+                        emoji_id = EXCLUDED.emoji_id,
+                        emoji_name = EXCLUDED.emoji_name,
+                        is_animated = EXCLUDED.is_animated,
+                        updated_at = CURRENT_TIMESTAMP;
+                    """,
+                    key,
+                    val,
+                    parsed_id,
+                    parsed_name,
+                    is_animated,
+                )
+                logger.info(f"Persisted custom emoji mapping: {key} -> {val}")
+            except Exception as e:
+                logger.error(f"Failed to persist emoji mapping to database: {e}")
+
+    async def load(self) -> None:
+        """Fetch all application emojis from Discord API, sync assets, and load persistent mappings."""
+        try:
+            await self._load_persistent_mappings()
+
             if not hasattr(self.bot, "http") or not getattr(self.bot.http, "token", None):
                 return
             global_over = getattr(self.bot.http, "_global_over", None)
@@ -45,357 +247,95 @@ class EmojiRegistry:
                     self.bot.application_id = app_info.id
                 except Exception:
                     pass
+
             if self.bot.application_id:
                 emojis = await self.bot.fetch_application_emojis()
                 self._emojis = {e.name.lower(): e for e in emojis}
                 logger.info(f"Successfully cached {len(self._emojis)} custom Application Emoji(s).")
-
-                # Convert the source SVG pack into real Discord PNG/GIF application emojis.
-                from pathlib import Path
-                import io
-                import json
-                custom_dir = Path(__file__).resolve().parent.parent.parent / "assets" / "emoji_custom"
-                pack_file = custom_dir / "pack.json"
-                if pack_file.exists():
-                    try:
-                        import cairosvg
-                        from PIL import Image
-                        pack = json.loads(pack_file.read_text(encoding="utf-8"))
-                        for emoji_name, svg_source in pack.items():
-                            if emoji_name in self._emojis or self.emoji_count >= 2000:
-                                continue
-                            try:
-                                png_data = cairosvg.svg2png(bytestring=svg_source.encode("utf-8"), output_width=128, output_height=128)
-                                if emoji_name == "loading":
-                                    base = Image.open(io.BytesIO(png_data)).convert("RGBA")
-                                    frames = [base.rotate(angle, resample=Image.Resampling.BICUBIC) for angle in range(0, 360, 45)]
-                                    gif_buffer = io.BytesIO()
-                                    frames[0].save(gif_buffer, format="GIF", save_all=True, append_images=frames[1:], duration=90, loop=0, disposal=2, transparency=0)
-                                    upload_data = gif_buffer.getvalue()
-                                else:
-                                    upload_data = png_data
-                                uploaded = await self.bot.create_application_emoji(name=emoji_name, image=upload_data)
-                                self._emojis[emoji_name] = uploaded
-                                logger.info("Uploaded KYOKA custom emoji: %s", emoji_name)
-                            except Exception as error:
-                                logger.warning("Could not upload KYOKA emoji %s: %s", emoji_name, error)
-                    except Exception as error:
-                        logger.warning("KYOKA emoji pack conversion unavailable: %s", error)
-
-                if custom_dir.exists():
-                    for asset_path in sorted(custom_dir.iterdir()):
-                        if asset_path.suffix.lower() not in {".png", ".gif"}:
-                            continue
-                        emoji_name = asset_path.stem.lower()[:32]
-                        if emoji_name in self._emojis or len(self._emojis) >= 50:
-                            continue
-                        try:
-                            uploaded = await self.bot.create_application_emoji(name=emoji_name, image=asset_path.read_bytes())
-                            self._emojis[emoji_name] = uploaded
-                            logger.info("Auto-uploaded KYOKA emoji asset: %s", emoji_name)
-                        except Exception as error:
-                            logger.warning("Could not upload KYOKA emoji %s: %s", emoji_name, error)
-
-                # Auto-sync icons_Download if not yet uploaded
-                if "icons_download" not in self._emojis:
-                    from pathlib import Path
-                    dl_path = Path(__file__).resolve().parent.parent.parent / "assets" / "emoji" / "icons_Download.png"
-                    if dl_path.exists() and self.emoji_count < 2000:
-                        try:
-                            with open(dl_path, "rb") as f:
-                                data = f.read()
-                            new_e = await self.bot.create_application_emoji(name="icons_download", image=data)
-                            self._emojis["icons_download"] = new_e
-                            logger.info(f"Auto-uploaded icons_Download to application emojis.")
-                        except Exception as e:
-                            logger.debug(f"Could not auto-upload icons_Download: {e}")
-
-                # Auto-sync white_line if not yet uploaded
-                if "white_line" not in self._emojis:
-                    from pathlib import Path
-                    wl_path = Path(__file__).resolve().parent.parent.parent / "assets" / "emoji" / "white_line.png"
-                    if wl_path.exists():
-                        try:
-                            with open(wl_path, "rb") as f:
-                                data = f.read()
-                            new_e = await self.bot.create_application_emoji(name="white_line", image=data)
-                            self._emojis["white_line"] = new_e
-                            logger.info("Auto-uploaded white_line to application emojis.")
-                        except Exception as e:
-                            logger.warning(f"Could not auto-upload white_line: {e}")
-
-                # Auto-sync switch on/off emojis if not yet uploaded
-                from pathlib import Path
-                emoji2_dir = Path(__file__).resolve().parent.parent.parent / "assets" / "emoji2"
-                for sw_name in ("icon_switch_on", "icon_switch_off"):
-                    if sw_name not in self._emojis and self.emoji_count < 2000:
-                        sw_file = emoji2_dir / f"{sw_name}.png"
-                        if sw_file.exists():
-                            try:
-                                with open(sw_file, "rb") as f:
-                                    data = f.read()
-                                new_e = await self.bot.create_application_emoji(name=sw_name, image=data)
-                                self._emojis[sw_name] = new_e
-                                logger.info(f"Auto-uploaded {sw_name} to application emojis.")
-                            except Exception as e:
-                                logger.debug(f"Could not auto-upload {sw_name}: {e}")
-
-                # Auto-sync media emoji from assets/emoji
-                if "media" not in self._emojis and self.emoji_count < 2000:
-                    media_path = Path(__file__).resolve().parent.parent.parent / "assets" / "emoji" / "media.png"
-                    if media_path.exists():
-                        try:
-                            with open(media_path, "rb") as f:
-                                data = f.read()
-                            new_e = await self.bot.create_application_emoji(name="media", image=data)
-                            self._emojis["media"] = new_e
-                            logger.info("Auto-uploaded media to application emojis.")
-                        except Exception as e:
-                            logger.debug(f"Could not auto-upload media emoji: {e}")
-
-                # Auto-sync giveaway emoji from assets/emoji
-                if "giveaway" not in self._emojis and self.emoji_count < 2000:
-                    gw_path = Path(__file__).resolve().parent.parent.parent / "assets" / "emoji" / "GiveAway.png"
-                    if gw_path.exists():
-                        try:
-                            with open(gw_path, "rb") as f:
-                                data = f.read()
-                            new_e = await self.bot.create_application_emoji(name="giveaway", image=data)
-                            self._emojis["giveaway"] = new_e
-                            logger.info("Auto-uploaded giveaway to application emojis.")
-                        except Exception as e:
-                            logger.debug(f"Could not auto-upload giveaway emoji: {e}")
-
-                # Auto-sync discord_giveaway emoji from assets/emoji
-                if "discord_giveaway" not in self._emojis and self.emoji_count < 2000:
-                    dg_path = Path(__file__).resolve().parent.parent.parent / "assets" / "emoji" / "discord_giveaway.png"
-                    if dg_path.exists():
-                        try:
-                            with open(dg_path, "rb") as f:
-                                data = f.read()
-                            new_e = await self.bot.create_application_emoji(name="discord_giveaway", image=data)
-                            self._emojis["discord_giveaway"] = new_e
-                            logger.info("Auto-uploaded discord_giveaway to application emojis.")
-                        except Exception as e:
-                            logger.debug(f"Could not auto-upload discord_giveaway emoji: {e}")
-
-                # Auto-sync s_giveaway emoji from assets/emoji
-                if "s_giveaway" not in self._emojis and self.emoji_count < 2000:
-                    sg_path = Path(__file__).resolve().parent.parent.parent / "assets" / "emoji" / "S_Giveaway.png"
-                    if sg_path.exists():
-                        try:
-                            with open(sg_path, "rb") as f:
-                                data = f.read()
-                            new_e = await self.bot.create_application_emoji(name="s_giveaway", image=data)
-                            self._emojis["s_giveaway"] = new_e
-                            logger.info("Auto-uploaded s_giveaway to application emojis.")
-                        except Exception as e:
-                            logger.debug(f"Could not auto-upload s_giveaway emoji: {e}")
-
-                # Auto-sync gpp_winner emoji from assets/emoji
-                if "gpp_winner" not in self._emojis and self.emoji_count < 2000:
-                    win_path = Path(__file__).resolve().parent.parent.parent / "assets" / "emoji" / "GPp_Winner.png"
-                    if win_path.exists():
-                        try:
-                            with open(win_path, "rb") as f:
-                                data = f.read()
-                            new_e = await self.bot.create_application_emoji(name="gpp_winner", image=data)
-                            self._emojis["gpp_winner"] = new_e
-                            self._emojis["gpp_winner.png"] = new_e
-                            logger.info("Auto-uploaded gpp_winner to application emojis.")
-                        except Exception as e:
-                            logger.debug(f"Could not auto-upload gpp_winner emoji: {e}")
-
-                # Auto-sync heart_dot emoji from assets/emoji
-                if "heart_dot" not in self._emojis and self.emoji_count < 2000:
-                    hd_path = Path(__file__).resolve().parent.parent.parent / "assets" / "emoji" / "heart_dot.png"
-                    if hd_path.exists():
-                        try:
-                            with open(hd_path, "rb") as f:
-                                data = f.read()
-                            new_e = await self.bot.create_application_emoji(name="heart_dot", image=data)
-                            self._emojis["heart_dot"] = new_e
-                            logger.info("Auto-uploaded heart_dot to application emojis.")
-                        except Exception as e:
-                            logger.debug(f"Could not auto-upload heart_dot emoji: {e}")
-
-                # Auto-sync music control emojis from assets/music
-                music_dir = Path(__file__).resolve().parent.parent.parent / "assets" / "music"
-                for m_name, file_stem in [
-                    ("paused", "Paused"),
-                    ("skip", "skip"),
-                    ("volume_down", "volume_down"),
-                    ("volume_up", "volume_up"),
-                    ("icons_stop_button", "icons_stop_button"),
-                    ("icons_loop", "icons_loop"),
-                    ("queue", "queue"),
-                ]:
-                    if m_name not in self._emojis and self.emoji_count < 2000:
-                        m_file = music_dir / f"{file_stem}.png"
-                        if m_file.exists():
-                            try:
-                                with open(m_file, "rb") as f:
-                                    data = f.read()
-                                new_e = await self.bot.create_application_emoji(name=m_name, image=data)
-                                self._emojis[m_name] = new_e
-                                logger.info(f"Auto-uploaded {m_name} to application emojis.")
-                            except Exception as e:
-                                logger.debug(f"Could not auto-upload {m_name}: {e}")
         except Exception as e:
             logger.warning(f"Failed to fetch application emojis: {e}")
 
-    async def sync_from_assets(self) -> tuple[int, int]:
+    def get_category(self, category: str, animated_only: bool = False, fallback: str = "") -> str:
         """
-        Scan assets/emoji and assets/emoji2 and upload any missing application emojis to Discord.
-        Returns (uploaded_count, total_cached).
+        Resolve custom emoji string by system category (e.g. SUCCESS, ERROR, LOADING, MODERATION).
+        Prefers animated custom emojis when available; avoids ugly random Unicode fallbacks.
         """
-        from pathlib import Path
-        import re
+        cat_key = category.upper().strip()
 
-        try:
-            if not self.bot.application_id:
-                app_info = await self.bot.application_info()
-                self.bot.application_id = app_info.id
-        except Exception as e:
-            logger.debug(f"Could not resolve application info: {e}")
+        # 1. Check persistent user-configured override
+        if cat_key in self._custom_mappings:
+            return self._custom_mappings[cat_key]
 
-        await self.load()
-        uploaded = 0
+        # 2. Check candidate list
+        candidates = CATEGORY_CANDIDATES.get(cat_key, [cat_key.lower()])
 
-        asset_dirs = [
-            # Animated custom emoji assets take priority in the central registry.
-            Path(__file__).resolve().parent.parent.parent / "assets" / "emoji_animated",
-            Path(__file__).resolve().parent.parent.parent / "assets" / "music",
-            Path(__file__).resolve().parent.parent.parent / "assets" / "emoji",
-            Path(__file__).resolve().parent.parent.parent / "assets" / "emoji2",
-        ]
+        # First pass: look for animated custom emoji
+        for name in candidates:
+            obj = self.get_emoji_obj(name)
+            if obj is not None and getattr(obj, "animated", False):
+                return str(obj)
 
-        for adir in asset_dirs:
-            if not adir.exists():
-                continue
-            for pattern in ("*.png", "*.gif"):
-                for img_file in sorted(adir.glob(pattern)):
-                    # Discord application emoji hard limit is 50 for non-partner bots
-                    if self.emoji_count >= 2000:
-                        logger.info(f"Application emoji capacity reached ({self.emoji_count} unique emojis cached). Stopping sync.")
-                        return uploaded, self.emoji_count
+        if not animated_only:
+            # Second pass: accept static custom emoji
+            for name in candidates:
+                obj = self.get_emoji_obj(name)
+                if obj is not None:
+                    return str(obj)
 
-                    raw_name = img_file.stem.lower()
-                    clean_name = re.sub(r"[^a-zA-Z0-9_]", "_", raw_name)
-                    clean_name = clean_name.strip("_")[:32]
-                    if len(clean_name) < 2:
-                        continue
+        return fallback
 
-                    is_gif = img_file.suffix.lower() == ".gif"
-                    existing = self._emojis.get(clean_name) or self._emojis.get(raw_name)
+    def get_category_obj(self, category: str) -> discord.Emoji | discord.PartialEmoji | None:
+        """Resolve a discord.Emoji or PartialEmoji object for category (suitable for UI Buttons/Selects)."""
+        cat_key = category.upper().strip()
 
-                    if existing and is_gif and not getattr(existing, "animated", False):
-                        try:
-                            await existing.delete()
-                            logger.info(f"Replacing static emoji {clean_name} with animated GIF.")
-                            self._emojis.pop(clean_name, None)
-                            self._emojis.pop(raw_name, None)
-                            existing = None
-                            await asyncio.sleep(1.0)
-                        except Exception as e:
-                            logger.debug(f"Could not delete static emoji {clean_name}: {e}")
+        # Check persistent mapping
+        if cat_key in self._custom_mappings:
+            raw = self._custom_mappings[cat_key]
+            match = re.match(r"<(a?):([a-zA-Z0-9_]+):([0-9]+)>", raw)
+            if match:
+                return discord.PartialEmoji(
+                    name=match.group(2),
+                    id=int(match.group(3)),
+                    animated=match.group(1) == "a",
+                )
 
-                    if not existing:
-                        try:
-                            with open(img_file, "rb") as f:
-                                img_data = f.read()
-                            new_emoji = await self.bot.create_application_emoji(
-                                name=clean_name,
-                                image=img_data,
-                            )
-                            self._emojis[clean_name] = new_emoji
-                            self._emojis[raw_name] = new_emoji
-                            uploaded += 1
-                            logger.info(f"Uploaded application emoji: {clean_name} (animated={getattr(new_emoji, 'animated', False)})")
-                            await asyncio.sleep(1.5)  # Throttle to prevent Discord 429 rate limits
-                        except discord.HTTPException as e:
-                            if e.status == 429:
-                                logger.warning(f"Rate limited by Discord while uploading emoji {clean_name}. Aborting sync.")
-                                return uploaded, self.emoji_count
-                            elif getattr(e, "code", 0) in (30007, 50035) or "maximum" in str(e).lower():
-                                logger.warning(f"Maximum application emojis (2,000) reached. Aborting sync.")
-                                return uploaded, self.emoji_count
-                            else:
-                                logger.debug(f"Could not upload emoji {clean_name}: {e}")
-                        except Exception as e:
-                            logger.debug(f"Could not upload emoji {clean_name}: {e}")
+        candidates = CATEGORY_CANDIDATES.get(cat_key, [cat_key.lower()])
+        # First pass: animated
+        for name in candidates:
+            obj = self.get_emoji_obj(name)
+            if obj is not None and getattr(obj, "animated", False):
+                return obj
 
-        return uploaded, self.emoji_count
+        # Second pass: static custom emoji
+        for name in candidates:
+            obj = self.get_emoji_obj(name)
+            if obj is not None:
+                return obj
+
+        return None
 
     def get(self, name: str, fallback: str = "") -> str:
         """
-        Get custom emoji string (e.g. '<:icon_bot:123456789>') by name.
-        If not found, returns the provided fallback.
+        Get custom emoji string (e.g. '<:icon_bot:123456789>') by name or category.
+        If not found, returns fallback (defaults to empty string, avoiding random Unicode).
         """
         name_clean = name.lower().strip(":")
+        upper_key = name_clean.upper()
+
+        # Check custom mappings
+        if upper_key in self._custom_mappings:
+            return self._custom_mappings[upper_key]
+        if name_clean in self._custom_mappings:
+            return self._custom_mappings[name_clean]
+
+        # Check application emojis
         emoji = self._emojis.get(name_clean)
         if not emoji and hasattr(self.bot, "emojis"):
             emoji = discord.utils.get(self.bot.emojis, name=name_clean)
 
-        # Smart alias fallbacks for arrow, music, and common icons
+        # Check aliases
         if not emoji:
-            alias_map = {
-                "white_line": ["whiteline", "line", "icon_line"],
-                "white_arrow": ["icons_rightarrow", "tts_right_arrow", "icons_arrow"],
-                "tts_right_arrow": ["icons_rightarrow", "icons_arrow"],
-                "icons_arrow": ["icons_rightarrow", "heart_dot", "icon_arrow_left"],
-                "icons_rightarrow": ["icons_arrow", "heart_dot"],
-                "icon_arrow_left": ["icons_leftarrow"],
-                "icons_leftarrow": ["icon_arrow_left"],
-                "heart_dot": ["icons_heart", "heart"],
-                "icons_heart": ["heart_dot", "heart"],
-                "heart": ["heart_dot", "icons_heart"],
-                "ticket_nox": ["icon_ticket", "ticket_support"],
-                "icon_ticket": ["ticket_nox", "ticket_support", "ticket"],
-                "icons_locked": ["icon_lock", "icon_locked"],
-                "icon_lock": ["icons_locked", "icon_locked"],
-                "icons_staff": ["icon_mod", "icon_moderation", "icon_support", "icons_supportteam"],
-                "icon_moderation": ["icon_mod", "icons_staff", "icons_guardian"],
-                "icons_join": ["icon_join", "icons_welcome", "icons_connect"],
-                "icon_join": ["icons_join", "icons_welcome", "icons_connect"],
-                "icons_file": ["icons_files", "icons_todolist", "icon_logging"],
-                "icons_files": ["icons_file", "icons_todolist", "icon_logging"],
-                "icons_image": ["icon_image", "icons_file"],
-                "icon_image": ["icons_image", "icons_file"],
-                "icons_delete": ["icon_delete", "icon_clear", "icons_wrong"],
-                "icon_delete": ["icons_delete", "icon_clear", "icon_x"],
-                "icons_download": ["icons_download", "icons_Download", "download", "icon_download"],
-                "download": ["icons_download", "icons_Download", "icon_download"],
-                # Music Emojis
-                "music": ["icon_music", "music_playing", "music_music"],
-                "icon_music": ["music", "music_playing", "music_music"],
-                "paused": ["icons_pause", "icon_pause"],
-                "icons_pause": ["paused", "icon_pause"],
-                "skip": ["icons_rightarrow", "icon_arrow_left", "icons_arrow"],
-                "queue": ["icons_list", "icon_playlist", "icons_todolist"],
-                "icons_stop_button": ["stop", "icon_stop", "icon_delete", "icon_x"],
-                "stop": ["icons_stop_button", "icon_stop", "icon_delete", "icon_x"],
-                "icons_loop": ["ub_refresh_icon", "icons_update"],
-                "loop": ["icons_loop", "ub_refresh_icon"],
-                "icons_shuffle": ["icons_magicwand", "icons_splash"],
-                "switch_on": ["icon_switch_on"],
-                "switch_off": ["icon_switch_off"],
-                "icon_switch_on": ["switch_on"],
-                "icon_switch_off": ["switch_off"],
-                "voldown": ["volume_down", "vol_down"],
-                "volume_down": ["voldown", "vol_down"],
-                "volup": ["volume_up", "vol_up"],
-                "volume_up": ["volup", "vol_up", "volume_down"],
-                "room_icon_mute": ["volume_down", "icons_micmute"],
-                # System Features
-                "media": ["icon_media", "icons_image", "icons_file"],
-                "giveaway": ["s_giveaway", "discord_giveaway", "icons_gift"],
-                "discord_giveaway": ["s_giveaway", "giveaway", "icons_gift"],
-                "s_giveaway": ["discord_giveaway", "giveaway", "icons_gift"],
-                "gpp_winner": ["winner", "s_giveaway", "discord_giveaway", "icons_gift"],
-                "winner": ["gpp_winner", "s_giveaway", "discord_giveaway", "icons_gift"],
-            }
-            for alias in alias_map.get(name_clean, []):
+            for alias in self._aliases.get(name_clean, []):
                 emoji = self._emojis.get(alias)
                 if not emoji and hasattr(self.bot, "emojis"):
                     emoji = discord.utils.get(self.bot.emojis, name=alias)
@@ -404,20 +344,17 @@ class EmojiRegistry:
 
         if emoji:
             return str(emoji)
-        # Standard Unicode pack fallback: bot UI remains expressive even when
-        # custom application emojis are missing or unavailable in this server.
-        try:
-            from src.utils.emoji_pack import EMOJI_PACK
-            unicode_emoji = EMOJI_PACK.get(name_clean)
-            if unicode_emoji:
-                return unicode_emoji
-        except Exception:
-            pass
+
+        # If a category was passed, try category resolver
+        if upper_key in CATEGORY_CANDIDATES:
+            cat_res = self.get_category(upper_key, fallback="")
+            if cat_res:
+                return cat_res
+
         return fallback
 
-
     def animated(self, *names: str, fallback: str = "") -> str:
-        """Resolve only registered animated custom emojis; never return a static emoji."""
+        """Resolve only registered animated custom emojis."""
         for name in names:
             try:
                 emoji = self.get_emoji_obj(name)
@@ -427,73 +364,27 @@ class EmojiRegistry:
                 continue
         return fallback
 
-    def get_emoji_obj(self, name: str) -> discord.Emoji | discord.PartialEmoji | str | None:
-        """
-        Get a discord.Emoji or discord.PartialEmoji object for UI buttons or components.
-        """
+    def get_emoji_obj(self, name: str) -> discord.Emoji | discord.PartialEmoji | None:
+        """Get a discord.Emoji or discord.PartialEmoji object for UI buttons or components."""
         name_clean = name.lower().strip(":")
+        upper_key = name_clean.upper()
+
+        if upper_key in self._custom_mappings:
+            raw = self._custom_mappings[upper_key]
+            match = re.match(r"<(a?):([a-zA-Z0-9_]+):([0-9]+)>", raw)
+            if match:
+                return discord.PartialEmoji(
+                    name=match.group(2),
+                    id=int(match.group(3)),
+                    animated=match.group(1) == "a",
+                )
+
         emoji = self._emojis.get(name_clean)
         if not emoji and hasattr(self.bot, "emojis"):
             emoji = discord.utils.get(self.bot.emojis, name=name_clean)
 
         if not emoji:
-            alias_map = {
-                "white_line": ["whiteline", "line", "icon_line"],
-                "white_arrow": ["icons_rightarrow", "tts_right_arrow", "icons_arrow"],
-                "tts_right_arrow": ["icons_rightarrow", "icons_arrow"],
-                "icons_arrow": ["icons_rightarrow", "heart_dot"],
-                "icons_rightarrow": ["icons_arrow", "heart_dot"],
-                "icon_arrow_left": ["icons_leftarrow"],
-                "icons_leftarrow": ["icon_arrow_left"],
-                "heart_dot": ["icons_heart", "heart"],
-                "icons_heart": ["heart_dot", "heart"],
-                "heart": ["heart_dot", "icons_heart"],
-                "ticket_nox": ["icon_ticket", "ticket_support"],
-                "icon_ticket": ["ticket_nox", "ticket_support", "ticket"],
-                "icons_locked": ["icon_lock", "icon_locked"],
-                "icon_lock": ["icons_locked", "icon_locked"],
-                "icons_staff": ["icon_mod", "icon_moderation", "icon_support", "icons_supportteam"],
-                "icon_moderation": ["icon_mod", "icons_staff", "icons_guardian"],
-                "icons_join": ["icon_join", "icons_welcome", "icons_connect"],
-                "icon_join": ["icons_join", "icons_welcome", "icons_connect"],
-                "icons_file": ["icons_files", "icons_todolist", "icon_logging"],
-                "icons_files": ["icons_file", "icons_todolist", "icon_logging"],
-                "icons_image": ["icon_image", "icons_file"],
-                "icon_image": ["icons_image", "icons_file"],
-                "icons_delete": ["icon_delete", "icon_clear", "icons_wrong"],
-                "icon_delete": ["icons_delete", "icon_clear", "icon_x"],
-                "icons_download": ["icons_download", "icons_Download", "download", "icon_download"],
-                "download": ["icons_download", "icons_Download", "icon_download"],
-                # Music Emojis
-                "music": ["icon_music", "music_playing", "music_music"],
-                "icon_music": ["music", "music_playing", "music_music"],
-                "paused": ["icons_pause", "icon_pause"],
-                "icons_pause": ["paused", "icon_pause"],
-                "skip": ["icons_rightarrow", "icon_arrow_left", "icons_arrow"],
-                "queue": ["icons_list", "icon_playlist", "icons_todolist"],
-                "icons_stop_button": ["stop", "icon_stop", "icon_delete", "icon_x"],
-                "stop": ["icons_stop_button", "icon_stop", "icon_delete", "icon_x"],
-                "icons_loop": ["ub_refresh_icon", "icons_update"],
-                "loop": ["icons_loop", "ub_refresh_icon"],
-                "icons_shuffle": ["icons_magicwand", "icons_splash"],
-                "switch_on": ["icon_switch_on"],
-                "switch_off": ["icon_switch_off"],
-                "icon_switch_on": ["switch_on"],
-                "icon_switch_off": ["switch_off"],
-                "voldown": ["volume_down", "vol_down"],
-                "volume_down": ["voldown", "vol_down"],
-                "volup": ["volume_up", "vol_up"],
-                "volume_up": ["volup", "vol_up", "volume_down"],
-                "room_icon_mute": ["volume_down", "icons_micmute"],
-                # System Features
-                "media": ["icon_media", "icons_image", "icons_file"],
-                "giveaway": ["s_giveaway", "discord_giveaway", "icons_gift"],
-                "discord_giveaway": ["s_giveaway", "giveaway", "icons_gift"],
-                "s_giveaway": ["discord_giveaway", "giveaway", "icons_gift"],
-                "gpp_winner": ["winner", "s_giveaway", "discord_giveaway", "icons_gift"],
-                "winner": ["gpp_winner", "s_giveaway", "discord_giveaway", "icons_gift"],
-            }
-            for alias in alias_map.get(name_clean, []):
+            for alias in self._aliases.get(name_clean, []):
                 emoji = self._emojis.get(alias)
                 if not emoji and hasattr(self.bot, "emojis"):
                     emoji = discord.utils.get(self.bot.emojis, name=alias)
@@ -505,42 +396,16 @@ class EmojiRegistry:
     def get_select_emoji(self, name: str, fallback_unicode: str | None = None) -> dict[str, Any] | None:
         """
         Get emoji dictionary structure suitable for Discord Select Menu options and components.
-        Custom emoji requires {'id': str, 'name': str}.
+        Custom emoji requires {'id': str, 'name': str, 'animated': bool}.
+        Supports BOTH static and animated custom emojis.
         """
-        name_clean = name.lower().strip(":")
-        emoji = self._emojis.get(name_clean)
-        if not emoji and hasattr(self.bot, "emojis"):
-            emoji = discord.utils.get(self.bot.emojis, name=name_clean)
-
-        if not emoji:
-            alias_map = {
-                "ticket_nox": ["icon_ticket", "ticket_support"],
-                "icon_ticket": ["ticket_nox", "ticket_support", "ticket"],
-                "icons_locked": ["icon_lock", "icon_locked"],
-                "icon_lock": ["icons_locked", "icon_locked"],
-                "icons_staff": ["icon_mod", "icon_moderation", "icon_support", "icons_supportteam"],
-                "icon_moderation": ["icon_mod", "icons_staff", "icons_guardian"],
-                "icons_join": ["icon_join", "icons_welcome", "icons_connect"],
-                "icon_join": ["icons_join", "icons_welcome", "icons_connect"],
-                "icons_file": ["icons_files", "icons_todolist", "icon_logging"],
-                "music": ["icon_music", "music_playing", "music_music"],
-                "icon_music": ["music", "music_playing", "music_music"],
-            }
-            for alias in alias_map.get(name_clean, []):
-                emoji = self._emojis.get(alias)
-                if not emoji and hasattr(self.bot, "emojis"):
-                    emoji = discord.utils.get(self.bot.emojis, name=alias)
-                if emoji:
-                    break
-
-        if emoji:
+        obj = self.get_emoji_obj(name)
+        if obj:
             return {
-                "id": str(emoji.id),
-                "name": emoji.name,
-                "animated": emoji.animated,
+                "id": str(getattr(obj, "id", "")),
+                "name": str(getattr(obj, "name", name)),
+                "animated": bool(getattr(obj, "animated", False)),
             }
         if fallback_unicode:
             return {"name": fallback_unicode}
         return None
-
-

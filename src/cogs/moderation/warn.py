@@ -8,7 +8,7 @@ from discord.ext import commands
 
 from src.core.context import CustomContext
 from src.cogs.moderation._helpers import check_hierarchy, dispatch_mod_log
-from src.utils.containers import KyokaContainer, send_container_response
+from src.ui.response import KyokaResponse, send_response
 
 if TYPE_CHECKING:
     from src.core.bot import KyokaBot
@@ -38,9 +38,8 @@ class WarnCog(commands.Cog):
         """Warn a member."""
         allowed, err_msg = check_hierarchy(self.bot, ctx, member)
         if not allowed:
-            container = KyokaContainer(accent_color=None)
-            container.add_section(content=f"**Cannot Moderate Member**\n> {err_msg}")
-            await send_container_response(ctx, container)
+            resp = KyokaResponse.permission("Cannot Moderate Member", err_msg or "Hierarchy check failed.")
+            await send_response(ctx, resp, ephemeral=True)
             return
 
         await self.bot.db.execute(
@@ -64,33 +63,27 @@ class WarnCog(commands.Cog):
 
         # Attempt DM notification
         try:
-            dm_container = KyokaContainer(accent_color=None)
-            dm_container.add_section(
-                content=(
-                    f"**You received a warning in {ctx.guild.name}**\n"
-                    f"> Moderator: **{ctx.author}**\n"
-                    f"> Reason: `{reason}`\n"
-                    f"> Total Warnings: `{total_warns}`"
-                )
+            dm_resp = KyokaResponse.moderation(
+                action="warned",
+                target=member,
+                moderator=ctx.author,
+                reason=reason,
+                extra_fields=[("Server", ctx.guild.name, True), ("Total Warnings", str(total_warns), True)],
             )
-            await send_container_response(member, dm_container)
+            await send_response(member, dm_resp)
         except Exception:
             pass
 
         await dispatch_mod_log(self.bot, ctx.guild, "Member Warning", member, ctx.author, reason, extra=f"Total Warns: {total_warns}")
 
-        e_reg = self.bot.custom_emojis
-        dot = e_reg.get("heart_dot", "-")
-        container = KyokaContainer(accent_color=None)
-        container.add_section(content="**Warning Issued**")
-        container.add_separator(divider=True)
-        container.add_text(
-            f"{dot} **Target:** **{member.display_name}** `「{member.id}」`\n"
-            f"{dot} **Total Warnings:** `{total_warns}`\n"
-            f"{dot} **Moderator:** **{ctx.author.display_name}**\n"
-            f"{dot} **Reason:** `{reason}`"
+        resp = KyokaResponse.moderation(
+            action="warn",
+            target=member,
+            moderator=ctx.author,
+            reason=reason,
+            extra_fields=[("Total Warnings", str(total_warns), True)],
         )
-        await send_container_response(ctx, container)
+        await send_response(ctx, resp)
 
     @commands.hybrid_command(
         name="warnings",
@@ -114,41 +107,32 @@ class WarnCog(commands.Cog):
             member.id,
         )
 
-        e_reg = self.bot.custom_emojis
-        dot = e_reg.get("heart_dot", "-")
-        container = KyokaContainer(accent_color=None)
-
         if not records:
-            container.add_section(
-                content=(
-                    f"**Clean Record**\n"
-                    f"> **{member}** has no recorded warnings in this server."
-                )
+            resp = KyokaResponse.info(
+                title="Clean Record",
+                description=f"**{member}** has no recorded warnings in this server.",
+                author=ctx.author,
             )
-            await send_container_response(ctx, container)
+            await send_response(ctx, resp)
             return
 
-        container.add_section(
-            content=(
-                f"**Member Warnings**\n"
-                f"> Showing last {len(records)} warning(s) for **{member}** `「{member.id}」`."
-            )
-        )
-        container.add_separator(divider=True)
-
-        warn_lines = []
+        fields = []
         for r in records:
             w_id = r["id"]
             mod_id = r["moderator_id"]
             reason = r["reason"]
             ts = r.get("created_at")
             ts_str = f"<t:{int(ts.timestamp())}:d>" if isinstance(ts, datetime.datetime) else "N/A"
-            warn_lines.append(f"{dot} **#{w_id}** by <@{mod_id}> ({ts_str}): `{reason}`")
+            fields.append((f"#{w_id} • {ts_str}", f"Moderator: <@{mod_id}>\nReason: `{reason}`", False))
 
-        container.add_text("\n".join(warn_lines))
-        container.add_separator(divider=True)
-        container.add_text(f"-# Use `?delwarn <id>` to remove a specific warning.")
-        await send_container_response(ctx, container)
+        resp = KyokaResponse.info(
+            title=f"Warnings for {member.display_name}",
+            description=f"Showing last {len(records)} warning(s) for **{member}** `「{member.id}」`.\n-# Use `?delwarn <id>` to remove a specific warning.",
+            fields=fields,
+            author=ctx.author,
+            thumbnail_url=member.display_avatar.url,
+        )
+        await send_response(ctx, resp)
 
     @commands.hybrid_command(
         name="delwarn",
@@ -166,14 +150,12 @@ class WarnCog(commands.Cog):
             ctx.guild.id,
         )
         if not row:
-            container = KyokaContainer(accent_color=None)
-            container.add_section(
-                content=(
-                    "**Warning Not Found**\n"
-                    f"> No warning with ID `#{warn_id}` exists in this server."
-                )
+            resp = KyokaResponse.warning(
+                title="Warning Not Found",
+                description=f"No warning with ID `#{warn_id}` exists in this server.",
+                author=ctx.author,
             )
-            await send_container_response(ctx, container)
+            await send_response(ctx, resp, ephemeral=True)
             return
 
         await self.bot.db.execute(
@@ -182,21 +164,13 @@ class WarnCog(commands.Cog):
             ctx.guild.id,
         )
 
-        e_reg = self.bot.custom_emojis
-        dot = e_reg.get("heart_dot", "-")
-        container = KyokaContainer(accent_color=None)
-        container.add_section(
-            content=(
-                f"**Warning Deleted**\n"
-                f"> Warning `#{warn_id}` has been deleted."
-            )
+        resp = KyokaResponse.success(
+            title="Warning Deleted",
+            description=f"Warning `#{warn_id}` has been deleted from this server.",
+            fields=[("Warning ID", f"`#{warn_id}`", True), ("Moderator", f"**{ctx.author.display_name}**", True)],
+            author=ctx.author,
         )
-        container.add_separator(divider=True)
-        container.add_text(
-            f"{dot} **Warning ID:** `#{warn_id}`\n"
-            f"{dot} **Moderator:** **{ctx.author.display_name}**"
-        )
-        await send_container_response(ctx, container)
+        await send_response(ctx, resp)
 
     @commands.command(
         name="case",
@@ -212,27 +186,30 @@ class WarnCog(commands.Cog):
             ctx.guild.id,
         )
         if not row:
-            container = KyokaContainer(accent_color=None)
-            container.add_section(content=f"**Case Not Found**\n> No warning case `#{case_id}` exists in this server.")
-            return await send_container_response(ctx, container)
+            resp = KyokaResponse.warning(
+                title="Case Not Found",
+                description=f"No warning case `#{case_id}` exists in this server.",
+                author=ctx.author,
+            )
+            return await send_response(ctx, resp, ephemeral=True)
 
         target = ctx.guild.get_member(row["user_id"])
         target_name = target.display_name if target else f"User {row['user_id']}"
         mod = ctx.guild.get_member(row["moderator_id"])
         mod_name = mod.display_name if mod else f"Mod {row['moderator_id']}"
 
-        e_reg = self.bot.custom_emojis
-        dot = e_reg.get("heart_dot", "-")
-        container = KyokaContainer(accent_color=None)
-        container.add_section(content=f"**Moderation Case #{case_id}**")
-        container.add_separator(divider=True)
-        container.add_text(
-            f"{dot} **Target:** **{target_name}** `「{row['user_id']}」`\n"
-            f"{dot} **Moderator:** **{mod_name}** `「{row['moderator_id']}」`\n"
-            f"{dot} **Reason:** `{row['reason']}`\n"
-            f"{dot} **Logged At:** `{row.get('created_at', 'N/A')}`"
+        fields = [
+            ("Target", f"**{target_name}** `「{row['user_id']}」`", True),
+            ("Moderator", f"**{mod_name}** `「{row['moderator_id']}」`", True),
+            ("Reason", f"`{row['reason']}`", False),
+            ("Logged At", f"`{row.get('created_at', 'N/A')}`", False),
+        ]
+        resp = KyokaResponse.info(
+            title=f"Moderation Case #{case_id}",
+            fields=fields,
+            author=ctx.author,
         )
-        await send_container_response(ctx, container)
+        await send_response(ctx, resp)
 
     @commands.command(
         name="clearwarnings",
@@ -250,9 +227,12 @@ class WarnCog(commands.Cog):
         )
         total = count_row["cnt"] if count_row else 0
         if total == 0:
-            container = KyokaContainer(accent_color=None)
-            container.add_section(content=f"**No Warnings Found**\n> {member.mention} has zero recorded warnings.")
-            return await send_container_response(ctx, container)
+            resp = KyokaResponse.info(
+                title="No Warnings Found",
+                description=f"{member.mention} has zero recorded warnings.",
+                author=ctx.author,
+            )
+            return await send_response(ctx, resp)
 
         await self.bot.db.execute(
             "DELETE FROM guild_warns WHERE guild_id = ? AND user_id = ?;",
@@ -262,17 +242,16 @@ class WarnCog(commands.Cog):
 
         await dispatch_mod_log(self.bot, ctx.guild, "Warnings Cleared", member, ctx.author, f"Cleared {total} warnings")
 
-        e_reg = self.bot.custom_emojis
-        dot = e_reg.get("heart_dot", "-")
-        container = KyokaContainer(accent_color=None)
-        container.add_section(content="**Warnings Cleared**")
-        container.add_separator(divider=True)
-        container.add_text(
-            f"{dot} **Target:** **{member.display_name}** `「{member.id}」`\n"
-            f"{dot} **Cleared Count:** `{total}` warning(s)\n"
-            f"{dot} **Moderator:** **{ctx.author.display_name}**"
+        resp = KyokaResponse.success(
+            title="Warnings Cleared",
+            description=f"Cleared `{total}` warning(s) for **{member.display_name}**.",
+            fields=[
+                ("Target", f"**{member.display_name}** `「{member.id}」`", True),
+                ("Cleared Count", f"`{total}` warning(s)", True),
+            ],
+            author=ctx.author,
         )
-        await send_container_response(ctx, container)
+        await send_response(ctx, resp)
 
 
 async def setup(bot: KyokaBot) -> None:

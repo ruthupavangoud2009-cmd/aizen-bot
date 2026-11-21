@@ -7,7 +7,7 @@ from discord.ext import commands
 
 from src.core.context import CustomContext
 from src.cogs.moderation._helpers import dispatch_mod_log
-from src.utils.containers import KyokaContainer, send_container_response
+from src.ui.response import KyokaResponse, send_response
 
 if TYPE_CHECKING:
     from src.core.bot import KyokaBot
@@ -38,9 +38,8 @@ class LockCog(commands.Cog):
         """Lock a channel."""
         target_channel = channel or ctx.channel
         if not isinstance(target_channel, discord.TextChannel):
-            container = KyokaContainer(accent_color=None)
-            container.add_section(content="**Error**\n> Lock command only applies to text channels.")
-            await send_container_response(ctx, container)
+            resp = KyokaResponse.warning("Error", "Lock command only applies to text channels.", author=ctx.author)
+            await send_response(ctx, resp, ephemeral=True)
             return
 
         overwrite = target_channel.overwrites_for(ctx.guild.default_role)
@@ -57,17 +56,17 @@ class LockCog(commands.Cog):
             channel=target_channel,
         )
 
-        e_reg = self.bot.custom_emojis
-        dot = e_reg.get("heart_dot", "-")
-        container = KyokaContainer(accent_color=None)
-        container.add_section(content="**Channel Locked**")
-        container.add_separator(divider=True)
-        container.add_text(
-            f"{dot} **Channel:** {target_channel.mention}\n"
-            f"{dot} **Moderator:** **{ctx.author.display_name}** `「{ctx.author.id}」`\n"
-            f"{dot} **Reason:** `{reason}`"
+        resp = KyokaResponse.success(
+            title="Channel Locked",
+            description=f"Successfully locked {target_channel.mention} for regular members.",
+            fields=[
+                ("Channel", target_channel.mention, True),
+                ("Moderator", f"**{ctx.author.display_name}** `「{ctx.author.id}」`", True),
+                ("Reason", f"`{reason}`", False),
+            ],
+            author=ctx.author,
         )
-        await send_container_response(ctx, container)
+        await send_response(ctx, resp)
 
     @commands.hybrid_command(
         name="unlock",
@@ -87,9 +86,8 @@ class LockCog(commands.Cog):
         """Unlock a channel."""
         target_channel = channel or ctx.channel
         if not isinstance(target_channel, discord.TextChannel):
-            container = KyokaContainer(accent_color=None)
-            container.add_section(content="**Error**\n> Unlock command only applies to text channels.")
-            await send_container_response(ctx, container)
+            resp = KyokaResponse.warning("Error", "Unlock command only applies to text channels.", author=ctx.author)
+            await send_response(ctx, resp, ephemeral=True)
             return
 
         overwrite = target_channel.overwrites_for(ctx.guild.default_role)
@@ -112,17 +110,17 @@ class LockCog(commands.Cog):
             channel=target_channel,
         )
 
-        e_reg = self.bot.custom_emojis
-        dot = e_reg.get("heart_dot", "-")
-        container = KyokaContainer(accent_color=None)
-        container.add_section(content="**Channel Unlocked**")
-        container.add_separator(divider=True)
-        container.add_text(
-            f"{dot} **Channel:** {target_channel.mention}\n"
-            f"{dot} **Moderator:** **{ctx.author.display_name}** `「{ctx.author.id}」`\n"
-            f"{dot} **Reason:** `{reason}`"
+        resp = KyokaResponse.success(
+            title="Channel Unlocked",
+            description=f"Successfully unlocked {target_channel.mention} for regular members.",
+            fields=[
+                ("Channel", target_channel.mention, True),
+                ("Moderator", f"**{ctx.author.display_name}** `「{ctx.author.id}」`", True),
+                ("Reason", f"`{reason}`", False),
+            ],
+            author=ctx.author,
         )
-        await send_container_response(ctx, container)
+        await send_response(ctx, resp)
 
     @commands.command(
         name="hide",
@@ -141,9 +139,8 @@ class LockCog(commands.Cog):
         """Hide a channel from @everyone."""
         target_channel = channel or ctx.channel
         if not isinstance(target_channel, discord.TextChannel):
-            container = KyokaContainer(accent_color=None)
-            container.add_section(content="**Error**\n> Hide command only applies to text channels.")
-            return await send_container_response(ctx, container)
+            resp = KyokaResponse.warning("Error", "Hide command only applies to text channels.", author=ctx.author)
+            return await send_response(ctx, resp, ephemeral=True)
 
         overwrite = target_channel.overwrites_for(ctx.guild.default_role)
         overwrite.view_channel = False
@@ -160,17 +157,17 @@ class LockCog(commands.Cog):
             channel=target_channel,
         )
 
-        e_reg = self.bot.custom_emojis
-        dot = e_reg.get("heart_dot", "-")
-        container = KyokaContainer(accent_color=None)
-        container.add_section(content="**Channel Hidden**")
-        container.add_separator(divider=True)
-        container.add_text(
-            f"{dot} **Channel:** {target_channel.mention}\n"
-            f"{dot} **Moderator:** **{ctx.author.display_name}**\n"
-            f"{dot} **Reason:** `{reason}`"
+        resp = KyokaResponse.success(
+            title="Channel Hidden",
+            description=f"Successfully hid {target_channel.mention} from regular members.",
+            fields=[
+                ("Channel", target_channel.mention, True),
+                ("Moderator", f"**{ctx.author.display_name}** `「{ctx.author.id}」`", True),
+                ("Reason", f"`{reason}`", False),
+            ],
+            author=ctx.author,
         )
-        await send_container_response(ctx, container)
+        await send_response(ctx, resp)
 
     @commands.command(
         name="unhide",
@@ -189,9 +186,8 @@ class LockCog(commands.Cog):
         """Unhide a channel for @everyone."""
         target_channel = channel or ctx.channel
         if not isinstance(target_channel, discord.TextChannel):
-            container = KyokaContainer(accent_color=None)
-            container.add_section(content="**Error**\n> Unhide command only applies to text channels.")
-            return await send_container_response(ctx, container)
+            resp = KyokaResponse.warning("Error", "Unhide command only applies to text channels.", author=ctx.author)
+            return await send_response(ctx, resp, ephemeral=True)
 
         overwrite = target_channel.overwrites_for(ctx.guild.default_role)
         overwrite.view_channel = None
@@ -208,17 +204,17 @@ class LockCog(commands.Cog):
             channel=target_channel,
         )
 
-        e_reg = self.bot.custom_emojis
-        dot = e_reg.get("heart_dot", "-")
-        container = KyokaContainer(accent_color=None)
-        container.add_section(content="**Channel Unhidden**")
-        container.add_separator(divider=True)
-        container.add_text(
-            f"{dot} **Channel:** {target_channel.mention}\n"
-            f"{dot} **Moderator:** **{ctx.author.display_name}**\n"
-            f"{dot} **Reason:** `{reason}`"
+        resp = KyokaResponse.success(
+            title="Channel Unhidden",
+            description=f"Successfully unhid {target_channel.mention} for regular members.",
+            fields=[
+                ("Channel", target_channel.mention, True),
+                ("Moderator", f"**{ctx.author.display_name}** `「{ctx.author.id}」`", True),
+                ("Reason", f"`{reason}`", False),
+            ],
+            author=ctx.author,
         )
-        await send_container_response(ctx, container)
+        await send_response(ctx, resp)
 
 
 async def setup(bot: KyokaBot) -> None:

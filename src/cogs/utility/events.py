@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+from pathlib import Path
 import re
 import time
 from typing import Any, Optional, Dict
@@ -15,6 +16,7 @@ import discord
 from discord import app_commands
 from discord.ext import commands
 
+from src.core.config import BASE_DIR
 from src.core.bot import KyokaBot
 from src.core.context import CustomContext
 from src.cogs.utility.embed_builder import ContainerDraft

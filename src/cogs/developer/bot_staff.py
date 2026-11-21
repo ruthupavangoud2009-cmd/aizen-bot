@@ -140,6 +140,15 @@ class BotStaffCog(commands.Cog, name="Developer-BotStaff"):
         add_bot_staff(target_id)
         if hasattr(self.bot, "no_prefix_users"):
             self.bot.no_prefix_users.add(target_id)
+        if hasattr(self.bot, "db") and self.bot.db:
+            try:
+                await self.bot.db.execute(
+                    "INSERT INTO system_bot_staff (user_id, added_by) VALUES ($1, $2) ON CONFLICT (user_id) DO NOTHING;",
+                    target_id,
+                    ctx.author.id,
+                )
+            except Exception as e:
+                logger.debug("Notice persisting bot staff to DB: %s", e)
 
         await audit(self.bot, ctx.author.id, "botstaff-add", target_id, "success")
         display = target_user.name if target_user else str(target_id)
@@ -173,6 +182,11 @@ class BotStaffCog(commands.Cog, name="Developer-BotStaff"):
             return await ctx.send(f"⚠️ <@{target_id}> is not in the Bot Staff registry.")
 
         remove_bot_staff(target_id)
+        if hasattr(self.bot, "db") and self.bot.db:
+            try:
+                await self.bot.db.execute("DELETE FROM system_bot_staff WHERE user_id = $1;", target_id)
+            except Exception as e:
+                logger.debug("Notice removing bot staff from DB: %s", e)
         await audit(self.bot, ctx.author.id, "botstaff-remove", target_id, "success")
         await ctx.send(f"🗑️ Successfully removed <@{target_id}> (`{target_id}`) from Bot Staff.")
 

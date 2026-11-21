@@ -187,12 +187,24 @@ class TicketClosedControlsView(discord.ui.View):
     def __init__(self, cog: TicketSystem) -> None:
         super().__init__(timeout=None)
         self.cog = cog
+        e_reg = getattr(cog.bot, "custom_emojis", None)
+        if e_reg and hasattr(e_reg, "get_emoji_obj"):
+            unlock_em = e_reg.get_emoji_obj("icons_unlock") or e_reg.get_emoji_obj("icon_lock")
+            if isinstance(unlock_em, (str, discord.Emoji, discord.PartialEmoji)):
+                self.btn_reopen.emoji = unlock_em
+
+            file_em = e_reg.get_emoji_obj("icons_file") or e_reg.get_emoji_obj("icons_files")
+            if isinstance(file_em, (str, discord.Emoji, discord.PartialEmoji)):
+                self.btn_transcript.emoji = file_em
+
+            del_em = e_reg.get_emoji_obj("icons_delete") or e_reg.get_emoji_obj("icon_delete")
+            if isinstance(del_em, (str, discord.Emoji, discord.PartialEmoji)):
+                self.btn_delete.emoji = del_em
 
     @discord.ui.button(
         label="Reopen Ticket",
         style=discord.ButtonStyle.success,
         custom_id="ticket_ctrl_reopen",
-        emoji="🔓",
         row=0,
     )
     async def btn_reopen(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
@@ -215,7 +227,6 @@ class TicketClosedControlsView(discord.ui.View):
         label="Transcript",
         style=discord.ButtonStyle.secondary,
         custom_id="ticket_ctrl_closed_transcript",
-        emoji="📄",
         row=0,
     )
     async def btn_transcript(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
@@ -245,7 +256,6 @@ class TicketClosedControlsView(discord.ui.View):
         label="Delete Ticket",
         style=discord.ButtonStyle.danger,
         custom_id="ticket_ctrl_delete",
-        emoji="🗑️",
         row=0,
     )
     async def btn_delete(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
