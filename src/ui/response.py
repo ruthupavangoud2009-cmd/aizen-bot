@@ -396,6 +396,14 @@ async def send_response(
         bot = getattr(target._state, "_parent", getattr(target._state, "bot", None))
 
     embed = response.build_embed(bot=bot)
+
+    # Apply guild custom UI color if configured (e.g. ?uicolour grey)
+    guild = getattr(target, "guild", None)
+    if guild and bot and hasattr(bot, "guild_mgr"):
+        custom_color = bot.guild_mgr.get_ui_color(guild.id, default=None)
+        if custom_color is not None:
+            embed.color = discord.Color(custom_color)
+
     file_list = [file] if file else (files or None)
 
     # 1. Interaction or Context wrapping an Interaction

@@ -49,6 +49,21 @@ class MicrosecondCache:
         self.ghostping: Dict[int, bool] = {}
         self.disabled_commands: Dict[int, Set[str]] = {}
         self.developers: Set[int] = set()
+        self.ui_colors: Dict[int, int] = {}
+
+    def get_ui_color(self, guild_id: int | None, default: int = 0x2B0938) -> int:
+        """Retrieve guild UI color from memory in <0.01ms."""
+        if guild_id is None:
+            return default
+        return self.ui_colors.get(guild_id, default)
+
+    def set_ui_color(self, guild_id: int, color: int) -> None:
+        """Store guild UI color in memory."""
+        self.ui_colors[guild_id] = color
+
+    def reset_ui_color(self, guild_id: int) -> None:
+        """Reset guild UI color to default."""
+        self.ui_colors.pop(guild_id, None)
 
     # --- Generic LRU Cache Methods ---
 

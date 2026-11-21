@@ -79,6 +79,11 @@ CATEGORY_CANDIDATES: dict[str, list[str]] = {
     "GAMES": ["icon_backpack", "icon_games", "icon_fun"],
     "UTILITY": ["icons_utility", "icons_settings", "ub_refresh_icon"],
     "ECONOMY": ["icon_dollar", "zefex_credit_cards", "cash"],
+    "TERMINAL": ["icon_terminal", "icon_slash", "icons_slash", "icon_dev"],
+    "BRACKETS": ["icon_code", "icon_developer", "icons_todolist", "icon_settings"],
+    "MODULES": ["icon_grid", "icon_menu", "icons_menu", "icon_forum"],
+    "BOOK": ["icon_book", "icons_rules", "icon_rules", "icons_file"],
+    "STACK": ["icon_stack", "icon_home", "icon_layers", "icons_menu"],
 }
 
 CATEGORY_FALLBACK_EMOJIS: dict[str, str] = {
@@ -134,6 +139,11 @@ CATEGORY_FALLBACK_EMOJIS: dict[str, str] = {
     "GAMES": "🎮",
     "UTILITY": "🔧",
     "ECONOMY": "💳",
+    "TERMINAL": ">_",
+    "BRACKETS": "{ }",
+    "MODULES": "⊞",
+    "BOOK": "📖",
+    "STACK": "≡",
 }
 
 
@@ -316,8 +326,63 @@ class EmojiRegistry:
                 emojis = await self.bot.fetch_application_emojis()
                 self._emojis = {e.name.lower(): e for e in emojis}
                 logger.info(f"Successfully cached {len(self._emojis)} custom Application Emoji(s).")
+                # Asynchronously sync missing local assets up to the 2,000 application emoji limit
+                asyncio.create_task(self.sync_assets_to_application())
         except Exception as e:
             logger.warning(f"Failed to fetch application emojis: {e}")
+
+    async def sync_assets_to_application(self, max_upload: int = 2000) -> int:
+        """
+        Sync local PNG/GIF assets to Discord Application Emojis,
+        taking advantage of Discord's 2,000 application emoji storage.
+        """
+        if not hasattr(self.bot, "create_application_emoji") or not getattr(self.bot, "application_id", None):
+            return 0
+
+        asset_dirs = [
+            _DATA_DIR.parent / "assets" / "emoji",
+            _DATA_DIR.parent / "assets" / "emoji2",
+            _DATA_DIR.parent / "assets" / "music",
+            _DATA_DIR.parent / "assets" / "avatar",
+        ]
+        created_count = 0
+        existing_names = set(self._emojis.keys())
+
+        for folder in asset_dirs:
+            if not folder.exists():
+                continue
+            for file_path in folder.iterdir():
+                if created_count >= max_upload:
+                    break
+                if file_path.suffix.lower() not in (".png", ".gif", ".jpg", ".jpeg"):
+                    continue
+
+                raw_name = file_path.stem.lower()
+                clean_name = re.sub(r"[^a-z0-9_]", "_", raw_name)
+                clean_name = re.sub(r"_+", "_", clean_name).strip("_")
+                if len(clean_name) < 2:
+                    clean_name = f"em_{clean_name}"
+                clean_name = clean_name[:32]
+
+                if clean_name in existing_names:
+                    continue
+
+                try:
+                    with open(file_path, "rb") as f:
+                        img_bytes = f.read()
+                    if len(img_bytes) > 256 * 1024:
+                        continue
+
+                    new_emoji = await self.bot.create_application_emoji(name=clean_name, image=img_bytes)
+                    self._emojis[clean_name] = new_emoji
+                    existing_names.add(clean_name)
+                    created_count += 1
+                    logger.info(f"Registered Application Emoji: {clean_name} (ID: {new_emoji.id}, Animated: {getattr(new_emoji, 'animated', False)})")
+                    await asyncio.sleep(0.4)
+                except Exception as e:
+                    logger.debug(f"Notice uploading application emoji {clean_name}: {e}")
+
+        return created_count
 
     def get_category(self, category: str, animated_only: bool = False, fallback: str = "") -> str:
         """
