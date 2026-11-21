@@ -76,36 +76,78 @@ class HelpCategorySelect(discord.ui.Select):
         emoji_registry = getattr(help_view.cog.bot, "custom_emojis", None)
 
         def resolve_menu_emoji(cat_name: Optional[str] = None) -> Optional[discord.PartialEmoji | str]:
-            if not emoji_registry:
-                return None
-            if not cat_name or cat_name == "home":
-                return emoji_registry.get_category_obj("HOME")
-            raw_category = cat_name.split("・", 1)[-1].strip().upper()
+            if not cat_name or cat_name.lower() == "home":
+                if emoji_registry:
+                    obj = emoji_registry.get_category_obj("HOME")
+                    if obj:
+                        return obj
+                return "🏠"
+
+            raw = cat_name.split("・", 1)[-1].strip().upper()
             mapping = {
                 "GETTING STARTED": "HOME",
                 "MODERATION": "MODERATION",
-                "AUTOMOD & SECURITY": "SECURITY",
-                "WELCOME & AUTOMOD": "SERVER",
+                "AUTOMOD & SECURITY": "ANTI_NUKE",
+                "ANTINUKE": "ANTI_NUKE",
+                "WELCOME & AUTOMOD": "WELCOMER",
+                "WELCOMER": "WELCOMER",
                 "VERIFICATION": "VERIFICATION",
                 "TICKETS & SUPPORT": "TICKET",
-                "REACTION ROLES": "SETTINGS",
-                "GIVEAWAYS & EVENTS": "PREMIUM",
+                "TICKET": "TICKET",
+                "REACTION ROLES": "ROLE",
+                "GIVEAWAYS & EVENTS": "GIVEAWAY",
+                "GIVEAWAY": "GIVEAWAY",
                 "MUSIC": "MUSIC",
                 "AFK": "AFK",
                 "VOUCHES & REPUTATION": "LEVEL",
                 "BLOX FRUITS SERVICE BILLS": "SAVE",
                 "BLOX FRUITS AI": "AI",
                 "ARTIFICIAL INTELLIGENCE": "AI",
+                "AI": "AI",
                 "LEVELS & COMMUNITY": "LEVEL",
-                "IMAGES & AVATARS": "PROFILE",
+                "IMAGES & AVATARS": "MEDIA",
+                "MEDIA": "MEDIA",
                 "SOCIAL & FUN": "MEMBERS",
                 "PREMIUM": "PREMIUM",
                 "SERVER ADMINISTRATION": "ADMIN",
-                "UTILITIES": "SETTINGS",
+                "ADMIN": "ADMIN",
+                "UTILITIES": "UTILITY",
+                "UTILITY": "UTILITY",
                 "OWNER & DEVELOPER": "OWNER",
+                "OWNER": "OWNER",
+                "MULTIPLAYER GAMES": "GAMES",
+                "MINI-GAMES": "GAMES",
+                "GAMES": "GAMES",
+                "WATCH PARTY": "VOICE",
+                "KYOKA CASINO": "CASINO",
+                "CASINO": "CASINO",
+                "HUNTING & ANIMALS": "GAMES",
+                "JOIN TO CREATE": "VOICE",
+                "MEETING": "VOICE",
+                "LOGGING": "LOGGING",
             }
-            cat_key = mapping.get(raw_category, "SETTINGS")
-            return emoji_registry.get_category_obj(cat_key)
+            cat_key = mapping.get(raw)
+            if not cat_key:
+                for k, v in mapping.items():
+                    if k in raw or raw in k:
+                        cat_key = v
+                        break
+            if not cat_key:
+                cat_key = "SETTINGS"
+
+            if emoji_registry:
+                obj = emoji_registry.get_category_obj(cat_key)
+                if obj:
+                    return obj
+            fallback_map = {
+                "HOME": "🏠", "MODERATION": "⚔️", "ANTI_NUKE": "🛡️", "WELCOMER": "🚪",
+                "VERIFICATION": "✅", "TICKET": "🎫", "ROLE": "🏷️", "GIVEAWAY": "🎉",
+                "MUSIC": "🎵", "AFK": "💤", "AI": "🤖", "LEVEL": "⭐", "MEDIA": "🖼️",
+                "MEMBERS": "👥", "PREMIUM": "💎", "ADMIN": "⚙️", "UTILITY": "🔧",
+                "OWNER": "👑", "GAMES": "🎮", "VOICE": "🎙️", "CASINO": "🎰",
+                "LOGGING": "📜", "SETTINGS": "⚙️",
+            }
+            return fallback_map.get(cat_key, "📁")
 
         options: list[discord.SelectOption] = [
             discord.SelectOption(
@@ -133,7 +175,7 @@ class HelpCategorySelect(discord.ui.Select):
             )
 
         super().__init__(
-            placeholder="Select a category to view commands...",
+            placeholder="Select a module to view commands...",
             min_values=1,
             max_values=1,
             options=options[:25],
@@ -518,92 +560,48 @@ class Help(commands.Cog, name="Help"):
         return ordered
 
     def build_home_embed(self, ctx: CustomContext, visible_categories: dict[str, list[commands.Command]]) -> discord.Embed:
-        """Construct the signature KYOKA Aizen Edition Help Homepage."""
+        """Construct the signature KYOKA Aizen Edition Help Homepage (Kyro & Greed style)."""
         reg = getattr(self.bot, "custom_emojis", None)
 
-        def get_em(category_name: str) -> str:
+        def get_em(name_or_cat: str, fallback: str = "") -> str:
             if not reg:
-                return ""
-            return reg.get_category(category_name, fallback="")
+                return fallback
+            res = reg.get_category(name_or_cat, fallback="")
+            if not res:
+                res = reg.get(name_or_cat, fallback=fallback)
+            return res or fallback
 
-        home_icon = get_em("HOME")
-        ping_icon = get_em("PING")
-        time_icon = get_em("TIME")
-        server_icon = get_em("SERVER")
-        members_icon = get_em("MEMBERS")
-        creator_icon = get_em("OWNER")
-        premium_icon = get_em("PREMIUM")
-        arrow_icon = get_em("ARROW")
-
-        bullet = arrow_icon if arrow_icon else "•"
-
+        heart = get_em("heart_dot", "💜")
         prefix = self.bot.guild_mgr.get_prefix(ctx.guild.id if ctx.guild else None)
         ws_ping = self._get_latency_ms()
-        guilds = list(getattr(self.bot, "guilds", ()) or ())
-        total_servers = len(guilds)
-        total_members = sum(int(getattr(g, "member_count", 0) or 0) for g in guilds)
+        total_commands = sum(len(cmds) for cmds in visible_categories.values())
+        modules_count = len(visible_categories)
 
-        # Uptime
-        start_time = getattr(self.bot, "start_time", None) or discord.utils.utcnow()
-        uptime_timestamp = int(start_time.timestamp())
-
-        title_str = f"{home_icon} KYOKA — AIZEN ULTIMATE EDITION".strip()
         embed = discord.Embed(
-            title=title_str,
+            title="kyoka help",
             description=(
-                "**Welcome to KYOKA** — The premier Aizen-themed Discord experience.\n"
-                "> Powerful server protection, high-fidelity music streaming, autonomous AI companions, "
-                "automated ticket panels, and next-generation moderation."
+                "Experience the ultimate Discord bot designed for seamless server management, "
+                "bulletproof security, high-fidelity music, and community engagement.\n\n"
+                "───────────────────────────────\n"
+                f"{heart} **Prefix:** `{prefix}` | **Slash:** `/`\n"
+                f"{heart} **Commands:** `{total_commands:,}`\n"
+                f"{heart} **Modules:** `{modules_count}` | **Ping:** `{ws_ping}ms`\n"
+                "───────────────────────────────"
             ),
             color=0x2B0938,
             timestamp=discord.utils.utcnow(),
-        )
-
-        embed.add_field(
-            name=f"{ping_icon} System Telemetry",
-            value=(
-                f"{bullet} **WebSocket Ping:** `{ws_ping}ms`\n"
-                f"{bullet} **Online Since:** <t:{uptime_timestamp}:R>\n"
-                f"{bullet} **Default Prefix:** `{prefix}` | **Slash:** `/`"
-            ),
-            inline=True,
-        )
-
-        embed.add_field(
-            name=f"{server_icon} Global Scale",
-            value=(
-                f"{bullet} **Active Servers:** `{total_servers:,}`\n"
-                f"{bullet} **Total Members:** `{total_members:,}`\n"
-                f"{bullet} **Accessible Modules:** `{len(visible_categories)}`"
-            ),
-            inline=True,
-        )
-
-        embed.add_field(
-            name=f"{creator_icon} Identity & Support",
-            value=(
-                f"{bullet} **Creator:** `made by aizen (ruthupavan)`\n"
-                f"{bullet} **Primary Owner:** <@{OWNER_ID}>\n"
-                f"{bullet} **Support Server:** [Join Here](https://discord.gg/7q4tn6dA6V)"
-            ),
-            inline=False,
-        )
-
-        embed.add_field(
-            name=f"{premium_icon} Premium Status",
-            value=f"{bullet} **Tier:** `KYOKA Supreme (Active)` — All enterprise features unlocked.",
-            inline=False,
         )
 
         if getattr(self.bot, "user", None):
             embed.set_thumbnail(url=self.bot.user.display_avatar.url)
 
         banner_url = Config.ASSETS.HELP_BANNER_URL or Config.ASSETS.BANNER_URL
-        if banner_url and banner_url.startswith("http"):
-            embed.set_image(url=banner_url)
+        if not banner_url or not banner_url.startswith("http"):
+            banner_url = "https://raw.githubusercontent.com/ruthupavangoud2009-cmd/aizen-bot/main/assets/branding/kyoka_banner.png"
+        embed.set_image(url=banner_url)
 
         embed.set_footer(
-            text=f"-# Select a category from the dropdown below • Type {prefix}help <command> for syntax",
+            text=f"📖 Use {prefix}help (command) for details on a specific command • Requested by {ctx.author.display_name}",
             icon_url=ctx.author.display_avatar.url if ctx.author else None,
         )
 
@@ -616,7 +614,7 @@ class Help(commands.Cog, name="Help"):
         commands_list: list[commands.Command],
         page: int = 1,
     ) -> discord.Embed:
-        """Construct a paginated category command viewer showing syntax, description, and permissions."""
+        """Construct a sleek, compact category command viewer matching Kyro & Greed style."""
         reg = getattr(self.bot, "custom_emojis", None)
 
         def get_em(category_name: str) -> str:
@@ -624,9 +622,7 @@ class Help(commands.Cog, name="Help"):
                 return ""
             return reg.get_category(category_name, fallback="")
 
-        arrow_icon = get_em("ARROW")
-        bullet = arrow_icon if arrow_icon else "•"
-
+        heart = reg.get("heart_dot", "💜") if reg else "💜"
         prefix = self.bot.guild_mgr.get_prefix(ctx.guild.id if ctx.guild else None)
         raw_title = cat_name.split("・", 1)[-1].strip()
 
@@ -646,31 +642,34 @@ class Help(commands.Cog, name="Help"):
         end_idx = start_idx + HELP_COMMANDS_PER_PAGE
         page_cmds = unique_cmds[start_idx:end_idx]
 
-        cat_icon = get_em(raw_title) or get_em("SETTINGS")
-        embed = discord.Embed(
-            title=f"{cat_icon} {raw_title} Module (Page {curr_page}/{total_pages})".strip(),
-            description=f"> {CATEGORY_DESCRIPTIONS.get(cat_name, 'Commands in this system.')}\n\n**Total Commands:** `{len(unique_cmds)}`",
-            color=0x2B0938,
-            timestamp=discord.utils.utcnow(),
-        )
+        cat_icon = get_em(raw_title) or get_em("SETTINGS") or "⚔️"
+        desc_lines = [
+            f"> {CATEGORY_DESCRIPTIONS.get(cat_name, 'Commands in this system.')}\n",
+            f"**Commands ({len(unique_cmds)}):**",
+        ]
 
         for cmd in page_cmds:
             badge = self._get_badge(cmd)
-            desc = (cmd.description or cmd.help or "No description provided.").strip().split("\n")[0][:100]
+            desc = (cmd.description or cmd.help or "No description provided.").strip().split("\n")[0][:75]
             sig = f" {cmd.signature}" if cmd.signature else ""
-            aliases_str = f" | Aliases: `{'`, `'.join(cmd.aliases[:3])}`" if getattr(cmd, "aliases", None) else ""
-            
-            field_name = f"{bullet} `{prefix}{cmd.qualified_name}{sig}`{badge}"
-            field_val = f"> {desc}{aliases_str}"
-            embed.add_field(name=field_name[:256], value=field_val[:1024], inline=False)
+            desc_lines.append(f"> {heart} **`{prefix}{cmd.qualified_name}{sig}`**{badge}\n> *{desc}*")
+
+        embed = discord.Embed(
+            title=f"{cat_icon} {raw_title} Module (Page {curr_page}/{total_pages})".strip(),
+            description="\n".join(desc_lines)[:4000],
+            color=0x2B0938,
+            timestamp=discord.utils.utcnow(),
+        )
 
         if getattr(self.bot, "user", None):
             embed.set_thumbnail(url=self.bot.user.display_avatar.url)
 
         embed.set_footer(
-            text=f"-# Use buttons below to paginate • {prefix}help <command> for deep details",
+            text=f"📖 Page {curr_page}/{total_pages} • Use {prefix}help <command> for syntax • Requested by {ctx.author.display_name}",
             icon_url=ctx.author.display_avatar.url if ctx.author else None,
         )
+
+        return embed
 
         return embed
 

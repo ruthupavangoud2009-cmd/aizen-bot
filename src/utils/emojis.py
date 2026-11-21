@@ -70,6 +70,70 @@ CATEGORY_CANDIDATES: dict[str, list[str]] = {
     "DATABASE": ["icons_todolist", "icons_file", "icons_files"],
     "SAVE": ["icons_download", "icons_todolist", "icon_upload"],
     "INFO": ["icon_info", "spy_icons_question", "icons_todolist"],
+    "GIVEAWAY": ["s_giveaway", "discord_giveaway", "giveaway", "icons_gift"],
+    "MEDIA": ["media", "icon_media", "icons_image", "icons_file"],
+    "WELCOMER": ["icons_join", "icon_join", "icons_welcome", "001_cinnamoroll_welcome_nf2u"],
+    "VOICE": ["icons_podcast", "room_icon_mute", "icon_voice"],
+    "LOGGING": ["icon_logging", "icons_todolist", "icons_file"],
+    "CASINO": ["icon_casino", "casino", "cash"],
+    "GAMES": ["icon_backpack", "icon_games", "icon_fun"],
+    "UTILITY": ["icons_utility", "icons_settings", "ub_refresh_icon"],
+    "ECONOMY": ["icon_dollar", "zefex_credit_cards", "cash"],
+}
+
+CATEGORY_FALLBACK_EMOJIS: dict[str, str] = {
+    "SUCCESS": "✅",
+    "ERROR": "❌",
+    "WARNING": "⚠️",
+    "LOADING": "🔄",
+    "ARROW": "💜",
+    "HOME": "🏠",
+    "MODERATION": "⚔️",
+    "BAN": "🔨",
+    "KICK": "👢",
+    "MUTE": "🔇",
+    "WARN": "⚠️",
+    "LOCK": "🔒",
+    "UNLOCK": "🔓",
+    "SECURITY": "🛡️",
+    "ANTI_NUKE": "🛡️",
+    "VERIFICATION": "✅",
+    "TICKET": "🎫",
+    "MUSIC": "🎵",
+    "PLAY": "▶️",
+    "PAUSE": "⏸️",
+    "SKIP": "⏭️",
+    "STOP": "⏹️",
+    "AI": "🤖",
+    "AFK": "💤",
+    "PROFILE": "👤",
+    "LEVEL": "⭐",
+    "PREMIUM": "💎",
+    "OWNER": "👑",
+    "ADMIN": "⚙️",
+    "STAFF": "🛡️",
+    "MEMBERS": "👥",
+    "SERVER": "🌐",
+    "CHANNEL": "💬",
+    "ROLE": "🏷️",
+    "SETTINGS": "⚙️",
+    "SEARCH": "🔍",
+    "BACK": "◀️",
+    "NEXT": "▶️",
+    "TIME": "⏰",
+    "PING": "📶",
+    "DATABASE": "💾",
+    "SAVE": "💾",
+    "INFO": "ℹ️",
+    "GIVEAWAY": "🎉",
+    "MEDIA": "🖼️",
+    "WELCOMER": "🚪",
+    "VOICE": "🎙️",
+    "LOGGING": "📜",
+    "CASINO": "🎰",
+    "GAMES": "🎮",
+    "UTILITY": "🔧",
+    "ECONOMY": "💳",
 }
 
 
@@ -258,7 +322,7 @@ class EmojiRegistry:
     def get_category(self, category: str, animated_only: bool = False, fallback: str = "") -> str:
         """
         Resolve custom emoji string by system category (e.g. SUCCESS, ERROR, LOADING, MODERATION).
-        Prefers animated custom emojis when available; avoids ugly random Unicode fallbacks.
+        Prefers animated custom emojis when available; falls back to dedicated category icons.
         """
         cat_key = category.upper().strip()
 
@@ -282,10 +346,12 @@ class EmojiRegistry:
                 if obj is not None:
                     return str(obj)
 
-        return fallback
+        if fallback:
+            return fallback
+        return CATEGORY_FALLBACK_EMOJIS.get(cat_key, "•")
 
-    def get_category_obj(self, category: str) -> discord.Emoji | discord.PartialEmoji | None:
-        """Resolve a discord.Emoji or PartialEmoji object for category (suitable for UI Buttons/Selects)."""
+    def get_category_obj(self, category: str) -> discord.Emoji | discord.PartialEmoji | str:
+        """Resolve a discord.Emoji, PartialEmoji, or clean icon for UI Buttons/Select menus."""
         cat_key = category.upper().strip()
 
         # Check persistent mapping
@@ -298,6 +364,8 @@ class EmojiRegistry:
                     id=int(match.group(3)),
                     animated=match.group(1) == "a",
                 )
+            if raw:
+                return raw
 
         candidates = CATEGORY_CANDIDATES.get(cat_key, [cat_key.lower()])
         # First pass: animated
@@ -312,7 +380,8 @@ class EmojiRegistry:
             if obj is not None:
                 return obj
 
-        return None
+        # Guaranteed fallback so dropdown options are NEVER blank (matching Image 4)
+        return CATEGORY_FALLBACK_EMOJIS.get(cat_key, "📁")
 
     def get(self, name: str, fallback: str = "") -> str:
         """

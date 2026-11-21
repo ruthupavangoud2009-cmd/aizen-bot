@@ -18,6 +18,7 @@ from discord import app_commands
 from discord.ext import commands
 
 from src.core.context import CustomContext
+from src.ui.response import KyokaResponse, ResponseType, send_response
 from src.utils.containers import KyokaContainer, send_container_response
 from src.utils.ui import AizenSymbols
 
@@ -308,36 +309,29 @@ class AFKCog(commands.Cog, name="AFK"):
         except Exception as e:
             logger.error(f"Failed to persist AFK record for user {user_id}: {e}", exc_info=e)
 
-        # Dispatch confirmation container
-        e_reg = getattr(self.bot, "custom_emojis", None)
-        heart_dot = _afk_emoji(self.bot, "heart_dot", "success", "kyoka")
-        status_emoji = _afk_emoji(self.bot, "afk", "loading", "kyoka")
-        dot_str = f"{heart_dot} " if heart_dot else ""
+        # Dispatch confirmation using unified KyokaResponse (Nyxium style - Image 2)
+        dot = "💜"
+        check = "✅"
+        if self.bot and hasattr(self.bot, "custom_emojis"):
+            dot = self.bot.custom_emojis.get("heart_dot", "💜")
+            check = self.bot.custom_emojis.get("success", "✅")
 
-        container = KyokaContainer(accent_color=None)
-        # Title: Username AFK (no @tag)
-        container.add_text(f"### {status_emoji} {ctx.author.name} AFK".strip())
-        container.add_separator(divider=True)
+        desc = (
+            f"> {ctx.author.mention} Your AFK status is now activated in the Server\n"
+            f"> **Reason:** {final_reason}\n"
+            f"> **DM Notifications:** Enabled\n\n"
+            f"{dot} You are now away from keyboard."
+        )
 
-        # Description: Reason, Went AFK, Tag with heart_dot
-        reason_emoji = _afk_emoji(self.bot, "command", "icon_info")
-        time_emoji = _afk_emoji(self.bot, "ping", "icon_ping")
-        user_emoji = _afk_emoji(self.bot, "members", "icon_users")
-        body_lines = [
-            f"{reason_emoji} **Reason:** {final_reason}",
-            f"{time_emoji} **Went AFK:** <t:{int(now.timestamp())}:R>",
-            f"{user_emoji} **Tag:** {ctx.author.mention}",
-        ]
-        container.add_section(content="\n".join(body_lines))
-
-        # User profile thumbnail
-        container.add_thumbnail(ctx.author.display_avatar.url)
-
-        # Divider & Requested by footer
-        container.add_separator(divider=True)
-        container.add_text(f"-# Requested by {ctx.author.name}")
-
-        await send_container_response(ctx, container)
+        resp = KyokaResponse(
+            response_type=ResponseType.SUCCESS,
+            title="AFK Activated",
+            custom_emoji=check,
+            description=desc,
+            thumbnail_url=ctx.author.display_avatar.url,
+            footer_text=f"-# Requested by {ctx.author.display_name}",
+        )
+        await send_response(ctx, resp)
 
     @commands.command(name="gafk", help="Activate a global AFK status across all servers.")
     async def gafk(self, ctx: CustomContext, *, reason: Optional[str] = None) -> None:
@@ -360,17 +354,27 @@ class AFKCog(commands.Cog, name="AFK"):
             )
         except Exception as error:
             logger.error("Could not persist global AFK for %s: %s", ctx.author.id, error)
-        afk_icon = _afk_emoji(self.bot, "afk", "loading", "kyoka")
-        success_icon = _afk_emoji(self.bot, "success", "icon_success")
-        embed = discord.Embed(
-            title=f"{afk_icon} {success_icon} Global AFK Activated",
-            description=f"**{ctx.author.mention}** is now globally AFK.\n\n**Reason:** {final_reason}\n**Scope:** All shared servers",
-            color=0x22C55E,
-            timestamp=now,
+        dot = "💜"
+        check = "✅"
+        if self.bot and hasattr(self.bot, "custom_emojis"):
+            dot = self.bot.custom_emojis.get("heart_dot", "💜")
+            check = self.bot.custom_emojis.get("success", "✅")
+
+        desc = (
+            f"> {ctx.author.mention} Your Global AFK status is now activated\n"
+            f"> **Reason:** {final_reason}\n"
+            f"> **Scope:** All Shared Servers\n\n"
+            f"{dot} You are now away from keyboard."
         )
-        embed.set_thumbnail(url=ctx.author.display_avatar.url)
-        embed.set_footer(text="Global AFK • Mentions will be notified in shared servers")
-        await ctx.send(embed=embed)
+        resp = KyokaResponse(
+            response_type=ResponseType.SUCCESS,
+            title="Global AFK Activated",
+            custom_emoji=check,
+            description=desc,
+            thumbnail_url=ctx.author.display_avatar.url,
+            footer_text=f"-# Requested by {ctx.author.display_name}",
+        )
+        await send_response(ctx, resp)
 
     @commands.Cog.listener()
     async def on_message(self, message: discord.Message) -> None:
@@ -451,45 +455,37 @@ class AFKCog(commands.Cog, name="AFK"):
             except Exception as e:
                 logger.debug(f"Failed to fetch AFK notes: {e}")
 
-            # Send welcome back card immediately
-            heart_dot = _afk_emoji(self.bot, "heart_dot", "success", "kyoka")
-            status_emoji = _afk_emoji(self.bot, "success", "icon_success", "kyoka")
-            dot_str = f"{heart_dot} " if heart_dot else ""
+            # Send welcome back card (Nyxium style)
+            dot = "💜"
+            if self.bot and hasattr(self.bot, "custom_emojis"):
+                dot = self.bot.custom_emojis.get("heart_dot", "💜")
+
             elapsed_seconds = max((now - afk_data.created_at).total_seconds(), 0.0)
             duration_str = format_duration(elapsed_seconds)
-
             raw_reason = afk_data.reason.strip() if afk_data.reason else ""
             reason_val = raw_reason if (raw_reason and raw_reason.lower() != "afk") else "None"
 
-            container = KyokaContainer(accent_color=None)
-            container.add_text(f"### {status_emoji} Welcome Back, {message.author.name}!")
-            container.add_separator(divider=True)
-
-            reason_emoji = _afk_emoji(self.bot, "command", "icon_info")
-            duration_emoji = _afk_emoji(self.bot, "ping", "icon_ping")
-            body_lines = [
-                f"{reason_emoji} **Reason:** {reason_val}",
-                f"{duration_emoji} **AFK Removed:** `{duration_str}`",
-            ]
-
+            welcome_desc = (
+                f"> Welcome back {message.author.mention}! Your AFK status has been removed.\n"
+                f"> **Reason:** {reason_val}\n"
+                f"> **Away For:** `{duration_str}`\n"
+            )
             if pending_notes:
-                note_emoji = _afk_emoji(self.bot, "ticket", "icon_ticket")
-                body_lines.append(f"{note_emoji} **Notes:** {len(pending_notes)} Note{'s' if len(pending_notes) > 1 else ''}")
-                for n in pending_notes:
-                    s_name = n.get("sender_name", "Someone")
-                    note_msg = n.get("note", "")
-                    body_lines.append(f"> **{s_name}:** {note_msg}")
-            else:
-                note_emoji = _afk_emoji(self.bot, "ticket", "icon_ticket")
-                body_lines.append(f"{note_emoji} **Notes:** None")
+                notes_lines = "\n".join(f"> • **{n.get('sender_name', 'Someone')}:** {n.get('note', '')}" for n in pending_notes)
+                welcome_desc += f"\n**Pending Notes ({len(pending_notes)}):**\n{notes_lines}\n"
 
-            container.add_section(content="\n".join(body_lines))
-            container.add_thumbnail(message.author.display_avatar.url)
-            container.add_separator(divider=True)
-            container.add_text(f"-# Welcome back {message.author.name}")
+            welcome_desc += f"\n{dot} Glad to have you back."
 
+            resp = KyokaResponse(
+                response_type=ResponseType.SUCCESS,
+                title=f"Welcome Back, {message.author.name}!",
+                custom_emoji="👋",
+                description=welcome_desc,
+                thumbnail_url=message.author.display_avatar.url,
+                footer_text=f"-# Welcome back {message.author.name}",
+            )
             try:
-                await send_container_response(message.channel, container)
+                await send_response(message.channel, resp)
             except Exception as e:
                 logger.debug(f"Failed to send AFK welcome back notice: {e}")
 
@@ -500,14 +496,24 @@ class AFKCog(commands.Cog, name="AFK"):
                     continue
                 target_afk = self._global_afk_cache.get(target.id)
                 if target_afk:
-                    embed = discord.Embed(
-                        title=f"{_afk_emoji(self.bot, 'afk', 'loading', 'kyoka')} {target.display_name} is Globally AFK",
-                        description=f"**Reason:** {target_afk.reason}\n**Away since:** <t:{int(target_afk.created_at.timestamp())}:R>",
-                        color=0x7C3AED,
+                    dot = "💜"
+                    if self.bot and hasattr(self.bot, "custom_emojis"):
+                        dot = self.bot.custom_emojis.get("heart_dot", "💜")
+                    resp = KyokaResponse(
+                        response_type=ResponseType.INFO,
+                        title=f"{target.display_name} is Globally AFK",
+                        custom_emoji="💤",
+                        description=(
+                            f"> {target.mention} is currently globally AFK across all shared servers\n"
+                            f"> **Reason:** {target_afk.reason}\n"
+                            f"> **Away Since:** <t:{int(target_afk.created_at.timestamp())}:R>\n\n"
+                            f"{dot} Please refrain from pinging unnecessarily."
+                        ),
+                        thumbnail_url=target.display_avatar.url,
+                        footer_text=f"-# Mentioned by {message.author.name}",
                     )
-                    embed.set_thumbnail(url=target.display_avatar.url)
                     try:
-                        await message.channel.send(embed=embed)
+                        await send_response(message.channel, resp)
                     except Exception as error:
                         logger.debug("Global AFK mention notice failed: %s", error)
 
@@ -530,36 +536,31 @@ class AFKCog(commands.Cog, name="AFK"):
                     self._mention_cooldowns[cooldown_key] = now_ts
 
                     target_afk = self._afk_cache[mentioned_key]
-                    heart_dot = _afk_emoji(self.bot, "heart_dot", "success", "kyoka")
-                    dot_str = f"{heart_dot} " if heart_dot else ""
-
                     raw_reason = target_afk.reason.strip() if target_afk.reason else ""
                     reason_val = raw_reason if (raw_reason and raw_reason.lower() != "afk") else "None"
 
-                    container = KyokaContainer(accent_color=None)
-                    afk_icon = _afk_emoji(self.bot, "afk", "loading", "kyoka")
-                    container.add_text(f"### {afk_icon} {mentioned_user.name}'s AFK".strip())
-                    container.add_separator(divider=True)
+                    dot = "💜"
+                    if self.bot and hasattr(self.bot, "custom_emojis"):
+                        dot = self.bot.custom_emojis.get("heart_dot", "💜")
 
-                    reason_emoji = _afk_emoji(self.bot, "command", "icon_info")
-                    time_emoji = _afk_emoji(self.bot, "ping", "icon_ping")
-                    user_emoji = _afk_emoji(self.bot, "members", "icon_users")
-                    body_lines = [
-                        f"{reason_emoji} **Reason:** {reason_val}",
-                        f"{time_emoji} **Went AFK:** <t:{int(target_afk.created_at.timestamp())}:R>",
-                        f"{user_emoji} **Tag:** {mentioned_user.mention}",
-                    ]
-                    container.add_section(content="\n".join(body_lines))
+                    mention_desc = (
+                        f"> {mentioned_user.mention} is currently AFK in this server\n"
+                        f"> **Reason:** {reason_val}\n"
+                        f"> **Went AFK:** <t:{int(target_afk.created_at.timestamp())}:R>\n\n"
+                        f"{dot} Leave a note using the button below."
+                    )
 
-                    container.add_thumbnail(mentioned_user.display_avatar.url)
-
-                    container.add_separator(divider=True)
-                    container.add_text(f"-# Mentioned by {message.author.name}")
-                    container.add_separator(divider=True)
-
+                    resp = KyokaResponse(
+                        response_type=ResponseType.INFO,
+                        title=f"{mentioned_user.name} is AFK",
+                        custom_emoji="💤",
+                        description=mention_desc,
+                        thumbnail_url=mentioned_user.display_avatar.url,
+                        footer_text=f"-# Mentioned by {message.author.name}",
+                    )
                     view = AFKLeaveNoteView(self.bot, mentioned_user.id, mentioned_user.display_name, guild_id)
                     try:
-                        await send_container_response(message.channel, container, view=view)
+                        await send_response(message.channel, resp, view=view)
                     except Exception as e:
                         logger.debug(f"Failed to send AFK mention notification: {e}")
 

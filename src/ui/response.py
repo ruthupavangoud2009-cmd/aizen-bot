@@ -121,9 +121,22 @@ class KyokaResponse:
         # Clean title with custom emoji
         formatted_title = f"{emoji_prefix} {self.title}".strip() if emoji_prefix else self.title
 
+        # Mobile-First Nyxium quote block formatting
+        final_desc = self.description or ""
+        fields_to_add = []
+        if self.fields and not any(isinstance(f[1], str) and len(f[1]) > 500 for f in self.fields):
+            quote_lines = [f"> **{name}:** {value}" for name, value, _ in self.fields]
+            block = "\n".join(quote_lines)
+            if final_desc:
+                final_desc = f"{final_desc}\n{block}"
+            else:
+                final_desc = block
+        else:
+            fields_to_add = self.fields
+
         embed = discord.Embed(
             title=formatted_title[:256] if formatted_title else None,
-            description=self.description[:4000] if self.description else None,
+            description=final_desc[:4000] if final_desc else None,
             color=self.color,
             timestamp=self.timestamp,
         )
@@ -137,9 +150,8 @@ class KyokaResponse:
         if self.image_url:
             embed.set_image(url=self.image_url)
 
-        for name, value, inline in self.fields[:25]:
+        for name, value, inline in fields_to_add[:25]:
             field_name = str(name)[:256]
-            # Format value with bullet if multiline key-value without bullet
             field_val = str(value)[:1024]
             embed.add_field(name=field_name, value=field_val, inline=inline)
 
@@ -272,7 +284,7 @@ class KyokaResponse:
         return cls(
             response_type=ResponseType.MODERATION,
             title=f"Member {action.title()}",
-            description=f"Action **{action.upper()}** executed successfully.",
+            description=f"\n💜 Member **{action.lower()}** executed successfully.",
             fields=fields,
             thumbnail_url=target.display_avatar.url if hasattr(target, "display_avatar") else None,
             footer_text=f"-# Moderator: {moderator.display_name} • KYOKA Moderation",
