@@ -589,6 +589,230 @@ class Help(commands.Cog, name="Help"):
 
         return container
 
+    def resolve_command_emoji(self, cmd_name: str, cat_name: str = "") -> str:
+        """
+        Resolve a dedicated custom emoji for every single command in KYOKA.
+        Prefers application emojis (<:name:id> / <a:name:id>), falls back to dedicated clean symbols.
+        """
+        reg = getattr(self.bot, "custom_emojis", None)
+        clean = cmd_name.lower().strip()
+
+        def em(key: str, fallback: str) -> str:
+            if reg:
+                val = reg.get(key)
+                if val:
+                    return val
+                cat_val = reg.get_category(key, fallback="")
+                if cat_val:
+                    return cat_val
+            return fallback
+
+        # 1. Exact command lookup table
+        EXACT_MAP: dict[str, tuple[str, str]] = {
+            # Moderation
+            "ban": ("icon_delete", "🔨"),
+            "unban": ("icon_unlock", "🔓"),
+            "softban": ("icon_delete", "🔨"),
+            "tempban": ("icons_timeout", "⏳"),
+            "kick": ("icons_leave", "👢"),
+            "mute": ("icons_micmute", "🔇"),
+            "unmute": ("icons_podcast", "🔊"),
+            "tempmute": ("icons_timeout", "⏱️"),
+            "timeout": ("icons_timeout", "⏳"),
+            "warn": ("icons_warning", "⚠️"),
+            "warnings": ("icons_todolist", "📋"),
+            "warns": ("icons_todolist", "📋"),
+            "clearwarns": ("icon_clear", "🧹"),
+            "purge": ("icon_clear", "🧹"),
+            "clean": ("icon_clear", "🧹"),
+            "nuke": ("icon_fire", "💥"),
+            "lock": ("icons_locked", "🔒"),
+            "unlock": ("icons_unlock", "🔓"),
+            "lockdown": ("icons_locked", "🔒"),
+            "slowmode": ("icons_reminder", "⏱️"),
+            "role": ("lpf_icon_roles", "🏷️"),
+            "addrole": ("icons_plus", "🏷️"),
+            "removerole": ("icon_delete", "🏷️"),
+            "nick": ("icons_message", "✏️"),
+            "setnick": ("icons_message", "✏️"),
+            "hide": ("icons_offline", "👁️‍🗨️"),
+            "unhide": ("icons_online", "👁️"),
+            "case": ("icons_file", "📁"),
+            "reason": ("icons_message", "📝"),
+            "history": ("icons_todolist", "📜"),
+            "modlogs": ("icon_logging", "📜"),
+            "snipe": ("sparkle_shine", "🎯"),
+            # Security / Antinuke
+            "antinuke": ("antinuke_pulse", "🛡️"),
+            "whitelist": ("icons_verified", "📜"),
+            "unwhitelist": ("icon_delete", "❌"),
+            "trust": ("verified_glow", "🤝"),
+            "untrust": ("icon_delete", "❌"),
+            "panic": ("warning_flash", "🚨"),
+            "recovery": ("ub_refresh_icon", "🔄"),
+            "automod": ("antinuke_pulse", "🤖"),
+            "antiraid": ("antinuke_pulse", "🛡️"),
+            "antispam": ("icons_micmute", "🚫"),
+            "antilink": ("icons_link", "🔗"),
+            "antiinvite": ("icons_invite", "🚫"),
+            # Music
+            "play": ("music_playing", "▶️"),
+            "p": ("music_playing", "▶️"),
+            "pause": ("paused", "⏸️"),
+            "resume": ("music_playing", "⏯️"),
+            "stop": ("icons_stop_button", "⏹️"),
+            "skip": ("skip", "⏭️"),
+            "s": ("skip", "⏭️"),
+            "seek": ("icons_rightarrow", "⏩"),
+            "queue": ("queue", "📑"),
+            "q": ("queue", "📑"),
+            "np": ("music_music", "🎵"),
+            "nowplaying": ("music_music", "🎵"),
+            "volume": ("volume_up", "🔊"),
+            "vol": ("volume_up", "🔊"),
+            "loop": ("icons_loop", "🔁"),
+            "repeat": ("icons_loop", "🔂"),
+            "shuffle": ("icons_shuffle", "🔀"),
+            "lyrics": ("lyrics", "📜"),
+            "disconnect": ("icons_leave", "🔌"),
+            "dc": ("icons_leave", "🔌"),
+            "join": ("icons_join", "📥"),
+            "filters": ("icons_magicwand", "🎛️"),
+            "bassboost": ("volume_up", "🔊"),
+            "radio": ("icons_podcast", "📻"),
+            "247": ("icons_richpresence", "♾️"),
+            # AI & Chat
+            "ai": ("sparkle_shine", "🤖"),
+            "ask": ("sparkle_shine", "💡"),
+            "chat": ("icon_chat", "💬"),
+            "gemini": ("sparkle_shine", "✨"),
+            "imagine": ("icons_image", "🎨"),
+            "draw": ("icons_image", "🖌️"),
+            "resetai": ("ub_refresh_icon", "🔄"),
+            "persona": ("user_badge", "🎭"),
+            # AFK
+            "afk": ("afk", "💤"),
+            "unafk": ("icons_online", "👋"),
+            "afklist": ("icons_todolist", "📋"),
+            # Blox Fruits & Trading
+            "bfservice": ("icons_todolist", "🧾"),
+            "bfbill": ("zefex_credit_cards", "🧾"),
+            "bfprice": ("icon_dollar", "🍎"),
+            "bftrade": ("coin_spin", "⚖️"),
+            "bffruits": ("icon_gift", "🍇"),
+            "bfstock": ("icons_list", "📦"),
+            "vouch": ("sparkle_shine", "⭐"),
+            "vouches": ("btp_red_crown", "🌟"),
+            # Giveaways
+            "giveaway": ("discord_giveaway", "🎉"),
+            "gstart": ("discord_giveaway", "🎉"),
+            "gend": ("icons_stop_button", "🏁"),
+            "greroll": ("ub_refresh_icon", "🎲"),
+            "glist": ("icons_list", "📋"),
+            # Tickets
+            "ticket": ("ticket_support", "🎫"),
+            "tcreate": ("ticket_support", "🎫"),
+            "tclose": ("icons_locked", "🔒"),
+            "treopen": ("icons_unlock", "🔓"),
+            "ttranscript": ("transcript", "📄"),
+            "tclaim": ("icons_staff", "🙋"),
+            "tadd": ("icons_plus", "➕"),
+            "tremove": ("icon_delete", "➖"),
+            # Economy & Casino
+            "balance": ("coin_spin", "💰"),
+            "bal": ("coin_spin", "💰"),
+            "daily": ("icon_gift", "🎁"),
+            "weekly": ("icon_gift", "📦"),
+            "pay": ("zefex_credit_cards", "💸"),
+            "rob": ("icons_leave", "🥷"),
+            "work": ("icons_todolist", "💼"),
+            "slots": ("coin_spin", "🎰"),
+            "coinflip": ("coin_spin", "🪙"),
+            "cf": ("coin_spin", "🪙"),
+            "roulette": ("coin_spin", "🎡"),
+            "blackjack": ("zefex_credit_cards", "🃏"),
+            "shop": ("icon_shoppingcart", "🛒"),
+            "buy": ("icon_shoppingcart", "🛍️"),
+            "inventory": ("icon_backpack", "🎒"),
+            "inv": ("icon_backpack", "🎒"),
+            # Verification
+            "verify": ("verified_glow", "✅"),
+            "setverify": ("icons_settings", "⚙️"),
+            "verifyrole": ("lpf_icon_roles", "🏷️"),
+            # Welcomer
+            "welcome": ("001_cinnamoroll_welcome_nf2u", "👋"),
+            "setwelcome": ("icons_settings", "⚙️"),
+            "autorole": ("lpf_icon_roles", "🏷️"),
+            # Server & General Utility
+            "ping": ("icons_ping", "📶"),
+            "uptime": ("icons_reminder", "⏳"),
+            "botinfo": ("icon_bot", "🤖"),
+            "serverinfo": ("icon_forum", "🌐"),
+            "userinfo": ("icon_person", "👤"),
+            "avatar": ("icons_image", "🖼️"),
+            "av": ("icons_image", "🖼️"),
+            "banner": ("icons_image", "🖼️"),
+            "uicolour": ("icons_settings", "🎨"),
+            "uicolor": ("icons_settings", "🎨"),
+            "prefix": ("icon_terminal", "⚙️"),
+            "setprefix": ("icons_settings", "⚙️"),
+            "invite": ("nt_icon_invite", "🔗"),
+            "support": ("icons_supportteam", "💬"),
+            "membercount": ("icons_people", "👥"),
+            "help": ("icon_book", "📖"),
+            "hca": ("icon_book", "📚"),
+        }
+
+        if clean in EXACT_MAP:
+            key, fb = EXACT_MAP[clean]
+            return em(key, fb)
+
+        # 2. Semantic keyword matching
+        KEYWORD_MAP: list[tuple[str, str, str]] = [
+            ("ban", "icon_delete", "🔨"),
+            ("kick", "icons_leave", "👢"),
+            ("mute", "icons_micmute", "🔇"),
+            ("warn", "icons_warning", "⚠️"),
+            ("lock", "icons_locked", "🔒"),
+            ("role", "lpf_icon_roles", "🏷️"),
+            ("play", "music_playing", "▶️"),
+            ("song", "music_music", "🎵"),
+            ("music", "music_music", "🎵"),
+            ("vol", "volume_up", "🔊"),
+            ("ticket", "ticket_support", "🎫"),
+            ("giveaway", "discord_giveaway", "🎉"),
+            ("game", "icon_backpack", "🎮"),
+            ("coin", "coin_spin", "🪙"),
+            ("cash", "coin_spin", "💰"),
+            ("money", "coin_spin", "💰"),
+            ("user", "icon_person", "👤"),
+            ("member", "icons_people", "👥"),
+            ("server", "icon_forum", "🌐"),
+            ("guild", "icon_forum", "🌐"),
+            ("image", "icons_image", "🖼️"),
+            ("pic", "icons_image", "🖼️"),
+            ("voice", "icons_podcast", "🎙️"),
+            ("log", "icon_logging", "📜"),
+            ("set", "icons_settings", "⚙️"),
+            ("config", "icons_settings", "⚙️"),
+            ("find", "icon_search", "🔍"),
+            ("search", "icon_search", "🔍"),
+            ("add", "icons_plus", "➕"),
+            ("del", "icon_delete", "🗑️"),
+            ("rem", "icon_delete", "➖"),
+            ("check", "verified_glow", "✅"),
+        ]
+        for kw, ek, fb in KEYWORD_MAP:
+            if kw in clean:
+                return em(ek, fb)
+
+        # 3. Fallback to category icon
+        if cat_name:
+            cat_em = reg.get_category(cat_name, fallback="") if reg else ""
+            if cat_em:
+                return cat_em
+        return em("heart_dot", "💜")
+
     def build_category_container(
         self,
         ctx: CustomContext,
@@ -607,7 +831,6 @@ class Help(commands.Cog, name="Help"):
                 res = reg.get(name_or_cat, fallback=fallback)
             return res or fallback
 
-        heart = get_em("heart_dot", fallback="💜")
         prefix = self.bot.guild_mgr.get_prefix(ctx.guild.id if ctx.guild else None)
         raw_title = cat_name.split("・", 1)[-1].strip()
 
@@ -639,7 +862,8 @@ class Help(commands.Cog, name="Help"):
             badge = self._get_badge(cmd)
             desc = (cmd.description or cmd.help or "No description provided.").strip().split("\n")[0][:75]
             sig = f" {cmd.signature}" if cmd.signature else ""
-            cmd_lines.append(f"> {heart} **`{prefix}{cmd.qualified_name}{sig}`**{badge}\n> *{desc}*")
+            cmd_emoji = self.resolve_command_emoji(cmd.qualified_name, raw_title)
+            cmd_lines.append(f"> {cmd_emoji} **`{prefix}{cmd.qualified_name}{sig}`**{badge}\n> *{desc}*")
 
         container.add_text("\n".join(cmd_lines))
         return container
@@ -739,7 +963,8 @@ class Help(commands.Cog, name="Help"):
             badge = self._get_badge(cmd)
             desc = (cmd.description or cmd.help or "No description provided.").strip().split("\n")[0][:75]
             sig = f" {cmd.signature}" if cmd.signature else ""
-            desc_lines.append(f"> {heart} **`{prefix}{cmd.qualified_name}{sig}`**{badge}\n> *{desc}*")
+            cmd_emoji = self.resolve_command_emoji(cmd.qualified_name, raw_title)
+            desc_lines.append(f"> {cmd_emoji} **`{prefix}{cmd.qualified_name}{sig}`**{badge}\n> *{desc}*")
 
         embed_color = self.bot.guild_mgr.get_ui_color(ctx.guild.id if ctx.guild else None, default=0x2B0938)
         embed = discord.Embed(

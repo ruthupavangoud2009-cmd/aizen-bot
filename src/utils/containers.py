@@ -487,9 +487,14 @@ async def send_container_response(
             http_client = getattr(bot_instance, "http", None) or getattr(getattr(obj, "_state", None), "http", None)
 
         # Direct bot channel message dispatch via raw Components V2 payload
+        # On POST /channels/{channel_id}/messages, Discord rejects flags: 32768 with 400 Bad Request.
+        # Strip flags from channel messages so Discord accepts Container type: 17 directly into the channel!
+        channel_payload = dict(payload)
+        channel_payload.pop("flags", None)
+
         try:
             if file_list:
-                form = _prepare_multipart_form(payload, file_list)
+                form = _prepare_multipart_form(channel_payload, file_list)
                 msg_data = await http_client.request(
                     discord.http.Route("POST", f"/channels/{channel_id}/messages"),
                     form=form,
@@ -498,7 +503,7 @@ async def send_container_response(
             else:
                 msg_data = await http_client.request(
                     discord.http.Route("POST", f"/channels/{channel_id}/messages"),
-                    json=payload,
+                    json=channel_payload,
                 )
             if view and msg_data and isinstance(msg_data, dict) and "id" in msg_data:
                 msg_id = int(msg_data["id"])
