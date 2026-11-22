@@ -353,33 +353,33 @@
       </div>
 
       <div class="music-track-info">
-        <div class="music-art-box">🎵</div>
+        <div class="music-art-box" id="demo-art-box">🎵</div>
         <div style="flex: 1; overflow: hidden;">
-          <div style="font-weight: 700; font-size: 1.15rem; color: #FAF5FF; white-space: nowrap; text-overflow: ellipsis; overflow: hidden;">
+          <div id="demo-track-title" style="font-weight: 700; font-size: 1.15rem; color: #FAF5FF; white-space: nowrap; text-overflow: ellipsis; overflow: hidden;">
             Treachery — Bleach OST (Kyōka Suigetsu Theme)
           </div>
-          <div style="font-size: 0.85rem; color: var(--text-muted); margin-top: 0.2rem;">
+          <div id="demo-track-artist" style="font-size: 0.85rem; color: var(--text-muted); margin-top: 0.2rem;">
             Shiro Sagisu • Requested by <span style="color: var(--purple-pastel); font-weight: 600;">@Aizen</span> • Bitrate: 384kbps FLAC
           </div>
         </div>
       </div>
 
-      <div class="music-scrub-bar">
-        <div class="music-scrub-fill"></div>
+      <div class="music-scrub-bar" id="demo-scrub-bar">
+        <div class="music-scrub-fill" id="demo-scrub-fill"></div>
       </div>
 
       <div style="display: flex; justify-content: space-between; font-size: 0.78rem; color: var(--text-dim); margin-bottom: 0.75rem;">
-        <span>1:42</span>
-        <span>3:35</span>
+        <span id="demo-cur-time">1:42</span>
+        <span id="demo-total-time">3:35</span>
       </div>
 
       <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 0.5rem;">
         <div style="display: flex; align-items: center; gap: 0.6rem;">
-          <button class="btn btn-outline btn-xs" style="padding: 0.35rem 0.65rem;" title="Previous Track">⏮</button>
-          <button class="btn btn-primary btn-xs" style="padding: 0.35rem 0.9rem;" title="Pause">⏸ Pause</button>
-          <button class="btn btn-outline btn-xs" style="padding: 0.35rem 0.65rem;" title="Next Track">⏭</button>
-          <button class="btn btn-outline btn-xs" style="padding: 0.35rem 0.65rem;" title="Shuffle">🔀 Shuff</button>
-          <button class="btn btn-outline btn-xs" style="padding: 0.35rem 0.65rem;" title="Loop">🔁 Loop</button>
+          <button id="demo-btn-prev" class="btn btn-outline btn-xs" style="padding: 0.35rem 0.65rem;" title="Previous Track">⏮</button>
+          <button id="demo-btn-play" class="btn btn-primary btn-xs" style="padding: 0.35rem 0.9rem;" title="Pause">⏸ Pause</button>
+          <button id="demo-btn-next" class="btn btn-outline btn-xs" style="padding: 0.35rem 0.65rem;" title="Next Track">⏭</button>
+          <button id="demo-btn-shuffle" class="btn btn-outline btn-xs" style="padding: 0.35rem 0.65rem;" title="Shuffle">🔀 Shuff</button>
+          <button id="demo-btn-loop" class="btn btn-outline btn-xs" style="padding: 0.35rem 0.65rem;" title="Loop">🔁 Loop</button>
         </div>
         <div style="font-size: 0.82rem; color: var(--text-muted);">
           Prefixes: <code>?play</code>, <code>+play</code>, <code>/play</code>
@@ -821,6 +821,108 @@
         });
         renderCommands(filtered);
       }
+
+      // Interactive Glass Audio Player Simulation
+      const DEMO_PLAYLIST = [
+        {
+          title: "Treachery — Bleach OST (Kyōka Suigetsu Theme)",
+          artist: "Shiro Sagisu • Requested by @Aizen • Bitrate: 384kbps FLAC",
+          total: "3:35",
+          cur: "1:42",
+          pct: 48,
+          icon: "🎵"
+        },
+        {
+          title: "Stand Up Be Strong — Bleach OST",
+          artist: "Shiro Sagisu • Requested by @LordAizen • Bitrate: 384kbps FLAC",
+          total: "4:18",
+          cur: "0:56",
+          pct: 22,
+          icon: "⚡"
+        },
+        {
+          title: "Clavar La Espada — Espada Battle Theme",
+          artist: "Shiro Sagisu • Requested by @Ulquiorra • Bitrate: 384kbps FLAC",
+          total: "3:52",
+          cur: "2:10",
+          pct: 56,
+          icon: "⚔️"
+        }
+      ];
+
+      let demoIndex = 0;
+      let demoPlaying = true;
+      let demoLoop = 0;
+
+      const btnPlay = document.getElementById('demo-btn-play');
+      const btnNext = document.getElementById('demo-btn-next');
+      const btnPrev = document.getElementById('demo-btn-prev');
+      const btnShuffle = document.getElementById('demo-btn-shuffle');
+      const btnLoop = document.getElementById('demo-btn-loop');
+      const titleEl = document.getElementById('demo-track-title');
+      const artistEl = document.getElementById('demo-track-artist');
+      const curTimeEl = document.getElementById('demo-cur-time');
+      const totalTimeEl = document.getElementById('demo-total-time');
+      const scrubFill = document.getElementById('demo-scrub-fill');
+      const artBox = document.getElementById('demo-art-box');
+      const eqBars = document.querySelectorAll('.audio-bar');
+
+      function updateDemoTrack() {
+        const tr = DEMO_PLAYLIST[demoIndex];
+        if (titleEl) titleEl.textContent = tr.title;
+        if (artistEl) artistEl.innerHTML = tr.artist.replace('@Aizen', '<span style="color: var(--purple-pastel); font-weight: 600;">@Aizen</span>');
+        if (curTimeEl) curTimeEl.textContent = tr.cur;
+        if (totalTimeEl) totalTimeEl.textContent = tr.total;
+        if (scrubFill) scrubFill.style.width = tr.pct + '%';
+        if (artBox) artBox.textContent = tr.icon;
+      }
+
+      function toastMsg(msg) {
+        const toast = document.getElementById('cmd-copy-toast');
+        if (toast) {
+          toast.textContent = msg;
+          toast.classList.add('show');
+          setTimeout(() => toast.classList.remove('show'), 2200);
+        }
+      }
+
+      btnPlay?.addEventListener('click', () => {
+        demoPlaying = !demoPlaying;
+        if (demoPlaying) {
+          btnPlay.innerHTML = '⏸ Pause';
+          btnPlay.className = 'btn btn-primary btn-xs';
+          eqBars.forEach(b => b.style.animationPlayState = 'running');
+          toastMsg('▶ Resumed 384kbps FLAC stream');
+        } else {
+          btnPlay.innerHTML = '▶ Play';
+          btnPlay.className = 'btn btn-outline btn-xs';
+          eqBars.forEach(b => b.style.animationPlayState = 'paused');
+          toastMsg('⏸ Studio playback paused');
+        }
+      });
+
+      btnNext?.addEventListener('click', () => {
+        demoIndex = (demoIndex + 1) % DEMO_PLAYLIST.length;
+        updateDemoTrack();
+        toastMsg('⏭ Skipped to next track');
+      });
+
+      btnPrev?.addEventListener('click', () => {
+        demoIndex = (demoIndex - 1 + DEMO_PLAYLIST.length) % DEMO_PLAYLIST.length;
+        updateDemoTrack();
+        toastMsg('⏮ Rewound to previous track');
+      });
+
+      btnShuffle?.addEventListener('click', () => {
+        toastMsg('🔀 Queue shuffled (3 upcoming tracks randomized)');
+      });
+
+      btnLoop?.addEventListener('click', () => {
+        demoLoop = (demoLoop + 1) % 3;
+        const modes = ['🔁 Loop', '🔂 Track', '➡️ Off'];
+        btnLoop.textContent = modes[demoLoop];
+        toastMsg(`Loop mode: ${modes[demoLoop]}`);
+      });
     });
   </script>
 </body>

@@ -135,22 +135,13 @@ CATEGORIES: list[CategoryMeta] = [
         priority=12,
     ),
     CategoryMeta(
-        id="service_bills",
-        name="Blox Fruits Service Bills",
-        tag="🧾・BLOX FRUITS SERVICE BILLS",
-        emoji="🧾",
-        description="Blox Fruits service receipts, itemized invoices, proof verification, and payments",
-        image_key="service_bills",
-        priority=13,
-    ),
-    CategoryMeta(
         id="blox_fruits",
         name="Blox Fruits AI",
         tag="🍎・BLOX FRUITS AI",
         emoji="🍎",
         description="Specialized Blox Fruits companion, fruit values, trade calculation, builds & notifier",
         image_key="blox_fruits",
-        priority=14,
+        priority=13,
     ),
     CategoryMeta(
         id="ai",
@@ -341,9 +332,6 @@ CATEGORY_SEARCH_ALIASES: dict[str, str] = {
     "vlb": "vouches", "vouchinfo": "vouches", "vouchhistory": "vouches", "vouchimport": "vouches",
     "repstaff": "vouches", "vouchstaff": "vouches", "vouchchannel": "vouches", "vouchremove": "vouches",
     "heldvouches": "vouches", "vouchregister": "vouches",
-    # Service Bills
-    "bill": "service_bills", "bills": "service_bills", "invoice": "service_bills", "service": "service_bills", "billing": "service_bills",
-    "top": "service_bills", "topai": "service_bills", "topmanager": "service_bills", "toptiers": "service_bills", "aihelp": "service_bills",
     # Staff Applications
     "staff": "staff_applications", "apply": "staff_applications", "apps": "staff_applications",
     "application": "staff_applications", "applications": "staff_applications", "staffapp": "staff_applications",

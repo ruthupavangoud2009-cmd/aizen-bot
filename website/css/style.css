@@ -1484,5 +1484,47 @@ input:checked + .slider:before {
   border: 1px solid rgba(168, 85, 247, 0.25);
 }
 
+/* Enhanced Glass Highlights & Radar Wave Pulse */
+.pulse-dot {
+  position: relative;
+}
+
+.pulse-dot::after {
+  content: "";
+  position: absolute;
+  top: -4px;
+  left: -4px;
+  right: -4px;
+  bottom: -4px;
+  border-radius: 50%;
+  border: 1.5px solid var(--emerald-accent);
+  animation: radar-wave 2s infinite ease-out;
+}
+
+@keyframes radar-wave {
+  0% { transform: scale(0.8); opacity: 1; }
+  100% { transform: scale(2.4); opacity: 0; }
+}
+
+/* Glass Card Sheen on Hover */
+.glass-feature-card::after,
+.glass-panel::after {
+  content: "";
+  position: absolute;
+  top: -50%;
+  left: -50%;
+  width: 200%;
+  height: 200%;
+  background: radial-gradient(circle, rgba(168, 85, 247, 0.08) 0%, transparent 60%);
+  opacity: 0;
+  transition: opacity 0.4s ease;
+  pointer-events: none;
+}
+
+.glass-feature-card:hover::after,
+.glass-panel:hover::after {
+  opacity: 1;
+}
+
 
 
