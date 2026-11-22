@@ -1134,8 +1134,8 @@ class AutoEvents(commands.Cog):
     # ─── Leave / Goodbye Command Group ───────────────────────────────────────
 
     @commands.hybrid_group(
-        name="leave",
-        aliases=["goodbye", "farewell"],
+        name="goodbye",
+        aliases=["farewell", "leavecard"],
         description="Configure automated server leave / goodbye container cards.",
         fallback="status",
     )

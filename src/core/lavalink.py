@@ -204,18 +204,11 @@ async def close_pool_nodes() -> None:
         await close_node(node)
 
 
-# ── Public node discovery ──
+# ── Public node discovery (Disabled for Self-Hosted Infrastructure) ──
 #
-# Community Lavalink nodes come and go, and most of them have a broken
-# websocket (the handshake is rejected with HTTP 400 by a proxy, or the node
-# closes the socket before sending its 'ready' op). Because the audio session
-# is only created through that websocket, a broken node means the bot cannot
-# play anything at all - even though the REST API still answers and song
-# searches keep working.
-#
-# The directory below is refreshed every few minutes by its maintainers and only
-# lists nodes that were online at that moment. Kyoka probes the entries itself
-# and only ever uses a node that passed the full check.
+# Kyoka relies exclusively on its dedicated, self-hosted music infrastructure.
+# Public community node discovery is permanently disabled to eliminate unstable
+# third-party servers, rate limits, and random disconnects.
 
 _public_nodes_cache: tuple[float, list[tuple[str, str]]] | None = None
 _PUBLIC_NODE_CACHE_TTL = 900.0  # 15 minutes
@@ -223,36 +216,10 @@ _PUBLIC_NODE_CACHE_TTL = 900.0  # 15 minutes
 
 async def fetch_public_nodes(limit: int = 30) -> list[tuple[str, str]]:
     """
-    Fetch the community Lavalink directory and return (uri, password) pairs.
-
-    Results are cached for a while so a failing node does not hammer the
-    directory API on every heal attempt.
+    Public community node discovery is disabled.
+    Kyoka uses dedicated self-hosted audio infrastructure.
     """
-    global _public_nodes_cache
-
-    from src.core.config import Config
-
-    now = time.time()
-    if _public_nodes_cache and now - _public_nodes_cache[0] < _PUBLIC_NODE_CACHE_TTL:
-        return _public_nodes_cache[1][:limit]
-
-    url = (getattr(Config, "LAVALINK_PUBLIC_LIST_URL", "https://lavalink-list.ajieblogs.eu.org/All") or "").strip()
-    if not url:
-        return []
-
-    try:
-        timeout_cfg = aiohttp.ClientTimeout(total=15.0, connect=8.0)
-        headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko)"}
-        async with aiohttp.ClientSession(timeout=timeout_cfg, headers=headers) as session:
-            async with session.get(url) as resp:
-                if resp.status != 200:
-                    logger.warning(f"Lavalink node directory returned HTTP {resp.status}")
-                    return []
-                raw = await resp.text()
-                entries = json.loads(raw)
-    except Exception as e:
-        logger.warning(f"Could not fetch the Lavalink node directory: {err_text(e)}")
-        return []
+    return []
 
     nodes: list[tuple[str, str]] = []
     seen: set[str] = set()
@@ -559,6 +526,53 @@ RESILIENT_CLUSTER_NODES: list[tuple[str, str]] = [
 ]
 
 
+async def _ensure_local_lavalink_running() -> None:
+    """Ensure local Lavalink process is active if configured for loopback 127.0.0.1."""
+    from src.core.config import Config
+    if "127.0.0.1" in Config.LAVALINK_HOST or "localhost" in Config.LAVALINK_HOST:
+        import socket
+        sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        sock.settimeout(0.4)
+        is_open = False
+        try:
+            is_open = sock.connect_ex(("127.0.0.1", Config.LAVALINK_PORT)) == 0
+        except Exception:
+            pass
+        finally:
+            sock.close()
+
+        if not is_open:
+            from pathlib import Path
+            import shutil, subprocess, os
+            jar_path = Path(__file__).resolve().parent.parent.parent / "lavalink-node" / "Lavalink.jar"
+            if jar_path.is_file():
+                java_bin = shutil.which("java") or "/opt/java/openjdk/bin/java"
+                if java_bin and (shutil.which(str(java_bin)) or Path(java_bin).is_file()):
+                    logger.info("Local Lavalink port 2333 is not open; auto-spawning local Lavalink process...")
+                    java_opts = (os.getenv("JAVA_OPTS") or "-Xmx4g -Xms1g -XX:+UseG1GC").split()
+                    try:
+                        subprocess.Popen(
+                            [str(java_bin)] + java_opts + ["-jar", str(jar_path)],
+                            cwd=str(jar_path.parent),
+                            stdout=subprocess.DEVNULL,
+                            stderr=subprocess.DEVNULL,
+                        )
+                        for _ in range(30):
+                            await asyncio.sleep(0.5)
+                            s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+                            s.settimeout(0.3)
+                            try:
+                                if s.connect_ex(("127.0.0.1", Config.LAVALINK_PORT)) == 0:
+                                    logger.info("Local Lavalink spawned successfully and accepting connections.")
+                                    break
+                            except Exception:
+                                pass
+                            finally:
+                                s.close()
+                    except Exception as e:
+                        logger.warning(f"Could not auto-spawn local Lavalink: {e}")
+
+
 async def connect_lavalink_node(
     bot: Optional["discord.Client"] = None,
     *,
@@ -663,27 +677,15 @@ async def connect_lavalink_node(
         logger.warning(f"Lavalink node {uri} could not be used: {reason}")
         return None
 
+    await _ensure_local_lavalink_running()
+
     # 1 + 2: configured nodes
     for uri, password in candidates():
         node = await _try(uri, password)
         if node is not None:
             return node
 
-    # 3: Resilient cluster nodes (Failover only if auto discover or fallbacks are explicitly enabled)
-    if allow_discovery and getattr(Config, "LAVALINK_AUTO_DISCOVER", False):
-        for fb_uri, fb_pw in RESILIENT_CLUSTER_NODES:
-            node = await _try(fb_uri, fb_pw)
-            if node is not None:
-                logger.info(f"MusicAgent: Connected to resilient fallback cluster node {fb_uri}")
-                return node
-
-    # 4: community directory - only when it is enabled and no configured node worked
-    if allow_discovery and getattr(Config, "LAVALINK_AUTO_DISCOVER", True):
-        discovered_nodes = await discover_working_nodes()
-        for disc_uri, disc_pw in discovered_nodes:
-            node = await _try(disc_uri, disc_pw)
-            if node is not None:
-                return node
-
+    # Only configured self-hosted nodes and explicit private fallbacks are used.
+    # Public node discovery is permanently disabled.
     detail = "; ".join(failures) if failures else "no URI configured"
-    raise LavalinkUnavailable(f"No reachable Lavalink node ({detail})")
+    raise LavalinkUnavailable(f"Dedicated self-hosted Lavalink node is currently unreachable ({detail})")

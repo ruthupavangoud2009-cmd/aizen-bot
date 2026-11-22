@@ -18,6 +18,17 @@ class Track:
     is_autoplay: bool = False
     query: Optional[str] = None
 
+    # Persistent Audio Caching & Metadata fields
+    is_cached: bool = False
+    cache_path: Optional[str] = None
+    cache_status: str = "streaming"  # "cached", "streaming", "expired", "failed"
+    audio_format: str = "opus"
+    file_size: int = 0
+    cached_at: Optional[float] = None
+    play_count: int = 0
+    source_name: str = "Unknown"  # "Cache", "YouTube Music", "YouTube", "JioSaavn", "SoundCloud"
+    cache_id: Optional[str] = None
+
     @property
     def uri(self) -> str:
         return self.url

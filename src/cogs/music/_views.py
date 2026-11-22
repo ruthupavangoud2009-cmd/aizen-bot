@@ -34,19 +34,16 @@ class MusicControlView(discord.ui.View):
 
     def _apply_custom_emojis(self) -> None:
         e_reg = getattr(self.bot, "custom_emojis", None)
-        if not e_reg:
-            return
 
-        def _safe_emoji(name: str) -> Optional[discord.PartialEmoji | str]:
-            if not hasattr(e_reg, "get_emoji_obj"):
-                return None
-            try:
-                res = e_reg.get_emoji_obj(name)
-                if isinstance(res, (str, discord.Emoji, discord.PartialEmoji)):
-                    return res
-            except Exception:
-                pass
-            return None
+        def _safe_emoji(name: str, fallback: str) -> Optional[discord.PartialEmoji | str]:
+            if e_reg and hasattr(e_reg, "get_emoji_obj"):
+                try:
+                    res = e_reg.get_emoji_obj(name)
+                    if isinstance(res, (str, discord.Emoji, discord.PartialEmoji)):
+                        return res
+                except Exception:
+                    pass
+            return fallback
 
         is_paused = bool(self.player and self.player.is_paused)
 
@@ -56,32 +53,28 @@ class MusicControlView(discord.ui.View):
                 if "playpause" in cid:
                     if is_paused:
                         child.label = "Resume"
-                        em = _safe_emoji("music") or _safe_emoji("paused")
-                        if em:
-                            child.emoji = em
+                        child.emoji = _safe_emoji("music", "▶️")
                     else:
                         child.label = "Pause"
-                        em = _safe_emoji("paused")
-                        if em:
-                            child.emoji = em
+                        child.emoji = _safe_emoji("paused", "⏸️")
                 elif "skip" in cid:
-                    em = _safe_emoji("skip")
-                    if em:
-                        child.emoji = em
+                    child.emoji = _safe_emoji("skip", "⏭️")
                 elif "voldown" in cid:
-                    em = _safe_emoji("volume_down") or _safe_emoji("voldown")
-                    if em:
-                        child.emoji = em
+                    child.emoji = _safe_emoji("volume_down", "🔉")
                 elif "volup" in cid:
-                    em = _safe_emoji("volume_up") or _safe_emoji("volup")
-                    if em:
-                        child.emoji = em
+                    child.emoji = _safe_emoji("volume_up", "🔊")
                 elif "stop" in cid:
-                    em = _safe_emoji("icons_stop_button") or _safe_emoji("stop")
-                    if em:
-                        child.emoji = em
-                elif "like" in cid or "loop" in cid or "autoplay" in cid or "queue" in cid:
-                    child.emoji = None
+                    child.emoji = _safe_emoji("icons_stop_button", "⏹️")
+                elif "like" in cid:
+                    child.emoji = _safe_emoji("like", "💜")
+                elif "loop" in cid:
+                    child.emoji = _safe_emoji("loop", "🔁")
+                elif "autoplay" in cid:
+                    child.emoji = _safe_emoji("autoplay", "📻")
+                elif "queue" in cid:
+                    child.emoji = _safe_emoji("queue", "📜")
+                elif "shuffle" in cid:
+                    child.emoji = _safe_emoji("shuffle", "🔀")
 
     def _get_player(self, interaction: discord.Interaction) -> Optional[GuildPlayer]:
         if interaction.guild_id:
@@ -515,3 +508,117 @@ class MusicControlView(discord.ui.View):
             await send_container_response(interaction, c, ephemeral=True)
         except Exception:
             pass
+
+
+class MusicSearchSelect(discord.ui.Select):
+    """Dropdown menu for interactive search result selection."""
+
+    def __init__(self, tracks: list[Any], author_id: int):
+        options = []
+        for i, track in enumerate(tracks[:5], 1):
+            title = (getattr(track, "title", "Unknown"))[:75]
+            author = (getattr(track, "author", "Unknown"))[:30]
+            dur = getattr(track, "formatted_duration", "0:00")
+            desc = f"{author} • {dur}"
+            options.append(
+                discord.SelectOption(
+                    label=f"{i}. {title}",
+                    description=desc,
+                    value=str(i - 1),
+                )
+            )
+        super().__init__(
+            placeholder="Select a track to play...",
+            min_values=1,
+            max_values=1,
+            options=options,
+            custom_id="kyoka:music:search_select",
+        )
+        self.tracks = tracks
+        self.author_id = author_id
+
+    async def callback(self, interaction: discord.Interaction) -> None:
+        if interaction.user.id != self.author_id:
+            await interaction.response.send_message("Only the person who initiated this search can pick a track.", ephemeral=True)
+            return
+
+        idx = int(self.values[0])
+        chosen_track = self.tracks[idx]
+
+        try:
+            if not interaction.response.is_done():
+                await interaction.response.defer()
+        except Exception:
+            pass
+
+        view = getattr(self, "view", None)
+        if view:
+            view.selected_track = chosen_track
+            view.stop()
+
+        music_cog = interaction.client.get_cog("Music")
+        if music_cog and interaction.guild:
+            player = music_cog.controller.get_or_create_player(interaction.guild)
+            member = interaction.user
+            if not player.is_connected and getattr(member, "voice", None) and getattr(member.voice, "channel", None):
+                try:
+                    await player.connect_voice(member.voice.channel)
+                except Exception as e:
+                    logger.warning(f"Voice connect error from search view: {e}")
+
+            player.home_channel = interaction.channel
+            chosen_track.requester = interaction.user.display_name
+            chosen_track.requester_id = interaction.user.id
+
+            from src.utils.containers import edit_container_response
+            if not player.is_playing and not player.is_paused:
+                await player.play_track(chosen_track, message_to_edit=interaction.message)
+            else:
+                await player.add_track(chosen_track)
+                c = KyokaContainer()
+                c.add_section(
+                    content=f"**Added to Queue**\n> Enqueued **[{chosen_track.title}]({chosen_track.url})** `[{chosen_track.formatted_duration}]` — `{chosen_track.requester}`"
+                )
+                try:
+                    await edit_container_response(interaction.message, c)
+                except Exception:
+                    pass
+
+
+class MusicSearchView(discord.ui.View):
+    """Interactive card view with select menu and buttons for search results."""
+
+    def __init__(self, bot: KyokaBot | KyroBot, tracks: list[Any], author_id: int):
+        super().__init__(timeout=60.0)
+        self.bot = bot
+        self.tracks = tracks[:5]
+        self.author_id = author_id
+        self.selected_track: Optional[Any] = None
+        self.message: Optional[discord.Message] = None
+
+        self.add_item(MusicSearchSelect(self.tracks, self.author_id))
+
+    @discord.ui.button(label="Cancel", style=discord.ButtonStyle.danger, row=1)
+    async def btn_cancel(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+        if interaction.user.id != self.author_id:
+            await interaction.response.send_message("Only the requester can cancel this search.", ephemeral=True)
+            return
+        self.stop()
+        try:
+            from src.utils.containers import edit_container_response
+            c = KyokaContainer()
+            c.add_section(content="**Search Cancelled**\n> Search selection was cancelled.")
+            await edit_container_response(interaction.message, c)
+        except Exception:
+            pass
+
+    async def on_timeout(self) -> None:
+        for child in self.children:
+            if hasattr(child, "disabled"):
+                child.disabled = True
+        if self.message:
+            try:
+                await self.message.edit(view=self)
+            except Exception:
+                pass
+

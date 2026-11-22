@@ -1,58 +1,186 @@
-# ==========================================
-# Lavalink v4 configuration for Kyoka
-# ==========================================
-# Lavalink 4.2+ is REQUIRED: since March 2026 Discord only allows
-# end-to-end encrypted voice (DAVE) and Lavalink 4.2.0 was the first
-# release supporting it. Older servers can no longer play audio in Discord.
-#
-# The password is read from the LAVALINK_PASSWORD environment variable so
-# the bot (Config.LAVALINK_PASSWORD) and this node always share one secret.
-# The default matches Lavalink's own shipped default.
+# ==============================================================================
+# KYOKA LAVALINK V4 - PRODUCTION CONFIGURATION (CO-LOCATED BOT DEPLOYMENT)
+# ==============================================================================
+# Reused from: https://github.com/ruthupavangoud2009-cmd/kyoka-lavalink.git
+# Bound strictly to loopback (127.0.0.1:2333) for secure internal bot access.
+# Compatible with Lavalink v4.x, Wavelink 3.x+, and Kyoka 3.0 Discord Bot.
+# ==============================================================================
 
 server:
   port: 2333
-  address: 0.0.0.0
+  address: 127.0.0.1
+  http2:
+    enabled: false
 
 lavalink:
   plugins:
-    # The built-in YouTube source is deprecated in v4 - the plugin replaces it
-    # and the built-in one has to be switched off below.
+    # 1. YouTube & YouTube Music Plugin (official replacement for built-in source)
     - dependency: "dev.lavalink.youtube:youtube-plugin:1.18.2"
+      repository: "https://maven.lavalink.dev/releases"
+      snapshot: false
+
+    # 2. LavaSrc Plugin (Spotify metadata & search-based track resolution)
+    - dependency: "com.github.topi314.lavasrc:lavasrc-plugin:4.8.3"
+      repository: "https://maven.lavalink.dev/releases"
       snapshot: false
 
   server:
-    password: "${LAVALINK_PASSWORD:youshallnotpass}"
+    # Strictly reads LAVALINK_PASSWORD or LAVALINK_SERVER_PASSWORD from environment
+    password: "${LAVALINK_PASSWORD:${LAVALINK_SERVER_PASSWORD:onlyforkyoka}}"
+
     sources:
+      # Built-in YouTube MUST be false when dev.lavalink.youtube plugin is loaded
       youtube: false
+      # Built-in audio sources
       soundcloud: true
       bandcamp: true
       twitch: true
       vimeo: true
+      # HTTP source handles direct audio links (MP3, FLAC, AAC, OGG) and live radio streams
       http: true
-      local: false
-    bufferDurationMs: 5000
+      # Local file playback enabled for persistent local song cache streaming
+      local: true
+
+    filters:
+      volume: true
+      equalizer: true
+      karaoke: true
+      timescale: true
+      tremolo: true
+      vibrato: true
+      distortion: true
+      rotation: true
+      channelMix: true
+      lowPass: true
+
+    # Audio Engine & Buffer tuning: 400ms jitter buffer + 5000ms lookahead frame buffer
+    bufferDurationMs: 400
     frameBufferDurationMs: 5000
     opusEncodingQuality: 10
     resamplingQuality: HIGH
     trackStuckThresholdMs: 10000
     useSeekGhosting: true
     playerUpdateInterval: 5
+    youtubeSearchEnabled: true
+    soundcloudSearchEnabled: true
+    gc-warnings: false
 
-  plugins:
-    youtube:
-      enabled: true
-      allowSearch: true
+# ==============================================================================
+# PLUGIN SPECIFIC CONFIGURATIONS
+# ==============================================================================
+plugins:
+  youtube:
+    enabled: true
+    allowSearch: true
+    allowDirectVideoIds: true
+    allowDirectPlaylistIds: true
+    # Full multi-client suite from kyoka-lavalink
+    clients:
+      - TV
+      - IOS
+      - MWEB
+      - WEBEMBEDDED
+      - MUSIC
+      - ANDROID_VR
+      - TVHTML5_SIMPLY
+      - ANDROID_MUSIC
+      - WEB
+      - ANDROID_TESTSUITE
 
+    clientOptions:
+      TV:
+        playback: true
+        searching: true
+        videoLoading: true
+        playlistLoading: true
+      IOS:
+        playback: true
+        searching: true
+        videoLoading: true
+        playlistLoading: true
+      MWEB:
+        playback: true
+        searching: true
+        videoLoading: true
+        playlistLoading: true
+      WEBEMBEDDED:
+        playback: true
+        searching: true
+        videoLoading: true
+        playlistLoading: true
+      MUSIC:
+        playback: true
+        searching: true
+        videoLoading: true
+        playlistLoading: true
+      ANDROID_VR:
+        playback: true
+        searching: true
+        videoLoading: true
+        playlistLoading: true
+      TVHTML5_SIMPLY:
+        playback: true
+        searching: true
+        videoLoading: true
+        playlistLoading: true
+      ANDROID_MUSIC:
+        playback: true
+        searching: true
+        videoLoading: true
+        playlistLoading: true
+      WEB:
+        playback: true
+        searching: true
+        videoLoading: true
+        playlistLoading: true
+      ANDROID_TESTSUITE:
+        playback: true
+        searching: true
+        videoLoading: true
+        playlistLoading: true
+
+  lavasrc:
+    providers:
+      # Order of resolution providers for Spotify tracks:
+      - "ytmsearch:\"%ISRC%\""
+      - "ytmsearch:%QUERY%"
+      - "ytsearch:%QUERY%"
+    sources:
+      spotify: true
+      applemusic: false
+      deezer: false
+      yandexmusic: false
+      flowerytts: false
+      youtube: false
+    spotify:
+      clientId: "${SPOTIFY_CLIENT_ID:}"
+      clientSecret: "${SPOTIFY_CLIENT_SECRET:}"
+      countryCode: "US"
+      playlistLoadLimit: 6
+      albumLoadLimit: 6
+      resolveExternalSources: true
+
+# ==============================================================================
+# LOGGING CONFIGURATION
+# ==============================================================================
 logging:
+  file:
+    path: ./logs/
+    max-history: 7
+    max-size: 50MB
   level:
     root: INFO
     lavalink: INFO
+    org.springframework.boot: INFO
+    org.springframework.web: INFO
   request:
     enabled: false
     includeClientInfo: false
 
+# ==============================================================================
+# METRICS CONFIGURATION
+# ==============================================================================
 metrics:
-  enabled: true
-  endpoint:
+  prometheus:
     enabled: true
-    path: /metrics
+    endpoint: /metrics

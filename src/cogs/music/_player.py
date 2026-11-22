@@ -17,6 +17,8 @@ import wavelink
 
 from src.cogs.music._models import Track
 from src.cogs.music._autoplay import NativeSmartAutoplay
+from src.cogs.music._cache import MusicCacheManager
+from src.cogs.music._queue import SmartQueue, SearchCache
 from src.core.lavalink import (
     LAVALINK_OP_TIMEOUT,
     LAVALINK_PLAY_TIMEOUT,
@@ -180,13 +182,14 @@ class GuildPlayer:
     Replaces local FFmpeg subprocesses with dedicated Lavalink node streaming.
     """
 
-    def __init__(self, bot: KyokaBot | KyroBot, guild: discord.Guild) -> None:
+    def __init__(self, bot: Any, guild: Any = None) -> None:
         self.bot = bot
         self.guild = guild
         self.voice_client: Optional[KyokaWavelinkPlayer | wavelink.Player] = None
 
-        # Playback state
-        self.queue: List[Track] = []
+        # Playback state & Smart Preloading Queue
+        self.smart_queue = SmartQueue(player=self)
+        self.queue: List[Track] = self.smart_queue._tracks
         self.current: Optional[Track] = None
         self.history: List[Track] = []
         self.volume: float = 1.0  # Normalized (1.0 = 100%)
@@ -228,59 +231,43 @@ class GuildPlayer:
     def is_playing(self) -> bool:
         """Check if actively playing audio."""
         vc = self.guild.voice_client or self.voice_client
-        if vc and isinstance(vc, wavelink.Player):
-            return vc.playing and not vc.paused
+        if vc and hasattr(vc, "playing") and hasattr(vc, "paused"):
+            return bool(vc.playing and not vc.paused)
         return False
 
     @property
     def is_paused(self) -> bool:
         """Check if playback is currently paused."""
         vc = self.guild.voice_client or self.voice_client
-        if vc and isinstance(vc, wavelink.Player):
-            return vc.paused
+        if vc and hasattr(vc, "paused"):
+            return bool(vc.paused)
         return False
 
     # ── Thread-Safe Queue Operations ──
 
     async def add_track(self, track: Track) -> None:
         """Thread-safely append a single track to the queue."""
-        async with self._queue_lock:
-            self.queue.append(track)
-        asyncio.create_task(self._prefetch_next_track())
+        await self.smart_queue.add(track)
 
     async def add_tracks(self, tracks: list[Track]) -> None:
         """Thread-safely append multiple tracks to the queue."""
-        async with self._queue_lock:
-            self.queue.extend(tracks)
-        asyncio.create_task(self._prefetch_next_track())
+        await self.smart_queue.add_all(tracks)
 
     async def pop_next_track(self) -> Optional[Track]:
         """Thread-safely pop the next track from the front of the queue."""
-        async with self._queue_lock:
-            if self.queue:
-                return self.queue.pop(0)
-            return None
+        return await self.smart_queue.pop()
 
     async def clear_queue(self) -> int:
         """Thread-safely clear all tracks from the queue and return count."""
-        async with self._queue_lock:
-            cnt = len(self.queue)
-            self.queue.clear()
-            return cnt
+        return await self.smart_queue.clear()
 
     async def remove_track_at(self, index: int) -> Optional[Track]:
         """Thread-safely remove a track at index (0-based) from queue."""
-        async with self._queue_lock:
-            if 0 <= index < len(self.queue):
-                return self.queue.pop(index)
-            return None
+        return await self.smart_queue.remove_at(index)
 
     async def shuffle_queue(self) -> int:
         """Thread-safely shuffle the upcoming queue."""
-        async with self._queue_lock:
-            import random
-            random.shuffle(self.queue)
-            return len(self.queue)
+        return await self.smart_queue.shuffle()
 
     # ── Voice Connection ──
 
@@ -762,6 +749,42 @@ class GuildPlayer:
         if playable:
             return playable
 
+        # ── Priority 1.1: Persistent Audio Cache (0ms Instant Playback) ──
+        cache_mgr = getattr(self.bot, "_music_cache_mgr", None)
+        if cache_mgr:
+            cached_res = await cache_mgr.get_cached_track(
+                track.url or track.query or track.title,
+                title=track.title,
+                artist=track.author,
+            )
+            if cached_res:
+                entry, has_audio = cached_res
+                track.is_cached = True
+                track.cache_path = entry.audio_path
+                track.cache_status = entry.cache_status
+                track.source_name = "Cache"
+                track.duration = entry.duration or track.duration
+                if has_audio and entry.audio_path:
+                    try:
+                        results = await asyncio.wait_for(wavelink.Playable.search(entry.audio_path), timeout=5.0)
+                        if results:
+                            p = results[0] if isinstance(results, list) else results.tracks[0]
+                            track._playable = p
+                            logger.info(f"Resolved '{track.title}' instantly from Persistent Audio Cache ({entry.audio_path}).")
+                            return p
+                    except Exception as e:
+                        logger.debug(f"Audio cache local file load notice: {e}")
+                elif entry.source_url and self._is_direct_stream_url(entry.source_url):
+                    try:
+                        results = await asyncio.wait_for(wavelink.Playable.search(entry.source_url), timeout=5.0)
+                        if results:
+                            p = results[0] if isinstance(results, list) else results.tracks[0]
+                            track._playable = p
+                            logger.info(f"Resolved '{track.title}' from Cache metadata stream URL.")
+                            return p
+                    except Exception:
+                        pass
+
         # ── Node Health Pre-check: Ensure Lavalink node is alive ──
         try:
             node = wavelink.Pool.get_node()
@@ -852,6 +875,9 @@ class GuildPlayer:
                             logger.debug(
                                 f"Resolved '{track.title}' via strategy ({source}, query='{query}', attempt={attempt + 1})"
                             )
+                            track.source_name = getattr(source, "name", str(source)) if source else "YouTube"
+                            if cache_mgr:
+                                asyncio.create_task(cache_mgr.register_track(track))
                             return p
                     break  # empty result — no point retrying this strategy
                 except asyncio.TimeoutError:
@@ -1407,11 +1433,12 @@ class GuildPlayer:
         dot_prefix = f"> {heart_e} " if heart_e else "> "
         link_prefix = f"{link_emoji} " if link_emoji else ""
 
+        engine_label = "⚡ Cached (0ms)" if getattr(track, "is_cached", False) else f"🌐 Stream ({getattr(track, 'source_name', 'Dedicated')})"
         body_lines = [
             f"{dot_prefix}**Song:** {song_display}",
             f"{dot_prefix}**Artist:** `{artist_display}`",
             f"{dot_prefix}**Timeline:** {progress_display}",
-            f"{dot_prefix}**Status:** Volume: `{vol_pct}%` • Loop: `{loop_status}` • Queue: `{q_label}` • Engine: `Studio HD`",
+            f"{dot_prefix}**Status:** Volume: `{vol_pct}%` • Loop: `{loop_status}` • Queue: `{q_label}` • Engine: `{engine_label}`",
         ]
 
         container.add_section(content="\n".join(body_lines))

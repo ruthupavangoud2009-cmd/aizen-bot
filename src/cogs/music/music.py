@@ -16,12 +16,17 @@ from src.cogs.music._views import MusicControlView
 from src.cogs.music._analytics import MusicAnalytics
 from src.cogs.music._agent import MusicAgent
 from src.cogs.music._commands.play import execute_play
+from src.cogs.music._commands.search import execute_search
 from src.cogs.music._commands.pause import execute_pause, execute_resume
 from src.cogs.music._commands.skip import execute_skip
 from src.cogs.music._commands.stop import execute_stop
 from src.cogs.music._commands.queue import execute_queue
 from src.cogs.music._commands.nowplaying import execute_nowplaying
 from src.cogs.music._commands.autoplay import execute_autoplay
+from src.cogs.music._cache import MusicCacheManager
+from src.cogs.music._queue import SearchCache
+from src.cogs.music._watchdog import PlaybackWatchdog
+from src.security.owner import is_owner_or_staff
 from src.cogs.music._commands.controls import (
     execute_loop,
     execute_shuffle,
@@ -58,6 +63,29 @@ class Music(commands.Cog):
         self.analytics = MusicAnalytics(bot)
         self.agent = MusicAgent(bot, self)
         bot._music_agent = self.agent
+
+        # Persistent Audio Cache Engine
+        if hasattr(bot, "_music_cache_mgr") and bot._music_cache_mgr:
+            self.cache_mgr = bot._music_cache_mgr
+        else:
+            self.cache_mgr = MusicCacheManager(bot)
+            bot._music_cache_mgr = self.cache_mgr
+        asyncio.create_task(self.cache_mgr.initialize())
+
+        # Microsecond Search Result Cache
+        if hasattr(bot, "_music_search_cache") and bot._music_search_cache:
+            self.search_cache = bot._music_search_cache
+        else:
+            self.search_cache = SearchCache()
+            bot._music_search_cache = self.search_cache
+
+        # Playback Watchdog & Health Supervision Engine
+        if hasattr(bot, "_music_watchdog") and bot._music_watchdog:
+            self.watchdog = bot._music_watchdog
+        else:
+            self.watchdog = PlaybackWatchdog(bot, self.controller)
+            bot._music_watchdog = self.watchdog
+
         # Register persistent view for button interactions
         self.bot.add_view(MusicControlView(bot, None))
 
@@ -129,6 +157,8 @@ class Music(commands.Cog):
         """Close Lavalink node pool only on bot shutdown, preserving active streams during hot-reload."""
         if hasattr(self, "agent") and self.agent:
             self.agent.cog_unload()
+        if hasattr(self, "watchdog") and self.watchdog:
+            self.watchdog.stop()
         if getattr(self.bot, "_is_shutting_down", False):
             import wavelink
             try:
@@ -600,6 +630,20 @@ class Music(commands.Cog):
             await send_container_response(ctx, container)
 
     @commands.hybrid_command(
+        name="leave",
+        aliases=["leavevc", "part"],
+        description="Disconnect Kyoka from voice channel and stop playback.",
+    )
+    async def leave(self, ctx: CustomContext) -> None:
+        """Disconnect Kyoka from voice channel and clear queue."""
+        if ctx.interaction and not ctx.interaction.response.is_done():
+            try:
+                await ctx.interaction.response.defer()
+            except Exception:
+                pass
+        await execute_stop(self, ctx)
+
+    @commands.hybrid_command(
         name="play",
         aliases=["p", "search"],
         description="Play high-fidelity music tracks directly in your voice channel.",
@@ -612,9 +656,22 @@ class Music(commands.Cog):
                 await ctx.interaction.response.defer()
             except Exception:
                 pass
+        if getattr(ctx, "invoked_with", "") in ("search", "find"):
+            await execute_search(self, ctx, query=query)
+            return
         await execute_play(self, ctx, query)
 
-    @commands.command(
+    @app_commands.command(
+        name="search",
+        description="Search for tracks and select from top 5 interactive results.",
+    )
+    @app_commands.describe(query="Song title, artist name, or keywords to search")
+    async def slash_search(self, interaction: discord.Interaction, query: str) -> None:
+        """Search for tracks and interactively select a song."""
+        ctx = await self.bot.get_context(interaction)
+        await execute_search(self, ctx, query=query)
+
+    @commands.hybrid_command(
         name="autoplay",
         aliases=["ap"],
         description="Toggle Smart Autoplay to play continuous radio based on played songs.",
@@ -715,29 +772,47 @@ class Music(commands.Cog):
             await ctx.interaction.response.defer()
         await execute_nowplaying(self, ctx)
 
-    @commands.command(
+    @commands.hybrid_command(
         name="loop",
+        aliases=["repeat"],
         description="Toggle loop mode between off, track, and entire queue.",
     )
+    @app_commands.describe(mode="Loop mode: off, track, or queue (leave blank to toggle)")
     async def loop(self, ctx: CustomContext, mode: Optional[str] = None) -> None:
         """Toggle loop mode."""
+        if ctx.interaction and not ctx.interaction.response.is_done():
+            try:
+                await ctx.interaction.response.defer()
+            except Exception:
+                pass
         await execute_loop(self, ctx, mode)
 
-    @commands.command(
+    @commands.hybrid_command(
         name="shuffle",
+        aliases=["sh"],
         description="Randomize the order of upcoming songs in queue.",
     )
     async def shuffle(self, ctx: CustomContext) -> None:
         """Shuffle queue."""
+        if ctx.interaction and not ctx.interaction.response.is_done():
+            try:
+                await ctx.interaction.response.defer()
+            except Exception:
+                pass
         await execute_shuffle(self, ctx)
 
-    @commands.command(
+    @commands.hybrid_command(
         name="clear",
         aliases=["clearqueue", "cq", "queueclear", "qc"],
         description="Clear all upcoming tracks from the queue.",
     )
     async def clear(self, ctx: CustomContext) -> None:
         """Clear queue."""
+        if ctx.interaction and not ctx.interaction.response.is_done():
+            try:
+                await ctx.interaction.response.defer()
+            except Exception:
+                pass
         await execute_clear(self, ctx)
 
     @commands.hybrid_command(
@@ -787,12 +862,19 @@ class Music(commands.Cog):
         await handle_playlist(ctx, self, action, name, query=query)
 
 
-    @commands.command(
+    @commands.hybrid_command(
         name="remove",
+        aliases=["rm"],
         description="Remove a specific track from the upcoming queue by its number.",
     )
+    @app_commands.describe(index="Track position number in the queue (e.g. 1)")
     async def remove(self, ctx: CustomContext, index: int) -> None:
         """Remove a track from queue."""
+        if ctx.interaction and not ctx.interaction.response.is_done():
+            try:
+                await ctx.interaction.response.defer()
+            except Exception:
+                pass
         await execute_remove(self, ctx, index)
 
     @commands.command(
@@ -1137,26 +1219,43 @@ class Music(commands.Cog):
             return
 
 
-    @commands.command(
-        name="musicdiag",
-        aliases=["audiodiag", "mudiag"],
-        description="Run real-time diagnostics on the music audio engine, Lavalink nodes, and voice gateway.",
+    @commands.hybrid_command(
+        name="musicdiagnostics",
+        aliases=["musicdiag", "audiodiag", "mudiag", "mdiag"],
+        description="Owner-only real-time music engine health, cache hit-rate, and audio diagnostics.",
     )
-    async def musicdiag(self, ctx: CustomContext) -> None:
-        """Inspect real-time health of Lavalink nodes, voice gateway, and Opus engine."""
+    async def musicdiagnostics(self, ctx: CustomContext) -> None:
+        """Inspect real-time health of self-hosted music engine, persistent song cache, and watchdog."""
+        if ctx.interaction and not ctx.interaction.response.is_done():
+            try:
+                await ctx.interaction.response.defer()
+            except Exception:
+                pass
+
+        if not is_owner_or_staff(ctx.author.id):
+            c = KyokaContainer()
+            c.add_text("⛔ **Access Denied:** Only the bot owner and authorized staff can view music diagnostics.")
+            await send_container_response(ctx, c, ephemeral=True)
+            return
+
         import wavelink
         from src.core.lavalink import candidates, probe_node
 
-        node_info = "None"
+        node_info = "Self-Hosted Lavalink"
         node_status = "Disconnected"
         rest_status = "Unknown"
         try:
             node = wavelink.Pool.get_node()
             if node:
-                node_info = getattr(node, "uri", "Unknown")
+                raw_uri = getattr(node, "uri", "Unknown")
+                # Sanitize credentials from display
+                clean_host = raw_uri.split("@")[-1] if "@" in raw_uri else raw_uri
+                node_info = f"Dedicated ({clean_host})"
                 node_status = getattr(node.status, "name", str(node.status))
+                t0 = time.time()
                 rest_ok = await probe_node(node, timeout=3.0)
-                rest_status = "Responsive (HTTP 200)" if rest_ok else "Unresponsive"
+                elapsed_ms = int((time.time() - t0) * 1000)
+                rest_status = f"Healthy ({elapsed_ms}ms, HTTP 200)" if rest_ok else "Unresponsive"
         except Exception as e:
             node_status = f"Error: {e}"
 
@@ -1171,21 +1270,55 @@ class Music(commands.Cog):
         player_playing = player.is_playing if player else False
         player_queue_len = len(player.queue) if player else 0
 
+        # Cache Statistics
+        cache_stats = self.cache_mgr.get_stats() if hasattr(self, "cache_mgr") else {
+            "cached_tracks": 0, "cached_audio_files": 0, "cache_size_mb": 0,
+            "max_size_mb": 1024, "free_disk_mb": 0, "cache_hits": 0,
+            "cache_misses": 0, "hit_rate_pct": 0.0, "is_persistent": True,
+        }
+
+        # Watchdog Statistics
+        watchdog_stats = self.watchdog.get_stats() if hasattr(self, "watchdog") else {
+            "stalls_detected": 0, "stalls_recovered": 0, "voice_reconnects": 0,
+            "empty_vc_timeouts": 0, "monitored_guilds": 0,
+        }
+
+        active_players_count = len(self.controller.players)
+        streaming_count = sum(1 for p in self.controller.players.values() if p.is_playing)
+        total_queued_tracks = sum(len(p.queue) for p in self.controller.players.values())
+
+        storage_mode_str = "Persistent Volume (Safe)" if cache_stats.get("is_persistent") else "Ephemeral Container (Temp)"
+        if cache_stats.get("warning"):
+            storage_mode_str += " ⚠️"
+
         container = KyokaContainer(accent_color=0x7C3AED)
-        container.add_section(
-            content=(
-                "**🎵 KYOKA Audio Engine & Voice Diagnostics**\n\n"
-                f"**Active Lavalink Node:** `{node_info}`\n"
-                f"**Node WebSocket State:** `{node_status}`\n"
-                f"**Node REST API:** `{rest_status}`\n"
-                f"**Configured Cluster Nodes:** `{len(configured_nodes)} configured`\n\n"
-                f"**Discord Opus Engine:** `{'Loaded & Active' if opus_loaded else 'Not Loaded'}`\n"
-                f"**Voice Client Type:** `{vc_type}`\n"
-                f"**Voice Channel:** `{vc_channel}` (Connected: `{vc_connected}`)\n"
-                f"**Playback State:** `{'Streaming' if player_playing else 'Idle'}`\n"
-                f"**Queue Depth:** `{player_queue_len} track(s)`"
-            )
+        container.add_text("## 🎵 KYOKA Ultra-Fast Music Engine Diagnostics")
+        container.add_separator(divider=True)
+
+        body = (
+            f"**Dedicated Music Backend**\n"
+            f"> Node Infrastructure: `{node_info}`\n"
+            f"> WebSocket Gateway: `{node_status}`\n"
+            f"> REST API Latency: `{rest_status}`\n"
+            f"> Dedicated Nodes: `{len(configured_nodes)} configured (Zero public nodes)`\n"
+            f"> Discord Opus Driver: `{'Active & Loaded' if opus_loaded else 'Not Loaded'}`\n\n"
+            f"**Persistent Song Cache & Storage**\n"
+            f"> Cache Hit Rate: `{cache_stats['hit_rate_pct']}%` ({cache_stats['cache_hits']} hits / {cache_stats['cache_misses']} misses)\n"
+            f"> Indexed Tracks: `{cache_stats['cached_tracks']} tracks` ({cache_stats['cached_audio_files']} cached audio files)\n"
+            f"> Storage Used: `{cache_stats['cache_size_mb']} MB` / `{cache_stats['max_size_mb']} MB` (Free: `{cache_stats['free_disk_mb']} MB`)\n"
+            f"> Storage Integrity: `{storage_mode_str}`\n\n"
+            f"**Autonomous Watchdog & Fleet Health**\n"
+            f"> Fleet Capacity: `{active_players_count} servers` (Streaming: `{streaming_count}` • Total Queued: `{total_queued_tracks}`)\n"
+            f"> Stalled Playbacks Cleared: `{watchdog_stats['stalls_recovered']} recovered` ({watchdog_stats['stalls_detected']} detected)\n"
+            f"> Gateway Reconnects: `{watchdog_stats['voice_reconnects']}` • Empty VC Leaves: `{watchdog_stats['empty_vc_timeouts']}`\n\n"
+            f"**Current Server Session ({getattr(ctx.guild, 'name', 'Unknown')})**\n"
+            f"> Voice Channel: `{vc_channel}` (Connected: `{vc_connected}`)\n"
+            f"> Playback State: `{'Streaming' if player_playing else 'Idle'}` • Queue Depth: `{player_queue_len} tracks`"
         )
+        container.add_section(content=body)
+        container.add_separator(divider=True)
+        container.add_text("-# KYOKA Self-Hosted Music Engine v3.0 • Confidential Infrastructure")
+
         await send_container_response(ctx, container)
 
     # ── Universal Music Cog Error Shield ──

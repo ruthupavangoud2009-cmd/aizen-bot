@@ -1,14 +1,13 @@
 services:
   - type: web
     name: kyoka-discord-bot
-    runtime: python
-    buildCommand: chmod +x build.sh && ./build.sh
-    startCommand: python src/main.py
-    plan: free
+    runtime: docker
+    dockerfilePath: ./Dockerfile
+    dockerContext: .
     region: virginia
+    healthCheckPath: /health
+    autoDeploy: true
     envVars:
-      - key: PYTHON_VERSION
-        value: 3.11.9
       - key: DISCORD_TOKEN
         sync: false
       - key: DATABASE_URL
@@ -21,18 +20,35 @@ services:
         value: "+"
       - key: SYNC_COMMANDS_ON_STARTUP
         value: "false"
+      # Co-located Private Lavalink V4 Engine Settings (localhost 127.0.0.1:2333)
       - key: LAVALINK_AUTO_DISCOVER
-        value: "1"
-      - key: LAVALINK_PUBLIC_LIST_URL
-        value: "https://lavalink-list.ajieblogs.eu.org/All"
+        value: "0"
       - key: LAVALINK_HOST
-        value: "lava2.kasawa.pro"
+        value: "127.0.0.1"
       - key: LAVALINK_PORT
-        value: "2334"
+        value: "2333"
       - key: LAVALINK_SECURE
         value: "false"
+      - key: LAVALINK_IDENTIFIER
+        value: "kyoka-lavalink-local"
       - key: LAVALINK_PASSWORD
-        value: "youshallnotpass"
+        sync: false
+      - key: LAVALINK_URI
+        value: "http://127.0.0.1:2333"
+      # JVM Tuning for High-Resource Hosting (30 GB RAM headroom)
+      - key: JAVA_OPTS
+        value: "-Xmx4g -Xms1g -XX:MaxMetaspaceSize=512m -XX:ReservedCodeCacheSize=128m -XX:+UseG1GC -XX:MaxGCPauseMillis=20 -XX:+UseStringDeduplication -Dfile.encoding=UTF-8"
+      # Spotify Resolution Credentials (optional, from kyoka-lavalink)
+      - key: SPOTIFY_CLIENT_ID
+        sync: false
+      - key: SPOTIFY_CLIENT_SECRET
+        sync: false
+      # High-Performance Music Cache Configuration
+      - key: MUSIC_CACHE_MAX_MB
+        value: "4096"
+      - key: MUSIC_CACHE_TTL_DAYS
+        value: "30"
+      # AI and Bot Runtime Settings
       - key: GEMINI_MODEL
         value: "gemini-flash-lite-latest"
       - key: AI_RESPONSE_TIMEOUT_SECONDS

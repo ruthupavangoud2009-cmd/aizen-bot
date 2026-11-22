@@ -3,11 +3,13 @@ from __future__ import annotations
 import os
 from dataclasses import dataclass
 from pathlib import Path
-from dotenv import load_dotenv
-
 # Load .env file from project root with override=True
 BASE_DIR = Path(__file__).resolve().parent.parent.parent
-load_dotenv(dotenv_path=BASE_DIR / ".env", override=True)
+try:
+    from dotenv import load_dotenv
+    load_dotenv(dotenv_path=BASE_DIR / ".env", override=True)
+except ImportError:
+    pass
 
 
 def _parse_application_id(value: str | int | None) -> int | None:
@@ -154,24 +156,34 @@ class Config:
         # explicitly in the hosting environment when a trusted proxy is required.
         return pool
 
-    # Lavalink / Audio Settings
-    # KYOKA is pinned to the requested public Lavalink node. This intentionally
-    # ignores stale Render dashboard variables (which previously kept routing
-    # the bot to kyoka-lavalink.onrender.com and caused websocket HTTP 404s).
-    LAVALINK_HOST: str = "lava2.kasawa.pro"
-    LAVALINK_PORT: int = 2334
-    LAVALINK_SECURE: bool = False
-    LAVALINK_IDENTIFIER: str = "kyoka-kasawa-v4"
-    LAVALINK_PASSWORD: str = "youshallnotpass"
+    # Self-Hosted Lavalink / Audio Engine Settings
+    # KYOKA runs its own dedicated, co-located Lavalink v4 engine on loopback (127.0.0.1:2333).
+    # Public / community Lavalink nodes and third-party discovery are strictly disabled.
+    LAVALINK_HOST: str = os.getenv("LAVALINK_HOST", "127.0.0.1")
+    LAVALINK_PORT: int = int(os.getenv("LAVALINK_PORT", "2333"))
+    LAVALINK_SECURE: bool = os.getenv("LAVALINK_SECURE", "false").lower() in ("true", "1", "yes")
+    LAVALINK_IDENTIFIER: str = os.getenv("LAVALINK_IDENTIFIER", "kyoka-lavalink-local")
+    LAVALINK_PASSWORD: str = os.getenv("LAVALINK_PASSWORD") or os.getenv("LAVALINK_SERVER_PASSWORD") or "onlyforkyoka"
 
     # Canonical Lavalink REST URI; Wavelink upgrades this to ws://.../v4/websocket.
-    LAVALINK_URI: str = "http://lava2.kasawa.pro:2334"
+    LAVALINK_URI: str = os.getenv(
+        "LAVALINK_URI",
+        f"{'https' if os.getenv('LAVALINK_SECURE', 'false').lower() in ('true', '1', 'yes') else 'http'}://{os.getenv('LAVALINK_HOST', '127.0.0.1')}:{os.getenv('LAVALINK_PORT', '2333')}"
+    )
 
-    # Keep discovery disabled so a different community node cannot silently
-    # replace the explicitly configured primary node.
-    LAVALINK_FALLBACK_URIS: str = ""
+    # Dedicated private fallback nodes only (if any are explicitly provisioned).
+    LAVALINK_FALLBACK_URIS: str = os.getenv("LAVALINK_FALLBACK_URIS", "")
     LAVALINK_AUTO_DISCOVER: bool = False
-    LAVALINK_PUBLIC_LIST_URL: str = "https://lavalink-list.ajieblogs.eu.org/All"
+    LAVALINK_PUBLIC_LIST_URL: str = ""
+
+    # Persistent Audio Cache & Smart Queue Settings
+    MUSIC_CACHE_DIR: str = os.getenv("MUSIC_CACHE_DIR", "data/music_cache")
+    MUSIC_CACHE_MAX_MB: int = int(os.getenv("MUSIC_CACHE_MAX_MB", "4096"))
+    MUSIC_CACHE_MAX_TRACKS: int = int(os.getenv("MUSIC_CACHE_MAX_TRACKS", "2000"))
+    MUSIC_CACHE_TTL_DAYS: int = int(os.getenv("MUSIC_CACHE_TTL_DAYS", "30"))
+    MUSIC_PRELOAD_LIMIT: int = int(os.getenv("MUSIC_PRELOAD_LIMIT", "3"))
+    MUSIC_WATCHDOG_INTERVAL: int = int(os.getenv("MUSIC_WATCHDOG_INTERVAL", "10"))
+    MUSIC_STALL_TIMEOUT: int = int(os.getenv("MUSIC_STALL_TIMEOUT", "15"))
 
     # Aesthetics
     COLORS: ThemeColors = ThemeColors()

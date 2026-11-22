@@ -695,6 +695,38 @@ class PostgresDatabase(BaseDatabase):
             """
             CREATE INDEX IF NOT EXISTS idx_user_playlist_tracks_plid ON user_playlist_tracks(playlist_id);
             """,
+            # Persistent Song Cache & Track Metadata table
+            """
+            CREATE TABLE IF NOT EXISTS music_track_cache (
+                cache_id VARCHAR(64) PRIMARY KEY,
+                title VARCHAR(255) NOT NULL,
+                artist VARCHAR(255) NOT NULL,
+                duration INT DEFAULT 0,
+                source_url TEXT,
+                thumbnail TEXT,
+                audio_path TEXT,
+                audio_format VARCHAR(20) DEFAULT 'opus',
+                file_size BIGINT DEFAULT 0,
+                usage_count INT DEFAULT 1,
+                cache_status VARCHAR(20) DEFAULT 'cached',
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                last_played_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            );
+            """,
+            """
+            CREATE INDEX IF NOT EXISTS idx_music_cache_last_played ON music_track_cache(last_played_at);
+            """,
+            # Guild Persistent Music State & Queue Recovery table
+            """
+            CREATE TABLE IF NOT EXISTS guild_music_state (
+                guild_id BIGINT PRIMARY KEY,
+                volume INT DEFAULT 100,
+                loop_mode VARCHAR(20) DEFAULT 'off',
+                smart_autoplay BOOLEAN DEFAULT FALSE,
+                queue_data JSONB DEFAULT '[]'::jsonb,
+                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            );
+            """,
             # Guild Member Warnings table
             """
             CREATE TABLE IF NOT EXISTS guild_warns (
