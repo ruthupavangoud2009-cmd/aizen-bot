@@ -667,6 +667,7 @@ class KyokaBot(commands.Bot):
 
     async def on_ready(self) -> None:
         """Fired when Discord client has finished caching guilds."""
+        logger.info("[KYOKA] Bot connected successfully")
         logger.info(
             f"Logged in as {self.user} (ID: {self.user.id}) across {len(self.guilds)} guilds."
         )

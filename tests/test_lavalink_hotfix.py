@@ -33,6 +33,8 @@ from scripts.run_combined import (
     detect_container_ram_mb,
     calculate_jvm_opts,
     verify_configuration,
+    ensure_java_runtime,
+    verify_lavalink_auth,
     CombinedSupervisor,
     INTERNAL_HOST,
     INTERNAL_PORT,
@@ -103,6 +105,7 @@ class TestLavalinkProductionHotfix(unittest.TestCase):
         content = cfg_path.read_text(encoding="utf-8")
         self.assertIn("port: 2333", content)
         self.assertIn("address: 127.0.0.1", content)
+        self.assertIn("${LAVALINK_PASSWORD:${LAVALINK_SERVER_PASSWORD:youshallnotpass}}", content)
         self.assertNotIn("onlyforkyoka", content)
 
     def test_no_competing_launchers(self):
@@ -140,6 +143,29 @@ class TestLavalinkProductionHotfix(unittest.TestCase):
         self.assertIn("lavasrc-plugin", content)
         self.assertIn("fontconfig", content)
         self.assertIn("procps", content)
+
+
+    def test_ensure_java_runtime_resolution(self):
+        """Verify ensure_java_runtime finds system java or checks standard paths."""
+        with patch("shutil.which", return_value="/usr/bin/java"), \
+             patch("subprocess.run") as mock_run:
+            mock_run.return_value = MagicMock(returncode=0, stdout="", stderr="openjdk version 21.0.2")
+            java_path = ensure_java_runtime()
+            self.assertEqual(java_path, "/usr/bin/java")
+
+    def test_verify_lavalink_auth_mocked(self):
+        """Verify auth verification handles HTTP 200 and HTTP 401."""
+        import urllib.error
+        with patch("urllib.request.urlopen") as mock_urlopen:
+            mock_resp = MagicMock()
+            mock_resp.status = 200
+            mock_resp.getcode.return_value = 200
+            mock_resp.__enter__.return_value = mock_resp
+            mock_urlopen.return_value = mock_resp
+            self.assertTrue(verify_lavalink_auth("127.0.0.1", 2333, "secret"))
+
+        with patch("urllib.request.urlopen", side_effect=urllib.error.HTTPError("http://127.0.0.1:2333/v4/info", 401, "Unauthorized", {}, None)):
+            self.assertFalse(verify_lavalink_auth("127.0.0.1", 2333, "wrong_secret"))
 
 
 if __name__ == "__main__":

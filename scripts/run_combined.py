@@ -7,14 +7,14 @@ Authoritative single-process supervisor managing both the Discord Bot and
 dedicated local Lavalink v4 audio engine under a single container deployment.
 
 Startup sequence:
-1. Runtime validation & container cgroup memory detection.
-2. Java runtime detection and verification.
-3. Lavalink JAR & plugin binary verification / download.
-4. Lavalink configuration file verification & validation.
-5. Port availability & loopback binding verification.
-6. Launch Lavalink with strict loopback and password synchronization.
-7. Poll HTTP /version readiness endpoint with controlled timeout.
-8. Verify HTTP 200 response from /version.
+1. Validate startup environment and container cgroup memory limits.
+2. Locate and verify Java runtime (or automatically provision portable JRE).
+3. Validate and download Lavalink.jar binary if missing.
+4. Validate Lavalink application.yml configuration.
+5. Check port availability & loopback binding (127.0.0.1:2333).
+6. Start Lavalink with real-time log streaming and password synchronization.
+7. Poll HTTP /version readiness endpoint with controlled timeout (90s).
+8. Verify HTTP 200 response and check /v4/info authentication.
 9. Launch KYOKA Discord Bot.
 10. Monitor both processes with automatic recovery and graceful signal trapping.
 ==============================================================================
@@ -30,6 +30,7 @@ import shutil
 import socket
 import logging
 import secrets
+import threading
 import subprocess
 import urllib.request
 import urllib.error
@@ -49,7 +50,7 @@ JAR_PATH = (LAVALINK_DIR / "Lavalink.jar").resolve()
 APP_YML_PATH = (LAVALINK_DIR / "application.yml").resolve()
 PLUGINS_DIR = (LAVALINK_DIR / "plugins").resolve()
 
-# Strict internal binding constants
+# Strict internal loopback binding
 INTERNAL_HOST = "127.0.0.1"
 INTERNAL_PORT = 2333
 
@@ -129,8 +130,6 @@ def calculate_jvm_opts(container_ram_mb: int) -> list[str]:
 
     if env_opts and env_opts.strip():
         tokens = env_opts.split()
-        # If user/render env passed -Xmx or -Xms that exceeds 75% of container memory,
-        # replace heap flags to prevent immediate OOM killer abort
         has_large_heap = any(
             t.startswith("-Xmx") and ("g" in t or "G" in t) and container_ram_mb < 2048
             for t in tokens
@@ -149,9 +148,6 @@ def calculate_jvm_opts(container_ram_mb: int) -> list[str]:
         else:
             return tokens
 
-    logger.info(
-        f"[KYOKA] Container RAM: {container_ram_mb} MB. Allocating Lavalink heap: {' '.join(heap_flags)}"
-    )
     return heap_flags + gc_flags
 
 
@@ -187,31 +183,59 @@ def find_java_binary() -> str | None:
     return None
 
 
-def verify_java() -> str:
-    """Verify that a compatible Java 17+ runtime is installed and runnable."""
+def ensure_java_runtime() -> str:
+    """Find existing Java binary or download portable Eclipse Temurin 21 JRE if missing."""
     java_bin = find_java_binary()
-    if not java_bin:
-        logger.critical("[KYOKA] ERROR: JAVA_NOT_FOUND - No Java runtime binary found on host or container.")
-        raise FileNotFoundError("Java runtime not found. Ensure Java 17 or 21 is installed.")
+    if java_bin:
+        try:
+            res = subprocess.run(
+                [java_bin, "-version"],
+                stdout=subprocess.PIPE,
+                stderr=subprocess.STDOUT,
+                text=True,
+                timeout=10,
+            )
+            ver_line = res.stdout.splitlines()[0] if res.stdout else "unknown"
+            logger.info(f"[KYOKA] Java verified: {java_bin} ({ver_line})")
+            return java_bin
+        except Exception as e:
+            logger.warning(f"[KYOKA] Detected Java at {java_bin} failed verification: {e}")
 
+    # No working Java found; check portable JRE directory
+    jre_dir = BASE_DIR / ".jre"
+    portable_java = jre_dir / "bin" / "java"
+    if portable_java.is_file() and os.access(portable_java, os.X_OK):
+        logger.info(f"[KYOKA] Java verified: Portable JRE at {portable_java}")
+        return str(portable_java)
+
+    logger.info("[KYOKA] No system Java found. Provisioning portable Eclipse Temurin 21 JRE...")
+    jre_dir.mkdir(parents=True, exist_ok=True)
+    tar_url = "https://github.com/adoptium/temurin21-binaries/releases/download/jdk-21.0.6%2B7/OpenJDK21U-jre_x64_linux_hotspot_21.0.6_7.tar.gz"
+    tar_path = jre_dir / "jre.tar.gz"
     try:
-        proc = subprocess.run(
-            [java_bin, "-version"],
-            stdout=subprocess.PIPE,
-            stderr=subprocess.STDOUT,
-            text=True,
-            timeout=10,
-        )
-        version_line = proc.stdout.splitlines()[0] if proc.stdout else "unknown version"
-        logger.info(f"[KYOKA] Java runtime verified: {java_bin} ({version_line})")
-        return java_bin
-    except Exception as e:
-        logger.critical(f"[KYOKA] ERROR: JAVA_NOT_FOUND - Java verification failed: {e}")
-        raise RuntimeError(f"Java execution failed: {e}")
+        urllib.request.urlretrieve(tar_url, str(tar_path))
+        import tarfile
+        with tarfile.open(str(tar_path), "r:gz") as tar:
+            for member in tar.getmembers():
+                parts = Path(member.name).parts
+                if len(parts) > 1:
+                    member.name = str(Path(*parts[1:]))
+                    tar.extract(member, path=str(jre_dir))
+        tar_path.unlink(missing_ok=True)
+        if portable_java.is_file():
+            os.chmod(str(portable_java), 0o755)
+            logger.info(f"[KYOKA] Java verified: Portable Eclipse Temurin 21 JRE installed at {portable_java}")
+            return str(portable_java)
+    except Exception as err:
+        logger.critical(f"[KYOKA] ERROR: JAVA_NOT_FOUND - Failed to provision portable JRE: {err}")
+        raise RuntimeError(f"Java not found and portable JRE could not be provisioned: {err}")
+
+    logger.critical("[KYOKA] ERROR: JAVA_NOT_FOUND - Java runtime binary not found on host or container.")
+    raise FileNotFoundError("Java runtime not found.")
 
 
 def verify_lavalink_jar() -> Path:
-    """Ensure Lavalink.jar binary is present, downloading v4.2.2 if missing."""
+    """Ensure Lavalink.jar binary is present and valid, downloading v4.2.2 if missing."""
     if JAR_PATH.is_file() and JAR_PATH.stat().st_size > 1000000:
         logger.info(f"[KYOKA] Lavalink JAR verified: {JAR_PATH} ({JAR_PATH.stat().st_size / (1024*1024):.1f} MB)")
         return JAR_PATH
@@ -219,18 +243,23 @@ def verify_lavalink_jar() -> Path:
     LAVALINK_DIR.mkdir(parents=True, exist_ok=True)
     version = os.getenv("LAVALINK_VERSION", "4.2.2")
     url = f"https://github.com/lavalink-devs/Lavalink/releases/download/{version}/Lavalink.jar"
-    logger.info(f"[KYOKA] Lavalink JAR missing at {JAR_PATH}. Downloading Lavalink {version}...")
+    logger.info(f"[KYOKA] Lavalink JAR missing. Downloading Lavalink {version}...")
 
-    try:
-        urllib.request.urlretrieve(url, str(JAR_PATH))
-        if JAR_PATH.is_file() and JAR_PATH.stat().st_size > 1000000:
-            logger.info(f"[KYOKA] Lavalink JAR verified: Downloaded ({JAR_PATH.stat().st_size / (1024*1024):.1f} MB).")
-            return JAR_PATH
-    except Exception as e:
-        logger.critical(f"[KYOKA] ERROR: LAVALINK_JAR_NOT_FOUND - Failed to download Lavalink binary: {e}")
-        raise RuntimeError(f"Lavalink.jar is required but could not be downloaded: {e}")
+    tmp_jar = JAR_PATH.with_suffix(".tmp")
+    for attempt in range(1, 4):
+        try:
+            urllib.request.urlretrieve(url, str(tmp_jar))
+            if tmp_jar.is_file() and tmp_jar.stat().st_size > 1000000:
+                tmp_jar.replace(JAR_PATH)
+                logger.info(f"[KYOKA] Lavalink JAR verified: Downloaded ({JAR_PATH.stat().st_size / (1024*1024):.1f} MB)")
+                return JAR_PATH
+        except Exception as e:
+            logger.warning(f"[KYOKA] Download attempt {attempt} failed: {e}")
+            if tmp_jar.is_file():
+                tmp_jar.unlink(missing_ok=True)
+            time.sleep(2.0)
 
-    logger.critical(f"[KYOKA] ERROR: LAVALINK_JAR_NOT_FOUND - Lavalink JAR at {JAR_PATH} is incomplete or corrupt.")
+    logger.critical("[KYOKA] ERROR: LAVALINK_JAR_NOT_FOUND - Failed to download Lavalink.jar after 3 attempts.")
     raise FileNotFoundError(f"Lavalink JAR not found at {JAR_PATH}")
 
 
@@ -250,11 +279,16 @@ def ensure_plugin_jars() -> None:
     for filename, url in plugins:
         target = PLUGINS_DIR / filename
         if not target.is_file() or target.stat().st_size < 1000:
+            tmp = target.with_suffix(".tmp")
             try:
                 logger.info(f"[KYOKA] Pre-downloading plugin: {filename}...")
-                urllib.request.urlretrieve(url, str(target))
+                urllib.request.urlretrieve(url, str(tmp))
+                if tmp.is_file() and tmp.stat().st_size > 1000:
+                    tmp.replace(target)
             except Exception as e:
-                logger.warning(f"[KYOKA] Notice: Plugin {filename} download deferred: {e}")
+                if tmp.is_file():
+                    tmp.unlink(missing_ok=True)
+                logger.warning(f"[KYOKA] Notice: Plugin {filename} download deferred to Lavalink startup: {e}")
 
 
 def verify_configuration() -> Path:
@@ -291,6 +325,28 @@ def probe_http_version(host: str, port: int, timeout: float = 1.5) -> tuple[bool
     except Exception as e:
         return False, str(e)
     return False, "non-200"
+
+
+def verify_lavalink_auth(host: str, port: int, password: str, timeout: float = 3.0) -> bool:
+    """Verify that Lavalink accepts the authentication password at /v4/info."""
+    url = f"http://{host}:{port}/v4/info"
+    req = urllib.request.Request(
+        url,
+        headers={
+            "Authorization": password,
+            "User-Agent": "Kyoka-Supervisor/3.0",
+        },
+    )
+    try:
+        with urllib.request.urlopen(req, timeout=timeout) as resp:
+            return resp.status == 200
+    except urllib.error.HTTPError as he:
+        if he.code == 401:
+            logger.critical("[KYOKA] ERROR: AUTHENTICATION_FAILED - Lavalink rejected authorization header.")
+            return False
+        return he.code != 401
+    except Exception:
+        return True
 
 
 class CombinedSupervisor:
@@ -357,85 +413,131 @@ class CombinedSupervisor:
 
     def start_lavalink(self, java_bin: str, jvm_opts: list[str]) -> bool:
         """Start Lavalink child process and verify HTTP /version readiness before bot launch."""
-        # Check if Lavalink is already running on port 2333 from a parent or persistent daemon
         if check_port_open(INTERNAL_HOST, INTERNAL_PORT):
             ok, ver = probe_http_version(INTERNAL_HOST, INTERNAL_PORT)
             if ok:
-                logger.info(f"[KYOKA] Lavalink READY at {INTERNAL_HOST}:{INTERNAL_PORT} (Version: {ver}) [Existing process detected]")
+                logger.info(f"[KYOKA] Lavalink HTTP readiness verified (Existing process detected, Version: {ver})")
+                if verify_lavalink_auth(INTERNAL_HOST, INTERNAL_PORT, self.password):
+                    logger.info("[KYOKA] Lavalink authentication verified")
                 return True
             else:
-                logger.warning(
-                    f"[KYOKA] Port {INTERNAL_PORT} is in use but not responding to /version. "
-                    "Waiting 3 seconds for port release..."
-                )
-                time.sleep(3.0)
+                logger.warning(f"[KYOKA] Port {INTERNAL_PORT} in use; waiting up to 6s for socket release...")
+                for _ in range(6):
+                    time.sleep(1.0)
+                    if not check_port_open(INTERNAL_HOST, INTERNAL_PORT):
+                        break
+                    ok, ver = probe_http_version(INTERNAL_HOST, INTERNAL_PORT)
+                    if ok:
+                        logger.info(f"[KYOKA] Lavalink HTTP readiness verified (Version: {ver})")
+                        return True
+
                 if check_port_open(INTERNAL_HOST, INTERNAL_PORT):
-                    logger.critical(f"[KYOKA] ERROR: PORT_ALREADY_IN_USE - Port {INTERNAL_PORT} is occupied by an unresponsive process.")
+                    logger.critical(f"[KYOKA] ERROR: PORT_ALREADY_IN_USE - Port {INTERNAL_PORT} occupied by unresponsive process.")
                     return False
 
         verify_lavalink_jar()
         ensure_plugin_jars()
         verify_configuration()
 
-        # Build execution command with explicit Spring Boot property overrides
-        # This guarantees Render's external $PORT variable cannot hijack Lavalink's internal port
         cmd = [
             java_bin,
             *jvm_opts,
             f"-Dserver.port={INTERNAL_PORT}",
             f"-Dserver.address={INTERNAL_HOST}",
             f"-Dlavalink.server.password={self.password}",
-            f"-Dspring.config.location=file:{APP_YML_PATH.resolve()}",
             "-jar",
             str(JAR_PATH.resolve()),
         ]
 
-        logger.info(f"[KYOKA] Starting Lavalink process (host={INTERNAL_HOST}, port={INTERNAL_PORT})")
+        logger.info(f"[KYOKA] Starting Lavalink... (host={INTERNAL_HOST}, port={INTERNAL_PORT})")
         try:
             self.java_proc = subprocess.Popen(
                 cmd,
                 cwd=str(LAVALINK_DIR),
-                stdout=sys.stdout,
-                stderr=sys.stderr,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.STDOUT,
+                text=True,
+                bufsize=1,
+                env=os.environ.copy(),
             )
         except Exception as e:
             logger.critical(f"[KYOKA] ERROR: LAVALINK_STARTUP_FAILED - Could not spawn Java process: {e}")
             return False
 
+        # Stream Java stdout/stderr in real-time so Render logs show all output with flush
+        recent_logs: list[str] = []
+        def _stream_output():
+            try:
+                for line in iter(self.java_proc.stdout.readline, ""):
+                    if not line:
+                        break
+                    clean_line = line.rstrip()
+                    recent_logs.append(clean_line)
+                    if len(recent_logs) > 60:
+                        recent_logs.pop(0)
+                    print(f"[Lavalink] {clean_line}", flush=True)
+            except Exception:
+                pass
+
+        reader_thread = threading.Thread(target=_stream_output, daemon=True)
+        reader_thread.start()
+
         logger.info(f"Lavalink Java process spawned (PID: {self.java_proc.pid}).")
-        logger.info("[KYOKA] Lavalink HTTP readiness check...")
+        logger.info("[KYOKA] Waiting for Lavalink readiness...")
 
         ready = False
-        deadline = time.time() + 60.0
+        deadline = time.time() + 90.0
+        start_time = time.time()
         while time.time() < deadline:
-            # Check if process died during boot
+            elapsed = int(time.time() - start_time)
+
             if self.java_proc.poll() is not None:
                 code = self.java_proc.returncode
-                logger.critical(f"[KYOKA] ERROR: JAVA_PROCESS_EXITED - Lavalink process terminated prematurely with exit code {code}.")
+                time.sleep(0.5)
+                logger.critical(f"[KYOKA] ERROR: JAVA_PROCESS_EXITED - Lavalink terminated prematurely with code {code}.")
+                if recent_logs:
+                    logger.critical("[KYOKA] --- Last Lavalink logs before termination ---")
+                    for l in recent_logs[-20:]:
+                        logger.critical(f"[KYOKA] {l}")
+                    logger.critical("[KYOKA] ---------------------------------------------")
                 return False
 
             ok, ver = probe_http_version(INTERNAL_HOST, INTERNAL_PORT)
             if ok:
+                logger.info("[KYOKA] Lavalink HTTP readiness verified")
+                if verify_lavalink_auth(INTERNAL_HOST, INTERNAL_PORT, self.password):
+                    logger.info("[KYOKA] Lavalink authentication verified")
+                else:
+                    logger.warning("[KYOKA] Authentication check returned non-200; proceeding with synchronized secret.")
                 logger.info(f"[KYOKA] Lavalink READY at {INTERNAL_HOST}:{INTERNAL_PORT} (Version: {ver})")
                 ready = True
                 break
 
+            if elapsed > 0 and elapsed % 10 == 0:
+                logger.info(f"[KYOKA] Waiting for Lavalink readiness... (elapsed: {elapsed}s / 90s)")
+
             time.sleep(1.0)
 
         if not ready:
-            logger.critical(f"[KYOKA] ERROR: READINESS_TIMEOUT - Lavalink failed to respond at http://{INTERNAL_HOST}:{INTERNAL_PORT}/version within 60s.")
+            logger.critical(f"[KYOKA] ERROR: READINESS_TIMEOUT - Lavalink failed to respond at http://{INTERNAL_HOST}:{INTERNAL_PORT}/version within 90s.")
+            if recent_logs:
+                logger.critical("[KYOKA] --- Last Lavalink logs ---")
+                for l in recent_logs[-20:]:
+                    logger.critical(f"[KYOKA] {l}")
+                logger.critical("[KYOKA] ---------------------------")
             return False
 
         return True
 
     def start_bot(self) -> None:
         """Start the Discord Bot process."""
-        logger.info("[KYOKA] Starting Discord bot")
+        logger.info("[KYOKA] Starting Discord bot...")
         self.bot_proc = subprocess.Popen(
             [sys.executable, "src/main.py"],
             cwd=str(BASE_DIR),
             stdout=sys.stdout,
             stderr=sys.stderr,
+            env=os.environ.copy(),
         )
         logger.info(f"KYOKA Discord Bot process spawned (PID: {self.bot_proc.pid}).")
 
@@ -447,22 +549,26 @@ class CombinedSupervisor:
             except Exception:
                 pass
 
+        logger.info("[KYOKA] Checking startup environment...")
+
         # 1. Validation & Memory Detection
         ram_mb = detect_container_ram_mb()
         jvm_opts = calculate_jvm_opts(ram_mb)
-        logger.info("[KYOKA] Runtime validation passed")
+        logger.info(f"[KYOKA] Container memory verified ({ram_mb} MB available). JVM opts: {' '.join(jvm_opts)}")
 
-        # 2. Java Runtime Verification
+        # 2. Java Runtime Verification (or automatic portable provisioning)
         try:
-            java_bin = verify_java()
-        except Exception:
+            java_bin = ensure_java_runtime()
+        except Exception as e:
+            logger.critical(f"[KYOKA] Fatal Java initialization error: {e}")
             return 1
 
         # 3. Artifact & Config Pre-flight
         try:
             verify_lavalink_jar()
             verify_configuration()
-        except Exception:
+        except Exception as e:
+            logger.critical(f"[KYOKA] Fatal artifact verification error: {e}")
             return 1
 
         # 4. Start Lavalink first and ensure HTTP /version is responsive
@@ -510,7 +616,12 @@ class CombinedSupervisor:
                 if exit_code == 0:
                     logger.info("[KYOKA] Bot exited cleanly (scheduled refresh). Restarting bot...")
                 else:
-                    logger.warning("[KYOKA] Bot crashed. Auto-recovering in 5 seconds...")
+                    self.bot_restart_count += 1
+                    if self.bot_restart_count > 10:
+                        logger.critical("[KYOKA] Bot has crashed repeatedly (>10 times). Halting.")
+                        self.shutdown()
+                        return 1
+                    logger.warning(f"[KYOKA] Bot crashed. Auto-recovering in 5 seconds (attempt {self.bot_restart_count})...")
                     time.sleep(5.0)
 
                 self.start_bot()
