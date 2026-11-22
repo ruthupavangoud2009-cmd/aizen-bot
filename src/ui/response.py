@@ -16,6 +16,23 @@ from typing import TYPE_CHECKING, Any, Optional, Sequence
 import discord
 from discord.ext import commands
 
+try:
+    from src.utils.emojis import CATEGORY_FALLBACK_EMOJIS
+except ImportError:
+    CATEGORY_FALLBACK_EMOJIS = {
+        "SUCCESS": "✅",
+        "ERROR": "❌",
+        "WARNING": "⚠️",
+        "LOADING": "🔄",
+        "ARROW": "💜",
+        "MODERATION": "⚔️",
+        "MUSIC": "🎵",
+        "TICKET": "🎫",
+        "AI": "🧠",
+        "PREMIUM": "👑",
+        "INFO": "ℹ️",
+    }
+
 if TYPE_CHECKING:
     from src.core.bot import KyokaBot
 
@@ -109,14 +126,16 @@ class KyokaResponse:
         bullet_icon = "•"
 
         # Resolve custom animated or static emoji from registry
-        if bot and hasattr(bot, "custom_emojis"):
+        cat_name = self.response_type.value.upper()
+        if self.custom_emoji:
+            emoji_prefix = self.custom_emoji
+        elif bot and hasattr(bot, "custom_emojis"):
             reg = bot.custom_emojis
-            cat_name = self.response_type.value.upper()
-            if self.custom_emoji:
-                emoji_prefix = self.custom_emoji
-            else:
-                emoji_prefix = reg.get_category(cat_name, fallback="")
+            emoji_prefix = reg.get_category(cat_name, fallback="")
             bullet_icon = reg.get("heart_dot", reg.get("icons_rightarrow", "•"))
+
+        if not emoji_prefix:
+            emoji_prefix = CATEGORY_FALLBACK_EMOJIS.get(cat_name, "💜")
 
         # Clean title with custom emoji
         formatted_title = f"{emoji_prefix} {self.title}".strip() if emoji_prefix else self.title
@@ -178,8 +197,9 @@ class KyokaResponse:
             title=title,
             description=description,
             fields=fields,
+            author_name=author.display_name if author else None,
+            author_icon_url=author.display_avatar.url if author else None,
             footer_text=f"-# Requested by {author.display_name}" if author else "KYOKA — Action Confirmed",
-            thumbnail_url=author.display_avatar.url if author else None,
         )
 
     @classmethod
@@ -197,6 +217,8 @@ class KyokaResponse:
             response_type=ResponseType.ERROR,
             title=title,
             description=desc,
+            author_name=author.display_name if author else None,
+            author_icon_url=author.display_avatar.url if author else None,
             footer_text=f"-# Requested by {author.display_name}" if author else "KYOKA — Error Diagnostic",
         )
 
@@ -213,6 +235,8 @@ class KyokaResponse:
             title=title,
             description=description,
             fields=fields,
+            author_name=author.display_name if author else None,
+            author_icon_url=author.display_avatar.url if author else None,
             footer_text=f"-# Requested by {author.display_name}" if author else "KYOKA — Warning",
         )
 
@@ -230,7 +254,9 @@ class KyokaResponse:
             title=title,
             description=description,
             fields=fields,
-            thumbnail_url=thumbnail_url or (author.display_avatar.url if author else None),
+            author_name=author.display_name if author else None,
+            author_icon_url=author.display_avatar.url if author else None,
+            thumbnail_url=thumbnail_url,
             footer_text=f"-# Requested by {author.display_name}" if author else "KYOKA — Aizen Edition",
         )
 
@@ -239,11 +265,14 @@ class KyokaResponse:
         cls,
         title: str = "Processing Request...",
         description: str = "Please wait while Kyoka synchronizes state...",
+        author: Optional[discord.User | discord.Member] = None,
     ) -> KyokaResponse:
         return cls(
             response_type=ResponseType.LOADING,
             title=title,
             description=description,
+            author_name=author.display_name if author else None,
+            author_icon_url=author.display_avatar.url if author else None,
             footer_text="KYOKA — Synchronizing State",
         )
 
@@ -253,6 +282,7 @@ class KyokaResponse:
         title: str = "Permission Denied",
         description: str = "You do not have the required permissions to execute this action.",
         missing_perms: Optional[list[str]] = None,
+        author: Optional[discord.User | discord.Member] = None,
     ) -> KyokaResponse:
         desc = description
         if missing_perms:
@@ -262,6 +292,8 @@ class KyokaResponse:
             response_type=ResponseType.PERMISSION,
             title=title,
             description=desc,
+            author_name=author.display_name if author else None,
+            author_icon_url=author.display_avatar.url if author else None,
             footer_text="KYOKA — Access Control",
         )
 
@@ -286,6 +318,8 @@ class KyokaResponse:
             title=f"Member {action.title()}",
             description=f"\n💜 Member **{action.lower()}** executed successfully.",
             fields=fields,
+            author_name=moderator.display_name if moderator else None,
+            author_icon_url=moderator.display_avatar.url if moderator else None,
             thumbnail_url=target.display_avatar.url if hasattr(target, "display_avatar") else None,
             footer_text=f"-# Moderator: {moderator.display_name} • KYOKA Moderation",
         )
@@ -304,6 +338,8 @@ class KyokaResponse:
             title=title,
             description=description,
             fields=fields,
+            author_name=author.display_name if author else None,
+            author_icon_url=author.display_avatar.url if author else None,
             thumbnail_url=thumbnail_url,
             footer_text=f"-# Queued by {author.display_name}" if author else "KYOKA Audio Engine • kasawa-v4",
         )

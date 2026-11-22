@@ -25,7 +25,7 @@ class NoPrefixCog(commands.Cog, name="Developer-NoPrefix"):
 
     @commands.group(
         name="noprefix",
-        aliases=["np"],
+        aliases=["nopref"],
         invoke_without_command=True,
         description="Manage Direct Command Execution (No-Prefix) authority.",
     )

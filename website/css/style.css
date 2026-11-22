@@ -902,8 +902,7 @@ nav, header, main, footer, .dashboard-wrapper, .section {
 
 .dashboard-wrapper,
 .owner-main-wrapper,
-.staff-wrapper,
-.shop-wrapper {
+.staff-wrapper {
   padding-bottom: 5.5rem !important;
 }
 
@@ -1293,5 +1292,197 @@ input:checked + .slider {
 input:checked + .slider:before {
   transform: translateX(22px) !important;
 }
+
+/* ==========================================================================
+   KYOKA SUPREME GLASSMORPISM & INTERACTIVE BOT COMPONENTS
+   ========================================================================== */
+
+/* Ambient Glow Orbs for Deep Refraction Behind Frosted Glass */
+.glow-orb-purple {
+  position: absolute;
+  width: 550px;
+  height: 550px;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(124, 58, 237, 0.28) 0%, rgba(76, 29, 149, 0.08) 55%, transparent 75%);
+  filter: blur(80px);
+  pointer-events: none;
+  z-index: 0;
+}
+
+.glow-orb-cyan {
+  position: absolute;
+  width: 420px;
+  height: 420px;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(6, 182, 212, 0.2) 0%, rgba(14, 116, 144, 0.06) 55%, transparent 75%);
+  filter: blur(75px);
+  pointer-events: none;
+  z-index: 0;
+}
+
+/* Elite Glassmorphic Panels */
+.glass-panel {
+  background: rgba(12, 14, 26, 0.68) !important;
+  backdrop-filter: blur(28px) saturate(190%) !important;
+  -webkit-backdrop-filter: blur(28px) saturate(190%) !important;
+  border: 1px solid rgba(255, 255, 255, 0.1) !important;
+  border-radius: var(--radius-lg);
+  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.75), inset 0 1px 0 rgba(255, 255, 255, 0.12);
+  position: relative;
+  overflow: hidden;
+  transition: var(--transition);
+}
+
+.glass-panel:hover {
+  border-color: rgba(168, 85, 247, 0.35) !important;
+  box-shadow: 0 30px 70px rgba(0, 0, 0, 0.85), 0 0 30px rgba(124, 58, 237, 0.15), inset 0 1px 0 rgba(255, 255, 255, 0.18);
+}
+
+.glass-panel::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, rgba(192, 132, 252, 0.5), transparent);
+}
+
+/* Glass Status Pill */
+.glass-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.4rem 1.15rem;
+  border-radius: var(--radius-full);
+  background: rgba(124, 58, 237, 0.15);
+  border: 1px solid rgba(168, 85, 247, 0.35);
+  backdrop-filter: blur(16px);
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--purple-pastel);
+  letter-spacing: 0.02em;
+}
+
+.glass-pill-emerald {
+  background: rgba(16, 185, 129, 0.12);
+  border-color: rgba(16, 185, 129, 0.35);
+  color: #6EE7B7;
+}
+
+.pulse-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--emerald-accent);
+  box-shadow: 0 0 10px var(--emerald-accent);
+  animation: pulse-glow 2s infinite ease-in-out;
+}
+
+@keyframes pulse-glow {
+  0%, 100% { opacity: 1; transform: scale(1); box-shadow: 0 0 10px #10B981; }
+  50% { opacity: 0.45; transform: scale(0.85); box-shadow: 0 0 4px #10B981; }
+}
+
+/* Interactive Glass Audio Player Showcase */
+.audio-player-glass {
+  background: rgba(10, 12, 22, 0.75);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: var(--radius-lg);
+  backdrop-filter: blur(32px) saturate(200%);
+  padding: 1.75rem;
+  box-shadow: 0 25px 60px rgba(0, 0, 0, 0.8), inset 0 1px 0 rgba(255, 255, 255, 0.15);
+  position: relative;
+  max-width: 780px;
+  margin: 0 auto;
+}
+
+.audio-bars-container {
+  display: flex;
+  align-items: flex-end;
+  gap: 4px;
+  height: 36px;
+  padding: 0 4px;
+}
+
+.audio-bar {
+  flex: 1;
+  width: 4px;
+  background: linear-gradient(180deg, var(--purple-glow), var(--purple-primary));
+  border-radius: 3px;
+  animation: bar-dance 1.4s infinite ease-in-out alternate;
+}
+
+.audio-bar:nth-child(2) { animation-delay: 0.2s; height: 60%; }
+.audio-bar:nth-child(3) { animation-delay: 0.4s; height: 85%; }
+.audio-bar:nth-child(4) { animation-delay: 0.1s; height: 40%; }
+.audio-bar:nth-child(5) { animation-delay: 0.6s; height: 95%; }
+.audio-bar:nth-child(6) { animation-delay: 0.3s; height: 50%; }
+.audio-bar:nth-child(7) { animation-delay: 0.5s; height: 75%; }
+.audio-bar:nth-child(8) { animation-delay: 0.15s; height: 35%; }
+
+@keyframes bar-dance {
+  0% { height: 20%; opacity: 0.5; }
+  50% { height: 80%; opacity: 1; }
+  100% { height: 45%; opacity: 0.75; }
+}
+
+/* Command Filter & Search */
+.command-filter-btn {
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  color: var(--text-muted);
+  padding: 0.45rem 1.1rem;
+  border-radius: var(--radius-full);
+  font-size: 0.88rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: var(--transition);
+}
+
+.command-filter-btn:hover {
+  background: rgba(124, 58, 237, 0.2);
+  border-color: rgba(168, 85, 247, 0.4);
+  color: #FAF5FF;
+}
+
+.command-filter-btn.active {
+  background: linear-gradient(135deg, var(--purple-primary), var(--purple-vibrant));
+  border-color: var(--purple-glow);
+  color: #FAF5FF;
+  box-shadow: 0 0 16px rgba(124, 58, 237, 0.4);
+}
+
+.command-glass-item {
+  background: rgba(15, 17, 30, 0.6);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: var(--radius-md);
+  padding: 1.15rem 1.35rem;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 1rem;
+  transition: var(--transition);
+  cursor: pointer;
+}
+
+.command-glass-item:hover {
+  background: rgba(25, 28, 48, 0.75);
+  border-color: rgba(168, 85, 247, 0.35);
+  transform: translateY(-2px);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4), 0 0 15px rgba(124, 58, 237, 0.1);
+}
+
+.command-code-badge {
+  font-family: var(--font-mono);
+  font-weight: 700;
+  font-size: 0.95rem;
+  color: var(--purple-pastel);
+  background: rgba(124, 58, 237, 0.2);
+  padding: 0.25rem 0.6rem;
+  border-radius: 6px;
+  border: 1px solid rgba(168, 85, 247, 0.25);
+}
+
 
 

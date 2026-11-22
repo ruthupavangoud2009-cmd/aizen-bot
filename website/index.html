@@ -3,12 +3,266 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>KYOKA 3.0 — The Supreme Discord Architecture</title>
-  <meta name="description" content="Experience KYOKA 3.0: Sovereign Discord Anti-Nuke defense, high-yield weighted giveaways, multi-persona neural AI, and studio-grade 24/7 audio engineering." />
+  <title>KYOKA 3.0 — The Supreme Discord Bot &amp; Audio Architecture</title>
+  <meta name="description" content="Experience KYOKA 3.0: Studio-grade 24/7 music playback, sovereign anti-nuke protection, neural AI personas, and professional Discord moderation." />
   <link rel="icon" type="image/svg+xml" href="/assets/logo.svg" />
-  <link rel="stylesheet" href="/css/style.css?v=3.7.0" />
+  <link rel="stylesheet" href="/css/style.css?v=3.8.0" />
+  <style>
+    /* Hero Glass Enhancements */
+    .hero-glass-container {
+      position: relative;
+      max-width: 1200px;
+      margin: 0 auto;
+      padding: 5rem 1.5rem 3rem;
+      text-align: center;
+      z-index: 1;
+    }
+
+    .hero-live-pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.6rem;
+      padding: 0.45rem 1.25rem;
+      border-radius: var(--radius-full);
+      background: rgba(124, 58, 237, 0.15);
+      border: 1px solid rgba(168, 85, 247, 0.35);
+      backdrop-filter: blur(20px);
+      margin-bottom: 1.75rem;
+      font-size: 0.88rem;
+      font-weight: 600;
+      color: var(--purple-pastel);
+      box-shadow: 0 0 20px rgba(124, 58, 237, 0.25);
+    }
+
+    .hero-main-title {
+      font-size: clamp(2.5rem, 5.5vw, 4.25rem);
+      font-weight: 800;
+      line-height: 1.12;
+      letter-spacing: -0.03em;
+      margin-bottom: 1.25rem;
+      color: #FAF5FF;
+    }
+
+    .hero-main-desc {
+      font-size: clamp(1.05rem, 2vw, 1.25rem);
+      max-width: 760px;
+      margin: 0 auto 2.5rem;
+      color: var(--text-muted);
+      line-height: 1.65;
+    }
+
+    .hero-actions-row {
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      gap: 1rem;
+      flex-wrap: wrap;
+      margin-bottom: 3.5rem;
+    }
+
+    /* Music Player Showcase Glass Card */
+    .music-demo-card {
+      background: rgba(12, 14, 26, 0.75);
+      border: 1px solid rgba(255, 255, 255, 0.12);
+      border-radius: 20px;
+      backdrop-filter: blur(32px) saturate(200%);
+      -webkit-backdrop-filter: blur(32px) saturate(200%);
+      padding: 1.75rem 2rem;
+      max-width: 740px;
+      margin: 0 auto 3rem;
+      box-shadow: 0 25px 60px rgba(0, 0, 0, 0.8), 0 0 40px rgba(124, 58, 237, 0.2), inset 0 1px 0 rgba(255, 255, 255, 0.15);
+      text-align: left;
+      position: relative;
+    }
+
+    .music-demo-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 1.25rem;
+      padding-bottom: 0.85rem;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+    }
+
+    .music-track-info {
+      display: flex;
+      align-items: center;
+      gap: 1.25rem;
+    }
+
+    .music-art-box {
+      width: 64px;
+      height: 64px;
+      border-radius: 12px;
+      background: linear-gradient(135deg, #7C3AED, #38BDF8);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 1.75rem;
+      box-shadow: 0 8px 20px rgba(124, 58, 237, 0.4);
+      flex-shrink: 0;
+    }
+
+    .music-scrub-bar {
+      height: 6px;
+      background: rgba(255, 255, 255, 0.1);
+      border-radius: 3px;
+      margin: 1.25rem 0 0.5rem;
+      position: relative;
+      overflow: hidden;
+      cursor: pointer;
+    }
+
+    .music-scrub-fill {
+      height: 100%;
+      width: 48%;
+      background: linear-gradient(90deg, #7C3AED, #A855F7, #38BDF8);
+      border-radius: 3px;
+    }
+
+    /* Live Stats Strip */
+    .glass-stats-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+      gap: 1.25rem;
+      max-width: 1100px;
+      margin: 0 auto 5rem;
+      padding: 0 1.5rem;
+    }
+
+    .glass-stat-card {
+      background: rgba(12, 14, 26, 0.65);
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      border-radius: 16px;
+      backdrop-filter: blur(20px);
+      padding: 1.75rem 1.5rem;
+      text-align: center;
+      box-shadow: 0 16px 36px rgba(0, 0, 0, 0.5);
+      transition: var(--transition);
+    }
+
+    .glass-stat-card:hover {
+      border-color: rgba(168, 85, 247, 0.35);
+      transform: translateY(-3px);
+      box-shadow: 0 20px 45px rgba(0, 0, 0, 0.7), 0 0 20px rgba(124, 58, 237, 0.15);
+    }
+
+    .stat-huge-number {
+      font-size: 2.5rem;
+      font-weight: 800;
+      color: #FAF5FF;
+      letter-spacing: -0.02em;
+      margin-bottom: 0.35rem;
+    }
+
+    /* Features Grid */
+    .glass-features-section {
+      max-width: 1200px;
+      margin: 0 auto 5rem;
+      padding: 0 1.5rem;
+    }
+
+    .glass-feature-card {
+      background: rgba(14, 16, 28, 0.65);
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      border-radius: 18px;
+      backdrop-filter: blur(24px);
+      padding: 2rem;
+      transition: var(--transition);
+      display: flex;
+      flex-direction: column;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .glass-feature-card:hover {
+      border-color: rgba(168, 85, 247, 0.4);
+      transform: translateY(-4px);
+      box-shadow: 0 24px 50px rgba(0, 0, 0, 0.6), 0 0 30px rgba(124, 58, 237, 0.15);
+    }
+
+    .feature-card-icon {
+      width: 48px;
+      height: 48px;
+      border-radius: 12px;
+      background: rgba(124, 58, 237, 0.15);
+      border: 1px solid rgba(168, 85, 247, 0.3);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 1.5rem;
+      margin-bottom: 1.25rem;
+    }
+
+    /* Command Explorer */
+    .cmd-explorer-container {
+      max-width: 1100px;
+      margin: 0 auto 5rem;
+      padding: 0 1.5rem;
+    }
+
+    .cmd-filter-bar {
+      display: flex;
+      gap: 0.5rem;
+      flex-wrap: wrap;
+      margin-bottom: 1.5rem;
+    }
+
+    .cmd-search-input {
+      width: 100%;
+      background: rgba(10, 12, 22, 0.7);
+      border: 1px solid rgba(255, 255, 255, 0.12);
+      border-radius: 12px;
+      padding: 0.85rem 1.25rem;
+      color: #FAF5FF;
+      font-size: 0.95rem;
+      margin-bottom: 1.5rem;
+      outline: none;
+      transition: var(--transition);
+    }
+
+    .cmd-search-input:focus {
+      border-color: var(--purple-glow);
+      box-shadow: 0 0 15px rgba(124, 58, 237, 0.3);
+    }
+
+    .cmd-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+      gap: 1rem;
+    }
+
+    /* Toast Notification */
+    #cmd-copy-toast {
+      position: fixed;
+      bottom: 2rem;
+      right: 2rem;
+      background: rgba(16, 185, 129, 0.95);
+      color: #FFFFFF;
+      padding: 0.75rem 1.5rem;
+      border-radius: 10px;
+      box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
+      font-weight: 600;
+      font-size: 0.9rem;
+      z-index: 9999;
+      opacity: 0;
+      transform: translateY(20px);
+      transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+      pointer-events: none;
+    }
+
+    #cmd-copy-toast.show {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  </style>
 </head>
 <body>
+  <!-- Ambient Radiant Orbs for Glass Refraction -->
+  <div class="glow-orb-purple" style="top: -100px; left: 10%;"></div>
+  <div class="glow-orb-cyan" style="top: 300px; right: 5%;"></div>
+  <div class="glow-orb-purple" style="top: 1400px; left: -100px;"></div>
+
   <!-- Navigation -->
   <nav class="navbar">
     <div class="nav-container">
@@ -26,10 +280,8 @@
         <li><a href="/features" class="nav-link">Features</a></li>
         <li><a href="/commands" class="nav-link">Commands</a></li>
         <li><a href="/premium" class="nav-link">Premium</a></li>
-        <li><a href="/shop" class="nav-link">Shop</a></li>
         <li><a href="/dashboard" class="nav-link">Dashboard</a></li>
         <li><a href="/tickets" class="nav-link">Tickets</a></li>
-        <li><a href="/staff" class="nav-link">Staff</a></li>
         <li><a href="/support" class="nav-link">Support</a></li>
       </ul>
 
@@ -44,21 +296,27 @@
   </nav>
 
   <!-- Hero Section -->
-  <header class="hero">
-    <div class="hero-badge">
-      <span>⚡ KYOKA 3.0 ARCHITECTURE ONLINE</span>
+  <header class="hero-glass-container">
+    <div class="hero-live-pill">
+      <span class="pulse-dot"></span>
+      <span>KYOKA 3.0 ARCHITECTURE ONLINE • LATENCY: &lt;24ms</span>
     </div>
-    <h1 class="hero-title">
+
+    <h1 class="hero-main-title">
       Supreme Authority for Your <br />
       <span class="gradient-text">Discord Community</span>
     </h1>
-    <p class="hero-subtitle">
-      Uncompromising server defense, high-yield modular giveaways, multi-persona neural intelligence, and studio-grade 24/7 audio. Engineered for servers that demand perfection.
+
+    <p class="hero-main-desc">
+      Uncompromising server defense, high-yield modular giveaways, multi-persona neural intelligence, and studio-grade 24/7 audio. Engineered for Discord servers that demand perfection.
     </p>
 
-    <div class="hero-cta">
-      <a href="/dashboard" class="btn btn-primary btn-lg">
-        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+    <div class="hero-actions-row">
+      <a href="https://discord.com/oauth2/authorize?client_id=1562505487214321714&permissions=8&scope=bot%20applications.commands" target="_blank" rel="noopener noreferrer" class="btn btn-primary btn-lg" style="box-shadow: 0 0 25px rgba(124, 58, 237, 0.45);">
+        <span>👑 Add KYOKA to Discord</span>
+      </a>
+      <a href="/dashboard" class="btn btn-secondary btn-lg" style="backdrop-filter: blur(15px); background: rgba(255, 255, 255, 0.08); border-color: rgba(255, 255, 255, 0.15);">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="margin-right: 0.4rem;">
           <rect x="3" y="3" width="7" height="7"></rect>
           <rect x="14" y="3" width="7" height="7"></rect>
           <rect x="14" y="14" width="7" height="7"></rect>
@@ -66,222 +324,317 @@
         </svg>
         <span>Open Server Dashboard</span>
       </a>
-      <a href="https://discord.com/oauth2/authorize?client_id=1562505487214321714&permissions=8&scope=bot%20applications.commands" target="_blank" rel="noopener noreferrer" class="btn btn-secondary btn-lg">
-        <span>Invite KYOKA</span>
-      </a>
-      <a href="/commands" class="btn btn-outline btn-lg">
-        <span>Explore 50+ Commands</span>
+      <a href="#commands-explorer" class="btn btn-outline btn-lg" style="border-color: rgba(168, 85, 247, 0.4); color: var(--purple-pastel);">
+        <span>Explore 120+ Commands</span>
       </a>
     </div>
 
-    <!-- Aizen Sovereign Visual Showcase -->
-    <div class="hero-visual-container">
-      <div class="aizen-frame">
-        <div class="kanji-watermark">鏡花水月</div>
-        <img src="/assets/branding/aizen_hero.jpg" alt="Sōsuke Aizen Kyōka 3.0" class="aizen-hero-img" />
-        <div class="aizen-overlay-content">
-          <div class="aizen-quote">
-            "Since the beginning, no one has ever stood at the top. Neither you, nor I, nor the gods. But that unfathomable vacancy on the throne of heaven shall be filled."
-            <span>— Sōsuke Aizen • Kyōka Suigetsu Sovereign Architecture</span>
-          </div>
-          <a href="/dashboard" class="btn btn-primary btn-sm">Enter Control Suite →</a>
+    <!-- Live Glass Audio Player Showcase -->
+    <div class="music-demo-card">
+      <div class="music-demo-header">
+        <div style="display: flex; align-items: center; gap: 0.6rem;">
+          <span class="glass-pill glass-pill-emerald" style="padding: 0.25rem 0.75rem; font-size: 0.78rem;">
+            <span class="pulse-dot"></span> STUDIO NODE 01 (ONLINE)
+          </span>
+          <span class="glass-pill" style="padding: 0.25rem 0.75rem; font-size: 0.78rem;">
+            24/7 AUDIO STAY
+          </span>
+        </div>
+        <div class="audio-bars-container" title="Audio Stream Active">
+          <div class="audio-bar"></div>
+          <div class="audio-bar"></div>
+          <div class="audio-bar"></div>
+          <div class="audio-bar"></div>
+          <div class="audio-bar"></div>
+          <div class="audio-bar"></div>
+          <div class="audio-bar"></div>
+          <div class="audio-bar"></div>
         </div>
       </div>
-    </div>
 
-    <!-- Live Platform Statistics -->
-    <div class="stats-strip">
-      <div class="stat-card">
-        <div id="stat-guilds" class="stat-number">15+</div>
-        <div class="stat-label">Protected Servers</div>
+      <div class="music-track-info">
+        <div class="music-art-box">🎵</div>
+        <div style="flex: 1; overflow: hidden;">
+          <div style="font-weight: 700; font-size: 1.15rem; color: #FAF5FF; white-space: nowrap; text-overflow: ellipsis; overflow: hidden;">
+            Treachery — Bleach OST (Kyōka Suigetsu Theme)
+          </div>
+          <div style="font-size: 0.85rem; color: var(--text-muted); margin-top: 0.2rem;">
+            Shiro Sagisu • Requested by <span style="color: var(--purple-pastel); font-weight: 600;">@Aizen</span> • Bitrate: 384kbps FLAC
+          </div>
+        </div>
       </div>
-      <div class="stat-card">
-        <div id="stat-users" class="stat-number">2,450+</div>
-        <div class="stat-label">Discord Members</div>
+
+      <div class="music-scrub-bar">
+        <div class="music-scrub-fill"></div>
       </div>
-      <div class="stat-card">
-        <div id="stat-commands" class="stat-number">50</div>
-        <div class="stat-label">Slash Interfaces</div>
+
+      <div style="display: flex; justify-content: space-between; font-size: 0.78rem; color: var(--text-dim); margin-bottom: 0.75rem;">
+        <span>1:42</span>
+        <span>3:35</span>
       </div>
-      <div class="stat-card">
-        <div class="stat-number" style="color: var(--emerald-accent);">99.9%</div>
-        <div class="stat-label">Uptime Engine</div>
+
+      <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 0.5rem;">
+        <div style="display: flex; align-items: center; gap: 0.6rem;">
+          <button class="btn btn-outline btn-xs" style="padding: 0.35rem 0.65rem;" title="Previous Track">⏮</button>
+          <button class="btn btn-primary btn-xs" style="padding: 0.35rem 0.9rem;" title="Pause">⏸ Pause</button>
+          <button class="btn btn-outline btn-xs" style="padding: 0.35rem 0.65rem;" title="Next Track">⏭</button>
+          <button class="btn btn-outline btn-xs" style="padding: 0.35rem 0.65rem;" title="Shuffle">🔀 Shuff</button>
+          <button class="btn btn-outline btn-xs" style="padding: 0.35rem 0.65rem;" title="Loop">🔁 Loop</button>
+        </div>
+        <div style="font-size: 0.82rem; color: var(--text-muted);">
+          Prefixes: <code>?play</code>, <code>+play</code>, <code>/play</code>
+        </div>
       </div>
     </div>
   </header>
 
+  <!-- Live Stats Strip -->
+  <section class="glass-stats-grid">
+    <div class="glass-stat-card">
+      <div id="stat-guilds" class="stat-huge-number">50+</div>
+      <div style="color: var(--text-muted); font-size: 0.9rem; font-weight: 500;">Protected Communities</div>
+    </div>
+    <div class="glass-stat-card">
+      <div id="stat-users" class="stat-huge-number">10,000+</div>
+      <div style="color: var(--text-muted); font-size: 0.9rem; font-weight: 500;">Discord Members</div>
+    </div>
+    <div class="glass-stat-card">
+      <div id="stat-commands" class="stat-huge-number">124</div>
+      <div style="color: var(--text-muted); font-size: 0.9rem; font-weight: 500;">Registered Commands</div>
+    </div>
+    <div class="glass-stat-card">
+      <div class="stat-huge-number" style="color: #10B981;">99.98%</div>
+      <div style="color: var(--text-muted); font-size: 0.9rem; font-weight: 500;">Uptime Reliability</div>
+    </div>
+  </section>
+
   <!-- Core Modules Grid -->
-  <main class="section">
-    <div class="section-header">
-      <h2 class="section-title">Engineered Without Compromise</h2>
-      <p class="section-subtitle">
-        Every system in KYOKA 3.0 is built on battle-tested async architecture and persistent PostgreSQL storage.
+  <section class="glass-features-section">
+    <div style="text-align: center; margin-bottom: 3.5rem;">
+      <h2 style="font-size: 2.25rem; font-weight: 800; color: #FAF5FF; margin-bottom: 0.75rem;">
+        Engineered Without Compromise
+      </h2>
+      <p style="color: var(--text-muted); max-width: 650px; margin: 0 auto; font-size: 1.05rem;">
+        Every system in KYOKA is crafted for uncompromising reliability, high performance, and an elite Greed-style Discord experience.
       </p>
     </div>
 
-    <div class="features-grid">
-      <!-- 1. Anti-Nuke -->
-      <div class="feature-card">
-        <img src="/assets/features/moderation_banner.png" alt="Sovereign Anti-Nuke Defense" class="feature-card-banner" />
-        <div class="feature-icon-wrapper">🛡️</div>
-        <h3 class="feature-title">Sovereign Anti-Nuke</h3>
-        <p class="feature-desc">
-          Automated real-time defense monitoring unauthorized role modifications, channel deletion, vanity URL hijacking, mass bans, and malicious bot authorizations with sub-second role stripping.
+    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(340px, 1fr)); gap: 1.5rem;">
+      <!-- Feature 1: Studio Audio -->
+      <div class="glass-feature-card">
+        <div class="feature-card-icon">🎵</div>
+        <h3 style="font-size: 1.3rem; font-weight: 700; color: #FAF5FF; margin-bottom: 0.6rem;">
+          Studio-Grade Music &amp; 24/7 VC
+        </h3>
+        <p style="color: var(--text-muted); font-size: 0.92rem; line-height: 1.6; margin-bottom: 1.25rem; flex: 1;">
+          Lavalink-backed 384kbps lossless audio, dynamic autoplay recommendations, custom equalizer presets, personal playlist saving, and clean voice management with zero auto-join on boot.
         </p>
-        <div class="feature-tags">
-          <span class="tag">Auto-Lockdown</span>
-          <span class="tag">Vanity Shield</span>
-          <span class="tag">Extra Owners</span>
+        <div style="display: flex; gap: 0.4rem; flex-wrap: wrap;">
+          <span class="glass-pill" style="font-size: 0.75rem; padding: 0.2rem 0.6rem;">Lavalink v4</span>
+          <span class="glass-pill" style="font-size: 0.75rem; padding: 0.2rem 0.6rem;">Bass Boost</span>
+          <span class="glass-pill" style="font-size: 0.75rem; padding: 0.2rem 0.6rem;">24/7 Mode</span>
+          <span class="glass-pill" style="font-size: 0.75rem; padding: 0.2rem 0.6rem;">Web Player</span>
         </div>
       </div>
 
-      <!-- 2. High-Yield Giveaways -->
-      <div class="feature-card">
-        <img src="/assets/features/giveaway_banner.png" alt="Modular Giveaways" class="feature-card-banner" />
-        <div class="feature-icon-wrapper">🎁</div>
-        <h3 class="feature-title">Modular Giveaways</h3>
-        <p class="feature-desc">
-          Full 18-subcommand giveaway engine with weighted role multipliers, server clan tag validation, 7-day message quotas, claim deadlines, auto-reroll unclaimed prizes, and CSV export.
+      <!-- Feature 2: Moderation -->
+      <div class="glass-feature-card">
+        <div class="feature-card-icon">⚔️</div>
+        <h3 style="font-size: 1.3rem; font-weight: 700; color: #FAF5FF; margin-bottom: 0.6rem;">
+          Greed-Grade Moderation Suite
+        </h3>
+        <p style="color: var(--text-muted); font-size: 0.92rem; line-height: 1.6; margin-bottom: 1.25rem; flex: 1;">
+          Professional moderation with timed bans, softbans, warns, case ID tracking, mass nickname resets, channel lockdown, and selective purge (bots, links, embeds, attachments, or mentions).
         </p>
-        <div class="feature-tags">
-          <span class="tag">Role Multipliers</span>
-          <span class="tag">Clan Tag Check</span>
-          <span class="tag">Claim Deadlines</span>
+        <div style="display: flex; gap: 0.4rem; flex-wrap: wrap;">
+          <span class="glass-pill" style="font-size: 0.75rem; padding: 0.2rem 0.6rem;">Case IDs</span>
+          <span class="glass-pill" style="font-size: 0.75rem; padding: 0.2rem 0.6rem;">Selective Purge</span>
+          <span class="glass-pill" style="font-size: 0.75rem; padding: 0.2rem 0.6rem;">Mass Nick Reset</span>
+          <span class="glass-pill" style="font-size: 0.75rem; padding: 0.2rem 0.6rem;">Audit Logs</span>
         </div>
       </div>
 
-      <!-- 3. Neural AI Persona -->
-      <div class="feature-card">
-        <img src="/assets/features/ai_banner.png" alt="Neural AI Persona" class="feature-card-banner" />
-        <div class="feature-icon-wrapper">🧠</div>
-        <h3 class="feature-title">Neural AI Personas</h3>
-        <p class="feature-desc">
-          Multi-personality assistant powered by high-speed neural models. Switch effortlessly between Lord Aizen, Composed Guide, or custom server lore with channel gating and dry humor.
+      <!-- Feature 3: Anti-Nuke -->
+      <div class="glass-feature-card">
+        <div class="feature-card-icon">🛡️</div>
+        <h3 style="font-size: 1.3rem; font-weight: 700; color: #FAF5FF; margin-bottom: 0.6rem;">
+          Sovereign Anti-Nuke &amp; Protection
+        </h3>
+        <p style="color: var(--text-muted); font-size: 0.92rem; line-height: 1.6; margin-bottom: 1.25rem; flex: 1;">
+          Sub-second defense monitoring unauthorized role modifications, channel wipes, vanity URL hijacking, mass bans, and malicious bot invites. Immediate role stripping and server quarantine.
         </p>
-        <div class="feature-tags">
-          <span class="tag">Aizen Persona</span>
-          <span class="tag">Custom Lore</span>
-          <span class="tag">Cooldown Guards</span>
+        <div style="display: flex; gap: 0.4rem; flex-wrap: wrap;">
+          <span class="glass-pill" style="font-size: 0.75rem; padding: 0.2rem 0.6rem;">Sub-Second Strip</span>
+          <span class="glass-pill" style="font-size: 0.75rem; padding: 0.2rem 0.6rem;">Vanity Shield</span>
+          <span class="glass-pill" style="font-size: 0.75rem; padding: 0.2rem 0.6rem;">Auto-Lockdown</span>
+          <span class="glass-pill" style="font-size: 0.75rem; padding: 0.2rem 0.6rem;">Whitelists</span>
         </div>
       </div>
 
-      <!-- 4. High-Fidelity Audio -->
-      <div class="feature-card">
-        <img src="/assets/features/music_banner.png" alt="Studio Audio & 24/7" class="feature-card-banner" />
-        <div class="feature-icon-wrapper">🎵</div>
-        <h3 class="feature-title">Studio Audio & 24/7</h3>
-        <p class="feature-desc">
-          Lavalink-backed crystal audio playback with smart recommendation autoplay, personal playlists, and uninterrupted 24/7 voice stay mode.
+      <!-- Feature 4: Neural AI -->
+      <div class="glass-feature-card">
+        <div class="feature-card-icon">🧠</div>
+        <h3 style="font-size: 1.3rem; font-weight: 700; color: #FAF5FF; margin-bottom: 0.6rem;">
+          Neural AI Persona &amp; Voice TTS
+        </h3>
+        <p style="color: var(--text-muted); font-size: 0.92rem; line-height: 1.6; margin-bottom: 1.25rem; flex: 1;">
+          Multi-personality AI assistant powered by high-speed neural models. Engage with Lord Aizen or custom lore personas. Spoken voice greetings welcome incoming voice users seamlessly.
         </p>
-        <div class="feature-tags">
-          <span class="tag">Smart Autoplay</span>
-          <span class="tag">24/7 Voice Stay</span>
-          <span class="tag">Volume Matrix</span>
+        <div style="display: flex; gap: 0.4rem; flex-wrap: wrap;">
+          <span class="glass-pill" style="font-size: 0.75rem; padding: 0.2rem 0.6rem;">Aizen Persona</span>
+          <span class="glass-pill" style="font-size: 0.75rem; padding: 0.2rem 0.6rem;">Voice TTS</span>
+          <span class="glass-pill" style="font-size: 0.75rem; padding: 0.2rem 0.6rem;">Multi-Language</span>
+          <span class="glass-pill" style="font-size: 0.75rem; padding: 0.2rem 0.6rem;">Zero Buffer</span>
         </div>
       </div>
 
-      <!-- 5. Voice Welcome Greetings -->
-      <div class="feature-card">
-        <img src="/assets/features/welcome_banner.png" alt="Spoken Voice Greetings" class="feature-card-banner" />
-        <div class="feature-icon-wrapper">🎙️</div>
-        <h3 class="feature-title">Spoken Voice Greetings</h3>
-        <p class="feature-desc">
-          Dynamic text-to-speech engine greeting incoming voice members with personalized spoken audio messages without interrupting active music playback.
+      <!-- Feature 5: Giveaways -->
+      <div class="glass-feature-card">
+        <div class="feature-card-icon">🎁</div>
+        <h3 style="font-size: 1.3rem; font-weight: 700; color: #FAF5FF; margin-bottom: 0.6rem;">
+          High-Yield Modular Giveaways
+        </h3>
+        <p style="color: var(--text-muted); font-size: 0.92rem; line-height: 1.6; margin-bottom: 1.25rem; flex: 1;">
+          18-subcommand giveaway engine with weighted role multipliers, server clan tag validation, 7-day message quotas, claim deadlines, auto-reroll unclaimed prizes, and CSV entry export.
         </p>
-        <div class="feature-tags">
-          <span class="tag">Multi-Language TTS</span>
-          <span class="tag">Voice Greetings</span>
-          <span class="tag">Zero Buffer</span>
+        <div style="display: flex; gap: 0.4rem; flex-wrap: wrap;">
+          <span class="glass-pill" style="font-size: 0.75rem; padding: 0.2rem 0.6rem;">Weighted Roles</span>
+          <span class="glass-pill" style="font-size: 0.75rem; padding: 0.2rem 0.6rem;">Clan Tag Check</span>
+          <span class="glass-pill" style="font-size: 0.75rem; padding: 0.2rem 0.6rem;">Auto-Reroll</span>
+          <span class="glass-pill" style="font-size: 0.75rem; padding: 0.2rem 0.6rem;">CSV Export</span>
         </div>
       </div>
 
-      <!-- 6. Member Gate & Verification -->
-      <div class="feature-card">
-        <img src="/assets/features/verification_banner.png" alt="Interactive Verification Gate" class="feature-card-banner" />
-        <div class="feature-icon-wrapper">✅</div>
-        <h3 class="feature-title">Interactive Verification</h3>
-        <p class="feature-desc">
-          Button-based or interactive captcha member verification preventing raid bot entries with account age thresholds and unverified quarantine roles.
+      <!-- Feature 6: Utility & Verification -->
+      <div class="glass-feature-card">
+        <div class="feature-card-icon">⚡</div>
+        <h3 style="font-size: 1.3rem; font-weight: 700; color: #FAF5FF; margin-bottom: 0.6rem;">
+          Interactive Utilities &amp; Member Gate
+        </h3>
+        <p style="color: var(--text-muted); font-size: 0.92rem; line-height: 1.6; margin-bottom: 1.25rem; flex: 1;">
+          Button-based member verification, custom HTML5 welcome canvas cards, snowflake analysis, embed creator, synchronized ticket routing, and comprehensive server stats.
         </p>
-        <div class="feature-tags">
-          <span class="tag">Button Gate</span>
-          <span class="tag">Captcha Mode</span>
-          <span class="tag">Age Limits</span>
-        </div>
-      </div>
-
-      <!-- 7. Koya-Style Welcome Canvas Engine -->
-      <div class="feature-card">
-        <img src="/assets/features/welcome_banner.png" alt="Koya-Style Welcome Studio" class="feature-card-banner" />
-        <div class="feature-icon-wrapper">🎨</div>
-        <h3 class="feature-title">Koya Welcome Studio</h3>
-        <p class="feature-desc">
-          High-resolution member greeting cards rendered on custom HTML5 Canvas. Choose vibrant themes (Nebula, Sunset, Cyberpunk), custom banner art, avatar glow borders, and real-time simulator preview.
-        </p>
-        <div class="feature-tags">
-          <span class="tag">Canvas Cards</span>
-          <span class="tag">Live Simulator</span>
-          <span class="tag">Custom Banners</span>
-        </div>
-      </div>
-
-      <!-- 8. Web-to-Bot Live Music Studio -->
-      <div class="feature-card">
-        <img src="/assets/features/music_banner.png" alt="Web-to-Bot Music Studio" class="feature-card-banner" />
-        <div class="feature-icon-wrapper">🎧</div>
-        <h3 class="feature-title">Web Voice Connect Studio</h3>
-        <p class="feature-desc">
-          Summon Kyoka to any server voice lounge right from the web dashboard. Search tracks, dispatch songs, manage the live queue, and tweak studio volume directly from your phone or browser.
-        </p>
-        <div class="feature-tags">
-          <span class="tag">Web-to-Bot Connect</span>
-          <span class="tag">Live Web Queue</span>
-          <span class="tag">Studio Controls</span>
-        </div>
-      </div>
-
-      <!-- 9. Synchronized Ticket Portals -->
-      <div class="feature-card">
-        <img src="/assets/features/ticket_panel.png" alt="Support Ticket Portals" class="feature-card-banner" />
-        <div class="feature-icon-wrapper">🎫</div>
-        <h3 class="feature-title">Synchronized Ticket Hub</h3>
-        <p class="feature-desc">
-          Versatile ticket desk supporting ultra-fast 1-Click Simple Tickets or Multi-Category routing. Complete category removal flexibility, live in-browser transcript logs, and staff claiming controls.
-        </p>
-        <div class="feature-tags">
-          <span class="tag">1-Click Simple Mode</span>
-          <span class="tag">Multi-Category</span>
-          <span class="tag">Discord Sync</span>
+        <div style="display: flex; gap: 0.4rem; flex-wrap: wrap;">
+          <span class="glass-pill" style="font-size: 0.75rem; padding: 0.2rem 0.6rem;">Canvas Cards</span>
+          <span class="glass-pill" style="font-size: 0.75rem; padding: 0.2rem 0.6rem;">Button Gate</span>
+          <span class="glass-pill" style="font-size: 0.75rem; padding: 0.2rem 0.6rem;">Embed Builder</span>
+          <span class="glass-pill" style="font-size: 0.75rem; padding: 0.2rem 0.6rem;">Ticket Sync</span>
         </div>
       </div>
     </div>
+  </section>
 
-    <!-- Terminal Command Demo -->
-    <div class="terminal-box">
-      <div class="terminal-header">
-        <div class="terminal-dot dot-red"></div>
-        <div class="terminal-dot dot-yellow"></div>
-        <div class="terminal-dot dot-green"></div>
-        <span class="terminal-title">KYOKA 3.0 Discord Console</span>
+  <!-- Interactive Commands Explorer -->
+  <section id="commands-explorer" class="cmd-explorer-container">
+    <div style="text-align: center; margin-bottom: 2.5rem;">
+      <h2 style="font-size: 2.25rem; font-weight: 800; color: #FAF5FF; margin-bottom: 0.75rem;">
+        Interactive Command Catalog
+      </h2>
+      <p style="color: var(--text-muted); font-size: 1rem;">
+        Click any command to copy its syntax directly to your clipboard.
+      </p>
+    </div>
+
+    <!-- Search input -->
+    <input type="text" id="cmd-search" class="cmd-search-input" placeholder="🔍 Search commands (e.g. play, ban, antinuke, giveaway, volume)..." />
+
+    <!-- Filter Buttons -->
+    <div class="cmd-filter-bar">
+      <button class="command-filter-btn active" data-cat="all">⚡ All Commands</button>
+      <button class="command-filter-btn" data-cat="music">🎵 Music &amp; Audio</button>
+      <button class="command-filter-btn" data-cat="moderation">🛡️ Moderation</button>
+      <button class="command-filter-btn" data-cat="antinuke">🔒 Anti-Nuke</button>
+      <button class="command-filter-btn" data-cat="giveaways">🎁 Giveaways</button>
+      <button class="command-filter-btn" data-cat="utility">⚙️ Utility</button>
+      <button class="command-filter-btn" data-cat="ai">🧠 Neural AI</button>
+    </div>
+
+    <!-- Command Cards Grid -->
+    <div class="cmd-grid" id="cmd-grid-slot">
+      <!-- Populated via JavaScript -->
+    </div>
+  </section>
+
+  <!-- Fast Discord Setup Showcase -->
+  <section style="max-width: 1000px; margin: 0 auto 5rem; padding: 0 1.5rem;">
+    <div class="glass-panel" style="padding: 3rem 2.5rem; text-align: center;">
+      <h2 style="font-size: 2rem; font-weight: 800; color: #FAF5FF; margin-bottom: 0.75rem;">
+        Get Started in Seconds
+      </h2>
+      <p style="color: var(--text-muted); max-width: 600px; margin: 0 auto 2.5rem; font-size: 1rem;">
+        KYOKA works immediately upon invite. No convoluted setups, no broken commands.
+      </p>
+
+      <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 1.5rem; text-align: left; margin-bottom: 2.5rem;">
+        <div style="background: rgba(10, 12, 22, 0.6); padding: 1.5rem; border-radius: 14px; border: 1px solid rgba(255, 255, 255, 0.08);">
+          <div style="font-weight: 800; color: var(--purple-light); font-size: 1.1rem; margin-bottom: 0.4rem;">1. Invite Kyoka</div>
+          <p style="color: var(--text-muted); font-size: 0.88rem; line-height: 1.5;">Authorize KYOKA with administrator permissions for full defense and voice features.</p>
+        </div>
+        <div style="background: rgba(10, 12, 22, 0.6); padding: 1.5rem; border-radius: 14px; border: 1px solid rgba(255, 255, 255, 0.08);">
+          <div style="font-weight: 800; color: var(--purple-light); font-size: 1.1rem; margin-bottom: 0.4rem;">2. Configure Security</div>
+          <p style="color: var(--text-muted); font-size: 0.88rem; line-height: 1.5;">Run <code>+antinuke setup</code> or configure trusted staff roles from your web dashboard.</p>
+        </div>
+        <div style="background: rgba(10, 12, 22, 0.6); padding: 1.5rem; border-radius: 14px; border: 1px solid rgba(255, 255, 255, 0.08);">
+          <div style="font-weight: 800; color: var(--purple-light); font-size: 1.1rem; margin-bottom: 0.4rem;">3. Play &amp; Enjoy</div>
+          <p style="color: var(--text-muted); font-size: 0.88rem; line-height: 1.5;">Hop in a voice channel and type <code>?play &lt;song&gt;</code> to experience lossless studio music.</p>
+        </div>
       </div>
-      <div class="terminal-body">
-        <div class="terminal-line">
-          <span class="prompt">+</span>
-          <span class="cmd">antinuke setup</span>
-        </div>
-        <div class="terminal-line">
-          <span class="response">🛡️ [KYOKA DEFENSE] Sovereign anti-nuke initialized: 16 protection modules active. Punishment: Strip Roles.</span>
-        </div>
-        <div class="terminal-line" style="margin-top: 0.75rem;">
-          <span class="prompt">/</span>
-          <span class="cmd">giveaway create prize:"Nitro Monthly" duration:24h winners:3 tag:"[AZN]"</span>
-        </div>
-        <div class="terminal-line">
-          <span class="response">🎁 [KYOKA GIVEAWAY] Interactive giveaway published in #giveaways with clan tag verification enabled.</span>
-        </div>
+
+      <a href="https://discord.com/oauth2/authorize?client_id=1562505487214321714&permissions=8&scope=bot%20applications.commands" target="_blank" rel="noopener noreferrer" class="btn btn-primary btn-lg">
+        👑 Invite KYOKA Now
+      </a>
+    </div>
+  </section>
+
+  <!-- FAQ Accordion -->
+  <section style="max-width: 900px; margin: 0 auto 5rem; padding: 0 1.5rem;">
+    <div style="text-align: center; margin-bottom: 2.5rem;">
+      <h2 style="font-size: 2rem; font-weight: 800; color: #FAF5FF; margin-bottom: 0.75rem;">
+        Frequently Asked Questions
+      </h2>
+      <p style="color: var(--text-muted); font-size: 0.95rem;">
+        Everything you need to know about KYOKA's architecture and setup.
+      </p>
+    </div>
+
+    <div style="display: flex; flex-direction: column; gap: 1rem;">
+      <div class="glass-panel" style="padding: 1.25rem 1.75rem;">
+        <h4 style="font-size: 1.05rem; font-weight: 700; color: var(--purple-pastel); margin-bottom: 0.4rem;">
+          What prefix does KYOKA use?
+        </h4>
+        <p style="color: var(--text-muted); font-size: 0.9rem; line-height: 1.5;">
+          KYOKA responds to both <code>?</code>, <code>+</code>, and full Discord slash commands (<code>/</code>). You can also configure a custom prefix per guild via <code>+setprefix &lt;new&gt;</code>.
+        </p>
+      </div>
+
+      <div class="glass-panel" style="padding: 1.25rem 1.75rem;">
+        <h4 style="font-size: 1.05rem; font-weight: 700; color: var(--purple-pastel); margin-bottom: 0.4rem;">
+          Does KYOKA auto-join voice channels on restart?
+        </h4>
+        <p style="color: var(--text-muted); font-size: 0.9rem; line-height: 1.5;">
+          No. KYOKA only joins voice channels when an authorized user explicitly issues a command (such as <code>?play</code>, <code>?join</code>, or <code>/play</code>). It never intrudes into voice channels automatically.
+        </p>
+      </div>
+
+      <div class="glass-panel" style="padding: 1.25rem 1.75rem;">
+        <h4 style="font-size: 1.05rem; font-weight: 700; color: var(--purple-pastel); margin-bottom: 0.4rem;">
+          How does the Anti-Nuke protection work?
+        </h4>
+        <p style="color: var(--text-muted); font-size: 0.9rem; line-height: 1.5;">
+          KYOKA intercepts audit log events in sub-second time. If an unauthorized administrator deletes multiple channels, bans members in bulk, or modifies danger roles, their roles are stripped immediately and the server is quarantined.
+        </p>
+      </div>
+
+      <div class="glass-panel" style="padding: 1.25rem 1.75rem;">
+        <h4 style="font-size: 1.05rem; font-weight: 700; color: var(--purple-pastel); margin-bottom: 0.4rem;">
+          Can I control music from my phone or web browser?
+        </h4>
+        <p style="color: var(--text-muted); font-size: 0.9rem; line-height: 1.5;">
+          Yes! By logging into the KYOKA Web Dashboard, you can view the live server queue, pause, skip, seek, and adjust studio volume directly from your web browser.
+        </p>
       </div>
     </div>
-  </main>
+  </section>
 
   <!-- Footer -->
   <footer class="footer">
@@ -311,7 +664,7 @@
         </ul>
       </div>
       <div class="footer-col">
-        <h5>Legal & Security</h5>
+        <h5>Legal &amp; Security</h5>
         <ul>
           <li><a href="/privacy">Privacy Policy</a></li>
           <li><a href="/terms">Terms of Service</a></li>
@@ -325,12 +678,150 @@
         <span class="creator-pulse-gem"></span>
         <span>Website made by — <strong class="creator-name">Aizen</strong> <span class="creator-tag">(ruthupavan)</span></span>
       </div>
-      <span style="color: var(--purple-light);">Powered by asyncpg & Cloudflare Pages</span>
+      <span style="color: var(--purple-light);">Powered by asyncpg &amp; Cloudflare Pages</span>
     </div>
   </footer>
 
-  <script type="module" src="/js/particles.js?v=3.7.0"></script>
-  <script type="module" src="/js/audio.js?v=3.7.0"></script>
-  <script type="module" src="/js/app.js?v=3.7.0"></script>
+  <!-- Toast Notification Container -->
+  <div id="cmd-copy-toast">✓ Copied to clipboard!</div>
+
+  <script type="module" src="/js/particles.js?v=3.8.0"></script>
+  <script type="module" src="/js/audio.js?v=3.8.0"></script>
+  <script type="module" src="/js/app.js?v=3.8.0"></script>
+  <script>
+    // Interactive Command Catalog Data & Filter Script
+    const BOT_COMMANDS = [
+      // Music
+      { name: "?play <query>", cat: "music", desc: "Search and play any song, album, or playlist with lossless audio." },
+      { name: "?pause", cat: "music", desc: "Pause current audio playback." },
+      { name: "?resume", cat: "music", desc: "Resume paused audio playback." },
+      { name: "?skip", cat: "music", desc: "Skip currently playing track." },
+      { name: "?stop", cat: "music", desc: "Stop playback and clear current queue." },
+      { name: "?join", cat: "music", desc: "Summon KYOKA to your current voice channel." },
+      { name: "?dc", cat: "music", desc: "Disconnect KYOKA from voice channel." },
+      { name: "?now", cat: "music", desc: "Show detailed now-playing track info and audio progress bar." },
+      { name: "?queue", cat: "music", desc: "Display current server music queue." },
+      { name: "?volume <1-150>", cat: "music", desc: "Adjust playback audio volume." },
+      { name: "?shuff", cat: "music", desc: "Shuffle upcoming songs in queue." },
+      { name: "?loop <track|queue|off>", cat: "music", desc: "Toggle loop mode for current track or full queue." },
+      { name: "?247", cat: "music", desc: "Toggle 24/7 voice stay mode in your server." },
+      { name: "?musicdiag", cat: "music", desc: "Run comprehensive Lavalink audio node diagnostics." },
+
+      // Moderation
+      { name: "+ban <user> [reason]", cat: "moderation", desc: "Permanently ban a member with audit log recording." },
+      { name: "+unban <id> [reason]", cat: "moderation", desc: "Revoke a ban for a previously banned user." },
+      { name: "+softban <user> [reason]", cat: "moderation", desc: "Ban and immediately unban to clear past messages." },
+      { name: "+kick <user> [reason]", cat: "moderation", desc: "Kick a member from the server." },
+      { name: "+timeout <user> <duration>", cat: "moderation", desc: "Mute/timeout a member for a specified time." },
+      { name: "+untimeout <user>", cat: "moderation", desc: "Remove timeout punishment from a member." },
+      { name: "+warn <user> <reason>", cat: "moderation", desc: "Issue a formal moderation warning with case ID." },
+      { name: "+warnings <user>", cat: "moderation", desc: "View warning history and infractions for a user." },
+      { name: "+clearwarns <user>", cat: "moderation", desc: "Clear all warnings issued to a user." },
+      { name: "+purge <amount>", cat: "moderation", desc: "Bulk delete messages in the current channel." },
+      { name: "+purge bots <amount>", cat: "moderation", desc: "Purge only messages sent by bots." },
+      { name: "+purge links <amount>", cat: "moderation", desc: "Purge only messages containing URLs." },
+      { name: "+purge embeds <amount>", cat: "moderation", desc: "Purge only messages with rich embeds." },
+      { name: "+slowmode <seconds>", cat: "moderation", desc: "Set channel slowmode rate limit." },
+      { name: "+lock [channel]", cat: "moderation", desc: "Lock down a channel to prevent member messages." },
+      { name: "+unlock [channel]", cat: "moderation", desc: "Unlock a previously locked channel." },
+      { name: "+massnick reset", cat: "moderation", desc: "Safely reset member nicknames across the server." },
+
+      // Anti-Nuke
+      { name: "+antinuke setup", cat: "antinuke", desc: "Initialize sovereign anti-nuke defense suite." },
+      { name: "+antinuke enable", cat: "antinuke", desc: "Activate real-time server protection and event shields." },
+      { name: "+antinuke disable", cat: "antinuke", desc: "Temporarily deactivate anti-nuke event monitoring." },
+      { name: "+antinuke status", cat: "antinuke", desc: "Inspect active modules, thresholds, and whitelist." },
+      { name: "+antinuke whitelist add <user>", cat: "antinuke", desc: "Whitelist a trusted administrator from anti-nuke triggers." },
+      { name: "+antinuke punishment <ban|strip>", cat: "antinuke", desc: "Configure punishment for triggered malicious actions." },
+
+      // Giveaways
+      { name: "/giveaway create", cat: "giveaways", desc: "Create an interactive giveaway with weighted role multipliers." },
+      { name: "/giveaway quick", cat: "giveaways", desc: "Fast giveaway launch with default 24h duration." },
+      { name: "/giveaway end <id>", cat: "giveaways", desc: "Conclude an active giveaway early and pick winners." },
+      { name: "/giveaway reroll <id>", cat: "giveaways", desc: "Reroll new winners for unclaimed giveaway prizes." },
+      { name: "/giveaway list", cat: "giveaways", desc: "List all active and recent giveaways." },
+
+      // Utility
+      { name: "+userinfo [user]", cat: "utility", desc: "Detailed user account, join date, permissions, and roles." },
+      { name: "+serverinfo", cat: "utility", desc: "Comprehensive server analytics, boost level, and counts." },
+      { name: "+avatar [user]", cat: "utility", desc: "Display full-resolution user avatar." },
+      { name: "+banner [user]", cat: "utility", desc: "Display full-resolution user banner." },
+      { name: "+snowflake <id>", cat: "utility", desc: "Inspect Discord ID creation timestamp and details." },
+      { name: "+embed", cat: "utility", desc: "Interactive rich embed builder for announcements." },
+      { name: "+setprefix <prefix>", cat: "utility", desc: "Change default server command prefix." },
+
+      // Neural AI
+      { name: "+ai <prompt>", cat: "ai", desc: "Query Lord Aizen neural persona with high-speed intelligence." },
+      { name: "+ai persona <type>", cat: "ai", desc: "Switch neural AI persona (Aizen, Composed Guide, Lore)." },
+      { name: "+va <message>", cat: "ai", desc: "Speak text in voice channel using studio voice TTS." }
+    ];
+
+    function renderCommands(commands) {
+      const slot = document.getElementById('cmd-grid-slot');
+      if (!slot) return;
+      if (commands.length === 0) {
+        slot.innerHTML = '<div style="grid-column: 1/-1; text-align: center; color: var(--text-dim); padding: 2rem;">No matching commands found.</div>';
+        return;
+      }
+      slot.innerHTML = commands.map(cmd => `
+        <div class="command-glass-item" onclick="copyCommand('${cmd.name.replace(/'/g, "\\'")}')" title="Click to copy syntax">
+          <div>
+            <div class="command-code-badge">${escapeHtml(cmd.name)}</div>
+            <div style="font-size: 0.85rem; color: var(--text-muted); margin-top: 0.4rem; line-height: 1.4;">${escapeHtml(cmd.desc)}</div>
+          </div>
+          <div style="color: var(--text-dim); font-size: 0.8rem; font-weight: 600;">📋</div>
+        </div>
+      `).join('');
+    }
+
+    function escapeHtml(text) {
+      return text.replace(/[&<>"']/g, function(m) {
+        return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#039;' }[m];
+      });
+    }
+
+    window.copyCommand = function(text) {
+      const cleanCmd = text.split('<')[0].split('[')[0].trim();
+      navigator.clipboard.writeText(cleanCmd).then(() => {
+        const toast = document.getElementById('cmd-copy-toast');
+        if (toast) {
+          toast.textContent = `✓ Copied "${cleanCmd}" to clipboard!`;
+          toast.classList.add('show');
+          setTimeout(() => toast.classList.remove('show'), 2200);
+        }
+      });
+    };
+
+    document.addEventListener('DOMContentLoaded', () => {
+      renderCommands(BOT_COMMANDS);
+
+      // Category filter buttons
+      document.querySelectorAll('.command-filter-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+          document.querySelectorAll('.command-filter-btn').forEach(b => b.classList.remove('active'));
+          btn.classList.add('active');
+          const cat = btn.getAttribute('data-cat');
+          const query = document.getElementById('cmd-search')?.value.toLowerCase().trim() || '';
+          filterCommands(cat, query);
+        });
+      });
+
+      // Search input listener
+      document.getElementById('cmd-search')?.addEventListener('input', (e) => {
+        const query = e.target.value.toLowerCase().trim();
+        const activeCat = document.querySelector('.command-filter-btn.active')?.getAttribute('data-cat') || 'all';
+        filterCommands(activeCat, query);
+      });
+
+      function filterCommands(cat, query) {
+        const filtered = BOT_COMMANDS.filter(cmd => {
+          const matchCat = (cat === 'all' || cmd.cat === cat);
+          const matchQuery = !query || cmd.name.toLowerCase().includes(query) || cmd.desc.toLowerCase().includes(query);
+          return matchCat && matchQuery;
+        });
+        renderCommands(filtered);
+      }
+    });
+  </script>
 </body>
 </html>

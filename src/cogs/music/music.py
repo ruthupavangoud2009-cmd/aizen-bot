@@ -108,29 +108,14 @@ class Music(commands.Cog):
             try:
                 rows = await self.bot.db.fetch_all("SELECT guild_id, voice_channel_id, text_channel_id FROM guild_music_247 WHERE is_247 = TRUE;")
                 self.controller._247_cache = {int(r["guild_id"]) for r in rows}
-                logger.info(f"Loaded {len(self.controller._247_cache)} 24/7 music guild(s) into memory.")
-
-                # Proactively recover voice connections for 24/7 guilds
+                logger.info(f"Loaded {len(self.controller._247_cache)} 24/7 music guild(s) into memory (auto-join on restart disabled; will join on user command).")
                 for r in rows:
                     guild_id = int(r["guild_id"])
-                    vc_id = r.get("voice_channel_id")
-                    if not vc_id:
-                        continue
                     guild = self.bot.get_guild(guild_id)
-                    if not guild:
-                        continue
-                    channel = guild.get_channel(int(vc_id))
-                    if not channel or not isinstance(channel, (discord.VoiceChannel, discord.StageChannel)):
-                        continue
-                    player = self.controller.get_or_create_player(guild)
-                    player.is_247 = True
-                    player.autoplay = True
-                    if not player.is_connected:
-                        try:
-                            await player.connect_voice(channel)
-                            logger.info(f"Auto-restored 24/7 voice connection in '{guild.name}' ({channel.name}).")
-                        except Exception as vc_err:
-                            logger.debug(f"Notice auto-connecting 24/7 voice in {guild.name}: {vc_err}")
+                    if guild:
+                        player = self.controller.get_or_create_player(guild)
+                        player.is_247 = True
+                        player.autoplay = True
             except Exception as e:
                 logger.debug(f"Notice loading 24/7 music state: {e}")
 

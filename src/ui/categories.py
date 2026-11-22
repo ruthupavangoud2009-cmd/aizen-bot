@@ -361,8 +361,6 @@ CATEGORY_SEARCH_ALIASES: dict[str, str] = {
     "config": "config", "setup": "config", "settings": "config", "prefix": "config", "logs": "config", "admin": "config", "administration": "config", "setbot": "config", "branding": "config", "brand": "config",
     # Social & Fun
     "social": "social", "fun": "social", "games": "social", "romance": "social", "anime": "social", "ltlvc": "social", "ltl": "social", "lasttoleave": "social", "lasttoleavevc": "social",
-    # KDC Shop & Stock & Reviews
-    "stock": "service_bills", "kdc": "service_bills", "shop": "service_bills", "store": "service_bills", "kdcshop": "service_bills", "review": "service_bills", "reviews": "service_bills",
     # Owner & Developer
     "owner": "owner", "dev": "owner", "developer": "owner", "system": "owner", "eval": "owner", "globalsupport": "owner", "setsupport": "owner",
     # Economy, Hunting & Games
@@ -380,7 +378,6 @@ CATEGORY_SEARCH_ALIASES: dict[str, str] = {
 
 # Cog class names / qualified names strongly mapped to categories
 COG_MAPPINGS: dict[str, str] = {
-    "kdcshop": "service_bills",
     "globalsupport": "owner",
     # Music (STRICT: only the real music cog)
     "music": "music",
@@ -530,9 +527,6 @@ COG_MAPPINGS: dict[str, str] = {
     "invite": "general",
     "promo": "general",
     "promocog": "general",
-    "kdcshop": "general",
-    "stock": "general",
-    "members": "general",
     "suggestions": "general",
     "tempvoice": "general",
     "embedbuilder": "general",
@@ -669,10 +663,6 @@ def resolve_command_category(cmd: Any) -> CategoryMeta:
         root_name == "top" and any(part in ("app", "apply", "applications") for part in getattr(cmd, "qualified_name", "").lower().split())
     ):
         return CATEGORY_BY_ID["staff_applications"]
-
-    # KDC Shop & Stock & Reviews
-    if root_name in ("stock", "kdc", "kdcshop", "shop", "store", "review", "reviews"):
-        return CATEGORY_BY_ID["service_bills"]
 
     # Blox Fruits Service Bills
     if root_name in (
