@@ -114,6 +114,7 @@ def calculate_jvm_opts(container_ram_mb: int) -> list[str]:
         "-XX:MaxGCPauseMillis=20",
         "-XX:+UseStringDeduplication",
         "-Dfile.encoding=UTF-8",
+        "-Djava.security.egd=file:/dev/./urandom",
     ]
 
     # Calculate safe heap limits based on real container RAM
@@ -486,7 +487,8 @@ class CombinedSupervisor:
         logger.info("[KYOKA] Waiting for Lavalink readiness...")
 
         ready = False
-        deadline = time.time() + 90.0
+        timeout_sec = float(os.getenv("LAVALINK_READINESS_TIMEOUT", "300.0"))
+        deadline = time.time() + timeout_sec
         start_time = time.time()
         while time.time() < deadline:
             elapsed = int(time.time() - start_time)
@@ -513,13 +515,13 @@ class CombinedSupervisor:
                 ready = True
                 break
 
-            if elapsed > 0 and elapsed % 10 == 0:
-                logger.info(f"[KYOKA] Waiting for Lavalink readiness... (elapsed: {elapsed}s / 90s)")
+            if elapsed > 0 and elapsed % 15 == 0:
+                logger.info(f"[KYOKA] Waiting for Lavalink readiness... (elapsed: {elapsed}s / {int(timeout_sec)}s)")
 
             time.sleep(1.0)
 
         if not ready:
-            logger.critical(f"[KYOKA] ERROR: READINESS_TIMEOUT - Lavalink failed to respond at http://{INTERNAL_HOST}:{INTERNAL_PORT}/version within 90s.")
+            logger.critical(f"[KYOKA] ERROR: READINESS_TIMEOUT - Lavalink failed to respond at http://{INTERNAL_HOST}:{INTERNAL_PORT}/version within {int(timeout_sec)}s.")
             if recent_logs:
                 logger.critical("[KYOKA] --- Last Lavalink logs ---")
                 for l in recent_logs[-20:]:

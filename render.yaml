@@ -37,6 +37,8 @@ services:
         sync: false
       - key: LAVALINK_URI
         value: "http://127.0.0.1:2333"
+      - key: LAVALINK_READINESS_TIMEOUT
+        value: "300"
       # JVM Tuning for Container Hosting (Dynamic cgroup heap allocation with G1GC)
       - key: JAVA_OPTS
         value: "-XX:+UseG1GC -XX:MaxGCPauseMillis=20 -XX:+UseStringDeduplication -Dfile.encoding=UTF-8"

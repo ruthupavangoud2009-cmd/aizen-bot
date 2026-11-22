@@ -82,6 +82,7 @@ class TestLavalinkProductionHotfix(unittest.TestCase):
         self.assertIn("-Xmx256m", opts_str)
         self.assertIn("-Xms64m", opts_str)
         self.assertIn("-XX:+UseG1GC", opts_str)
+        self.assertIn("-Djava.security.egd=file:/dev/./urandom", opts_str)
 
     def test_jvm_opts_moderate_ram_container(self):
         """Verify JVM options for 1024 MB container."""
@@ -166,6 +167,17 @@ class TestLavalinkProductionHotfix(unittest.TestCase):
 
         with patch("urllib.request.urlopen", side_effect=urllib.error.HTTPError("http://127.0.0.1:2333/v4/info", 401, "Unauthorized", {}, None)):
             self.assertFalse(verify_lavalink_auth("127.0.0.1", 2333, "wrong_secret"))
+
+    def test_readiness_timeout_default_and_env(self):
+        """Verify readiness timeout defaults to 300s and respects LAVALINK_READINESS_TIMEOUT env var."""
+        with patch.dict(os.environ, {}, clear=False):
+            os.environ.pop("LAVALINK_READINESS_TIMEOUT", None)
+            timeout = float(os.getenv("LAVALINK_READINESS_TIMEOUT", "300.0"))
+            self.assertEqual(timeout, 300.0)
+
+        with patch.dict(os.environ, {"LAVALINK_READINESS_TIMEOUT": "180"}):
+            timeout = float(os.getenv("LAVALINK_READINESS_TIMEOUT", "300.0"))
+            self.assertEqual(timeout, 180.0)
 
 
 if __name__ == "__main__":
