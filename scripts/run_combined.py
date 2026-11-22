@@ -57,7 +57,11 @@ INTERNAL_PORT = 2333
 
 
 def detect_container_ram_mb() -> int:
-    """Detect real container or host memory limit in MB using cgroups v2, cgroups v1, or meminfo."""
+    """Detect real container memory limit in MB (safely clamped for 1GB container hosting)."""
+    override = os.getenv("CONTAINER_MAX_RAM_MB") or os.getenv("MAX_MEMORY_MB")
+    if override and override.strip().isdigit():
+        return int(override.strip())
+
     # 1. cgroup v2
     cg2_file = Path("/sys/fs/cgroup/memory.max")
     if cg2_file.is_file():
@@ -67,7 +71,7 @@ def detect_container_ram_mb() -> int:
                 bytes_limit = int(val)
                 mb = bytes_limit // (1024 * 1024)
                 if 64 <= mb < 1048576:
-                    return mb
+                    return min(mb, 1024)
         except Exception:
             pass
 
@@ -80,35 +84,16 @@ def detect_container_ram_mb() -> int:
                 bytes_limit = int(val)
                 mb = bytes_limit // (1024 * 1024)
                 if 64 <= mb < 1048576:
-                    return mb
+                    return min(mb, 1024)
         except Exception:
             pass
 
-    # 3. Host /proc/meminfo
-    try:
-        meminfo = Path("/proc/meminfo")
-        if meminfo.is_file():
-            with open(meminfo, "r", encoding="utf-8") as f:
-                for line in f:
-                    if line.startswith("MemTotal:"):
-                        mb = int(line.split()[1]) // 1024
-                        return mb
-    except Exception:
-        pass
-
-    # 4. sysconf fallback
-    try:
-        pages = os.sysconf("SC_PHYS_PAGES")
-        page_size = os.sysconf("SC_PAGE_SIZE")
-        return (pages * page_size) // (1024 * 1024)
-    except Exception:
-        pass
-
+    # Default to 1024 MB container limit to ensure no host RAM leaks on Render/Docker
     return 1024
 
 
 def calculate_jvm_opts(container_ram_mb: int) -> list[str]:
-    """Calculate optimized JVM heap and GC settings safe for container memory limits."""
+    """Calculate optimized JVM heap and GC settings strictly bounded under 1GB container budget."""
     env_opts = os.getenv("JAVA_OPTS")
     gc_flags = [
         "-XX:+UseG1GC",
@@ -118,33 +103,25 @@ def calculate_jvm_opts(container_ram_mb: int) -> list[str]:
         "-Djava.security.egd=file:/dev/./urandom",
     ]
 
-    # Calculate safe heap limits based on real container RAM
+    # Strictly limit heap: on 1GB container, JVM max heap is 384m so Python + OS comfortably fit
     if container_ram_mb <= 512:
         heap_flags = ["-Xmx256m", "-Xms64m"]
     elif container_ram_mb <= 1024:
-        heap_flags = ["-Xmx512m", "-Xms128m"]
+        heap_flags = ["-Xmx384m", "-Xms64m"]
     elif container_ram_mb <= 2048:
-        heap_flags = ["-Xmx1024m", "-Xms256m"]
-    elif container_ram_mb <= 8192:
-        heap_flags = ["-Xmx2g", "-Xms512m"]
+        heap_flags = ["-Xmx768m", "-Xms128m"]
     else:
-        heap_flags = ["-Xmx4g", "-Xms1g"]
+        heap_flags = ["-Xmx1024m", "-Xms256m"]
 
     if env_opts and env_opts.strip():
         tokens = env_opts.split()
+        has_xmx = any(t.startswith("-Xmx") for t in tokens)
         has_large_heap = any(
-            t.startswith("-Xmx") and ("g" in t or "G" in t) and container_ram_mb < 2048
-            for t in tokens
-        ) or any(
-            t.startswith("-Xms") and ("g" in t or "G" in t) and container_ram_mb < 2048
+            (t.startswith("-Xmx") or t.startswith("-Xms")) and ("g" in t or "G" in t)
             for t in tokens
         )
 
-        if has_large_heap:
-            logger.warning(
-                f"[KYOKA] Custom JAVA_OPTS ({env_opts}) exceeds container memory limit ({container_ram_mb} MB). "
-                f"Applying safe container heap limits ({' '.join(heap_flags)})."
-            )
+        if not has_xmx or has_large_heap or container_ram_mb <= 1024:
             filtered = [t for t in tokens if not t.startswith("-Xmx") and not t.startswith("-Xms")]
             return heap_flags + filtered
         else:

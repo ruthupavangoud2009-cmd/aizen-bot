@@ -63,8 +63,11 @@ async def get_prefix(bot: KyokaBot, message: discord.Message) -> list[str]:
         except Exception:
             logger.exception("Could not resolve guild prefix; using the configured default.")
 
-    # Exactly one active text prefix per server. No legacy fallback prefixes.
+    # Support configured prefix plus common prefixes (?, !, +) so users never get locked out
     prefixes: list[str] = [configured_prefix]
+    for alt_p in ("?", "!", "+"):
+        if alt_p not in prefixes:
+            prefixes.append(alt_p)
 
     author_id = message.author.id if message.author else None
     no_prefix_users = getattr(bot, "no_prefix_users", set())

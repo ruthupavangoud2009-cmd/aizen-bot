@@ -180,11 +180,11 @@ class Config:
     LAVALINK_AUTO_DISCOVER: bool = False
     LAVALINK_PUBLIC_LIST_URL: str = ""
 
-    # Persistent Audio Cache & Smart Queue Settings
+    # Persistent Audio Cache & Smart Queue Settings (Strictly optimized for 1GB container)
     MUSIC_CACHE_DIR: str = os.getenv("MUSIC_CACHE_DIR", "data/music_cache")
-    MUSIC_CACHE_MAX_MB: int = int(os.getenv("MUSIC_CACHE_MAX_MB", "4096"))
-    MUSIC_CACHE_MAX_TRACKS: int = int(os.getenv("MUSIC_CACHE_MAX_TRACKS", "2000"))
-    MUSIC_CACHE_TTL_DAYS: int = int(os.getenv("MUSIC_CACHE_TTL_DAYS", "30"))
+    MUSIC_CACHE_MAX_MB: int = int(os.getenv("MUSIC_CACHE_MAX_MB", "256"))
+    MUSIC_CACHE_MAX_TRACKS: int = int(os.getenv("MUSIC_CACHE_MAX_TRACKS", "500"))
+    MUSIC_CACHE_TTL_DAYS: int = int(os.getenv("MUSIC_CACHE_TTL_DAYS", "7"))
     MUSIC_PRELOAD_LIMIT: int = int(os.getenv("MUSIC_PRELOAD_LIMIT", "3"))
     MUSIC_WATCHDOG_INTERVAL: int = int(os.getenv("MUSIC_WATCHDOG_INTERVAL", "10"))
     MUSIC_STALL_TIMEOUT: int = int(os.getenv("MUSIC_STALL_TIMEOUT", "15"))
