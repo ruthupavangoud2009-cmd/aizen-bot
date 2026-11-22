@@ -135,48 +135,6 @@ class UIColor(commands.Cog, name="Admin-UIColor"):
         )
         await send_response(ctx, resp)
 
-    @commands.command(
-        name="syncemojis",
-        aliases=["emojisync", "uploademojis"],
-        description="Sync local custom and animated emoji assets directly to Discord Application Emojis (Bot Owner only).",
-    )
-    async def syncemojis(self, ctx: CustomContext) -> None:
-        """Sync all local assets to the bot's application emojis (up to 2,000 capacity)."""
-        if not (is_primary_owner(ctx.author.id) or is_owner_or_staff(ctx.author.id)):
-            resp = KyokaResponse.permission(
-                title="Bot Owner Only",
-                description="Only the bot owner / creator can synchronize application emojis.",
-            )
-            return await send_response(ctx, resp, ephemeral=True)
-
-        reg = getattr(self.bot, "custom_emojis", None)
-        if not reg:
-            resp = KyokaResponse.error(
-                title="Emoji Registry Unavailable",
-                description="The emoji registry is not initialized on this bot instance.",
-            )
-            return await send_response(ctx, resp)
-
-        status_msg = await ctx.send("> 🔄 **Synchronizing Application Emojis...** Uploading PNG/GIF assets to Discord...")
-        count = await reg.sync_assets_to_application()
-        total = reg.emoji_count
-
-        resp = KyokaResponse(
-            response_type=ResponseType.SUCCESS,
-            title="Application Emojis Synchronized",
-            description=(
-                f"> **Newly Uploaded Emojis:** `{count}`\n"
-                f"> **Total Cached Application Emojis:** `{total}` / `2,000`\n\n"
-                f"All bot modules, help menus, and commands now have access to custom animated & static icons."
-            ),
-            footer_text=f"-# Triggered by {ctx.author.display_name} • 2,000 Emoji Storage",
-        )
-        try:
-            await status_msg.delete()
-        except Exception:
-            pass
-        await send_response(ctx, resp)
-
 
 async def setup(bot: KyokaBot) -> None:
     """Load the UIColor cog."""

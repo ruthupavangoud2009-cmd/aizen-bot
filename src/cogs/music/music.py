@@ -789,7 +789,7 @@ class Music(commands.Cog):
 
     @commands.hybrid_command(
         name="shuffle",
-        aliases=["sh"],
+        aliases=["shuff"],
         description="Randomize the order of upcoming songs in queue.",
     )
     async def shuffle(self, ctx: CustomContext) -> None:

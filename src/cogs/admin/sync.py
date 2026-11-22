@@ -78,10 +78,16 @@ class Sync(commands.Cog):
     )
     @is_developer()
     async def sync_emojis(self, ctx: CustomContext) -> None:
+        reg = getattr(self.bot, "custom_emojis", None)
+        if not reg:
+            await ctx.send_error("The emoji registry is not initialized on this bot instance.")
+            return
+
         load_card = KyokaContainer()
         load_card.add_section(content="**Emoji Synchronization**\n> Scanning assets and uploading application emojis...")
         status_msg = await send_container_response(ctx, load_card)
-        uploaded, total = await self.bot.custom_emojis.sync_from_assets()
+        uploaded = await reg.sync_assets_to_application()
+        total = getattr(reg, "emoji_count", 0)
 
         container = KyokaContainer(accent_color=None)
         container.add_section(

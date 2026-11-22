@@ -1961,7 +1961,7 @@ class AIVoice(commands.Cog, name="AIVoice"):
 
     @commands.command(
         name="vcleave",
-        aliases=["leavevc", "vcdisconnect", "bye"],
+        aliases=["vcdisconnect", "bye", "va_leave"],
         help="Voice Agent says goodbye and disconnects from the voice channel.",
     )
     async def cmd_vcleave(self, ctx: CustomContext) -> None:
