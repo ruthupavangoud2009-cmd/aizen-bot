@@ -7,6 +7,7 @@ services:
     region: virginia
     healthCheckPath: /health
     autoDeploy: true
+    startCommand: python scripts/run_combined.py
     envVars:
       - key: DISCORD_TOKEN
         sync: false
@@ -35,9 +36,9 @@ services:
         sync: false
       - key: LAVALINK_URI
         value: "http://127.0.0.1:2333"
-      # JVM Tuning for High-Resource Hosting (30 GB RAM headroom)
+      # JVM Tuning for Container Hosting (Dynamic cgroup heap allocation with G1GC)
       - key: JAVA_OPTS
-        value: "-Xmx4g -Xms1g -XX:MaxMetaspaceSize=512m -XX:ReservedCodeCacheSize=128m -XX:+UseG1GC -XX:MaxGCPauseMillis=20 -XX:+UseStringDeduplication -Dfile.encoding=UTF-8"
+        value: "-XX:+UseG1GC -XX:MaxGCPauseMillis=20 -XX:+UseStringDeduplication -Dfile.encoding=UTF-8"
       # Spotify Resolution Credentials (optional, from kyoka-lavalink)
       - key: SPOTIFY_CLIENT_ID
         sync: false

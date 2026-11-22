@@ -17,9 +17,9 @@ ENV JAVA_HOME=/opt/java/openjdk
 COPY --from=jre-base /opt/java/openjdk /opt/java/openjdk
 ENV PATH="${JAVA_HOME}/bin:${PATH}"
 
-# Install audio & system dependencies
+# Install audio, font, procps, and system dependencies
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    curl ca-certificates libopus0 ffmpeg \
+    curl ca-certificates fontconfig procps libopus0 ffmpeg \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
@@ -43,7 +43,7 @@ RUN pip install --no-cache-dir --upgrade pip && \
 COPY . /app/
 
 # Make scripts executable
-RUN chmod +x /app/build.sh /app/build-lavalink.sh 2>/dev/null || true
+RUN chmod +x /app/build.sh /app/build-lavalink.sh /app/scripts/run_combined.py 2>/dev/null || true
 
 # Default environment configuration for private local connection
 ENV LAVALINK_HOST=127.0.0.1 \
@@ -59,3 +59,4 @@ EXPOSE 10000
 
 # Supervisor entrypoint manages both Lavalink V4 and Kyoka Discord Bot
 ENTRYPOINT ["python", "scripts/run_combined.py"]
+CMD []

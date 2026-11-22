@@ -1,0 +1,146 @@
+#!/usr/bin/env python3
+"""
+Unit and integration tests for Kyoka Lavalink Hotfix.
+Verifies supervisor diagnostics, memory limit detection, password consistency,
+port collision protection, and elimination of competing background launchers.
+"""
+
+import os
+import sys
+import unittest
+from pathlib import Path
+from unittest.mock import patch, MagicMock
+
+# Ensure project root is in sys.path
+BASE_DIR = Path(__file__).resolve().parent.parent
+sys.path.insert(0, str(BASE_DIR))
+
+# Mock external heavy dependencies if running in minimal environment without pip packages
+for mod_name in ["discord", "discord.ext", "discord.ext.tasks", "discord.ext.commands", "wavelink", "aiohttp"]:
+    if mod_name not in sys.modules:
+        m = MagicMock()
+        if mod_name == "aiohttp":
+            m.ClientTimeout = MagicMock()
+            m.ClientSession = MagicMock()
+        elif mod_name == "wavelink":
+            m.Pool = MagicMock()
+            m.Node = MagicMock()
+        sys.modules[mod_name] = m
+
+from src.core.config import Config
+from src.core.lavalink import candidates
+from scripts.run_combined import (
+    detect_container_ram_mb,
+    calculate_jvm_opts,
+    verify_configuration,
+    CombinedSupervisor,
+    INTERNAL_HOST,
+    INTERNAL_PORT,
+)
+
+
+class TestLavalinkProductionHotfix(unittest.TestCase):
+    """Test suite for Lavalink hotfix verification."""
+
+    def test_configuration_loopback_binding(self):
+        """Verify Config binds strictly to local loopback 127.0.0.1:2333."""
+        self.assertEqual(Config.LAVALINK_HOST, "127.0.0.1")
+        self.assertEqual(Config.LAVALINK_PORT, 2333)
+        self.assertFalse(Config.LAVALINK_SECURE)
+        self.assertEqual(Config.LAVALINK_URI, "http://127.0.0.1:2333")
+        self.assertFalse(Config.LAVALINK_AUTO_DISCOVER)
+
+    def test_candidates_list(self):
+        """Verify candidate node list resolves to local loopback with no third-party discovery."""
+        c = candidates()
+        self.assertTrue(len(c) >= 1)
+        uri, _ = c[0]
+        self.assertEqual(uri, "http://127.0.0.1:2333")
+
+    def test_no_insecure_fallback_password(self):
+        """Verify that default insecure fallback 'onlyforkyoka' is not committed as password."""
+        with patch.dict(os.environ, {"LAVALINK_PASSWORD": "", "LAVALINK_SERVER_PASSWORD": ""}):
+            supervisor = CombinedSupervisor()
+            # If no password is in env, supervisor must generate a secure secret (not onlyforkyoka)
+            self.assertNotEqual(supervisor.password, "onlyforkyoka")
+            self.assertNotEqual(supervisor.password, "")
+            self.assertTrue(len(supervisor.password) >= 20)
+            self.assertEqual(os.environ["LAVALINK_PASSWORD"], supervisor.password)
+
+    def test_container_memory_detection(self):
+        """Verify container RAM limit detection doesn't crash and returns reasonable MB."""
+        ram_mb = detect_container_ram_mb()
+        self.assertIsInstance(ram_mb, int)
+        self.assertGreater(ram_mb, 64)
+
+    def test_jvm_opts_low_ram_container(self):
+        """Verify JVM options for 512 MB container allocate safe heap to avoid OOM killer."""
+        opts = calculate_jvm_opts(512)
+        opts_str = " ".join(opts)
+        self.assertIn("-Xmx256m", opts_str)
+        self.assertIn("-Xms64m", opts_str)
+        self.assertIn("-XX:+UseG1GC", opts_str)
+
+    def test_jvm_opts_moderate_ram_container(self):
+        """Verify JVM options for 1024 MB container."""
+        opts = calculate_jvm_opts(1024)
+        opts_str = " ".join(opts)
+        self.assertIn("-Xmx512m", opts_str)
+        self.assertIn("-Xms128m", opts_str)
+
+    def test_jvm_opts_oversized_env_opts_scaled_down(self):
+        """Verify that if custom JAVA_OPTS has -Xmx4g on a 512MB container, it is scaled down."""
+        with patch.dict(os.environ, {"JAVA_OPTS": "-Xmx4g -Xms1g -XX:+UseG1GC"}):
+            opts = calculate_jvm_opts(512)
+            opts_str = " ".join(opts)
+            self.assertNotIn("-Xmx4g", opts_str)
+            self.assertIn("-Xmx256m", opts_str)
+
+    def test_application_yml_exists_and_valid(self):
+        """Verify that application.yml is present and contains required server and lavalink blocks."""
+        cfg_path = verify_configuration()
+        self.assertTrue(cfg_path.is_file())
+        content = cfg_path.read_text(encoding="utf-8")
+        self.assertIn("port: 2333", content)
+        self.assertIn("address: 127.0.0.1", content)
+        self.assertNotIn("onlyforkyoka", content)
+
+    def test_no_competing_launchers(self):
+        """Verify that src/core/lavalink.py does NOT define _ensure_local_lavalink_running."""
+        import src.core.lavalink as lavalink_module
+        self.assertFalse(
+            hasattr(lavalink_module, "_ensure_local_lavalink_running"),
+            "Competing launcher _ensure_local_lavalink_running must be completely removed from lavalink.py"
+        )
+
+    def test_supervisor_re_exec_guard_in_main(self):
+        """Verify src/main.py contains the supervisor delegation guard."""
+        main_path = BASE_DIR / "src" / "main.py"
+        content = main_path.read_text(encoding="utf-8")
+        self.assertIn("KYOKA_SUPERVISED", content)
+        self.assertIn("scripts/run_combined.py", content)
+
+    def test_render_yaml_configuration(self):
+        """Verify render.yaml declares docker runtime and explicit startCommand."""
+        render_path = BASE_DIR / "render.yaml"
+        content = render_path.read_text(encoding="utf-8")
+        self.assertIn("runtime: docker", content)
+        self.assertIn("startCommand: python scripts/run_combined.py", content)
+        self.assertIn("LAVALINK_HOST", content)
+        self.assertIn("127.0.0.1", content)
+        self.assertIn("2333", content)
+
+    def test_dockerfile_configuration(self):
+        """Verify Dockerfile contains JRE, Lavalink.jar, plugins, and correct entrypoint."""
+        docker_path = BASE_DIR / "Dockerfile"
+        content = docker_path.read_text(encoding="utf-8")
+        self.assertIn("ENTRYPOINT [\"python\", \"scripts/run_combined.py\"]", content)
+        self.assertIn("Lavalink.jar", content)
+        self.assertIn("youtube-plugin", content)
+        self.assertIn("lavasrc-plugin", content)
+        self.assertIn("fontconfig", content)
+        self.assertIn("procps", content)
+
+
+if __name__ == "__main__":
+    unittest.main()

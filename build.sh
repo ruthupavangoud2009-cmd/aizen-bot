@@ -9,12 +9,13 @@ BASE_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 LAVALINK_DIR="${BASE_DIR}/lavalink-node"
 PLUGINS_DIR="${LAVALINK_DIR}/plugins"
 mkdir -p "${LAVALINK_DIR}" "${PLUGINS_DIR}" "${BASE_DIR}/data/music_cache"
+chmod +x "${BASE_DIR}/build.sh" "${BASE_DIR}/build-lavalink.sh" "${BASE_DIR}/scripts/run_combined.py" 2>/dev/null || true
 
 # 1. System packages if running as root
 if [ "$(id -u)" -eq 0 ] && command -v apt-get >/dev/null 2>&1; then
     echo "Installing voice/audio packages and system tools (root)..."
     apt-get update -y && apt-get install -y --no-install-recommends \
-        curl ca-certificates libopus0 ffmpeg \
+        curl ca-certificates libopus0 ffmpeg default-jre-headless fontconfig procps \
         && rm -rf /var/lib/apt/lists/* || true
 fi
 

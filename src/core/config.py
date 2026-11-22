@@ -163,7 +163,11 @@ class Config:
     LAVALINK_PORT: int = int(os.getenv("LAVALINK_PORT", "2333"))
     LAVALINK_SECURE: bool = os.getenv("LAVALINK_SECURE", "false").lower() in ("true", "1", "yes")
     LAVALINK_IDENTIFIER: str = os.getenv("LAVALINK_IDENTIFIER", "kyoka-lavalink-local")
-    LAVALINK_PASSWORD: str = os.getenv("LAVALINK_PASSWORD") or os.getenv("LAVALINK_SERVER_PASSWORD") or "onlyforkyoka"
+    LAVALINK_PASSWORD: str = (
+        os.getenv("LAVALINK_PASSWORD")
+        or os.getenv("LAVALINK_SERVER_PASSWORD")
+        or "kyoka_local_internal_secret"
+    ).strip()
 
     # Canonical Lavalink REST URI; Wavelink upgrades this to ws://.../v4/websocket.
     LAVALINK_URI: str = os.getenv(

@@ -351,6 +351,13 @@ async def main() -> None:
 
 
 if __name__ == "__main__":
+    if os.getenv("KYOKA_SUPERVISED") != "1" and not os.getenv("KYOKA_DISABLE_SUPERVISOR"):
+        supervisor_script = BASE_DIR / "scripts" / "run_combined.py"
+        if supervisor_script.is_file():
+            os.environ["KYOKA_SUPERVISED"] = "1"
+            logger.info("[KYOKA] Direct execution detected; delegating to authoritative supervisor (scripts/run_combined.py)...")
+            os.execv(sys.executable, [sys.executable, str(supervisor_script)] + sys.argv[1:])
+
     try:
         asyncio.run(main())
     except KeyboardInterrupt:

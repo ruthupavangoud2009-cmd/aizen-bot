@@ -101,7 +101,12 @@ def candidates() -> list[tuple[str, str]]:
 
     result: list[tuple[str, str]] = []
     primary = (getattr(Config, "LAVALINK_URI", "") or "").strip()
-    password = getattr(Config, "LAVALINK_PASSWORD", "onlyforkyoka") or "onlyforkyoka"
+    password = (
+        getattr(Config, "LAVALINK_PASSWORD", "")
+        or os.getenv("LAVALINK_PASSWORD")
+        or os.getenv("LAVALINK_SERVER_PASSWORD")
+        or "kyoka_local_internal_secret"
+    ).strip()
     if primary:
         if "|" in primary:
             p_uri, p_pw = primary.split("|", 1)
@@ -526,53 +531,6 @@ RESILIENT_CLUSTER_NODES: list[tuple[str, str]] = [
 ]
 
 
-async def _ensure_local_lavalink_running() -> None:
-    """Ensure local Lavalink process is active if configured for loopback 127.0.0.1."""
-    from src.core.config import Config
-    if "127.0.0.1" in Config.LAVALINK_HOST or "localhost" in Config.LAVALINK_HOST:
-        import socket
-        sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        sock.settimeout(0.4)
-        is_open = False
-        try:
-            is_open = sock.connect_ex(("127.0.0.1", Config.LAVALINK_PORT)) == 0
-        except Exception:
-            pass
-        finally:
-            sock.close()
-
-        if not is_open:
-            from pathlib import Path
-            import shutil, subprocess, os
-            jar_path = Path(__file__).resolve().parent.parent.parent / "lavalink-node" / "Lavalink.jar"
-            if jar_path.is_file():
-                java_bin = shutil.which("java") or "/opt/java/openjdk/bin/java"
-                if java_bin and (shutil.which(str(java_bin)) or Path(java_bin).is_file()):
-                    logger.info("Local Lavalink port 2333 is not open; auto-spawning local Lavalink process...")
-                    java_opts = (os.getenv("JAVA_OPTS") or "-Xmx4g -Xms1g -XX:+UseG1GC").split()
-                    try:
-                        subprocess.Popen(
-                            [str(java_bin)] + java_opts + ["-jar", str(jar_path)],
-                            cwd=str(jar_path.parent),
-                            stdout=subprocess.DEVNULL,
-                            stderr=subprocess.DEVNULL,
-                        )
-                        for _ in range(30):
-                            await asyncio.sleep(0.5)
-                            s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-                            s.settimeout(0.3)
-                            try:
-                                if s.connect_ex(("127.0.0.1", Config.LAVALINK_PORT)) == 0:
-                                    logger.info("Local Lavalink spawned successfully and accepting connections.")
-                                    break
-                            except Exception:
-                                pass
-                            finally:
-                                s.close()
-                    except Exception as e:
-                        logger.warning(f"Could not auto-spawn local Lavalink: {e}")
-
-
 async def connect_lavalink_node(
     bot: Optional["discord.Client"] = None,
     *,
@@ -666,7 +624,7 @@ async def connect_lavalink_node(
 
             if node.status == wavelink.NodeStatus.CONNECTED:
                 if await probe_node(node):
-                    logger.info(f"Connected to Lavalink node {uri}")
+                    logger.info(f"[KYOKA MUSIC] Lavalink node connected ({uri})")
                     return node
                 reason = "REST API unresponsive"
             else:
@@ -677,9 +635,8 @@ async def connect_lavalink_node(
         logger.warning(f"Lavalink node {uri} could not be used: {reason}")
         return None
 
-    await _ensure_local_lavalink_running()
-
     # 1 + 2: configured nodes
+    logger.info("[KYOKA MUSIC] Connecting to local Lavalink")
     for uri, password in candidates():
         node = await _try(uri, password)
         if node is not None:
@@ -687,5 +644,9 @@ async def connect_lavalink_node(
 
     # Only configured self-hosted nodes and explicit private fallbacks are used.
     # Public node discovery is permanently disabled.
+    logger.warning(
+        "[KYOKA MUSIC] Dedicated local Lavalink node at 127.0.0.1:2333 is not reachable. "
+        "Verify the Kyoka supervisor (scripts/run_combined.py) is running."
+    )
     detail = "; ".join(failures) if failures else "no URI configured"
     raise LavalinkUnavailable(f"Dedicated self-hosted Lavalink node is currently unreachable ({detail})")
