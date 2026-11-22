@@ -7,36 +7,38 @@ import discord
 from discord import app_commands
 from discord.ext import commands
 
-from src.utils.containers import KyokaContainer, send_container_response
+from src.utils.emojis import sanitize_emoji_string
 from src.ui.theme import KyokaTheme
 
 logger = logging.getLogger("Kyoka.ErrorHandler")
 
 
-def _error_emoji(bot: commands.Bot, *names: str, fallback: str = "") -> str:
-    """Resolve an emoji defensively; prefer animated custom application emojis."""
+def _error_emoji(bot: commands.Bot, *names: str, fallback: str = "❌") -> str:
+    """Resolve an emoji defensively; ensure it is usable so unrendered <:id:> never leaks."""
     registry = getattr(bot, "custom_emojis", None)
     if registry is None:
         return fallback
     for name in names:
         try:
             emoji = registry.get_emoji_obj(name)
-            if emoji is not None and getattr(emoji, "animated", False):
-                return str(emoji)
-        except Exception:
-            continue
-    for name in names:
-        try:
-            emoji = registry.get_emoji_obj(name)
             if emoji is not None:
-                return str(emoji)
+                if isinstance(emoji, discord.Emoji):
+                    if not getattr(emoji, "is_usable", lambda: True)():
+                        continue
+                    return str(emoji)
+                elif isinstance(emoji, discord.PartialEmoji):
+                    if hasattr(bot, "emojis"):
+                        matched = discord.utils.get(bot.emojis, id=emoji.id)
+                        if matched and not getattr(matched, "is_usable", lambda: True)():
+                            continue
+                    return str(emoji)
         except Exception:
             continue
     return fallback
 
 
 class ErrorHandler(commands.Cog, name="ErrorHandler"):
-    """Global listener for prefix, hybrid, and slash command errors with secure diagnostic incident tracking."""
+    """Global listener for prefix, hybrid, and slash command errors with signature Kyoka Sovereign embeds."""
 
     def __init__(self, bot: commands.Bot) -> None:
         self.bot = bot
@@ -64,8 +66,6 @@ class ErrorHandler(commands.Cog, name="ErrorHandler"):
         error = getattr(error, "original", error)
 
         if isinstance(error, commands.CommandNotFound):
-            # Do not silently swallow a missing vouch command: that made a
-            # failed Vouches extension look like the bot ignored the message.
             attempted = (getattr(ctx, "invoked_with", "") or "").lower()
             if attempted in {"vouch", "vouchhelp", "rephelp", "vouchremove", "vouchchannel", "vouchregister", "vouchscan"}:
                 logger.error(
@@ -76,144 +76,185 @@ class ErrorHandler(commands.Cog, name="ErrorHandler"):
                 )
                 try:
                     await ctx.reply(
-                        "The vouch module is not loaded right now. The bot has logged the extension failure; "
-                        "please check the latest Render startup logs.",
+                        "The vouch module is currently synchronizing with server cache. Please check latest logs.",
                         mention_author=False,
                     )
                 except Exception:
                     pass
             return
 
-        err_icon = _error_emoji(self.bot, "ERROR", "icons_wrong", "icon_x", fallback="")
-        warn_icon = _error_emoji(self.bot, "WARNING", "icons_warning", "icon_warning", fallback="")
-        clock_icon = _error_emoji(self.bot, "TIME", "icons_clock", "loading", fallback="")
-        lock_icon = _error_emoji(self.bot, "LOCK", "icons_locked", "icon_lock", fallback="")
+        err_icon = _error_emoji(self.bot, "ERROR", "icons_wrong", "icon_x", fallback="❌")
+        warn_icon = _error_emoji(self.bot, "WARNING", "icons_warning", "icon_warning", fallback="⚠️")
+        clock_icon = _error_emoji(self.bot, "TIME", "icons_clock", "loading", fallback="⏳")
+        lock_icon = _error_emoji(self.bot, "LOCK", "icons_locked", "icon_lock", fallback="🔒")
 
-        err_sp = f"{err_icon} " if err_icon else ""
-        warn_sp = f"{warn_icon} " if warn_icon else ""
-        clock_sp = f"{clock_icon} " if clock_icon else ""
-        lock_sp = f"{lock_icon} " if lock_icon else ""
-
-        container = KyokaContainer(accent_color=None)
+        # Color and header states
+        color = KyokaTheme.ERROR
+        title = "Command Error"
+        body = "An error occurred while executing this command."
+        author_badge = "Command Alert"
 
         if isinstance(error, commands.MissingPermissions):
             missing_perms = ", ".join(f"`{p}`" for p in error.missing_permissions)
-            container.add_section(
-                content=(
-                    f"**{lock_sp}Permission Denied**\n"
-                    f"> You need the following permissions to execute this command:\n> {missing_perms}"
-                )
-            )
+            title = f"{lock_icon} Permission Denied"
+            body = f"> You need the following permission(s) to execute `{ctx.prefix}{ctx.command.qualified_name}`:\n> {missing_perms}"
+            author_badge = "Access Denied"
 
         elif isinstance(error, commands.BotMissingPermissions):
             missing_perms = ", ".join(f"`{p}`" for p in error.missing_permissions)
-            container.add_section(
-                content=(
-                    f"**{lock_sp}Bot Missing Permissions**\n"
-                    f"> I need the following permissions in this channel:\n> {missing_perms}"
-                )
+            title = f"{lock_icon} KYOKA Missing Permissions"
+            body = f"> I need the following permission(s) in this channel to perform that action:\n> {missing_perms}"
+            author_badge = "Bot Permission Required"
+
+        elif isinstance(error, discord.Forbidden):
+            title = f"{lock_icon} Action Forbidden (Discord 403)"
+            body = (
+                "> Discord rejected this operation because KYOKA lacks the necessary server permissions, "
+                "or the target user/role is higher than or equal to KYOKA in the role hierarchy.\n\n"
+                "> 💜 **Resolution:** Move KYOKA's highest role higher in `Server Settings > Roles` "
+                "and ensure KYOKA has administrative or moderation rights."
             )
+            author_badge = "Hierarchy Constraint"
 
         elif isinstance(error, commands.CommandOnCooldown):
-            container.add_section(
-                content=(
-                    f"**{clock_sp}Cooldown Active**\n"
-                    f"> This command is currently on cooldown. Try again in `{error.retry_after:.1f}s`."
-                )
+            color = KyokaTheme.WARNING
+            title = f"{clock_icon} Cooldown Active"
+            body = (
+                f"> This command is currently cooling down to preserve rate limits.\n"
+                f"> Please wait `{error.retry_after:.1f}s` before trying `{ctx.prefix}{ctx.command.qualified_name}` again."
             )
+            author_badge = "Rate Limited"
 
         elif type(error).__name__ == "PremiumRequiredError":
-            return
+            color = 0xA855F7
+            title = "👑 KYOKA Prime Feature"
+            body = (
+                "> This command requires an active KYOKA Prime subscription.\n\n"
+                "> 💜 **Tiers:** Pro ($4.99/mo) or Ultimate ($9.99/mo)\n"
+                "> 💜 **Activate:** Use `+license activate <key>` or check bot settings."
+            )
+            author_badge = "Prime Exclusive"
 
         elif isinstance(error, (commands.NotOwner, commands.CheckFailure)):
-            container.add_section(
-                content=(
-                    f"**{lock_sp}Access Denied**\n"
-                    f"> {str(error) or 'You do not have permission to use this command.'}"
-                )
-            )
+            title = f"{lock_icon} Access Denied"
+            body = f"> {str(error) or 'You do not have permission to execute this command in this server or channel.'}"
+            author_badge = "Authorization Failure"
 
         elif isinstance(error, commands.MissingRequiredArgument):
-            container.add_section(
-                content=(
-                    f"**{warn_sp}Invalid Command Usage**\n"
-                    f"> Missing required parameter: `{error.param.name}`\n"
-                    f"> Usage: `{ctx.prefix}{ctx.command.qualified_name} {ctx.command.signature}`"
-                )
+            color = KyokaTheme.WARNING
+            title = f"{warn_icon} Missing Parameter"
+            body = (
+                f"> Missing required parameter: `{error.param.name}`\n\n"
+                f"> 💜 **Usage:** `{ctx.prefix}{ctx.command.qualified_name} {ctx.command.signature}`\n"
+                f"> 💜 **Example:** `{ctx.prefix}{ctx.command.qualified_name} <{error.param.name}>`"
             )
+            author_badge = "Invalid Usage"
 
         elif isinstance(error, (commands.MemberNotFound, commands.UserNotFound)):
-            container.add_section(
-                content=(
-                    f"**{warn_sp}User Not Found**\n"
-                    f"> Could not find a member or user matching `{discord.utils.escape_markdown(str(error.argument))}`.\n"
-                    f"> *Tip: Try mentioning the user (@User) or providing their 17–19 digit Discord ID.*"
-                )
+            color = KyokaTheme.WARNING
+            title = f"{warn_icon} Member Not Found"
+            arg_clean = discord.utils.escape_markdown(str(getattr(error, "argument", "Unknown")))
+            body = (
+                f"> Could not find a member matching `{arg_clean}`.\n\n"
+                f"> 💜 **Tip:** Mention the user (`@User`) or provide their 17–19 digit Discord snowflake ID."
             )
+            author_badge = "Target Unresolved"
 
         elif isinstance(error, commands.ChannelNotFound):
-            container.add_section(
-                content=(
-                    f"**{warn_sp}Channel Not Found**\n"
-                    f"> Could not find channel `{discord.utils.escape_markdown(str(error.argument))}`."
-                )
-            )
+            color = KyokaTheme.WARNING
+            title = f"{warn_icon} Channel Not Found"
+            arg_clean = discord.utils.escape_markdown(str(getattr(error, "argument", "Unknown")))
+            body = f"> Could not find channel matching `{arg_clean}`."
+            author_badge = "Channel Unresolved"
 
         elif isinstance(error, commands.RoleNotFound):
-            container.add_section(
-                content=(
-                    f"**{warn_sp}Role Not Found**\n"
-                    f"> Could not find role `{discord.utils.escape_markdown(str(error.argument))}`."
-                )
-            )
+            color = KyokaTheme.WARNING
+            title = f"{warn_icon} Role Not Found"
+            arg_clean = discord.utils.escape_markdown(str(getattr(error, "argument", "Unknown")))
+            body = f"> Could not find role matching `{arg_clean}`."
+            author_badge = "Role Unresolved"
 
         elif isinstance(error, commands.BadUnionArgument):
-            container.add_section(
-                content=(
-                    f"**{warn_sp}Invalid Argument**\n"
-                    f"> Could not resolve `{error.param.name}`. Please mention a valid user/role or provide an ID."
-                )
-            )
+            color = KyokaTheme.WARNING
+            title = f"{warn_icon} Invalid Argument"
+            body = f"> Could not resolve `{error.param.name}`. Please mention a valid user, channel, or role, or provide an ID."
+            author_badge = "Argument Mismatch"
 
         elif isinstance(error, commands.BadLiteralArgument):
+            color = KyokaTheme.WARNING
             options = ", ".join(f"`{opt}`" for opt in error.literals)
-            container.add_section(
-                content=(
-                    f"**{warn_sp}Invalid Choice**\n"
-                    f"> Valid options for `{error.param.name}` are: {options}"
-                )
-            )
+            title = f"{warn_icon} Invalid Selection"
+            body = f"> Valid choices for `{error.param.name}` are: {options}"
+            author_badge = "Choice Mismatch"
 
         elif isinstance(error, commands.RangeError):
-            container.add_section(
-                content=(
-                    f"**{warn_sp}Value Out of Range**\n"
-                    f"> `{error.value}` is out of range. Must be between `{error.minimum}` and `{error.maximum}`."
-                )
-            )
+            color = KyokaTheme.WARNING
+            title = f"{warn_icon} Value Out of Range"
+            body = f"> Value `{error.value}` is out of range. Must be between `{error.minimum}` and `{error.maximum}`."
+            author_badge = "Range Limit"
 
         elif isinstance(error, commands.TooManyArguments):
-            container.add_section(
-                content=(
-                    f"**{warn_sp}Too Many Arguments**\n"
-                    f"> Too many arguments were passed to `{ctx.command.qualified_name}`.\n"
-                    f"> Usage: `{ctx.prefix}{ctx.command.qualified_name} {ctx.command.signature}`"
-                )
+            color = KyokaTheme.WARNING
+            title = f"{warn_icon} Too Many Arguments"
+            body = (
+                f"> Too many arguments were provided for `{ctx.command.qualified_name}`.\n\n"
+                f"> 💜 **Usage:** `{ctx.prefix}{ctx.command.qualified_name} {ctx.command.signature}`"
             )
+            author_badge = "Syntax Error"
 
         elif isinstance(error, commands.BadArgument):
-            container.add_section(
-                content=(
-                    f"**{warn_sp}Invalid Command Argument**\n"
-                    f"> {str(error)}\n"
-                    f"> Usage: `{ctx.prefix}{ctx.command.qualified_name} {ctx.command.signature}`"
-                )
+            color = KyokaTheme.WARNING
+            title = f"{warn_icon} Invalid Command Argument"
+            body = (
+                f"> {str(error)}\n\n"
+                f"> 💜 **Usage:** `{ctx.prefix}{ctx.command.qualified_name} {ctx.command.signature}`"
             )
+            author_badge = "Syntax Error"
 
-        elif isinstance(error, discord.HTTPException) and error.status == 429:
+        elif isinstance(error, commands.DisabledCommand):
+            title = f"{lock_icon} Command Disabled"
+            body = f"> `{ctx.prefix}{ctx.command.qualified_name}` is currently disabled by administrators."
+            author_badge = "Disabled"
+
+        elif isinstance(error, commands.NoPrivateMessage):
+            title = "⛩️ Server Channel Required"
+            body = "> This command can only be used inside a Discord server channel, not in Direct Messages."
+            author_badge = "Guild Only"
+
+        elif isinstance(error, commands.PrivateMessageOnly):
+            title = "📩 Direct Message Required"
+            body = "> This command is designed to be executed only inside Direct Messages with KYOKA."
+            author_badge = "DM Only"
+
+        elif isinstance(error, commands.NSFWChannelRequired):
+            title = "🔞 Age-Restricted Channel Required"
+            body = "> This command contains mature content and can only be used in Age-Restricted (NSFW) channels."
+            author_badge = "NSFW Enforced"
+
+        elif isinstance(error, commands.MaxConcurrencyReached):
+            color = KyokaTheme.WARNING
+            title = f"{clock_icon} Concurrency Limit Reached"
+            body = "> This command is already actively running another request in this channel. Please wait for it to complete."
+            author_badge = "Busy"
+
+        elif "wavelink" in type(error).__module__ or any(k in type(error).__name__ for k in ("NoNodeAvailable", "Lavalink", "NodeException", "TrackLoadError")):
+            color = 0xEC4899  # Music Pink
+            title = "🎵 Audio Engine Synchronizing"
+            body = (
+                "> The audio streaming node is currently synchronizing with Discord voice servers.\n\n"
+                f"> 💜 **Resolution:** Please verify you are in an active voice channel and retry `{ctx.prefix}{ctx.command.qualified_name}` in a few seconds."
+            )
+            author_badge = "Audio Protocol"
+
+        elif isinstance(error, discord.NotFound):
+            color = KyokaTheme.WARNING
+            title = f"{warn_icon} Resource Not Found"
+            body = "> The target Discord message, channel, or interaction has expired or was removed."
+            author_badge = "Expired"
+
+        elif isinstance(error, discord.HTTPException) and getattr(error, "status", 0) == 429:
             logger.error(
-                f"Discord REST API 429 Rate Limit active during '{ctx.command}': {error}. "
-                "Suppressing error message response to avoid extending rate limit window."
+                f"Discord REST API 429 Rate Limit active during '{ctx.command}': {error}."
             )
             return
 
@@ -223,86 +264,166 @@ class ErrorHandler(commands.Cog, name="ErrorHandler"):
             tb = "".join(traceback.format_exception(type(error), error, error.__traceback__))
             logger.error(f"[Incident {incident_id}] Unhandled error in '{ctx.command}': {error}\n{tb}")
 
-            container.add_section(
-                content=(
-                    f"**{err_icon}Internal Error**\n"
-                    f"> An unexpected error occurred while executing this command.\n"
-                    f"> **Diagnostic Incident ID:** `{incident_id}`\n"
-                    f"> *The incident has been securely recorded on the server. Please report this Incident ID to bot administrators.*"
-                )
+            title = f"{err_icon} System Diagnostic Alert"
+            body = (
+                f"> An unexpected internal exception interrupted `{ctx.command.qualified_name}`.\n\n"
+                f"> 💜 **Incident Reference:** `{incident_id}`\n"
+                f"> 💜 **Status:** Telemetry securely recorded on host server.\n\n"
+                f"> *Please report this Incident ID to bot administrators if the issue persists.*"
+            )
+            author_badge = "Diagnostic Trace"
+
+        # Apply custom guild UI color if available
+        guild = getattr(ctx, "guild", None)
+        if guild and hasattr(self.bot, "guild_mgr"):
+            custom_color = self.bot.guild_mgr.get_ui_color(guild.id, default=None)
+            if custom_color is not None and color == KyokaTheme.ERROR:
+                pass  # Keep high-visibility red for critical errors, but respect theme for others
+            elif custom_color is not None:
+                color = custom_color
+
+        # Build signature Kyoka Sovereign Embed
+        clean_title = sanitize_emoji_string(title, bot=self.bot)
+        clean_body = sanitize_emoji_string(body, bot=self.bot)
+
+        embed = discord.Embed(
+            title=clean_title[:256],
+            description=clean_body[:4000],
+            color=color,
+            timestamp=discord.utils.utcnow(),
+        )
+
+        author = ctx.author
+        if author:
+            embed.set_author(
+                name=f"{author.display_name} • {author_badge}",
+                icon_url=author.display_avatar.url,
             )
 
-        container.add_separator(divider=True)
-        container.add_text(f"-# Requested by {ctx.author.display_name}")
+        footer_icon = self.bot.user.display_avatar.url if self.bot.user else None
+        cmd_name = getattr(ctx.command, "qualified_name", "unknown")
+        embed.set_footer(
+            text=f"✧ KYOKA Suigetsu Protocol • {ctx.prefix}{cmd_name}",
+            icon_url=footer_icon,
+        )
 
         try:
-            await send_container_response(ctx, container, ephemeral=True)
-        except Exception as send_error:
-            logger.warning("Failed to deliver error container; attempting plain-text fallback: %s", type(send_error).__name__)
+            inter = getattr(ctx, "interaction", None)
+            if inter:
+                if inter.response.is_done():
+                    await inter.followup.send(embed=embed, ephemeral=True)
+                else:
+                    await inter.response.send_message(embed=embed, ephemeral=True)
+            else:
+                await ctx.reply(embed=embed, mention_author=False)
+        except Exception:
             try:
-                await ctx.reply("KYOKA encountered an error while handling this command. Please try again.", mention_author=False)
-            except Exception as fallback_error:
-                logger.debug("Plain-text command error fallback also failed: %s", type(fallback_error).__name__)
+                await ctx.send(embed=embed)
+            except Exception as send_err:
+                logger.warning(f"Failed to deliver command error embed: {send_err}")
 
     async def on_app_command_error(
         self, interaction: discord.Interaction, error: app_commands.AppCommandError
     ) -> None:
-        """Handle errors occurring during slash command execution."""
+        """Handle errors occurring during slash command execution with signature Kyoka Sovereign embeds."""
         error = getattr(error, "original", error)
 
         incident_id = f"INC-{uuid.uuid4().hex[:8].upper()}"
         tb = "".join(traceback.format_exception(type(error), error, error.__traceback__))
-        # Include safe identifiers so an incident can be traced from the user's
-        # Discord error card to Render logs without logging message content or tokens.
         command_name = getattr(interaction.command, "qualified_name", None) or "unknown"
         guild_id = interaction.guild_id
         user_id = interaction.user.id if interaction.user else None
-        logger.error(
-            "[Slash Incident %s] command=%s guild_id=%s user_id=%s "
-            "interaction_id=%s error_type=%s error=%s\\n%s",
-            incident_id,
-            command_name,
-            guild_id,
-            user_id,
-            interaction.id,
-            type(error).__name__,
-            str(error),
-            tb,
-        )
+
+        color = KyokaTheme.ERROR
+        title = "❌ Slash Command Interrupted"
+        author_badge = "Command Alert"
 
         if isinstance(error, app_commands.CommandOnCooldown):
-            msg = f"⏳ **Cooldown Active:** Please wait `{error.retry_after:.1f}s` before trying again."
-        elif isinstance(error, (app_commands.MissingPermissions, app_commands.BotMissingPermissions, app_commands.CheckFailure)):
-            msg = f"🔒 **Access Denied:** {str(error) or 'You do not have permission to execute this slash command.'}"
-        else:
-            msg = (
-                f"❌ **Internal Error:** An unexpected error occurred while processing this interaction.\n"
-                f"> **Diagnostic Incident ID:** `{incident_id}`\n"
-                f"> *Please report this Incident ID to bot administrators.*"
+            color = KyokaTheme.WARNING
+            title = "⏳ Cooldown Active"
+            body = (
+                f"> This command is cooling down to preserve rate limits.\n"
+                f"> Please wait `{error.retry_after:.1f}s` before trying `/{command_name}` again."
             )
+            author_badge = "Rate Limited"
+
+        elif isinstance(error, (app_commands.MissingPermissions, app_commands.BotMissingPermissions, app_commands.CheckFailure)):
+            title = "🔒 Access Denied"
+            body = f"> {str(error) or 'You do not have permission to execute this slash command in this channel.'}"
+            author_badge = "Access Denied"
+
+        elif isinstance(error, discord.Forbidden):
+            title = "🔒 Action Forbidden (Discord 403)"
+            body = (
+                "> Discord rejected this operation because KYOKA lacks the necessary server permissions, "
+                "or the target user/role is higher than or equal to KYOKA in the role hierarchy."
+            )
+            author_badge = "Hierarchy Constraint"
+
+        elif "wavelink" in type(error).__module__ or any(k in type(error).__name__ for k in ("NoNodeAvailable", "Lavalink", "NodeException")):
+            color = 0xEC4899
+            title = "🎵 Audio Protocol Synchronizing"
+            body = (
+                "> The audio streaming node is currently synchronizing with Discord voice servers.\n"
+                "> Please verify you are in a voice channel and retry in a few moments."
+            )
+            author_badge = "Audio Protocol"
+
+        else:
+            logger.error(
+                "[Slash Incident %s] command=%s guild_id=%s user_id=%s "
+                "interaction_id=%s error_type=%s error=%s\n%s",
+                incident_id,
+                command_name,
+                guild_id,
+                user_id,
+                interaction.id,
+                type(error).__name__,
+                str(error),
+                tb,
+            )
+            title = "❌ System Diagnostic Alert"
+            body = (
+                f"> An unexpected internal exception interrupted `/{command_name}`.\n\n"
+                f"> 💜 **Incident Reference:** `{incident_id}`\n"
+                f"> 💜 **Status:** Telemetry securely recorded on host server.\n\n"
+                f"> *Please report this Incident ID to bot administrators if the issue persists.*"
+            )
+            author_badge = "Diagnostic Trace"
+
+        embed = discord.Embed(
+            title=sanitize_emoji_string(title, bot=self.bot)[:256],
+            description=sanitize_emoji_string(body, bot=self.bot)[:4000],
+            color=color,
+            timestamp=discord.utils.utcnow(),
+        )
+
+        user = interaction.user
+        if user:
+            embed.set_author(
+                name=f"{user.display_name} • {author_badge}",
+                icon_url=user.display_avatar.url,
+            )
+
+        footer_icon = self.bot.user.display_avatar.url if self.bot.user else None
+        embed.set_footer(
+            text=f"✧ KYOKA Suigetsu Protocol • /{command_name}",
+            icon_url=footer_icon,
+        )
 
         try:
             if not interaction.response.is_done():
-                await interaction.response.send_message(msg, ephemeral=True)
+                await interaction.response.send_message(embed=embed, ephemeral=True)
             else:
-                await interaction.followup.send(msg, ephemeral=True)
-        except (discord.NotFound, discord.InteractionResponded) as send_err:
-            # The interaction token may have expired or already been acknowledged.
-            logger.warning(
-                "Could not deliver slash error card (incident_id=%s command=%s): %s",
-                incident_id, command_name, type(send_err).__name__,
-            )
+                await interaction.followup.send(embed=embed, ephemeral=True)
+        except (discord.NotFound, discord.InteractionResponded):
             if interaction.channel and hasattr(interaction.channel, "send"):
                 try:
-                    await interaction.channel.send(msg)
+                    await interaction.channel.send(embed=embed)
                 except Exception:
                     pass
         except Exception as send_err:
-            logger.exception(
-                "Slash error response failed (incident_id=%s command=%s); "
-                "the original callback error is logged above.",
-                incident_id, command_name, exc_info=send_err,
-            )
+            logger.exception("Slash error response failed", exc_info=send_err)
 
 
 async def setup(bot: commands.Bot) -> None:

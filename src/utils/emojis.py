@@ -527,6 +527,8 @@ class EmojiRegistry:
                     break
 
         if emoji:
+            if isinstance(emoji, discord.Emoji) and not getattr(emoji, "is_usable", lambda: True)():
+                return fallback
             return str(emoji)
 
         # If a category was passed, try category resolver
@@ -543,6 +545,8 @@ class EmojiRegistry:
             try:
                 emoji = self.get_emoji_obj(name)
                 if emoji is not None and getattr(emoji, "animated", False):
+                    if isinstance(emoji, discord.Emoji) and not getattr(emoji, "is_usable", lambda: True)():
+                        continue
                     return str(emoji)
             except Exception:
                 continue
@@ -557,11 +561,24 @@ class EmojiRegistry:
             raw = self._custom_mappings[upper_key]
             match = re.match(r"<(a?):([a-zA-Z0-9_]+):([0-9]+)>", raw)
             if match:
-                return discord.PartialEmoji(
-                    name=match.group(2),
-                    id=int(match.group(3)),
-                    animated=match.group(1) == "a",
-                )
+                eid = int(match.group(3))
+                # Validate against bot emoji cache if available
+                if hasattr(self.bot, "emojis"):
+                    known = discord.utils.get(self.bot.emojis, id=eid)
+                    if known and not getattr(known, "is_usable", lambda: True)():
+                        pass
+                    else:
+                        return discord.PartialEmoji(
+                            name=match.group(2),
+                            id=eid,
+                            animated=match.group(1) == "a",
+                        )
+                else:
+                    return discord.PartialEmoji(
+                        name=match.group(2),
+                        id=eid,
+                        animated=match.group(1) == "a",
+                    )
 
         emoji = self._emojis.get(name_clean)
         if not emoji and hasattr(self.bot, "emojis"):
@@ -574,6 +591,9 @@ class EmojiRegistry:
                     emoji = discord.utils.get(self.bot.emojis, name=alias)
                 if emoji:
                     break
+
+        if emoji and isinstance(emoji, discord.Emoji) and not getattr(emoji, "is_usable", lambda: True)():
+            return None
 
         return emoji
 
@@ -593,3 +613,40 @@ class EmojiRegistry:
         if fallback_unicode:
             return {"name": fallback_unicode}
         return None
+
+
+def sanitize_emoji_string(text: str, bot: Optional[commands.Bot] = None) -> str:
+    """
+    Sanitize any custom emoji tags in text that cannot be rendered, falling back to clean unicode.
+    Prevents raw leaked strings like <:error:1573329197454069780> from showing on Discord.
+    """
+    if not text or "<" not in text:
+        return text
+
+    def _repl(match: re.Match) -> str:
+        name = match.group(2).lower()
+        eid = int(match.group(3))
+        if bot and hasattr(bot, "emojis"):
+            e = discord.utils.get(bot.emojis, id=eid)
+            if e and getattr(e, "is_usable", lambda: True)():
+                return match.group(0)
+
+        # Inaccessible external emoji fallback
+        if any(k in name for k in ("error", "wrong", "fail", "no", "x")):
+            return "❌"
+        if any(k in name for k in ("warn", "alert", "caution")):
+            return "⚠️"
+        if any(k in name for k in ("lock", "secure", "private")):
+            return "🔒"
+        if any(k in name for k in ("time", "clock", "load", "wait")):
+            return "⏳"
+        if any(k in name for k in ("check", "success", "tick", "yes")):
+            return "✅"
+        if any(k in name for k in ("music", "song", "audio", "note")):
+            return "🎵"
+        if any(k in name for k in ("sparkle", "star", "glow", "ai")):
+            return "✨"
+        return "💜"
+
+    return re.sub(r"<(a?):([a-zA-Z0-9_]+):([0-9]+)>", _repl, text)
+

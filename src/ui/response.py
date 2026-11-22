@@ -17,7 +17,7 @@ import discord
 from discord.ext import commands
 
 try:
-    from src.utils.emojis import CATEGORY_FALLBACK_EMOJIS
+    from src.utils.emojis import CATEGORY_FALLBACK_EMOJIS, sanitize_emoji_string
 except ImportError:
     CATEGORY_FALLBACK_EMOJIS = {
         "SUCCESS": "✅",
@@ -32,6 +32,8 @@ except ImportError:
         "PREMIUM": "👑",
         "INFO": "ℹ️",
     }
+    def sanitize_emoji_string(text: str, bot: Any = None) -> str:
+        return text
 
 if TYPE_CHECKING:
     from src.core.bot import KyokaBot
@@ -140,11 +142,11 @@ class KyokaResponse:
         # Clean title with custom emoji
         formatted_title = f"{emoji_prefix} {self.title}".strip() if emoji_prefix else self.title
 
-        # Mobile-First Nyxium quote block formatting
+        # Mobile-First Kyoka Sovereign quote block formatting with signature violet diamonds
         final_desc = self.description or ""
         fields_to_add = []
         if self.fields and not any(isinstance(f[1], str) and len(f[1]) > 500 for f in self.fields):
-            quote_lines = [f"> **{name}:** {value}" for name, value, _ in self.fields]
+            quote_lines = [f"> 💜 **{name}:** {value}" for name, value, _ in self.fields]
             block = "\n".join(quote_lines)
             if final_desc:
                 final_desc = f"{final_desc}\n{block}"
@@ -153,15 +155,19 @@ class KyokaResponse:
         else:
             fields_to_add = self.fields
 
+        clean_title = sanitize_emoji_string(formatted_title, bot=bot) if formatted_title else None
+        clean_desc = sanitize_emoji_string(final_desc, bot=bot) if final_desc else None
+
         embed = discord.Embed(
-            title=formatted_title[:256] if formatted_title else None,
-            description=final_desc[:4000] if final_desc else None,
+            title=clean_title[:256] if clean_title else None,
+            description=clean_desc[:4000] if clean_desc else None,
             color=self.color,
             timestamp=self.timestamp,
         )
 
         if self.author_name:
-            embed.set_author(name=self.author_name[:256], icon_url=self.author_icon_url)
+            tag = " • KYOKA System" if "•" not in self.author_name else ""
+            embed.set_author(name=f"{self.author_name}{tag}"[:256], icon_url=self.author_icon_url)
 
         if self.thumbnail_url:
             embed.set_thumbnail(url=self.thumbnail_url)
@@ -170,13 +176,15 @@ class KyokaResponse:
             embed.set_image(url=self.image_url)
 
         for name, value, inline in fields_to_add[:25]:
-            field_name = str(name)[:256]
-            field_val = str(value)[:1024]
+            field_name = sanitize_emoji_string(str(name), bot=bot)[:256]
+            field_val = sanitize_emoji_string(str(value), bot=bot)[:1024]
             embed.add_field(name=field_name, value=field_val, inline=inline)
 
-        footer_text = self.footer_text
+        footer_text = self.footer_text or "KYOKA — Suigetsu Protocol"
+        if not footer_text.startswith("✧ "):
+            footer_text = f"✧ {footer_text}"
         embed.set_footer(
-            text=footer_text[:2048] if footer_text else "KYOKA — Aizen Edition",
+            text=footer_text[:2048],
             icon_url=self.footer_icon_url,
         )
 
