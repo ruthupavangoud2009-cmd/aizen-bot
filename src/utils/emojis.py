@@ -342,8 +342,10 @@ class EmojiRegistry:
         asset_dirs = [
             _DATA_DIR.parent / "assets" / "emoji",
             _DATA_DIR.parent / "assets" / "emoji2",
+            _DATA_DIR.parent / "assets" / "emoji_custom",
             _DATA_DIR.parent / "assets" / "music",
             _DATA_DIR.parent / "assets" / "avatar",
+            _DATA_DIR.parent / "assets" / "branding",
         ]
         created_count = 0
         existing_names = set(self._emojis.keys())
@@ -414,6 +416,54 @@ class EmojiRegistry:
         if fallback:
             return fallback
         return CATEGORY_FALLBACK_EMOJIS.get(cat_key, "•")
+
+    def get_animated(self, concept_or_name: str, fallback: str = "✨") -> str:
+        """
+        Resolve an animated custom application emoji by concept, mood, or keyword.
+        Matches keywords (sparkle, heart, verify, loading, defense, coin, hype, fire, etc.)
+        to active animated application emojis on the bot.
+        """
+        clean = concept_or_name.lower().strip(": ")
+        concept_map: dict[str, list[str]] = {
+            "sparkle": ["sparkle_shine", "ai", "icons_magicwand"],
+            "ai": ["sparkle_shine", "ai"],
+            "magic": ["sparkle_shine"],
+            "love": ["heart_pulse", "heart_dot"],
+            "heart": ["heart_pulse", "heart_dot"],
+            "verify": ["verified_glow", "icons_verified"],
+            "success": ["verified_glow", "icon_success"],
+            "shield": ["antinuke_pulse", "antinuke_shield"],
+            "defense": ["antinuke_pulse", "antinuke_shield"],
+            "security": ["antinuke_pulse"],
+            "loading": ["loading_pulse", "icons_loading"],
+            "wait": ["loading_pulse"],
+            "coin": ["coin_spin", "icon_casino"],
+            "money": ["coin_spin", "icon_dollar"],
+            "win": ["verified_glow", "coin_spin"],
+            "fire": ["heart_pulse", "icon_fire"],
+        }
+        candidates = concept_map.get(clean, [clean, f"{clean}_pulse", f"{clean}_glow", f"{clean}_spin", f"{clean}_shine"])
+        for name in candidates:
+            obj = self.get_emoji_obj(name)
+            if obj is not None and getattr(obj, "animated", False):
+                return str(obj)
+        for name in candidates:
+            obj = self.get_emoji_obj(name)
+            if obj is not None:
+                return str(obj)
+        return fallback
+
+    def list_animated(self) -> list[discord.Emoji | discord.PartialEmoji]:
+        """List all currently accessible animated application/guild emojis."""
+        res: list[discord.Emoji | discord.PartialEmoji] = []
+        for e in self._emojis.values():
+            if getattr(e, "animated", False):
+                res.append(e)
+        if hasattr(self.bot, "emojis"):
+            for e in self.bot.emojis:
+                if getattr(e, "animated", False) and e.id not in {getattr(x, "id", 0) for x in res}:
+                    res.append(e)
+        return res
 
     def get_category_obj(self, category: str) -> discord.Emoji | discord.PartialEmoji | str:
         """Resolve a discord.Emoji, PartialEmoji, or clean icon for UI Buttons/Select menus."""

@@ -347,13 +347,18 @@ class CompanionAI(commands.Cog):
             await ctx.send(reply[:1950])
             return
 
+        reg = getattr(self.bot, "custom_emojis", None)
+        sparkle = reg.get_animated("sparkle", fallback="") if reg else ""
+        formatted_title = f"{sparkle} {p_def['title']}".strip() if sparkle else p_def["title"]
+
         embed = discord.Embed(
-            title=p_def["title"],
+            title=formatted_title,
             description=reply[:4000],
             color=p_def["color"],
         )
+        embed.set_author(name=ctx.author.display_name, icon_url=ctx.author.display_avatar.url)
         embed.set_footer(
-            text=f"Aizen AI Engine • Use {ctx.prefix}ai reset to clear memory",
+            text=f"-# Prompted by {ctx.author.display_name} • Aizen AI Engine",
             icon_url=ctx.author.display_avatar.url,
         )
         if gif_url:
@@ -622,6 +627,66 @@ class CompanionAI(commands.Cog):
         embed.set_footer(text=f"Use {ctx.prefix}ai persona <name> to activate")
         view = PersonaSelectView(self, is_admin=self._is_admin_or_owner(ctx.author, ctx.guild))
         await ctx.send(embed=embed, view=view)
+
+    @ai.command(name="emoji", aliases=["animatedemoji", "emojify", "em"], help="AI animated emoji search and reaction generator.")
+    async def ai_emoji(self, ctx: CustomContext, *, query: str = "") -> None:
+        """Search, recommend, or react with animated Discord application emojis using AI."""
+        reg = getattr(self.bot, "custom_emojis", None)
+        animated_emojis = reg.list_animated() if reg and hasattr(reg, "list_animated") else []
+
+        if not query.strip():
+            sparkle = reg.get_animated("sparkle", fallback="✨") if reg else "✨"
+            desc_lines = [
+                f"> **Available Animated Emojis:** `{len(animated_emojis)} active`",
+                "> Use `+ai emoji <mood | concept | query>` to generate an AI animated reaction.\n",
+            ]
+            if animated_emojis:
+                display_emojis = " ".join(str(e) for e in animated_emojis[:20])
+                desc_lines.append(f"**Application Emojis:**\n{display_emojis}\n")
+            else:
+                desc_lines.append(f"**Standard Emojis:**\n✨ 💜 ⛩️ 🛡️ 🎵 ⚔️ 👑 ⚡ 🌀 💫\n")
+
+            desc_lines.append(f"-# Type `{ctx.prefix}ai emoji <topic>` to let AI pick the best animated reaction.")
+
+            embed = discord.Embed(
+                title=f"{sparkle} Animated Emoji Studio",
+                description="\n".join(desc_lines),
+                color=AIZEN_PURPLE,
+            )
+            embed.set_author(name=ctx.author.display_name, icon_url=ctx.author.display_avatar.url)
+            embed.set_footer(text="KYOKA 3.0 • AI Animated Expressions", icon_url=ctx.guild.icon.url if ctx.guild and ctx.guild.icon else None)
+            return await ctx.send(embed=embed)
+
+        matched_emoji = reg.get_animated(query, fallback="") if reg else ""
+        sparkle = reg.get_animated("sparkle", fallback="✨") if reg else "✨"
+
+        prompt = f"Express a short, punchy 1-sentence reaction for: '{query}'. Use expressive words and stylish formatting."
+        session = self._get_session()
+        try:
+            async with ctx.typing():
+                reaction_text = await self.bot.ai_mgr.generate_persona_reply(
+                    session=session,
+                    guild_id=ctx.guild.id if ctx.guild else 0,
+                    user_id=ctx.author.id,
+                    persona_key="normal",
+                    prompt=prompt,
+                    server_name=ctx.guild.name if ctx.guild else "Discord",
+                    enforce_cooldown=False,
+                )
+        except Exception:
+            reaction_text = f"Spiritual pressure resonates with '{query}'."
+
+        emoji_showcase = f"{matched_emoji} " if matched_emoji else f"{sparkle} "
+        clean_reaction = reaction_text.replace("\n", " ").strip()[:250]
+
+        embed = discord.Embed(
+            title=f"{emoji_showcase}AI Animated Expression",
+            description=f"> {clean_reaction}\n\n**Matched Emoji:** {matched_emoji or sparkle} `query: {query}`",
+            color=AIZEN_PURPLE,
+        )
+        embed.set_author(name=ctx.author.display_name, icon_url=ctx.author.display_avatar.url)
+        embed.set_footer(text=f"Requested by {ctx.author.display_name} • KYOKA AI", icon_url=ctx.author.display_avatar.url)
+        await ctx.send(embed=embed)
 
     @ai.command(name="persona", aliases=["setpersona"])
     @commands.guild_only()

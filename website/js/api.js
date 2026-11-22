@@ -416,6 +416,7 @@ export const OFFICIAL_COMMANDS_CATALOG = [
   { group: "Utility", name: "+setprefix <prefix>", description: "Change default server command prefix.", category: "Utility" },
   { group: "Utility", name: "+afk [reason]", description: "Set automatic AFK responder status when mentioned.", category: "Utility" },
   { group: "Artificial Intelligence", name: "+ai <prompt>", description: "Query Lord Aizen neural persona with high-speed intelligence.", category: "Artificial Intelligence" },
+  { group: "Artificial Intelligence", name: "+ai emoji <query>", description: "AI-driven animated emoji search and reaction generator.", category: "Artificial Intelligence" },
   { group: "Artificial Intelligence", name: "+va <speech>", description: "Speak text into current voice channel using studio TTS.", category: "Artificial Intelligence" }
 ];
 

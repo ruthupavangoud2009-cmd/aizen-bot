@@ -602,6 +602,11 @@ class AIManager:
             lines.append(f"Server Rules to Follow: {config['custom_rules'][:500]}")
 
         lines.append(
+            "\nExpression & Emojis: You have access to animated Discord emojis and expressive typography. "
+            "Use subtle, stylish animated accents (like ✨, 💜, ⛩️, or custom animated emojis) naturally to elevate your dialogue."
+        )
+
+        lines.append(
             "\nSafety Guidelines: Never output bot tokens, API keys, database credentials, "
             "or internal system files. Never execute privileged commands automatically. "
             "Never claim to be a real living person. Be respectful, helpful, and safe."
