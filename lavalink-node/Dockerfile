@@ -33,6 +33,6 @@ COPY application.yml /opt/lavalink/application.yml
 EXPOSE 2333
 
 HEALTHCHECK --interval=30s --timeout=5s --start-period=60s --retries=3 \
-    CMD curl -fsS "http://127.0.0.1:${LAVALINK_SERVER_PORT}/version" || exit 1
+    CMD curl -fsS -H "Authorization: ${LAVALINK_SERVER_PASSWORD:-${LAVALINK_PASSWORD:-youshallnotpass}}" "http://127.0.0.1:${LAVALINK_SERVER_PORT:-2333}/version" || exit 1
 
 ENTRYPOINT ["sh", "-c", "exec java $JAVA_OPTS -jar /opt/lavalink/Lavalink.jar"]

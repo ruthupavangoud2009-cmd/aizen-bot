@@ -35,6 +35,9 @@ from scripts.run_combined import (
     verify_configuration,
     ensure_java_runtime,
     verify_lavalink_auth,
+    probe_http_version,
+    probe_http_version_auth,
+    get_configured_passwords,
     CombinedSupervisor,
     INTERNAL_HOST,
     INTERNAL_PORT,
@@ -178,6 +181,65 @@ class TestLavalinkProductionHotfix(unittest.TestCase):
         with patch.dict(os.environ, {"LAVALINK_READINESS_TIMEOUT": "180"}):
             timeout = float(os.getenv("LAVALINK_READINESS_TIMEOUT", "300.0"))
             self.assertEqual(timeout, 180.0)
+
+    def test_probe_http_version_sends_authorization_header(self):
+        """Verify that probe_http_version passes Authorization header to Lavalink /version."""
+        import urllib.request
+        with patch("urllib.request.urlopen") as mock_urlopen:
+            mock_resp = MagicMock()
+            mock_resp.status = 200
+            mock_resp.read.return_value = b"4.2.2\n"
+            mock_resp.__enter__.return_value = mock_resp
+            mock_urlopen.return_value = mock_resp
+
+            ok, ver = probe_http_version("127.0.0.1", 2333, password="supersecretpass")
+            self.assertTrue(ok)
+            self.assertEqual(ver, "4.2.2")
+
+            # Check that the request was made with Authorization header
+            call_args = mock_urlopen.call_args
+            req = call_args[0][0]
+            self.assertIsInstance(req, urllib.request.Request)
+            self.assertEqual(req.headers.get("Authorization"), "supersecretpass")
+            self.assertEqual(req.full_url, "http://127.0.0.1:2333/version")
+
+    def test_probe_http_version_auth_fallback_on_401(self):
+        """Verify that if candidate password gives 401, next candidate is tried."""
+        import urllib.error
+        with patch("urllib.request.urlopen") as mock_urlopen:
+            mock_resp = MagicMock()
+            mock_resp.status = 200
+            mock_resp.read.return_value = b"4.2.2"
+            mock_resp.__enter__.return_value = mock_resp
+
+            # First password fails with 401 Unauthorized, second succeeds
+            mock_urlopen.side_effect = [
+                urllib.error.HTTPError("http://127.0.0.1:2333/version", 401, "Unauthorized", {}, None),
+                mock_resp,
+            ]
+
+            ok, ver, matched_pw = probe_http_version_auth(
+                "127.0.0.1",
+                2333,
+                candidate_passwords=["wrongpass", "rightpass"],
+            )
+            self.assertTrue(ok)
+            self.assertEqual(ver, "4.2.2")
+            self.assertEqual(matched_pw, "rightpass")
+
+    def test_probe_http_version_connection_refused(self):
+        """Verify that connection failure returns False without throwing."""
+        with patch("urllib.request.urlopen", side_effect=ConnectionRefusedError(111, "Connection refused")):
+            ok, err = probe_http_version("127.0.0.1", 2333, password="test")
+            self.assertFalse(ok)
+            self.assertIn("Connection refused", err)
+
+    def test_get_configured_passwords(self):
+        """Verify get_configured_passwords resolves env and default fallbacks."""
+        with patch.dict(os.environ, {"LAVALINK_PASSWORD": "mycustompassword"}):
+            pws = get_configured_passwords()
+            self.assertIn("mycustompassword", pws)
+            self.assertIn("youshallnotpass", pws)
 
 
 if __name__ == "__main__":

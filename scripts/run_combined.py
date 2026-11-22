@@ -24,6 +24,7 @@ from __future__ import annotations
 
 import os
 import sys
+import re
 import time
 import signal
 import shutil
@@ -314,18 +315,88 @@ def check_port_open(host: str, port: int) -> bool:
         return sock.connect_ex((host, port)) == 0
 
 
-def probe_http_version(host: str, port: int, timeout: float = 1.5) -> tuple[bool, str]:
-    """Probe Lavalink /version endpoint."""
+def get_configured_passwords() -> list[str]:
+    """Extract candidate passwords from environment, configuration file, and defaults."""
+    pw_list: list[str] = []
+    env_pw = os.getenv("LAVALINK_PASSWORD") or os.getenv("LAVALINK_SERVER_PASSWORD")
+    if env_pw and env_pw.strip():
+        pw_list.append(env_pw.strip())
+
+    if APP_YML_PATH.is_file():
+        try:
+            content = APP_YML_PATH.read_text(encoding="utf-8")
+            m = re.search(r'password:\s*["\']?([^"\'\$\s\n\r]+)["\']?', content)
+            if m:
+                extracted = m.group(1).strip()
+                if extracted and extracted not in pw_list:
+                    pw_list.append(extracted)
+        except Exception:
+            pass
+
+    for fallback in ("youshallnotpass", "onlyforkyoka", "kyoka_local_internal_secret"):
+        if fallback not in pw_list:
+            pw_list.append(fallback)
+
+    return pw_list
+
+
+def probe_http_version_auth(
+    host: str,
+    port: int,
+    candidate_passwords: list[str] | None = None,
+    timeout: float = 1.5,
+) -> tuple[bool, str, str | None]:
+    """Probe Lavalink /version endpoint across candidate authorization passwords.
+
+    Returns (is_ready, version_str_or_error, working_password).
+    """
     url = f"http://{host}:{port}/version"
-    try:
-        req = urllib.request.Request(url, headers={"User-Agent": "Kyoka-Supervisor/3.0"})
-        with urllib.request.urlopen(req, timeout=timeout) as resp:
-            if resp.status == 200:
-                ver = resp.read().decode("utf-8").strip()
-                return True, ver
-    except Exception as e:
-        return False, str(e)
-    return False, "non-200"
+    candidates: list[str] = []
+    if candidate_passwords:
+        for p in candidate_passwords:
+            if p and p not in candidates:
+                candidates.append(p)
+    for p in get_configured_passwords():
+        if p not in candidates:
+            candidates.append(p)
+
+    last_err = "non-200"
+    for candidate_pw in candidates:
+        try:
+            req = urllib.request.Request(
+                url,
+                headers={
+                    "User-Agent": "Kyoka-Supervisor/3.0",
+                    "Authorization": candidate_pw,
+                },
+            )
+            with urllib.request.urlopen(req, timeout=timeout) as resp:
+                if resp.status == 200:
+                    ver = resp.read().decode("utf-8").strip()
+                    return True, ver, candidate_pw
+        except urllib.error.HTTPError as he:
+            last_err = f"HTTP Error {he.code}: {he.reason}"
+            if he.code == 401:
+                # 401 Unauthorized indicates Undertow / Lavalink is active and filtering requests,
+                # but candidate_pw was rejected. Try next candidate password.
+                continue
+            return False, last_err, None
+        except Exception as e:
+            return False, str(e), None
+
+    return False, last_err, None
+
+
+def probe_http_version(
+    host: str,
+    port: int,
+    password: str | None = None,
+    timeout: float = 1.5,
+) -> tuple[bool, str]:
+    """Probe Lavalink /version endpoint with required authorization."""
+    candidates = [password] if password else None
+    ok, ver, _ = probe_http_version_auth(host, port, candidates, timeout=timeout)
+    return ok, ver
 
 
 def verify_lavalink_auth(host: str, port: int, password: str, timeout: float = 3.0) -> bool:
@@ -415,8 +486,13 @@ class CombinedSupervisor:
     def start_lavalink(self, java_bin: str, jvm_opts: list[str]) -> bool:
         """Start Lavalink child process and verify HTTP /version readiness before bot launch."""
         if check_port_open(INTERNAL_HOST, INTERNAL_PORT):
-            ok, ver = probe_http_version(INTERNAL_HOST, INTERNAL_PORT)
+            ok, ver, matched_pw = probe_http_version_auth(INTERNAL_HOST, INTERNAL_PORT, [self.password])
             if ok:
+                if matched_pw and matched_pw != self.password:
+                    logger.info("[KYOKA] Existing Lavalink accepted candidate password; synchronizing credentials.")
+                    self.password = matched_pw
+                    os.environ["LAVALINK_PASSWORD"] = matched_pw
+                    os.environ["LAVALINK_SERVER_PASSWORD"] = matched_pw
                 logger.info(f"[KYOKA] Lavalink HTTP readiness verified (Existing process detected, Version: {ver})")
                 if verify_lavalink_auth(INTERNAL_HOST, INTERNAL_PORT, self.password):
                     logger.info("[KYOKA] Lavalink authentication verified")
@@ -427,8 +503,12 @@ class CombinedSupervisor:
                     time.sleep(1.0)
                     if not check_port_open(INTERNAL_HOST, INTERNAL_PORT):
                         break
-                    ok, ver = probe_http_version(INTERNAL_HOST, INTERNAL_PORT)
+                    ok, ver, matched_pw = probe_http_version_auth(INTERNAL_HOST, INTERNAL_PORT, [self.password])
                     if ok:
+                        if matched_pw and matched_pw != self.password:
+                            self.password = matched_pw
+                            os.environ["LAVALINK_PASSWORD"] = matched_pw
+                            os.environ["LAVALINK_SERVER_PASSWORD"] = matched_pw
                         logger.info(f"[KYOKA] Lavalink HTTP readiness verified (Version: {ver})")
                         return True
 
@@ -504,8 +584,13 @@ class CombinedSupervisor:
                     logger.critical("[KYOKA] ---------------------------------------------")
                 return False
 
-            ok, ver = probe_http_version(INTERNAL_HOST, INTERNAL_PORT)
+            ok, ver, matched_pw = probe_http_version_auth(INTERNAL_HOST, INTERNAL_PORT, [self.password])
             if ok:
+                if matched_pw and matched_pw != self.password:
+                    logger.info("[KYOKA] Synchronizing supervisor secret with verified Lavalink password.")
+                    self.password = matched_pw
+                    os.environ["LAVALINK_PASSWORD"] = matched_pw
+                    os.environ["LAVALINK_SERVER_PASSWORD"] = matched_pw
                 logger.info("[KYOKA] Lavalink HTTP readiness verified")
                 if verify_lavalink_auth(INTERNAL_HOST, INTERNAL_PORT, self.password):
                     logger.info("[KYOKA] Lavalink authentication verified")
