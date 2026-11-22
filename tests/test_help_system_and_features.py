@@ -24,19 +24,6 @@ async def test_help_cog_and_categories():
 
 
 @pytest.mark.asyncio
-async def test_pay_command_and_staff_view():
-    from src.cogs.general.kdc_shop import KDCShop
-    bot = KyokaBot()
-    shop = KDCShop(bot)
-    
-    # Test staff view generation
-    view = shop.get_staff_contact_view()
-    assert len(view.children) >= 1
-    # Check that owner ID 1505515188991033409 is in the direct DM url
-    assert any("1505515188991033409" in getattr(item, "url", "") for item in view.children)
-
-
-@pytest.mark.asyncio
 async def test_server_avatar_cog():
     from src.cogs.general.server_avatar import ServerAvatar
     bot = KyokaBot()

@@ -192,9 +192,9 @@ async def run_bot_loop() -> None:
             # a fresh client. It does not restart the Render container or promise
             # a lower network ping. Set BOT_RESTART_INTERVAL_HOURS=0 to disable.
             try:
-                restart_hours = max(0.0, float(os.getenv("BOT_RESTART_INTERVAL_HOURS", "3")))
+                restart_hours = max(0.0, float(os.getenv("BOT_RESTART_INTERVAL_HOURS", "0")))
             except (TypeError, ValueError):
-                restart_hours = 3.0
+                restart_hours = 0.0
 
             async def _scheduled_client_restart() -> None:
                 if restart_hours <= 0:
