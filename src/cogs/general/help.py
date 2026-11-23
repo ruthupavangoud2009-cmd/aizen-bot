@@ -67,6 +67,55 @@ CATEGORY_DESCRIPTIONS: dict[str, str] = {
 }
 
 
+async def _safe_help_send(
+    ctx: CustomContext,
+    *,
+    embed: Optional[discord.Embed] = None,
+    view: Optional[discord.ui.View] = None,
+    content: Optional[str] = None,
+) -> Optional[discord.Message]:
+    """Guaranteed fail-safe sender for help command across prefix, slash, and hybrid invocations."""
+    inter = getattr(ctx, "interaction", None)
+    if inter:
+        try:
+            if inter.response.is_done():
+                return await inter.followup.send(
+                    embed=embed or discord.utils.MISSING,
+                    view=view or discord.utils.MISSING,
+                    content=content or discord.utils.MISSING,
+                )
+            else:
+                await inter.response.send_message(
+                    embed=embed or discord.utils.MISSING,
+                    view=view or discord.utils.MISSING,
+                    content=content or discord.utils.MISSING,
+                )
+                try:
+                    return await inter.original_response()
+                except Exception:
+                    return None
+        except Exception as e:
+            logger.debug(f"Interaction send notice: {e}")
+
+    try:
+        return await ctx.reply(
+            embed=embed or discord.utils.MISSING,
+            view=view or discord.utils.MISSING,
+            content=content or discord.utils.MISSING,
+            mention_author=False,
+        )
+    except Exception:
+        try:
+            return await ctx.send(
+                embed=embed or discord.utils.MISSING,
+                view=view or discord.utils.MISSING,
+                content=content or discord.utils.MISSING,
+            )
+        except Exception as e:
+            logger.error(f"Failed to send help response: {e}")
+            return None
+
+
 class HelpCategorySelect(discord.ui.Select):
     """Interactive category select menu for switching between command categories."""
 
@@ -77,9 +126,8 @@ class HelpCategorySelect(discord.ui.Select):
         current_selection: str = "home",
     ) -> None:
         self.help_view = help_view
-        emoji_registry = getattr(help_view.cog.bot, "custom_emojis", None)
 
-        def resolve_menu_emoji(cat_name: Optional[str] = None) -> Optional[discord.PartialEmoji | str]:
+        def resolve_menu_emoji(cat_name: Optional[str] = None) -> str:
             if not cat_name or cat_name.lower() == "home":
                 return "🏠"
 
@@ -142,16 +190,6 @@ class HelpCategorySelect(discord.ui.Select):
                 "OWNER": "👑", "GAMES": "🎮", "VOICE": "🎙️", "CASINO": "🎰",
                 "LOGGING": "📜", "SETTINGS": "⚙️",
             }
-
-            if emoji_registry:
-                try:
-                    obj = emoji_registry.get_category_obj(cat_key)
-                    if isinstance(obj, discord.Emoji) and getattr(obj, "is_usable", lambda: True)():
-                        return obj
-                    elif isinstance(obj, str) and not obj.startswith("<"):
-                        return obj
-                except Exception:
-                    pass
             return fallback_map.get(cat_key, "📁")
 
         options: list[discord.SelectOption] = [
@@ -249,21 +287,10 @@ class HelpView(discord.ui.View):
 
     def _build_components(self) -> None:
         self.clear_items()
-        reg = getattr(self.cog.bot, "custom_emojis", None)
 
-        def btn_emoji(cat_name: str) -> Optional[discord.PartialEmoji | str]:
+        def btn_emoji(cat_name: str) -> str:
             fb = {"BACK": "◀️", "HOME": "🏠", "NEXT": "▶️"}
-            if not reg:
-                return fb.get(cat_name)
-            try:
-                obj = reg.get_category_obj(cat_name)
-                if isinstance(obj, discord.Emoji) and getattr(obj, "is_usable", lambda: True)():
-                    return obj
-                elif isinstance(obj, str) and not obj.startswith("<"):
-                    return obj
-            except Exception:
-                pass
-            return fb.get(cat_name)
+            return fb.get(cat_name, "•")
 
         # Row 0: Dropdown
         self.category_select = HelpCategorySelect(
@@ -360,7 +387,10 @@ class HelpView(discord.ui.View):
             await edit_container_response(interaction, container, view=self)
         except Exception:
             embed = self.cog.build_home_embed(self.ctx, self.visible_categories)
-            await interaction.response.edit_message(embed=embed, view=self)
+            if interaction.response.is_done():
+                await interaction.edit_original_response(embed=embed, view=self)
+            else:
+                await interaction.response.edit_message(embed=embed, view=self)
 
     async def switch_to_category(self, interaction: discord.Interaction, cat_name: str, page: int = 1) -> None:
         self.current_category = cat_name
@@ -372,7 +402,10 @@ class HelpView(discord.ui.View):
             await edit_container_response(interaction, container, view=self)
         except Exception:
             embed = self.cog.build_category_embed(self.ctx, cat_name, cmds, page=page)
-            await interaction.response.edit_message(embed=embed, view=self)
+            if interaction.response.is_done():
+                await interaction.edit_original_response(embed=embed, view=self)
+            else:
+                await interaction.response.edit_message(embed=embed, view=self)
 
     async def btn_back_callback(self, interaction: discord.Interaction) -> None:
         if self.current_page > 1:
@@ -989,8 +1022,6 @@ class Help(commands.Cog, name="Help"):
 
         return embed
 
-        return embed
-
     def build_command_embed(self, ctx: CustomContext, cmd: commands.Command) -> discord.Embed:
         """Construct detailed single-command inspector card."""
         reg = getattr(self.bot, "custom_emojis", None)
@@ -1034,9 +1065,12 @@ class Help(commands.Cog, name="Help"):
             inline=True,
         )
 
-        if getattr(cmd, "_buckets", None) and hasattr(cmd._buckets, "_cooldown") and cmd._buckets._cooldown:
-            cd = cmd._buckets._cooldown.per
-            embed.add_field(name="Cooldown", value=f"`{cd:.1f}s`", inline=True)
+        try:
+            if getattr(cmd, "_buckets", None) and hasattr(cmd._buckets, "_cooldown") and cmd._buckets._cooldown:
+                cd = cmd._buckets._cooldown.per
+                embed.add_field(name="Cooldown", value=f"`{cd:.1f}s`", inline=True)
+        except Exception:
+            pass
 
         if getattr(self.bot, "user", None):
             embed.set_thumbnail(url=self.bot.user.display_avatar.url)
@@ -1120,72 +1154,104 @@ class Help(commands.Cog, name="Help"):
         command_or_category: Optional[str] = None,
     ) -> None:
         """Interactive Help Console for KYOKA."""
-        # Immediate deferral for slash commands to prevent Discord 3s interaction timeout
-        if getattr(ctx, "interaction", None) and not ctx.interaction.response.is_done():
-            try:
-                await ctx.interaction.response.defer()
-            except Exception:
-                pass
-
-        visible_categories = await self._get_visible_categories(ctx)
-
-        # 1. Single Command or Direct Category Lookup
-        if command_or_category:
-            clean_arg = command_or_category.strip().lower()
-
-            # Check if exact category match
-            matched_cat = next(
-                (c for c in visible_categories if clean_arg in c.lower()),
-                None,
-            )
-            if matched_cat:
-                cmds = visible_categories[matched_cat]
-                container = self.build_category_container(ctx, matched_cat, cmds, page=1)
-                view = HelpView(self, ctx, visible_categories, current_category=matched_cat, current_page=1)
+        try:
+            # Immediate deferral for slash commands to prevent Discord 3s interaction timeout
+            if getattr(ctx, "interaction", None) and not ctx.interaction.response.is_done():
                 try:
-                    msg = await send_container_response(ctx, container, view=view)
-                    view.message = msg
+                    await ctx.interaction.response.defer()
                 except Exception:
+                    pass
+
+            visible_categories = await self._get_visible_categories(ctx)
+
+            # 1. Single Command or Direct Category Lookup
+            if command_or_category:
+                raw_arg = command_or_category.strip()
+                tokens = raw_arg.split()
+                req_page = 1
+                clean_arg = raw_arg.lower()
+
+                # Handle "music 2" or "mod 2" style arguments (page number as second word)
+                if len(tokens) >= 2 and tokens[-1].isdigit():
+                    req_page = max(1, int(tokens[-1]))
+                    clean_arg = " ".join(tokens[:-1]).strip().lower()
+
+                # Check if exact category match
+                matched_cat = next(
+                    (c for c in visible_categories if clean_arg in c.lower()),
+                    None,
+                )
+                if matched_cat:
+                    cmds = visible_categories[matched_cat]
+                    container = self.build_category_container(ctx, matched_cat, cmds, page=req_page)
+                    view = HelpView(self, ctx, visible_categories, current_category=matched_cat, current_page=req_page)
                     try:
-                        embed = self.build_category_embed(ctx, matched_cat, cmds, page=1)
-                        msg = await ctx.send(embed=embed, view=view)
+                        msg = await send_container_response(ctx, container, view=view)
                         view.message = msg
                     except Exception:
-                        embed = self.build_category_embed(ctx, matched_cat, cmds, page=1)
-                        await ctx.send(embed=embed)
+                        try:
+                            embed = self.build_category_embed(ctx, matched_cat, cmds, page=req_page)
+                            msg = await _safe_help_send(ctx, embed=embed, view=view)
+                            view.message = msg
+                        except Exception:
+                            embed = self.build_category_embed(ctx, matched_cat, cmds, page=req_page)
+                            await _safe_help_send(ctx, embed=embed)
+                    return
+
+                # Check if command match
+                cmd = self.bot.get_command(clean_arg)
+                if cmd and self._can_run_command(cmd, ctx):
+                    embed = self.build_command_embed(ctx, cmd)
+                    await _safe_help_send(ctx, embed=embed)
+                    return
+
+                # Fallback to search query
+                embed = self.build_search_results_embed(ctx, visible_categories, clean_arg)
+                view = HelpView(self, ctx, visible_categories, current_category="home")
+                try:
+                    msg = await _safe_help_send(ctx, embed=embed, view=view)
+                    view.message = msg
+                except Exception:
+                    await _safe_help_send(ctx, embed=embed)
                 return
 
-            # Check if command match
-            cmd = self.bot.get_command(clean_arg)
-            if cmd and self._can_run_command(cmd, ctx):
-                embed = self.build_command_embed(ctx, cmd)
-                await ctx.send(embed=embed)
-                return
-
-            # Fallback to search query
-            embed = self.build_search_results_embed(ctx, visible_categories, clean_arg)
-            view = HelpView(self, ctx, visible_categories, current_category="home")
+            # 2. Default Homepage View
+            container = self.build_home_container(ctx, visible_categories)
+            view = HelpView(self, ctx, visible_categories, current_category="home", current_page=1)
             try:
-                msg = await ctx.send(embed=embed, view=view)
+                msg = await send_container_response(ctx, container, view=view)
                 view.message = msg
             except Exception:
-                await ctx.send(embed=embed)
-            return
-
-        # 2. Default Homepage View
-        container = self.build_home_container(ctx, visible_categories)
-        view = HelpView(self, ctx, visible_categories, current_category="home", current_page=1)
-        try:
-            msg = await send_container_response(ctx, container, view=view)
-            view.message = msg
-        except Exception:
+                try:
+                    embed = self.build_home_embed(ctx, visible_categories)
+                    msg = await _safe_help_send(ctx, embed=embed, view=view)
+                    view.message = msg
+                except Exception:
+                    embed = self.build_home_embed(ctx, visible_categories)
+                    await _safe_help_send(ctx, embed=embed)
+        except Exception as exc:
+            logger.exception(f"Unhandled notice in help_command: {exc}")
             try:
-                embed = self.build_home_embed(ctx, visible_categories)
-                msg = await ctx.send(embed=embed, view=view)
-                view.message = msg
+                prefix = self.bot.guild_mgr.get_prefix(ctx.guild.id if ctx.guild else None)
             except Exception:
-                embed = self.build_home_embed(ctx, visible_categories)
-                await ctx.send(embed=embed)
+                prefix = "+"
+            try:
+                emb = discord.Embed(
+                    title="📖 Aizen Help Menu",
+                    description=(
+                        f"Welcome to **Aizen Bot**.\n\n"
+                        f"• Use `{prefix}help <command>` to inspect a command manual.\n"
+                        f"• Use `{prefix}ping` for latency and system diagnostics.\n"
+                        f"• Use `{prefix}hca` for the complete command archive."
+                    ),
+                    color=0x7C3AED,
+                )
+                await _safe_help_send(ctx, embed=emb)
+            except Exception:
+                await _safe_help_send(
+                    ctx,
+                    content=f"📖 **Aizen Help:** Use `{prefix}help <command>` or `{prefix}ping` to test system speed.",
+                )
 
     @commands.command(
         name="hca",
