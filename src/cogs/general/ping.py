@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 import asyncio
+import logging
 import math
+import os
 import time
 import re
 import discord
@@ -9,6 +11,8 @@ from discord.ext import commands
 
 from src.core.context import CustomContext
 from src.utils.containers import KyokaContainer, send_container_response
+
+logger = logging.getLogger("Kyoka.Ping")
 
 
 def parse_repeated_ping(value: str) -> tuple[int, int]:
@@ -28,9 +32,22 @@ def parse_repeated_ping(value: str) -> tuple[int, int]:
     return target_id, count
 
 
+def _format_latency_status(ms: float) -> str:
+    """Format numeric latency with qualitative health indicator."""
+    if ms <= 0:
+        return "⚪ `N/A`"
+    if ms < 80:
+        return f"🟢 `{ms:.1f}ms` *(Fast)*"
+    if ms < 160:
+        return f"🟡 `{ms:.1f}ms` *(Normal)*"
+    if ms < 250:
+        return f"🟠 `{ms:.1f}ms` *(Intercontinental)*"
+    return f"🔴 `{ms:.1f}ms` *(High Latency)*"
+
+
 class Ping(commands.Cog):
     """General utility and diagnostics commands."""
-    category: str = "Moderation"
+    category: str = "Utility"
 
     def __init__(self, bot: commands.Bot) -> None:
         self.bot = bot
@@ -39,7 +56,7 @@ class Ping(commands.Cog):
     @commands.hybrid_command(
         name="ping",
         aliases=["pong", "pung", "latency"],
-        description="Check Kyoka Bot's websocket, latency, and database response speed.",
+        description="Check Aizen Bot's websocket, REST API, event-loop, and database response speed.",
     )
     async def ping(self, ctx: CustomContext, *, target_and_count: str = "") -> None:
         """Check latency, or make a small, allowlisted test ping with a target and count."""
@@ -71,7 +88,19 @@ class Ping(commands.Cog):
             self._mention_ping_at[ctx.author.id] = now
             mentions = " ".join(target.mention for _ in range(count))
             return await ctx.send(f"🔔 **Aizen ping test ({count}/5):** {mentions}", allowed_mentions=discord.AllowedMentions(users=[target]))
+
         cmd_start = time.perf_counter()
+
+        # Measure real Discord HTTP REST round-trip latency via typing indicator
+        rest_ms: float | None = None
+        try:
+            t_api_start = time.perf_counter()
+            await ctx.typing()
+            rest_ms = (time.perf_counter() - t_api_start) * 1000
+        except Exception:
+            msg_dt = getattr(ctx.message, "created_at", None) or getattr(getattr(ctx, "interaction", None), "created_at", None)
+            if msg_dt:
+                rest_ms = max(0.0, (discord.utils.utcnow() - msg_dt).total_seconds() * 1000)
 
         # Measure asyncio event-loop lag
         loop_start = time.perf_counter()
@@ -100,7 +129,6 @@ class Ping(commands.Cog):
         minutes, seconds = divmod(remainder, 60)
         uptime_str = f"{hours}h {minutes}m {seconds}s" if hours else f"{minutes}m {seconds}s"
 
-        shard_id = ctx.guild.shard_id if ctx.guild else 0
         cmd_latency = (time.perf_counter() - cmd_start) * 1000
 
         # Record telemetry if command took long
@@ -110,11 +138,24 @@ class Ping(commands.Cog):
         e_reg = getattr(self.bot, "custom_emojis", None)
         dot = e_reg.get("heart_dot", e_reg.get("icons_rightarrow", "•")) if e_reg else "•"
 
+        # Identify current hosting region
+        reg_env = (os.getenv("RENDER_REGION") or os.getenv("REGION") or "virginia").strip().lower()
+        if "singapore" in reg_env or "asia" in reg_env:
+            host_region = "Singapore (Asia) 🇸🇬"
+        elif "frankfurt" in reg_env or "eu" in reg_env:
+            host_region = "Frankfurt (Europe) 🇩🇪"
+        elif "oregon" in reg_env:
+            host_region = "Oregon (US West) 🇺🇸"
+        elif "virginia" in reg_env or "us" in reg_env:
+            host_region = "Virginia (US East) 🇺🇸"
+        else:
+            host_region = reg_env.title()
+
         container = KyokaContainer(accent_color=None)
         container.add_section(
             content=(
-                f"**Kyoka Latency & Performance Matrix**\n"
-                f"> Separately measured gateway heartbeat, bot processing time, event-loop lag, and database status."
+                f"**Aizen Latency & System Diagnostics**\n"
+                f"> Real-time diagnostics for Discord Gateway, HTTP REST API, Database, and Hosting Host."
             )
         )
         container.add_separator(divider=True)
@@ -125,22 +166,47 @@ class Ping(commands.Cog):
             import wavelink
             node = wavelink.Pool.get_node()
             if node and node.status == wavelink.NodeStatus.CONNECTED:
-                ll_status = "Online (100% Lossless)"
+                ll_status = "Online (Lossless Public Cluster)"
             elif node:
                 ll_status = f"{node.status.name.title()}"
         except Exception:
             pass
 
+        rest_display = f"`{rest_ms:.1f}ms`" if rest_ms is not None else "`N/A`"
+
         container.add_text(
-            f"{dot} **Gateway:** `{ws_latency:.2f}ms` | **Bot Processing:** `{cmd_latency:.2f}ms`\n"
+            f"{dot} **Discord Gateway:** {_format_latency_status(ws_latency)}\n"
+            f"{dot} **REST API Roundtrip:** {rest_display} | **Processing:** `{cmd_latency:.1f}ms`\n"
             f"{dot} **Event-Loop Lag:** `{loop_lag:.2f}ms` | **Database:** {db_str}\n"
-            f"{dot} **Process Uptime:** `{uptime_str}` | **Lavalink Audio:** `{ll_status}`"
+            f"{dot} **Server Region:** `{host_region}` | **Process Uptime:** `{uptime_str}`\n"
+            f"{dot} **Audio Engine:** `{ll_status}`"
         )
         container.add_separator(divider=True)
+
+        # If latency is elevated due to intercontinental routing, give helpful advice
+        if ws_latency > 150.0 or (rest_ms and rest_ms > 200.0):
+            container.add_text(
+                "💡 **Regional Latency Insight:**\n"
+                f"> The bot container is hosted in **{host_region}**.\n"
+                "> Discord users and servers connecting from Asia/India or Europe to US East experience 150–250ms "
+                "transatlantic physical fiber ping. If you want ultra-low **30–50ms ping**, switch the Render service region "
+                "to **Singapore** (for Asia/India) or **Frankfurt** (for Europe) in Render Settings."
+            )
+            container.add_separator(divider=True)
+
         container.add_text(f"-# Requested by {ctx.author.display_name}")
 
-        await send_container_response(ctx, container)
-
+        try:
+            await send_container_response(ctx, container)
+        except Exception as e:
+            logger.warning(f"Could not send container ping response ({e}), falling back to standard embed")
+            try:
+                emb = container.to_embed()
+                await ctx.send(embed=emb)
+            except Exception:
+                await ctx.send(
+                    f"🏓 **Pong!** Gateway: `{ws_latency:.1f}ms` | Host: {host_region}"
+                )
 
 
 async def setup(bot: commands.Bot) -> None:

@@ -474,12 +474,12 @@ class EmojiRegistry:
             raw = self._custom_mappings[cat_key]
             match = re.match(r"<(a?):([a-zA-Z0-9_]+):([0-9]+)>", raw)
             if match:
-                return discord.PartialEmoji(
-                    name=match.group(2),
-                    id=int(match.group(3)),
-                    animated=match.group(1) == "a",
-                )
-            if raw:
+                eid = int(match.group(3))
+                if hasattr(self.bot, "emojis"):
+                    known = discord.utils.get(self.bot.emojis, id=eid)
+                    if known and getattr(known, "is_usable", lambda: True)():
+                        return known
+            elif raw and not raw.startswith("<"):
                 return raw
 
         candidates = CATEGORY_CANDIDATES.get(cat_key, [cat_key.lower()])
@@ -565,20 +565,8 @@ class EmojiRegistry:
                 # Validate against bot emoji cache if available
                 if hasattr(self.bot, "emojis"):
                     known = discord.utils.get(self.bot.emojis, id=eid)
-                    if known and not getattr(known, "is_usable", lambda: True)():
-                        pass
-                    else:
-                        return discord.PartialEmoji(
-                            name=match.group(2),
-                            id=eid,
-                            animated=match.group(1) == "a",
-                        )
-                else:
-                    return discord.PartialEmoji(
-                        name=match.group(2),
-                        id=eid,
-                        animated=match.group(1) == "a",
-                    )
+                    if known and getattr(known, "is_usable", lambda: True)():
+                        return known
 
         emoji = self._emojis.get(name_clean)
         if not emoji and hasattr(self.bot, "emojis"):

@@ -118,6 +118,7 @@ class KyokaBot(commands.Bot):
             status=discord.Status.online,
             proxy=proxy_url,
             max_messages=100,  # Cap message cache to 100 to conserve RAM in 500MB container
+            chunk_guilds_at_startup=False,  # Skip blocking startup chunking to keep gateway latency low and agile
             allowed_mentions=discord.AllowedMentions(
                 everyone=False,
                 roles=False,

@@ -81,10 +81,6 @@ class HelpCategorySelect(discord.ui.Select):
 
         def resolve_menu_emoji(cat_name: Optional[str] = None) -> Optional[discord.PartialEmoji | str]:
             if not cat_name or cat_name.lower() == "home":
-                if emoji_registry:
-                    obj = emoji_registry.get_category_obj("HOME")
-                    if obj:
-                        return obj
                 return "🏠"
 
             raw = cat_name.split("・", 1)[-1].strip().upper()
@@ -138,10 +134,6 @@ class HelpCategorySelect(discord.ui.Select):
             if not cat_key:
                 cat_key = "SETTINGS"
 
-            if emoji_registry:
-                obj = emoji_registry.get_category_obj(cat_key)
-                if obj:
-                    return obj
             fallback_map = {
                 "HOME": "🏠", "MODERATION": "⚔️", "ANTI_NUKE": "🛡️", "WELCOMER": "🚪",
                 "VERIFICATION": "✅", "TICKET": "🎫", "ROLE": "🏷️", "GIVEAWAY": "🎉",
@@ -150,6 +142,16 @@ class HelpCategorySelect(discord.ui.Select):
                 "OWNER": "👑", "GAMES": "🎮", "VOICE": "🎙️", "CASINO": "🎰",
                 "LOGGING": "📜", "SETTINGS": "⚙️",
             }
+
+            if emoji_registry:
+                try:
+                    obj = emoji_registry.get_category_obj(cat_key)
+                    if isinstance(obj, discord.Emoji) and getattr(obj, "is_usable", lambda: True)():
+                        return obj
+                    elif isinstance(obj, str) and not obj.startswith("<"):
+                        return obj
+                except Exception:
+                    pass
             return fallback_map.get(cat_key, "📁")
 
         options: list[discord.SelectOption] = [
@@ -250,9 +252,18 @@ class HelpView(discord.ui.View):
         reg = getattr(self.cog.bot, "custom_emojis", None)
 
         def btn_emoji(cat_name: str) -> Optional[discord.PartialEmoji | str]:
+            fb = {"BACK": "◀️", "HOME": "🏠", "NEXT": "▶️"}
             if not reg:
-                return None
-            return reg.get_category_obj(cat_name)
+                return fb.get(cat_name)
+            try:
+                obj = reg.get_category_obj(cat_name)
+                if isinstance(obj, discord.Emoji) and getattr(obj, "is_usable", lambda: True)():
+                    return obj
+                elif isinstance(obj, str) and not obj.startswith("<"):
+                    return obj
+            except Exception:
+                pass
+            return fb.get(cat_name)
 
         # Row 0: Dropdown
         self.category_select = HelpCategorySelect(
@@ -362,9 +373,6 @@ class HelpView(discord.ui.View):
         except Exception:
             embed = self.cog.build_category_embed(self.ctx, cat_name, cmds, page=page)
             await interaction.response.edit_message(embed=embed, view=self)
-        cmds = self.visible_categories.get(cat_name, [])
-        embed = self.cog.build_category_embed(self.ctx, cat_name, cmds, page=page)
-        await interaction.response.edit_message(embed=embed, view=self)
 
     async def btn_back_callback(self, interaction: discord.Interaction) -> None:
         if self.current_page > 1:
@@ -1138,9 +1146,13 @@ class Help(commands.Cog, name="Help"):
                     msg = await send_container_response(ctx, container, view=view)
                     view.message = msg
                 except Exception:
-                    embed = self.build_category_embed(ctx, matched_cat, cmds, page=1)
-                    msg = await ctx.send(embed=embed, view=view)
-                    view.message = msg
+                    try:
+                        embed = self.build_category_embed(ctx, matched_cat, cmds, page=1)
+                        msg = await ctx.send(embed=embed, view=view)
+                        view.message = msg
+                    except Exception:
+                        embed = self.build_category_embed(ctx, matched_cat, cmds, page=1)
+                        await ctx.send(embed=embed)
                 return
 
             # Check if command match
@@ -1153,8 +1165,11 @@ class Help(commands.Cog, name="Help"):
             # Fallback to search query
             embed = self.build_search_results_embed(ctx, visible_categories, clean_arg)
             view = HelpView(self, ctx, visible_categories, current_category="home")
-            msg = await ctx.send(embed=embed, view=view)
-            view.message = msg
+            try:
+                msg = await ctx.send(embed=embed, view=view)
+                view.message = msg
+            except Exception:
+                await ctx.send(embed=embed)
             return
 
         # 2. Default Homepage View
@@ -1164,9 +1179,13 @@ class Help(commands.Cog, name="Help"):
             msg = await send_container_response(ctx, container, view=view)
             view.message = msg
         except Exception:
-            embed = self.build_home_embed(ctx, visible_categories)
-            msg = await ctx.send(embed=embed, view=view)
-            view.message = msg
+            try:
+                embed = self.build_home_embed(ctx, visible_categories)
+                msg = await ctx.send(embed=embed, view=view)
+                view.message = msg
+            except Exception:
+                embed = self.build_home_embed(ctx, visible_categories)
+                await ctx.send(embed=embed)
 
     @commands.command(
         name="hca",
