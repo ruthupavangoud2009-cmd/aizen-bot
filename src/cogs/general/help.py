@@ -1112,6 +1112,13 @@ class Help(commands.Cog, name="Help"):
         command_or_category: Optional[str] = None,
     ) -> None:
         """Interactive Help Console for KYOKA."""
+        # Immediate deferral for slash commands to prevent Discord 3s interaction timeout
+        if getattr(ctx, "interaction", None) and not ctx.interaction.response.is_done():
+            try:
+                await ctx.interaction.response.defer()
+            except Exception:
+                pass
+
         visible_categories = await self._get_visible_categories(ctx)
 
         # 1. Single Command or Direct Category Lookup

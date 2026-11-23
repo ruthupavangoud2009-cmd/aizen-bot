@@ -3,7 +3,7 @@
 # ==============================================================================
 # Dual-stack runtime: Eclipse Temurin JRE 21 + Python 3.11 Debian
 # Runs both Kyoka Discord Bot and dedicated local Lavalink node in ONE container.
-# Optimized for high-resource hosting (30GB RAM headroom).
+# Optimized for 500MB / 512MB container hosting (Render Free / Starter tier).
 # ==============================================================================
 
 # Stage 1: Official Eclipse Temurin 21 JRE for Lavalink
@@ -45,12 +45,14 @@ RUN mkdir -p /app/lavalink-node/plugins /app/lavalink-node/logs /app/data/music_
 # Make scripts executable
 RUN chmod +x /app/build.sh /app/build-lavalink.sh /app/scripts/run_combined.py 2>/dev/null || true
 
-# Default environment configuration for private local connection
+# Default environment configuration for private local connection (strict 500MB container ceiling)
 ENV LAVALINK_HOST=127.0.0.1 \
     LAVALINK_PORT=2333 \
     LAVALINK_SECURE=false \
     LAVALINK_IDENTIFIER=kyoka-lavalink-local \
     LAVALINK_URI=http://127.0.0.1:2333 \
+    CONTAINER_MAX_RAM_MB=500 \
+    JAVA_OPTS="-Xmx180m -Xms48m -XX:+UseSerialGC -XX:MaxMetaspaceSize=80m -XX:ReservedCodeCacheSize=24m -XX:MaxDirectMemorySize=24m -Xss256k -Dio.netty.allocator.type=unpooled -Dfile.encoding=UTF-8 -Djava.security.egd=file:/dev/./urandom" \
     PORT=10000 \
     PYTHONUNBUFFERED=1
 

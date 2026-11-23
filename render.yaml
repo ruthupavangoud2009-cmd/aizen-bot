@@ -39,19 +39,19 @@ services:
         value: "http://127.0.0.1:2333"
       - key: LAVALINK_READINESS_TIMEOUT
         value: "300"
-      # JVM Tuning for 1GB Container Hosting (Strict 384MB heap limit to prevent OOM)
+      # JVM Tuning for 500MB / 512MB Container Hosting (Strict 180MB heap limit to prevent OOM)
       - key: JAVA_OPTS
-        value: "-Xmx384m -Xms64m -XX:+UseG1GC -XX:MaxGCPauseMillis=20 -XX:+UseStringDeduplication -Dfile.encoding=UTF-8"
+        value: "-Xmx180m -Xms48m -XX:+UseSerialGC -XX:MaxMetaspaceSize=80m -XX:ReservedCodeCacheSize=24m -XX:MaxDirectMemorySize=24m -Xss256k -Dio.netty.allocator.type=unpooled -Dfile.encoding=UTF-8 -Djava.security.egd=file:/dev/./urandom"
       - key: CONTAINER_MAX_RAM_MB
-        value: "1024"
+        value: "500"
       # Spotify Resolution Credentials (optional, from kyoka-lavalink)
       - key: SPOTIFY_CLIENT_ID
         sync: false
       - key: SPOTIFY_CLIENT_SECRET
         sync: false
-      # High-Performance Music Cache Configuration (Capped for 1GB container)
+      # High-Performance Music Cache Configuration (Capped for 500MB container)
       - key: MUSIC_CACHE_MAX_MB
-        value: "256"
+        value: "128"
       - key: MUSIC_CACHE_TTL_DAYS
         value: "7"
       # AI and Bot Runtime Settings

@@ -79,12 +79,16 @@ class TestLavalinkProductionHotfix(unittest.TestCase):
         self.assertGreater(ram_mb, 64)
 
     def test_jvm_opts_low_ram_container(self):
-        """Verify JVM options for 512 MB container allocate safe heap to avoid OOM killer."""
+        """Verify JVM options for 512 MB / 500 MB container allocate safe heap to avoid OOM killer."""
         opts = calculate_jvm_opts(512)
         opts_str = " ".join(opts)
-        self.assertIn("-Xmx256m", opts_str)
-        self.assertIn("-Xms64m", opts_str)
-        self.assertIn("-XX:+UseG1GC", opts_str)
+        self.assertIn("-Xmx180m", opts_str)
+        self.assertIn("-Xms48m", opts_str)
+        self.assertIn("-XX:+UseSerialGC", opts_str)
+        self.assertIn("-XX:MaxMetaspaceSize=80m", opts_str)
+        self.assertIn("-XX:ReservedCodeCacheSize=24m", opts_str)
+        self.assertIn("-XX:MaxDirectMemorySize=24m", opts_str)
+        self.assertIn("-Xss256k", opts_str)
         self.assertIn("-Djava.security.egd=file:/dev/./urandom", opts_str)
 
     def test_jvm_opts_moderate_ram_container(self):
@@ -100,7 +104,7 @@ class TestLavalinkProductionHotfix(unittest.TestCase):
             opts = calculate_jvm_opts(512)
             opts_str = " ".join(opts)
             self.assertNotIn("-Xmx4g", opts_str)
-            self.assertIn("-Xmx256m", opts_str)
+            self.assertIn("-Xmx180m", opts_str)
 
     def test_application_yml_exists_and_valid(self):
         """Verify that application.yml is present and contains required server and lavalink blocks."""

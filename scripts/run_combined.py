@@ -57,7 +57,7 @@ INTERNAL_PORT = 2333
 
 
 def detect_container_ram_mb() -> int:
-    """Detect real container memory limit in MB (safely clamped for 1GB container hosting)."""
+    """Detect real container memory limit in MB (safely clamped for 500MB / 512MB container hosting)."""
     override = os.getenv("CONTAINER_MAX_RAM_MB") or os.getenv("MAX_MEMORY_MB")
     if override and override.strip().isdigit():
         return int(override.strip())
@@ -71,7 +71,7 @@ def detect_container_ram_mb() -> int:
                 bytes_limit = int(val)
                 mb = bytes_limit // (1024 * 1024)
                 if 64 <= mb < 1048576:
-                    return min(mb, 1024)
+                    return min(mb, 512)
         except Exception:
             pass
 
@@ -84,17 +84,48 @@ def detect_container_ram_mb() -> int:
                 bytes_limit = int(val)
                 mb = bytes_limit // (1024 * 1024)
                 if 64 <= mb < 1048576:
-                    return min(mb, 1024)
+                    return min(mb, 512)
         except Exception:
             pass
 
-    # Default to 1024 MB container limit to ensure no host RAM leaks on Render/Docker
-    return 1024
+    # Default to 512 MB container limit to ensure no host RAM leaks on Render/Docker
+    return 512
 
 
 def calculate_jvm_opts(container_ram_mb: int) -> list[str]:
-    """Calculate optimized JVM heap and GC settings strictly bounded under 1GB container budget."""
+    """Calculate optimized JVM heap and GC settings strictly bounded under container budget."""
     env_opts = os.getenv("JAVA_OPTS")
+
+    # Ultra-lean tuning for 500MB - 512MB containers (Render Free / Starter)
+    # Total JVM footprint stays strictly <= 320MB (Heap + Metaspace + CodeCache + Direct + Stacks)
+    # Leaving >180MB for Python Discord Bot and Linux OS
+    if container_ram_mb <= 512:
+        lean_flags = [
+            "-Xmx180m",
+            "-Xms48m",
+            "-XX:+UseSerialGC",
+            "-XX:MaxMetaspaceSize=80m",
+            "-XX:ReservedCodeCacheSize=24m",
+            "-XX:MaxDirectMemorySize=24m",
+            "-Xss256k",
+            "-Dio.netty.allocator.type=unpooled",
+            "-Dfile.encoding=UTF-8",
+            "-Djava.security.egd=file:/dev/./urandom",
+        ]
+        if env_opts and env_opts.strip():
+            tokens = env_opts.split()
+            # If custom JAVA_OPTS exceeds safe heap for 512MB container, scale it down to prevent OOM
+            has_oversized = any(
+                (t.startswith("-Xmx") or t.startswith("-Xms"))
+                and any(c in t for c in ("g", "G", "256", "384", "512", "1024"))
+                for t in tokens
+            )
+            if has_oversized or not any(t.startswith("-Xmx") for t in tokens):
+                filtered = [t for t in tokens if not t.startswith("-Xmx") and not t.startswith("-Xms")]
+                return ["-Xmx180m", "-Xms48m"] + [f for f in lean_flags[2:] if f not in filtered] + filtered
+            return tokens
+        return lean_flags
+
     gc_flags = [
         "-XX:+UseG1GC",
         "-XX:MaxGCPauseMillis=20",
@@ -103,29 +134,17 @@ def calculate_jvm_opts(container_ram_mb: int) -> list[str]:
         "-Djava.security.egd=file:/dev/./urandom",
     ]
 
-    # Strictly limit heap: on 1GB container, JVM max heap is 384m so Python + OS comfortably fit
-    if container_ram_mb <= 512:
-        heap_flags = ["-Xmx256m", "-Xms64m"]
-    elif container_ram_mb <= 1024:
-        heap_flags = ["-Xmx384m", "-Xms64m"]
+    if env_opts and env_opts.strip():
+        return env_opts.split()
+
+    if container_ram_mb <= 1024:
+        heap_flags = ["-Xmx512m", "-Xms128m"]
     elif container_ram_mb <= 2048:
         heap_flags = ["-Xmx768m", "-Xms128m"]
+    elif container_ram_mb <= 8192:
+        heap_flags = ["-Xmx2g", "-Xms512m"]
     else:
-        heap_flags = ["-Xmx1024m", "-Xms256m"]
-
-    if env_opts and env_opts.strip():
-        tokens = env_opts.split()
-        has_xmx = any(t.startswith("-Xmx") for t in tokens)
-        has_large_heap = any(
-            (t.startswith("-Xmx") or t.startswith("-Xms")) and ("g" in t or "G" in t)
-            for t in tokens
-        )
-
-        if not has_xmx or has_large_heap or container_ram_mb <= 1024:
-            filtered = [t for t in tokens if not t.startswith("-Xmx") and not t.startswith("-Xms")]
-            return heap_flags + filtered
-        else:
-            return tokens
+        heap_flags = ["-Xmx4g", "-Xms1g"]
 
     return heap_flags + gc_flags
 
@@ -427,6 +446,37 @@ class CombinedSupervisor:
         os.environ["LAVALINK_URI"] = f"http://{INTERNAL_HOST}:{INTERNAL_PORT}"
         os.environ["KYOKA_SUPERVISED"] = "1"
 
+    def _get_process_rss_mb(self, proc: subprocess.Popen | None) -> float:
+        """Read process RSS in MB from /proc/[pid]/statm without external dependencies."""
+        if not proc or proc.poll() is not None:
+            return 0.0
+        try:
+            statm = Path(f"/proc/{proc.pid}/statm")
+            if statm.is_file():
+                pages = int(statm.read_text(encoding="utf-8").split()[1])
+                page_size = os.sysconf("SC_PAGE_SIZE") if hasattr(os, "sysconf") else 4096
+                return (pages * page_size) / (1024 * 1024)
+        except Exception:
+            pass
+        return 0.0
+
+    def check_memory_usage(self, max_allowed_mb: int = 500) -> tuple[float, float, float]:
+        """Monitor RSS of Java and Bot subprocesses and enforce safe container ceiling."""
+        java_rss = self._get_process_rss_mb(self.java_proc)
+        bot_rss = self._get_process_rss_mb(self.bot_proc)
+        total_rss = java_rss + bot_rss
+
+        if total_rss > 0 and total_rss > (max_allowed_mb * 0.90):
+            logger.warning(
+                f"[KYOKA.MemoryGuard] High container memory: Total {total_rss:.1f} MB "
+                f"(Java: {java_rss:.1f} MB, Bot: {bot_rss:.1f} MB, Ceiling: {max_allowed_mb} MB). "
+                f"Triggering proactive Python garbage collection."
+            )
+            import gc
+            gc.collect()
+
+        return java_rss, bot_rss, total_rss
+
     def handle_signal(self, signum: int, _) -> None:
         signame = signal.Signals(signum).name if hasattr(signal, "Signals") else str(signum)
         logger.info(f"Signal {signame} received. Initiating graceful shutdown of all processes...")
@@ -645,8 +695,21 @@ class CombinedSupervisor:
         self.start_bot()
 
         # 6. Supervisory Monitoring Loop
+        last_memory_check = time.time()
         while self.running:
             time.sleep(2.0)
+            now = time.time()
+
+            # Proactive container memory telemetry & OOM guard (every 30 seconds)
+            if now - last_memory_check >= 30.0:
+                last_memory_check = now
+                j_rss, b_rss, t_rss = self.check_memory_usage(ram_mb)
+                if t_rss > 0:
+                    status = "HEALTHY" if t_rss < (ram_mb * 0.85) else "ELEVATED"
+                    logger.info(
+                        f"[KYOKA.MemoryGuard] Memory Status: Total {t_rss:.1f} MB / {ram_mb} MB "
+                        f"(Lavalink: {j_rss:.1f} MB, Discord Bot: {b_rss:.1f} MB) [{status}]"
+                    )
 
             # Check Lavalink health
             if self.java_proc and self.java_proc.poll() is not None:

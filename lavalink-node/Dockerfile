@@ -14,7 +14,7 @@ FROM eclipse-temurin:21-jre-jammy
 
 ENV LAVALINK_SERVER_PORT=2333 \
     LAVALINK_SERVER_ADDRESS=0.0.0.0 \
-    JAVA_OPTS="-Xmx384m -XX:+UseG1GC -XX:MaxGCPauseMillis=100 -Dfile.encoding=UTF-8"
+    JAVA_OPTS="-Xmx180m -Xms48m -XX:+UseSerialGC -XX:MaxMetaspaceSize=80m -XX:ReservedCodeCacheSize=24m -XX:MaxDirectMemorySize=24m -Xss256k -Dio.netty.allocator.type=unpooled -Dfile.encoding=UTF-8 -Djava.security.egd=file:/dev/./urandom"
 
 RUN apt-get update \
     && apt-get install -y --no-install-recommends \

@@ -117,6 +117,7 @@ class KyokaBot(commands.Bot):
             strip_after_prefix=True,
             status=discord.Status.online,
             proxy=proxy_url,
+            max_messages=100,  # Cap message cache to 100 to conserve RAM in 500MB container
             allowed_mentions=discord.AllowedMentions(
                 everyone=False,
                 roles=False,

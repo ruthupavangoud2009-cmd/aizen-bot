@@ -53,9 +53,9 @@ lavalink:
       channelMix: true
       lowPass: true
 
-    # Audio Engine & Buffer tuning: 400ms jitter buffer + 5000ms lookahead frame buffer
-    bufferDurationMs: 400
-    frameBufferDurationMs: 5000
+    # Audio Engine & Buffer tuning: 300ms jitter buffer + 2000ms lookahead frame buffer (Memory bounded for 500MB container)
+    bufferDurationMs: 300
+    frameBufferDurationMs: 2000
     opusEncodingQuality: 10
     resamplingQuality: HIGH
     trackStuckThresholdMs: 10000
