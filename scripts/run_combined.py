@@ -97,16 +97,18 @@ def calculate_jvm_opts(container_ram_mb: int) -> list[str]:
     env_opts = os.getenv("JAVA_OPTS")
 
     # Ultra-lean tuning for 500MB - 512MB containers (Render Free / Starter)
-    # Total JVM footprint stays strictly <= 320MB (Heap + Metaspace + CodeCache + Direct + Stacks)
-    # Leaving >180MB for Python Discord Bot and Linux OS
+    # Total JVM footprint stays strictly <= 180MB (Heap + Metaspace + CodeCache + Direct + Stacks)
+    # Leaving >320MB for Python Discord Bot and Linux OS
     if container_ram_mb <= 512:
         lean_flags = [
-            "-Xmx180m",
-            "-Xms48m",
+            "-Xmx96m",
+            "-Xms32m",
             "-XX:+UseSerialGC",
-            "-XX:MaxMetaspaceSize=80m",
-            "-XX:ReservedCodeCacheSize=24m",
-            "-XX:MaxDirectMemorySize=24m",
+            "-XX:MaxMetaspaceSize=56m",
+            "-XX:ReservedCodeCacheSize=16m",
+            "-XX:MaxDirectMemorySize=16m",
+            "-XX:CompressedClassSpaceSize=16m",
+            "-XX:TieredStopAtLevel=1",
             "-Xss256k",
             "-Dio.netty.allocator.type=unpooled",
             "-Dfile.encoding=UTF-8",
@@ -117,12 +119,12 @@ def calculate_jvm_opts(container_ram_mb: int) -> list[str]:
             # If custom JAVA_OPTS exceeds safe heap for 512MB container, scale it down to prevent OOM
             has_oversized = any(
                 (t.startswith("-Xmx") or t.startswith("-Xms"))
-                and any(c in t for c in ("g", "G", "256", "384", "512", "1024"))
+                and any(c in t for c in ("g", "G", "128", "180", "256", "384", "512", "1024"))
                 for t in tokens
             )
             if has_oversized or not any(t.startswith("-Xmx") for t in tokens):
                 filtered = [t for t in tokens if not t.startswith("-Xmx") and not t.startswith("-Xms")]
-                return ["-Xmx180m", "-Xms48m"] + [f for f in lean_flags[2:] if f not in filtered] + filtered
+                return ["-Xmx96m", "-Xms32m"] + [f for f in lean_flags[2:] if f not in filtered] + filtered
             return tokens
         return lean_flags
 

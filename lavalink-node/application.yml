@@ -31,11 +31,11 @@ lavalink:
     sources:
       # Built-in YouTube MUST be false when dev.lavalink.youtube plugin is loaded
       youtube: false
-      # Built-in audio sources
+      # Built-in audio sources (disabled unused sources to minimize memory)
       soundcloud: true
-      bandcamp: true
-      twitch: true
-      vimeo: true
+      bandcamp: false
+      twitch: false
+      vimeo: false
       # HTTP source handles direct audio links (MP3, FLAC, AAC, OGG) and live radio streams
       http: true
       # Local file playback enabled for persistent local song cache streaming
@@ -44,20 +44,20 @@ lavalink:
     filters:
       volume: true
       equalizer: true
-      karaoke: true
+      karaoke: false
       timescale: true
-      tremolo: true
-      vibrato: true
-      distortion: true
-      rotation: true
+      tremolo: false
+      vibrato: false
+      distortion: false
+      rotation: false
       channelMix: true
       lowPass: true
 
-    # Audio Engine & Buffer tuning: 300ms jitter buffer + 2000ms lookahead frame buffer (Memory bounded for 500MB container)
-    bufferDurationMs: 300
-    frameBufferDurationMs: 2000
-    opusEncodingQuality: 10
-    resamplingQuality: HIGH
+    # Audio Engine & Buffer tuning: 200ms jitter buffer + 800ms lookahead frame buffer (Memory bounded for 500MB container)
+    bufferDurationMs: 200
+    frameBufferDurationMs: 800
+    opusEncodingQuality: 8
+    resamplingQuality: MEDIUM
     trackStuckThresholdMs: 10000
     useSeekGhosting: true
     playerUpdateInterval: 5
@@ -74,7 +74,7 @@ plugins:
     allowSearch: true
     allowDirectVideoIds: true
     allowDirectPlaylistIds: true
-    # Full multi-client suite from kyoka-lavalink
+    # Streamlined multi-client suite (removed broken ANDROID_TESTSUITE and redundant clients)
     clients:
       - TV
       - IOS
@@ -82,10 +82,7 @@ plugins:
       - WEBEMBEDDED
       - MUSIC
       - ANDROID_VR
-      - TVHTML5_SIMPLY
-      - ANDROID_MUSIC
       - WEB
-      - ANDROID_TESTSUITE
 
     clientOptions:
       TV:
@@ -118,22 +115,7 @@ plugins:
         searching: true
         videoLoading: true
         playlistLoading: true
-      TVHTML5_SIMPLY:
-        playback: true
-        searching: true
-        videoLoading: true
-        playlistLoading: true
-      ANDROID_MUSIC:
-        playback: true
-        searching: true
-        videoLoading: true
-        playlistLoading: true
       WEB:
-        playback: true
-        searching: true
-        videoLoading: true
-        playlistLoading: true
-      ANDROID_TESTSUITE:
         playback: true
         searching: true
         videoLoading: true
