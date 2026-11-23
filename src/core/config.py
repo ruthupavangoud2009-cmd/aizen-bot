@@ -156,29 +156,30 @@ class Config:
         # explicitly in the hosting environment when a trusted proxy is required.
         return pool
 
-    # Self-Hosted Lavalink / Audio Engine Settings
-    # KYOKA runs its own dedicated, co-located Lavalink v4 engine on loopback (127.0.0.1:2333).
-    # Public / community Lavalink nodes and third-party discovery are strictly disabled.
-    LAVALINK_HOST: str = os.getenv("LAVALINK_HOST", "127.0.0.1")
-    LAVALINK_PORT: int = int(os.getenv("LAVALINK_PORT", "2333"))
-    LAVALINK_SECURE: bool = os.getenv("LAVALINK_SECURE", "false").lower() in ("true", "1", "yes")
-    LAVALINK_IDENTIFIER: str = os.getenv("LAVALINK_IDENTIFIER", "kyoka-lavalink-local")
+    # Lavalink / Audio Engine Settings (Resilient Public Lavalink v4 Cluster)
+    LAVALINK_HOST: str = os.getenv("LAVALINK_HOST", "lavalinkv4.serenetia.com")
+    LAVALINK_PORT: int = int(os.getenv("LAVALINK_PORT", "443"))
+    LAVALINK_SECURE: bool = os.getenv("LAVALINK_SECURE", "true").lower() in ("true", "1", "yes")
+    LAVALINK_IDENTIFIER: str = os.getenv("LAVALINK_IDENTIFIER", "kyoka-lavalink-v4")
     LAVALINK_PASSWORD: str = (
         os.getenv("LAVALINK_PASSWORD")
         or os.getenv("LAVALINK_SERVER_PASSWORD")
-        or "kyoka_local_internal_secret"
+        or "https://seretia.link/discord"
     ).strip()
 
     # Canonical Lavalink REST URI; Wavelink upgrades this to ws://.../v4/websocket.
     LAVALINK_URI: str = os.getenv(
         "LAVALINK_URI",
-        f"{'https' if os.getenv('LAVALINK_SECURE', 'false').lower() in ('true', '1', 'yes') else 'http'}://{os.getenv('LAVALINK_HOST', '127.0.0.1')}:{os.getenv('LAVALINK_PORT', '2333')}"
+        f"{'https' if os.getenv('LAVALINK_SECURE', 'true').lower() in ('true', '1', 'yes') else 'http'}://{os.getenv('LAVALINK_HOST', 'lavalinkv4.serenetia.com')}:{os.getenv('LAVALINK_PORT', '443')}"
     )
 
-    # Dedicated private fallback nodes only (if any are explicitly provisioned).
-    LAVALINK_FALLBACK_URIS: str = os.getenv("LAVALINK_FALLBACK_URIS", "")
-    LAVALINK_AUTO_DISCOVER: bool = False
-    LAVALINK_PUBLIC_LIST_URL: str = ""
+    # Resilient public Lavalink v4 fallback nodes
+    LAVALINK_FALLBACK_URIS: str = os.getenv(
+        "LAVALINK_FALLBACK_URIS",
+        "http://lava-v4.ajieblogs.eu.org:80|https://dsc.gg/ajidevserver,https://lavalink.nazha.online:443|nazhafreelava"
+    )
+    LAVALINK_AUTO_DISCOVER: bool = os.getenv("LAVALINK_AUTO_DISCOVER", "true").lower() in ("true", "1", "yes")
+    LAVALINK_PUBLIC_LIST_URL: str = os.getenv("LAVALINK_PUBLIC_LIST_URL", "")
 
     # Persistent Audio Cache & Smart Queue Settings (Strictly optimized for 1GB container)
     MUSIC_CACHE_DIR: str = os.getenv("MUSIC_CACHE_DIR", "data/music_cache")

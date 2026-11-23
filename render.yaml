@@ -8,7 +8,7 @@ services:
     healthCheckPath: /health
     autoDeploy: true
     buildCommand: chmod +x build.sh && ./build.sh
-    startCommand: python scripts/run_combined.py
+    startCommand: python -m src.main
     envVars:
       - key: DISCORD_TOKEN
         sync: false
@@ -22,34 +22,25 @@ services:
         value: "+"
       - key: SYNC_COMMANDS_ON_STARTUP
         value: "false"
-      # Co-located Private Lavalink V4 Engine Settings (localhost 127.0.0.1:2333)
+      # Public Lavalink V4 Cluster Settings (Ultra-lean ~70MB container)
       - key: LAVALINK_AUTO_DISCOVER
-        value: "0"
-      - key: LAVALINK_HOST
-        value: "127.0.0.1"
-      - key: LAVALINK_PORT
-        value: "2333"
+        value: "true"
       - key: LAVALINK_SECURE
-        value: "false"
+        value: "true"
       - key: LAVALINK_IDENTIFIER
-        value: "kyoka-lavalink-local"
+        value: "kyoka-lavalink-v4"
       - key: LAVALINK_PASSWORD
-        sync: false
+        value: "https://seretia.link/discord"
       - key: LAVALINK_URI
-        value: "http://127.0.0.1:2333"
-      - key: LAVALINK_READINESS_TIMEOUT
-        value: "300"
-      # JVM Tuning for 500MB / 512MB Container Hosting (Strict 180MB heap limit to prevent OOM)
-      - key: JAVA_OPTS
-        value: "-Xmx180m -Xms48m -XX:+UseSerialGC -XX:MaxMetaspaceSize=80m -XX:ReservedCodeCacheSize=24m -XX:MaxDirectMemorySize=24m -Xss256k -Dio.netty.allocator.type=unpooled -Dfile.encoding=UTF-8 -Djava.security.egd=file:/dev/./urandom"
-      - key: CONTAINER_MAX_RAM_MB
-        value: "500"
-      # Spotify Resolution Credentials (optional, from kyoka-lavalink)
+        value: "https://lavalinkv4.serenetia.com:443"
+      - key: LAVALINK_FALLBACK_URIS
+        value: "http://lava-v4.ajieblogs.eu.org:80|https://dsc.gg/ajidevserver,https://lavalink.nazha.online:443|nazhafreelava"
+      # Spotify Resolution Credentials
       - key: SPOTIFY_CLIENT_ID
         sync: false
       - key: SPOTIFY_CLIENT_SECRET
         sync: false
-      # High-Performance Music Cache Configuration (Capped for 500MB container)
+      # High-Performance Music Cache Configuration
       - key: MUSIC_CACHE_MAX_MB
         value: "128"
       - key: MUSIC_CACHE_TTL_DAYS

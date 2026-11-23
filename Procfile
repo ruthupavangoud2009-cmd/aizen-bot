@@ -1,1 +1,1 @@
-web: python scripts/run_combined.py
+web: python -m src.main
