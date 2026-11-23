@@ -178,7 +178,7 @@ class Config:
         "LAVALINK_FALLBACK_URIS",
         "http://lava-v4.ajieblogs.eu.org:80|https://dsc.gg/ajidevserver,https://lavalink.nazha.online:443|nazhafreelava"
     )
-    LAVALINK_AUTO_DISCOVER: bool = os.getenv("LAVALINK_AUTO_DISCOVER", "true").lower() in ("true", "1", "yes")
+    LAVALINK_AUTO_DISCOVER: bool = False
     LAVALINK_PUBLIC_LIST_URL: str = os.getenv("LAVALINK_PUBLIC_LIST_URL", "")
 
     # Persistent Audio Cache & Smart Queue Settings (Strictly optimized for 1GB container)

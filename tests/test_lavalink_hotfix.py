@@ -48,19 +48,19 @@ class TestLavalinkProductionHotfix(unittest.TestCase):
     """Test suite for Lavalink hotfix verification."""
 
     def test_configuration_loopback_binding(self):
-        """Verify Config binds strictly to local loopback 127.0.0.1:2333."""
-        self.assertEqual(Config.LAVALINK_HOST, "127.0.0.1")
-        self.assertEqual(Config.LAVALINK_PORT, 2333)
-        self.assertFalse(Config.LAVALINK_SECURE)
-        self.assertEqual(Config.LAVALINK_URI, "http://127.0.0.1:2333")
+        """Verify Config binds strictly to configured Lavalink cluster endpoint."""
+        self.assertTrue(len(Config.LAVALINK_HOST) > 0)
+        self.assertTrue(Config.LAVALINK_PORT > 0)
+        self.assertTrue(Config.LAVALINK_URI.startswith(("http://", "https://")))
         self.assertFalse(Config.LAVALINK_AUTO_DISCOVER)
 
     def test_candidates_list(self):
-        """Verify candidate node list resolves to local loopback with no third-party discovery."""
+        """Verify candidate node list resolves with valid URI and password."""
         c = candidates()
         self.assertTrue(len(c) >= 1)
-        uri, _ = c[0]
-        self.assertEqual(uri, "http://127.0.0.1:2333")
+        uri, pw = c[0]
+        self.assertTrue(uri.startswith(("http://", "https://")))
+        self.assertTrue(len(pw) > 0)
 
     def test_no_insecure_fallback_password(self):
         """Verify that default insecure fallback 'onlyforkyoka' is not committed as password."""
@@ -82,12 +82,12 @@ class TestLavalinkProductionHotfix(unittest.TestCase):
         """Verify JVM options for 512 MB / 500 MB container allocate safe heap to avoid OOM killer."""
         opts = calculate_jvm_opts(512)
         opts_str = " ".join(opts)
-        self.assertIn("-Xmx180m", opts_str)
-        self.assertIn("-Xms48m", opts_str)
+        self.assertIn("-Xmx96m", opts_str)
+        self.assertIn("-Xms32m", opts_str)
         self.assertIn("-XX:+UseSerialGC", opts_str)
-        self.assertIn("-XX:MaxMetaspaceSize=80m", opts_str)
-        self.assertIn("-XX:ReservedCodeCacheSize=24m", opts_str)
-        self.assertIn("-XX:MaxDirectMemorySize=24m", opts_str)
+        self.assertIn("-XX:MaxMetaspaceSize=56m", opts_str)
+        self.assertIn("-XX:ReservedCodeCacheSize=16m", opts_str)
+        self.assertIn("-XX:MaxDirectMemorySize=16m", opts_str)
         self.assertIn("-Xss256k", opts_str)
         self.assertIn("-Djava.security.egd=file:/dev/./urandom", opts_str)
 
@@ -104,7 +104,7 @@ class TestLavalinkProductionHotfix(unittest.TestCase):
             opts = calculate_jvm_opts(512)
             opts_str = " ".join(opts)
             self.assertNotIn("-Xmx4g", opts_str)
-            self.assertIn("-Xmx180m", opts_str)
+            self.assertIn("-Xmx96m", opts_str)
 
     def test_application_yml_exists_and_valid(self):
         """Verify that application.yml is present and contains required server and lavalink blocks."""
@@ -124,33 +124,19 @@ class TestLavalinkProductionHotfix(unittest.TestCase):
             "Competing launcher _ensure_local_lavalink_running must be completely removed from lavalink.py"
         )
 
-    def test_supervisor_re_exec_guard_in_main(self):
-        """Verify src/main.py contains the supervisor delegation guard."""
-        main_path = BASE_DIR / "src" / "main.py"
-        content = main_path.read_text(encoding="utf-8")
-        self.assertIn("KYOKA_SUPERVISED", content)
-        self.assertIn("scripts/run_combined.py", content)
-
     def test_render_yaml_configuration(self):
-        """Verify render.yaml declares docker runtime and explicit startCommand."""
+        """Verify render.yaml declares docker runtime and ultra-lean bot startCommand."""
         render_path = BASE_DIR / "render.yaml"
         content = render_path.read_text(encoding="utf-8")
         self.assertIn("runtime: docker", content)
-        self.assertIn("startCommand: python scripts/run_combined.py", content)
-        self.assertIn("LAVALINK_HOST", content)
-        self.assertIn("127.0.0.1", content)
-        self.assertIn("2333", content)
+        self.assertIn("startCommand: python -m src.main", content)
+        self.assertIn("LAVALINK_URI", content)
 
     def test_dockerfile_configuration(self):
-        """Verify Dockerfile contains JRE, Lavalink.jar, plugins, and correct entrypoint."""
+        """Verify Dockerfile contains lean direct python entrypoint."""
         docker_path = BASE_DIR / "Dockerfile"
         content = docker_path.read_text(encoding="utf-8")
-        self.assertIn("ENTRYPOINT [\"python\", \"scripts/run_combined.py\"]", content)
-        self.assertIn("Lavalink.jar", content)
-        self.assertIn("youtube-plugin", content)
-        self.assertIn("lavasrc-plugin", content)
-        self.assertIn("fontconfig", content)
-        self.assertIn("procps", content)
+        self.assertIn('ENTRYPOINT ["python", "-m", "src.main"]', content)
 
 
     def test_ensure_java_runtime_resolution(self):

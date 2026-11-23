@@ -527,7 +527,8 @@ async def probe_candidate_node(
 
 RESILIENT_CLUSTER_NODES: list[tuple[str, str]] = [
     ("https://lavalinkv4.serenetia.com:443", "https://seretia.link/discord"),
-    ("https://lava-v4.millohost.my.id:443", "https://discord.gg/mjS5J2K3ep"),
+    ("http://lava-v4.ajieblogs.eu.org:80", "https://dsc.gg/ajidevserver"),
+    ("https://lavalink.nazha.online:443", "nazhafreelava"),
 ]
 
 
@@ -544,12 +545,7 @@ async def connect_lavalink_node(
     Order:
       1. the configured primary node
       2. the configured fallback nodes (LAVALINK_FALLBACK_URIS)
-      3. a working node discovered from the community directory
-
-    Wavelink's ``Pool.connect`` swallows connection errors and only registers
-    the node on success, so the real connection state is verified explicitly
-    afterwards. A node is only accepted when its websocket delivers the 'ready'
-    op AND its REST API answers - a node whose REST is hung cannot play music.
+      3. verified resilient public cluster nodes (RESILIENT_CLUSTER_NODES)
     """
     from src.core.config import Config
 
@@ -635,18 +631,19 @@ async def connect_lavalink_node(
         logger.warning(f"Lavalink node {uri} could not be used: {reason}")
         return None
 
-    # 1 + 2: configured nodes
-    logger.info("[KYOKA MUSIC] Connecting to local Lavalink")
+    # 1 + 2: configured primary & fallback nodes
+    logger.info("[KYOKA MUSIC] Connecting to Lavalink node cluster")
     for uri, password in candidates():
         node = await _try(uri, password)
         if node is not None:
             return node
 
-    # Only configured self-hosted nodes and explicit private fallbacks are used.
-    # Public node discovery is permanently disabled.
-    logger.warning(
-        "[KYOKA MUSIC] Dedicated local Lavalink node at 127.0.0.1:2333 is not reachable. "
-        "Verify the Kyoka supervisor (scripts/run_combined.py) is running."
-    )
+    # 3: resilient public cluster fallback
+    for uri, password in RESILIENT_CLUSTER_NODES:
+        node = await _try(uri, password)
+        if node is not None:
+            return node
+
+    logger.warning("[KYOKA MUSIC] All Lavalink cluster nodes are currently unreachable.")
     detail = "; ".join(failures) if failures else "no URI configured"
-    raise LavalinkUnavailable(f"Dedicated self-hosted Lavalink node is currently unreachable ({detail})")
+    raise LavalinkUnavailable(f"Lavalink audio engine is currently unreachable ({detail})")

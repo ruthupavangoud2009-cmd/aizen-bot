@@ -24,7 +24,7 @@ services:
         value: "false"
       # Public Lavalink V4 Cluster Settings (Ultra-lean ~70MB container)
       - key: LAVALINK_AUTO_DISCOVER
-        value: "true"
+        value: "false"
       - key: LAVALINK_SECURE
         value: "true"
       - key: LAVALINK_IDENTIFIER
