@@ -384,46 +384,5 @@ class TestMusicDiagnostics(unittest.IsolatedAsyncioTestCase):
         self.assertNotIn("onlyforkyoka", dump)
 
 
-class TestCombinedSupervisorAndDeployment(unittest.TestCase):
-    """Verifies combined monolithic supervisor, JVM tuning for 30GB host, and localhost binding."""
-
-    def test_supervisor_jvm_sizing_for_high_resource_host(self):
-        from scripts.run_combined import calculate_jvm_opts
-        # Test 30 GB host (~30720 MB)
-        opts_30gb = calculate_jvm_opts(30720)
-        self.assertIn("-Xmx4g", opts_30gb)
-        self.assertIn("-Xms1g", opts_30gb)
-        self.assertIn("-XX:+UseG1GC", opts_30gb)
-        self.assertIn("-XX:+UseStringDeduplication", opts_30gb)
-
-        # Test 8 GB host
-        opts_8gb = calculate_jvm_opts(8192)
-        self.assertIn("-Xmx2g", opts_8gb)
-
-        # Test custom override
-        with patch.dict(os.environ, {"JAVA_OPTS": "-Xmx8g -Xms2g"}):
-            opts_custom = calculate_jvm_opts(30720)
-            self.assertEqual(opts_custom, ["-Xmx8g", "-Xms2g"])
-
-    def test_supervisor_localhost_defaults(self):
-        from scripts.run_combined import CombinedSupervisor
-        supervisor = CombinedSupervisor()
-        self.assertEqual(os.environ["LAVALINK_HOST"], "127.0.0.1")
-        self.assertEqual(os.environ["LAVALINK_PORT"], "2333")
-        self.assertEqual(os.environ["LAVALINK_SECURE"], "false")
-        self.assertEqual(os.environ["LAVALINK_URI"], "http://127.0.0.1:2333")
-
-    def test_lavalink_application_yml_matches_kyoka_lavalink(self):
-        app_yml = Path(__file__).resolve().parent.parent / "lavalink-node" / "application.yml"
-        self.assertTrue(app_yml.is_file())
-        content = app_yml.read_text(encoding="utf-8")
-        self.assertIn("127.0.0.1", content)
-        self.assertIn("2333", content)
-        self.assertIn("youtube-plugin:1.18.2", content)
-        self.assertIn("lavasrc-plugin:4.8.3", content)
-        self.assertIn("local: true", content)
-        self.assertIn("ANDROID_VR", content)
-
-
 if __name__ == "__main__":
     unittest.main()

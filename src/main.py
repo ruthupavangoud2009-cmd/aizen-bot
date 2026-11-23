@@ -351,13 +351,6 @@ async def main() -> None:
 
 
 if __name__ == "__main__":
-    if os.getenv("KYOKA_USE_LOCAL_LAVALINK") == "1":
-        supervisor_script = BASE_DIR / "scripts" / "run_combined.py"
-        if supervisor_script.is_file():
-            os.environ["KYOKA_SUPERVISED"] = "1"
-            logger.info("[KYOKA] Local Lavalink requested; delegating to supervisor (scripts/run_combined.py)...")
-            os.execv(sys.executable, [sys.executable, str(supervisor_script)] + sys.argv[1:])
-
     try:
         asyncio.run(main())
     except KeyboardInterrupt:
