@@ -161,18 +161,86 @@ class EmojiRegistry:
         """Count unique application emoji IDs, not cache aliases."""
         return len({getattr(emoji, "id", id(emoji)) for emoji in self._emojis.values()})
 
+    @property
+    def heart_dot(self) -> str:
+        """Animated pulsing heart if available, else static heart dot, else bullet."""
+        return (
+            self.animated("heart_pulse", fallback="")
+            or self.get("heart_pulse", "")
+            or self.get("heart_dot", "")
+            or ">"
+        )
+
+    @property
+    def music_playing(self) -> str:
+        """Animated music equalizer if available, else static music, else note."""
+        return (
+            self.animated("music_playing", "music_music", fallback="")
+            or self.get("music_playing", "")
+            or self.get("music", "")
+            or "🎵"
+        )
+
+    @property
+    def verified(self) -> str:
+        """Animated verified glow if available, else static verified, else checkmark."""
+        return (
+            self.animated("verified_glow", fallback="")
+            or self.get("verified_glow", "")
+            or self.get("verified_premium", "")
+            or "✅"
+        )
+
+    @property
+    def loading(self) -> str:
+        """Animated loading spinner if available, else static loading, else spinner."""
+        return (
+            self.animated("loading_pulse", fallback="")
+            or self.get("loading_pulse", "")
+            or "🔄"
+        )
+
+    @property
+    def antinuke(self) -> str:
+        """Animated antinuke shield pulse if available, else shield."""
+        return (
+            self.animated("antinuke_pulse", fallback="")
+            or self.get("antinuke_pulse", "")
+            or self.get("antinuke_shield", "")
+            or "🛡️"
+        )
+
+    @property
+    def coin(self) -> str:
+        """Animated coin spin if available, else coin."""
+        return (
+            self.animated("coin_spin", fallback="")
+            or self.get("coin_spin", "")
+            or "🪙"
+        )
+
+    @property
+    def sparkle(self) -> str:
+        """Animated sparkle shine if available, else sparkle."""
+        return (
+            self.animated("sparkle_shine", fallback="")
+            or self.get("sparkle_shine", "")
+            or "✨"
+        )
+
     def _init_alias_map(self) -> dict[str, list[str]]:
         return {
             "white_line": ["whiteline", "line", "icon_line"],
             "white_arrow": ["icons_rightarrow", "tts_right_arrow", "icons_arrow"],
             "tts_right_arrow": ["icons_rightarrow", "icons_arrow"],
-            "icons_arrow": ["icons_rightarrow", "heart_dot", "icon_arrow_left"],
-            "icons_rightarrow": ["icons_arrow", "heart_dot"],
+            "icons_arrow": ["icons_rightarrow", "heart_pulse", "heart_dot", "icon_arrow_left"],
+            "icons_rightarrow": ["icons_arrow", "heart_pulse", "heart_dot"],
             "icon_arrow_left": ["icons_leftarrow"],
             "icons_leftarrow": ["icon_arrow_left"],
-            "heart_dot": ["icons_heart", "heart"],
-            "icons_heart": ["heart_dot", "heart"],
-            "heart": ["heart_dot", "icons_heart"],
+            "heart_dot": ["heart_pulse", "icons_heart", "heart"],
+            "icons_heart": ["heart_pulse", "heart_dot", "heart"],
+            "heart": ["heart_pulse", "heart_dot", "icons_heart"],
+            "heart_pulse": ["heart_dot", "icons_heart", "heart"],
             "ticket_nox": ["icon_ticket", "ticket_support"],
             "icon_ticket": ["ticket_nox", "ticket_support", "ticket"],
             "icons_locked": ["icon_lock", "icon_locked"],
@@ -189,8 +257,10 @@ class EmojiRegistry:
             "icon_delete": ["icons_delete", "icon_clear", "icon_x"],
             "icons_download": ["icons_download", "icons_Download", "download", "icon_download"],
             "download": ["icons_download", "icons_Download", "icon_download"],
-            "music": ["icon_music", "music_playing", "music_music"],
-            "icon_music": ["music", "music_playing", "music_music"],
+            "music": ["music_playing", "music_music", "icon_music"],
+            "music_playing": ["music_music", "music", "icon_music"],
+            "music_music": ["music_playing", "music", "icon_music"],
+            "icon_music": ["music_playing", "music_music", "music"],
             "paused": ["icons_pause", "icon_pause"],
             "icons_pause": ["paused", "icon_pause"],
             "skip": ["icons_rightarrow", "icon_arrow_left", "icons_arrow"],
@@ -215,6 +285,16 @@ class EmojiRegistry:
             "s_giveaway": ["discord_giveaway", "giveaway", "icons_gift"],
             "gpp_winner": ["winner", "s_giveaway", "discord_giveaway", "icons_gift"],
             "winner": ["gpp_winner", "s_giveaway", "discord_giveaway", "icons_gift"],
+            "verified": ["verified_glow", "verified_premium", "icons_verified"],
+            "verified_glow": ["verified_premium", "icons_verified", "icon_success"],
+            "loading": ["loading_pulse", "icons_loading", "ub_refresh_icon"],
+            "loading_pulse": ["icons_loading", "ub_refresh_icon", "loading"],
+            "antinuke": ["antinuke_pulse", "antinuke_shield", "icon_shield"],
+            "antinuke_pulse": ["antinuke_shield", "icon_shield", "icons_guardian"],
+            "coin": ["coin_spin", "icon_casino", "cash"],
+            "coin_spin": ["icon_casino", "cash", "icon_dollar"],
+            "sparkle": ["sparkle_shine", "ai", "icons_magicwand"],
+            "sparkle_shine": ["ai", "icons_magicwand", "icons_sparkles"],
         }
 
     async def _load_persistent_mappings(self) -> None:

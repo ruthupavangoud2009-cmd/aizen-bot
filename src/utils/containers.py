@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import logging
 from typing import Any
+
 import discord
 from discord.ext import commands
 
@@ -17,15 +18,11 @@ logger = logging.getLogger("Kyoka.Containers")
 
 
 class KyokaContainer:
-    """Builder for Discord Components V2 Container cards with a shared KYŌKA accent."""
-
-    DEFAULT_ACCENT_COLOR = 0x7C3AED  # Royal Violet
+    """Builder for Discord Components V2 Container cards."""
 
     def __init__(self, accent_color: int | None = None) -> None:
         self.components: list[dict[str, Any]] = []
-        self._accent_color: int | None = (
-            accent_color if accent_color is not None else self.DEFAULT_ACCENT_COLOR
-        )
+        self._accent_color: int | None = accent_color
         self.author_name: str | None = None
         self.author_icon_url: str | None = None
         self.footer_text: str | None = None
@@ -164,77 +161,40 @@ class KyokaContainer:
         return self
 
     def to_embed(self, content: str | None = None) -> discord.Embed:
-        """Convert container components into a standard signature discord.Embed."""
+        """Convert container components into a standard discord.Embed for fallback compatibility."""
         if hasattr(self, "_fallback_embed") and self._fallback_embed is not None:
             return self._fallback_embed
-
-        color = self.accent_color if self.accent_color is not None else self.DEFAULT_ACCENT_COLOR
         embed = discord.Embed(
-            color=color,
+            color=self.accent_color if self.accent_color is not None else 0x7C3AED,
             timestamp=discord.utils.utcnow(),
         )
-
-        desc_parts: list[str] = []
         if content and str(content).strip():
-            desc_parts.append(str(content).strip())
-
-        footer_text: str | None = getattr(self, "footer_text", None)
-
+            embed.description = str(content).strip()
         for comp in self.components:
             ctype = comp.get("type")
             if ctype == 10:  # TextDisplay
-                text = str(comp.get("content", ""))
+                text = comp.get("content", "")
                 if text.startswith("-# "):
-                    footer_text = text.replace("-# ", "").strip()
-                elif text.startswith("## ") and not embed.title:
-                    embed.title = text.replace("## ", "").strip()
-                elif text.strip():
-                    desc_parts.append(text.strip())
-
+                    embed.set_footer(text=text.replace("-# ", "").strip())
+                elif not embed.description:
+                    embed.description = text
+                else:
+                    embed.description += f"\n\n{text}"
             elif ctype == 9:  # Section
                 sub_comps = comp.get("components", [])
                 for sc in sub_comps:
-                    text = str(sc.get("content", ""))
-                    if text.startswith("-# "):
-                        footer_text = text.replace("-# ", "").strip()
-                    elif text.startswith("## ") and not embed.title:
-                        embed.title = text.replace("## ", "").strip()
-                    elif text.strip():
-                        desc_parts.append(text.strip())
-
+                    text = sc.get("content", "")
+                    if not embed.description:
+                        embed.description = text
+                    else:
+                        embed.description += f"\n\n{text}"
                 acc = comp.get("accessory", {})
                 if acc.get("type") == 11 and "media" in acc:
                     embed.set_thumbnail(url=acc["media"].get("url", ""))
-
             elif ctype == 12:  # Media Gallery
                 items = comp.get("items", [])
                 if items and "media" in items[0]:
                     embed.set_image(url=items[0]["media"].get("url", ""))
-
-        if desc_parts:
-            raw_desc = "\n\n".join(desc_parts)
-            embed.description = sanitize_emoji_string(raw_desc)[:4000]
-
-        if embed.title:
-            embed.title = sanitize_emoji_string(embed.title)[:256]
-
-        if footer_text:
-            embed.set_footer(
-                text=footer_text[:2048],
-                icon_url=getattr(self, "footer_icon_url", None),
-            )
-        elif not embed.footer or not embed.footer.text:
-            embed.set_footer(
-                text="✧ KYOKA Suigetsu Protocol",
-                icon_url=getattr(self, "footer_icon_url", None),
-            )
-
-        if getattr(self, "author_name", None):
-            embed.set_author(
-                name=self.author_name[:256],
-                icon_url=getattr(self, "author_icon_url", None),
-            )
-
         return embed
 
     def build(self) -> discord.Embed:
@@ -253,6 +213,7 @@ class KyokaContainer:
         if self.accent_color is not None:
             data["accent_color"] = self.accent_color
         return data
+
 
 def build_container_payload(
     container: KyokaContainer | list[KyokaContainer],
@@ -344,8 +305,8 @@ def _prepare_multipart_form(
     for f in file_list:
         try:
             f.reset()
-        except Exception:
-            pass
+        except Exception as r_err:
+            logger.debug(f"File reset notice: {r_err}")
 
     payload["attachments"] = [
         {"id": i, "filename": f.filename}
@@ -379,214 +340,392 @@ async def send_container_response(
     files: list[discord.File] | None = None,
     allowed_mentions: discord.AllowedMentions | dict[str, Any] | None = None,
 ) -> Any:
-    """Send a message using standard, high-definition Discord Rich Embeds with custom Kyoka Sovereign aesthetics."""
+    """Send or edit a message using Components V2 Container(s) with optional file attachments."""
+    # resolve hybrid context interaction if present
     interaction = getattr(interaction_or_ctx, "interaction", None)
-    target = interaction if interaction is not None else interaction_or_ctx
+    if interaction is not None:
+        target = interaction
+    else:
+        target = interaction_or_ctx
 
-    container_list = container if isinstance(container, list) else [container]
-    primary = container_list[0]
+    payload = build_container_payload(
+        container,
+        view=view,
+        content=content,
+        allowed_mentions=allowed_mentions,
+    )
+    file_list = [file] if file is not None else (files or [])
 
-    # Resolve fallback link view if buttons are embedded inside container components
-    actual_view = view
-    if actual_view is None:
-        link_view = discord.ui.View(timeout=None)
-        has_links = False
-        for c in container_list:
-            for comp in getattr(c, "components", []):
-                if comp.get("type") == 1:
-                    for item in comp.get("components", []):
-                        if item.get("type") == 2 and item.get("style") == 5:
-                            lbl = item.get("label", "Link")
-                            u = item.get("url", "https://discord.com")
-                            if u and u.startswith("http"):
-                                link_view.add_item(discord.ui.Button(label=lbl, url=u, style=discord.ButtonStyle.link))
-                                has_links = True
-        if has_links:
-            actual_view = link_view
-
-    file_list = [file] if file is not None else (files or None)
-
-    guild = getattr(target, "guild", None)
-    bot = getattr(target, "client", getattr(target, "bot", None))
-    if not bot and hasattr(target, "_state"):
-        bot = getattr(target._state, "_parent", getattr(target._state, "bot", None))
-
-    custom_ui_color = None
-    if guild and bot and hasattr(bot, "guild_mgr"):
-        custom_ui_color = bot.guild_mgr.get_ui_color(guild.id, default=None)
-
-    embeds = []
-    for i, c in enumerate(container_list):
-        emb = c.to_embed(content=content if i == 0 else None)
-        if custom_ui_color is not None:
-            emb.color = discord.Color(custom_ui_color)
-        elif emb.color is None or emb.color.value == 0:
-            emb.color = discord.Color(KyokaContainer.DEFAULT_ACCENT_COLOR)
-        embeds.append(emb)
-
-    single_embed = embeds[0] if len(embeds) == 1 else None
-
-    # 1. Interaction or Hybrid Interaction
+    interaction = None
     if isinstance(target, discord.Interaction):
-        try:
-            if target.response.is_done():
-                if single_embed:
-                    return await target.followup.send(
-                        embed=single_embed,
-                        view=actual_view or discord.utils.MISSING,
-                        ephemeral=ephemeral,
-                        files=file_list or discord.utils.MISSING,
+        interaction = target
+    elif hasattr(target, "interaction") and getattr(target, "interaction", None) is not None:
+        interaction = target.interaction
+
+    if interaction:
+        bot = getattr(interaction, "client", getattr(interaction, "bot", None))
+        app_id = getattr(bot, "application_id", None) or (bot.user.id if bot and bot.user else None)
+        if ephemeral:
+            payload["flags"] = payload.get("flags", 0) | 64  # EPHEMERAL
+
+        if interaction.response.is_done():
+            try:
+                if file_list:
+                    form = _prepare_multipart_form(payload, file_list)
+                    msg_data = await bot.http.request(
+                        discord.http.Route(
+                            "POST",
+                            f"/webhooks/{app_id}/{interaction.token}",
+                        ),
+                        form=form,
+                        files=file_list,
                     )
                 else:
-                    return await target.followup.send(
-                        embeds=embeds,
-                        view=actual_view or discord.utils.MISSING,
-                        ephemeral=ephemeral,
-                        files=file_list or discord.utils.MISSING,
+                    msg_data = await bot.http.request(
+                        discord.http.Route(
+                            "POST",
+                            f"/webhooks/{app_id}/{interaction.token}",
+                        ),
+                        json=payload,
                     )
+                if view and hasattr(bot, "_connection"):
+                    msg_id = int(msg_data["id"]) if isinstance(msg_data, dict) and "id" in msg_data else None
+                    state = getattr(bot, "_connection", None) or getattr(bot, "_state", None) or bot
+                    if hasattr(state, "store_view"):
+                        state.store_view(view, msg_id)
+                if isinstance(msg_data, dict):
+                    msg_data["_bot"] = bot
+                    msg_data["channel_id"] = interaction.channel_id
+                    channel_obj = getattr(target, "channel", None) or getattr(interaction, "channel", None)
+                    state = getattr(bot, "_connection", bot)
+                    if hasattr(state, "create_message") and channel_obj:
+                        try:
+                            return state.create_message(channel=channel_obj, data=msg_data)
+                        except Exception as cm_err:
+                            logger.debug(f"create_message notice: {cm_err}")
+                return msg_data
+            except Exception as e:
+                logger.warning(f"Interaction followup webhook failed ({e}), falling back to direct channel dispatch...")
+        else:
+            try:
+                # Send initial response via raw interaction callback
+                if file_list:
+                    form = _prepare_multipart_form(payload, file_list, wrapper={"type": 4, "data": payload})
+                    res = await bot.http.request(
+                        discord.http.Route(
+                            "POST",
+                            f"/interactions/{interaction.id}/{interaction.token}/callback",
+                        ),
+                        form=form,
+                        files=file_list,
+                    )
+                else:
+                    res = await bot.http.request(
+                        discord.http.Route(
+                            "POST",
+                            f"/interactions/{interaction.id}/{interaction.token}/callback",
+                        ),
+                        json={"type": 4, "data": payload},
+                    )
+                if view:
+                    state = getattr(bot, "_connection", None) or getattr(bot, "_state", None) or bot
+                    if hasattr(state, "store_view"):
+                        state.store_view(view)
+                return res
+            except discord.HTTPException as e:
+                # 40060: Interaction has already been acknowledged -> Fallback to webhook followup!
+                if e.code == 40060 or "already been acknowledged" in str(e).lower():
+                    try:
+                        if file_list:
+                            form = _prepare_multipart_form(payload, file_list)
+                            msg_data = await bot.http.request(
+                                discord.http.Route(
+                                    "POST",
+                                    f"/webhooks/{app_id}/{interaction.token}",
+                                ),
+                                form=form,
+                                files=file_list,
+                            )
+                        else:
+                            msg_data = await bot.http.request(
+                                discord.http.Route(
+                                    "POST",
+                                    f"/webhooks/{app_id}/{interaction.token}",
+                                ),
+                                json=payload,
+                            )
+                        if isinstance(msg_data, dict):
+                            msg_data["_bot"] = bot
+                            msg_data["channel_id"] = interaction.channel_id
+                            channel_obj = getattr(target, "channel", None) or getattr(interaction, "channel", None)
+                            state = getattr(bot, "_connection", bot)
+                            if hasattr(state, "create_message") and channel_obj:
+                                try:
+                                    return state.create_message(channel=channel_obj, data=msg_data)
+                                except Exception as cm_err:
+                                    logger.debug(f"create_message fallback notice: {cm_err}")
+                        return msg_data
+                    except Exception as e2:
+                        logger.warning(f"Interaction followup fallback failed: {e2}")
+                elif e.code == 10062 or "unknown interaction" in str(e).lower():
+                    logger.warning("Interaction expired (10062), falling back to channel dispatch...")
+                else:
+                    raise
+    else:
+        obj = target
+
+        # Handle User / Member DMs
+        if isinstance(obj, (discord.User, discord.Member)):
+            dm = await obj.create_dm()
+            channel_id = dm.id
+            bot_instance = getattr(obj, "_state", None)
+            http_client = getattr(bot_instance, "http", None)
+        elif isinstance(obj, discord.abc.GuildChannel) or (isinstance(obj, discord.abc.Messageable) and hasattr(obj, "id") and not hasattr(obj, "channel")):
+            channel_id = obj.id
+            bot_instance = getattr(obj, "bot", getattr(obj, "_state", None))
+            http_client = getattr(bot_instance, "http", None) or getattr(getattr(obj, "_state", None), "http", None)
+        elif hasattr(obj, "channel"):
+            channel_id = obj.channel.id
+            bot_instance = getattr(obj, "bot", getattr(obj, "_state", None))
+            http_client = getattr(bot_instance, "http", None) or getattr(getattr(obj, "_state", None), "http", None)
+        else:
+            channel_id = int(obj)
+            bot_instance = getattr(obj, "bot", getattr(obj, "_state", None))
+            http_client = getattr(bot_instance, "http", None) or getattr(getattr(obj, "_state", None), "http", None)
+
+        # Direct bot channel message dispatch via raw Components V2 payload
+        try:
+            if file_list:
+                form = _prepare_multipart_form(payload, file_list)
+                msg_data = await http_client.request(
+                    discord.http.Route("POST", f"/channels/{channel_id}/messages"),
+                    form=form,
+                    files=file_list,
+                )
             else:
-                if single_embed:
-                    await target.response.send_message(
-                        embed=single_embed,
-                        view=actual_view or discord.utils.MISSING,
-                        ephemeral=ephemeral,
-                        files=file_list or discord.utils.MISSING,
-                    )
-                else:
-                    await target.response.send_message(
-                        embeds=embeds,
-                        view=actual_view or discord.utils.MISSING,
-                        ephemeral=ephemeral,
-                        files=file_list or discord.utils.MISSING,
-                    )
-                try:
-                    return await target.original_response()
-                except Exception:
-                    return None
-        except (discord.NotFound, discord.HTTPException):
-            channel = getattr(target, "channel", None)
-            if channel and hasattr(channel, "send"):
-                if single_embed:
-                    return await channel.send(
-                        embed=single_embed,
-                        view=actual_view or discord.utils.MISSING,
-                        files=file_list or discord.utils.MISSING,
-                    )
-                return await channel.send(
-                    embeds=embeds,
-                    view=actual_view or discord.utils.MISSING,
-                    files=file_list or discord.utils.MISSING,
+                msg_data = await http_client.request(
+                    discord.http.Route("POST", f"/channels/{channel_id}/messages"),
+                    json=payload,
                 )
+            if view and msg_data and isinstance(msg_data, dict) and "id" in msg_data:
+                msg_id = int(msg_data["id"])
+                if not getattr(view, "message_id", None):
+                    setattr(view, "message_id", msg_id)
+                if not getattr(view, "channel_id", None):
+                    setattr(view, "channel_id", channel_id)
+                state = getattr(bot_instance, "_connection", None) or getattr(bot_instance, "_state", None) or bot_instance
+                if hasattr(state, "store_view"):
+                    state.store_view(view, msg_id)
+
+            # Reconstruct discord.Message if state is accessible
+            if isinstance(msg_data, dict):
+                msg_data["_bot"] = bot_instance
+                msg_data["channel_id"] = channel_id
+                channel_obj = getattr(obj, "channel", obj if isinstance(obj, discord.abc.Messageable) else None)
+                state = getattr(bot_instance, "_connection", bot_instance)
+                if hasattr(state, "create_message") and channel_obj:
+                    try:
+                        return state.create_message(channel=channel_obj, data=msg_data)
+                    except Exception as cm_err:
+                        logger.debug(f"create_message channel notice: {cm_err}")
+            return msg_data
+        except discord.Forbidden:
             raise
+        except discord.HTTPException as e:
+            if e.status == 429:
+                logger.error(f"Discord 429 Too Many Requests (Rate limit): {e}")
+                raise
+            logger.warning(f"Raw Components V2 HTTP request failed ({e}), attempting standard send fallback...")
+            target_send = getattr(obj, "send", None) or getattr(getattr(obj, "channel", None), "send", None)
+            if target_send:
+                primary = container if isinstance(container, KyokaContainer) else container[0]
 
-    # 2. Context
-    if isinstance(target, commands.Context):
-        try:
-            if single_embed:
-                return await target.reply(
-                    embed=single_embed,
-                    view=actual_view or discord.utils.MISSING,
-                    files=file_list or discord.utils.MISSING,
-                    mention_author=False,
-                )
-            return await target.reply(
-                embeds=embeds,
-                view=actual_view or discord.utils.MISSING,
-                files=file_list or discord.utils.MISSING,
-                mention_author=False,
-            )
-        except Exception:
-            if single_embed:
-                return await target.send(
-                    embed=single_embed,
-                    view=actual_view or discord.utils.MISSING,
-                    files=file_list or discord.utils.MISSING,
-                )
-            return await target.send(
-                embeds=embeds,
-                view=actual_view or discord.utils.MISSING,
-                files=file_list or discord.utils.MISSING,
-            )
+                # Extract link buttons from container into a fallback View if no view is provided
+                fallback_view = view
+                if fallback_view is None:
+                    container_list = container if isinstance(container, list) else [container]
+                    link_view = discord.ui.View(timeout=None)
+                    has_buttons = False
+                    for c in container_list:
+                        for comp in c.components:
+                            if comp.get("type") == 1:
+                                for item in comp.get("components", []):
+                                    if item.get("type") == 2 and item.get("style") == 5:
+                                        lbl = item.get("label", "Link")
+                                        u = item.get("url", "https://discord.com")
+                                        if u and u.startswith("http"):
+                                            link_view.add_item(discord.ui.Button(label=lbl, url=u, style=discord.ButtonStyle.link))
+                                            has_buttons = True
+                    if has_buttons:
+                        fallback_view = link_view
 
-    # 3. Direct Messageable Channel / Thread
-    if hasattr(target, "send") and callable(target.send):
-        if single_embed:
-            return await target.send(
-                embed=single_embed,
-                view=actual_view or discord.utils.MISSING,
-                files=file_list or discord.utils.MISSING,
-            )
-        return await target.send(
-            embeds=embeds,
-            view=actual_view or discord.utils.MISSING,
-            files=file_list or discord.utils.MISSING,
-        )
+                send_kwargs: dict[str, Any] = {
+                    "content": content,
+                    "embed": primary.to_embed(content=content),
+                    "view": fallback_view,
+                    "allowed_mentions": allowed_mentions or discord.AllowedMentions(users=True),
+                }
+                if file_list:
+                    if len(file_list) == 1:
+                        send_kwargs["file"] = file_list[0]
+                    else:
+                        send_kwargs["files"] = file_list
 
-    # 4. User or Member DM
-    if isinstance(target, (discord.User, discord.Member)):
-        dm = await target.create_dm()
-        if single_embed:
-            return await dm.send(
-                embed=single_embed,
-                view=actual_view or discord.utils.MISSING,
-                files=file_list or discord.utils.MISSING,
-            )
-        return await dm.send(
-            embeds=embeds,
-            view=actual_view or discord.utils.MISSING,
-            files=file_list or discord.utils.MISSING,
-        )
-
-    raise ValueError(f"Unsupported target for send_container_response: {type(target)}")
+                msg = await target_send(**send_kwargs)
+                if view and msg and hasattr(msg, "id"):
+                    setattr(view, "message_id", msg.id)
+                    setattr(view, "channel_id", getattr(msg.channel, "id", None))
+                    bot_instance = getattr(msg, "_state", None)
+                    if bot_instance and hasattr(bot_instance, "store_view"):
+                        bot_instance.store_view(view, msg.id)
+                return msg
+            raise
 
 
 async def edit_container_response(
-    interaction_or_msg: discord.Interaction | discord.Message,
+    interaction_or_msg: discord.Interaction | discord.Message | dict[str, Any],
     container: KyokaContainer | list[KyokaContainer],
     view: discord.ui.View | None = None,
     file: discord.File | None = None,
     files: list[discord.File] | None = None,
     content: str | None = None,
-) -> Any:
-    """Edit an existing message or interaction safely using Discord Rich Embeds."""
-    container_list = container if isinstance(container, list) else [container]
-    embeds = [c.to_embed(content=content if i == 0 else None) for i, c in enumerate(container_list)]
-    single_embed = embeds[0] if len(embeds) == 1 else None
+) -> None:
+    """Edit an existing Components V2 Container message safely with fallbacks, including files."""
+    payload = build_container_payload(container, view=view, is_edit=True, content=content)
+    payload.pop("flags", None)
+    file_list = [file] if file is not None else (files or [])
 
-    if isinstance(interaction_or_msg, discord.Message):
-        if single_embed:
-            return await interaction_or_msg.edit(
-                embed=single_embed,
-                view=view or discord.utils.MISSING,
-            )
-        return await interaction_or_msg.edit(
-            embeds=embeds,
-            view=view or discord.utils.MISSING,
+    if isinstance(interaction_or_msg, (discord.Message, dict)):
+        msg = interaction_or_msg
+        channel_id = getattr(getattr(msg, "channel", None), "id", None) or (int(msg.get("channel_id", 0)) if isinstance(msg, dict) else None)
+        msg_id = getattr(msg, "id", None) or (int(msg.get("id", 0)) if isinstance(msg, dict) else None)
+        bot = (
+            getattr(msg, "bot", None)
+            or getattr(getattr(msg, "_state", None), "client", None)
+            or getattr(msg, "_state", None)
+            or (msg.get("_bot") if isinstance(msg, dict) else None)
         )
+        http_client = getattr(bot, "http", None) or (getattr(bot, "_state", None) and getattr(bot._state, "http", None))
+        if http_client and channel_id and msg_id:
+            try:
+                if file_list:
+                    form = _prepare_multipart_form(payload, file_list)
+                    await http_client.request(
+                        discord.http.Route(
+                            "PATCH",
+                            f"/channels/{channel_id}/messages/{msg_id}",
+                        ),
+                        form=form,
+                        files=file_list,
+                    )
+                else:
+                    await http_client.request(
+                        discord.http.Route(
+                            "PATCH",
+                            f"/channels/{channel_id}/messages/{msg_id}",
+                        ),
+                        json=payload,
+                    )
+                if view:
+                    state = getattr(bot, "_connection", None) or getattr(bot, "_state", None) or bot
+                    if hasattr(state, "store_view"):
+                        state.store_view(view, msg_id)
+                return
+            except Exception as e:
+                logger.error(f"Direct channel PATCH edit failed: {e}")
+                raise
+        return
 
-    if isinstance(interaction_or_msg, discord.Interaction):
-        if not interaction_or_msg.response.is_done():
-            if single_embed:
-                return await interaction_or_msg.response.edit_message(
-                    embed=single_embed,
-                    view=view or discord.utils.MISSING,
+    interaction = interaction_or_msg
+    bot = interaction.client
+    app_id = (
+        getattr(interaction, "application_id", None)
+        or getattr(bot, "application_id", None)
+        or (bot.user.id if bot and bot.user else None)
+    )
+
+    # try interaction response callback (type 7 UPDATE_MESSAGE) if not done
+    try:
+        if not interaction.response.is_done():
+            if file_list:
+                form = _prepare_multipart_form(payload, file_list, wrapper={"type": 7, "data": payload})
+                await bot.http.request(
+                    discord.http.Route(
+                        "POST",
+                        f"/interactions/{interaction.id}/{interaction.token}/callback",
+                    ),
+                    form=form,
+                    files=file_list,
                 )
-            return await interaction_or_msg.response.edit_message(
-                embeds=embeds,
-                view=view or discord.utils.MISSING,
-            )
+            else:
+                await bot.http.request(
+                    discord.http.Route(
+                        "POST",
+                        f"/interactions/{interaction.id}/{interaction.token}/callback",
+                    ),
+                    json={"type": 7, "data": payload},  # 7 = UPDATE_MESSAGE
+                )
+            if view and hasattr(bot, "_connection"):
+                msg_id = interaction.message.id if interaction.message else None
+                bot._connection.store_view(view, msg_id)
+            return
         else:
-            if single_embed:
-                return await interaction_or_msg.edit_original_response(
-                    embed=single_embed,
-                    view=view or discord.utils.MISSING,
+            # if interaction is already done/deferred, edit original webhook message
+            if file_list:
+                form = _prepare_multipart_form(payload, file_list)
+                msg_data = await bot.http.request(
+                    discord.http.Route(
+                        "PATCH",
+                        f"/webhooks/{app_id}/{interaction.token}/messages/@original",
+                    ),
+                    form=form,
+                    files=file_list,
                 )
-            return await interaction_or_msg.edit_original_response(
-                embeds=embeds,
-                view=view or discord.utils.MISSING,
-            )
+            else:
+                msg_data = await bot.http.request(
+                    discord.http.Route(
+                        "PATCH",
+                        f"/webhooks/{app_id}/{interaction.token}/messages/@original",
+                    ),
+                    json=payload,
+                )
+            if view and hasattr(bot, "_connection"):
+                msg_id = None
+                if isinstance(msg_data, dict) and "id" in msg_data:
+                    msg_id = int(msg_data["id"])
+                elif interaction.message:
+                    msg_id = interaction.message.id
+                bot._connection.store_view(view, msg_id)
+            return
+    except Exception as e:
+        logger.warning(f"Interaction callback edit failed ({e}). Attempting channel PATCH fallback.")
+
+    # fallback to direct channel message edit if interaction expired
+    try:
+        if interaction.message and interaction.channel_id:
+            if file_list:
+                form = _prepare_multipart_form(payload, file_list)
+                await bot.http.request(
+                    discord.http.Route(
+                        "PATCH",
+                        f"/channels/{interaction.channel_id}/messages/{interaction.message.id}",
+                    ),
+                    form=form,
+                    files=file_list,
+                )
+            else:
+                await bot.http.request(
+                    discord.http.Route(
+                        "PATCH",
+                        f"/channels/{interaction.channel_id}/messages/{interaction.message.id}",
+                    ),
+                    json=payload,
+                )
+            if view and hasattr(bot, "_connection"):
+                bot._connection.store_view(view, interaction.message.id)
+    except Exception as e2:
+        logger.error(f"Fallback channel message edit also failed: {e2}")
 
 
 # Backward Compatibility Alias
 KyroContainer = KyokaContainer
-

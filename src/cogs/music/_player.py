@@ -1392,53 +1392,38 @@ class GuildPlayer:
         """Construct the Components V2 Now Playing card matching custom layout."""
         e_reg = getattr(self.bot, "custom_emojis", None)
         heart_e = ""
+        music_anim = ""
         if e_reg:
             heart_e = (
-                e_reg.get("heart_dot", "")
+                getattr(e_reg, "heart_dot", "")
+                or e_reg.animated("heart_pulse", fallback="")
+                or e_reg.get("heart_pulse", "")
+                or e_reg.get("heart_dot", "")
                 or e_reg.get("icons_heart", "")
-                or e_reg.get("heart", "")
             )
-        link_emoji = e_reg.get("link", "") if e_reg else ""
+            music_anim = getattr(e_reg, "music_playing", "") or e_reg.get("music_playing", "")
 
         container = KyokaContainer(accent_color=None)
 
-        # 1. Title: Now Playing (ZERO emoji on title)
-        container.add_text("## Now Playing")
+        # 1. Title: Now Playing (Clean typography with animated visualizer if available)
+        title_prefix = f"{music_anim} " if music_anim else ""
+        container.add_text(f"## {title_prefix}Now Playing")
 
         # 2. 1 Divider line directly beneath Now Playing
         container.add_separator(divider=True)
 
-        # 3. Song, Artist, and Duration with heart emoji in front (NO normal/unicode emojis, no source)
+        # 3. Song, Artist, and Duration with animated heart emoji in front (NO normal/unicode emojis, no source)
         safe_title = track.title.replace("[", "(").replace("]", ")")
         song_display = f"[{safe_title}]({track.url})" if track.url else safe_title
         artist_display = track.author or "Unknown Artist"
         duration_display = track.formatted_duration or "00:00"
 
-        # Calculate elapsed position & dynamic progress bar
-        pos_ms = getattr(self.voice_client, "position", 0) if self.voice_client else 0
-        total_sec = max(1, track.duration)
-        cur_sec = min(int(pos_ms / 1000), total_sec)
-        e_mins, e_secs = divmod(cur_sec, 60)
-        progress = cur_sec / total_sec
-        bar_len = 10
-        filled = min(bar_len, max(0, int(progress * bar_len)))
-        prog_bar = "━" * filled + "🔘" + "─" * max(0, bar_len - filled - 1)
-        progress_display = f"`{e_mins:02d}:{e_secs:02d}` {prog_bar} `{duration_display}`"
-
-        vol_pct = int(self.volume * 100)
-        loop_status = self.loop_mode.upper() if self.loop_mode != "off" else "Off"
-        queue_count = len(self.queue)
-        q_label = f"{queue_count} track{'s' if queue_count != 1 else ''}" if queue_count > 0 else "Empty"
-
         dot_prefix = f"> {heart_e} " if heart_e else "> "
-        link_prefix = f"{link_emoji} " if link_emoji else ""
 
-        engine_label = "⚡ Cached (0ms)" if getattr(track, "is_cached", False) else f"🌐 Stream ({getattr(track, 'source_name', 'Dedicated')})"
         body_lines = [
             f"{dot_prefix}**Song:** {song_display}",
             f"{dot_prefix}**Artist:** `{artist_display}`",
-            f"{dot_prefix}**Timeline:** {progress_display}",
-            f"{dot_prefix}**Status:** Volume: `{vol_pct}%` • Loop: `{loop_status}` • Queue: `{q_label}` • Engine: `{engine_label}`",
+            f"{dot_prefix}**Duration:** `{duration_display}`",
         ]
 
         container.add_section(content="\n".join(body_lines))
@@ -1465,38 +1450,45 @@ class GuildPlayer:
         container.add_separator(divider=True)
         return container
 
+    async def _safe_delete_message(self, msg: discord.Message) -> None:
+        """Silently delete a message."""
+        try:
+            await msg.delete()
+        except Exception:
+            pass
+
     async def send_now_playing_card(self, track: Track, message_to_edit: Optional[discord.Message] = None) -> None:
-        """
-        Update the Now Playing controller card in the home channel.
-        Only displays in chat when explicitly requested by a user command (?nowplaying, ?np, or ?play),
-        preventing automatic chat clutter during queue playback, autoplay, and 24/7 radio.
-        """
+        """Post or edit the interactive Now Playing card in home channel."""
         if not self.home_channel:
             return
 
         container = self.build_now_playing_container(track)
         view = MusicControlView(self.bot, player=self, track_url=track.url)
 
-        # 1. If triggered by an explicit command message (e.g. ?play when idle):
+        # 1. If message_to_edit is provided, edit it directly (e.g. replacing 'Searching...' card)
         if message_to_edit and isinstance(message_to_edit, discord.Message):
             try:
                 await edit_container_response(message_to_edit, container, view=view, content=None)
                 self.controller_message = message_to_edit
                 return
-            except Exception as e:
-                logger.debug(f"Failed to edit command message with now playing: {e}")
+            except Exception as edit_err:
+                logger.debug(f"Failed to edit message into controller: {edit_err}")
 
-        # 2. If a controller message exists from an explicit ?nowplaying / ?np command, edit it in place
+        # 2. Clean up any existing controller card to prevent duplicate cards in chat
         if self.controller_message and isinstance(self.controller_message, discord.Message):
-            try:
-                await edit_container_response(self.controller_message, container, view=view, content=None)
-                return
-            except Exception:
-                self.controller_message = None
+            old_msg = self.controller_message
+            self.controller_message = None
+            asyncio.create_task(self._safe_delete_message(old_msg))
 
-        # 3. DO NOT post new messages into chat automatically on song transitions!
-        # The Now Playing card will only appear when someone explicitly uses a command (?nowplaying / ?np).
-        return
+        # 3. Post a fresh Now Playing card
+        try:
+            msg = await send_container_response(
+                self.home_channel, container, view=view, content=None
+            )
+            if isinstance(msg, discord.Message):
+                self.controller_message = msg
+        except Exception as e:
+            logger.debug(f"Failed to send now playing card: {e}")
 
     async def update_controller_message(self, force: bool = False) -> None:
         """Refresh active controller card in place without posting new messages."""

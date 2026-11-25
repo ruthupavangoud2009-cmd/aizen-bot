@@ -190,6 +190,71 @@ class KyokaResponse:
 
         return embed
 
+    def to_container(self, bot: Optional[KyokaBot] = None) -> Any:
+        """Construct a high-performance Components V2 container card matching Cicada/Kyro layout."""
+        from src.utils.containers import KyokaContainer
+
+        emoji_prefix = ""
+        bullet_icon = ">"
+
+        cat_name = self.response_type.value.upper()
+        if self.custom_emoji:
+            emoji_prefix = self.custom_emoji
+        elif bot and hasattr(bot, "custom_emojis"):
+            reg = bot.custom_emojis
+            emoji_prefix = (
+                getattr(reg, "verified", "") if cat_name == "SUCCESS"
+                else getattr(reg, "loading", "") if cat_name == "LOADING"
+                else getattr(reg, "antinuke", "") if cat_name in ("SECURITY", "ANTI_NUKE")
+                else getattr(reg, "coin", "") if cat_name in ("ECONOMY", "CASINO")
+                else getattr(reg, "sparkle", "") if cat_name == "AI"
+                else reg.get_category(cat_name, fallback="")
+            )
+            bullet_icon = getattr(reg, "heart_dot", "") or ">"
+
+        if not emoji_prefix:
+            emoji_prefix = CATEGORY_FALLBACK_EMOJIS.get(cat_name, "")
+
+        container = KyokaContainer(accent_color=None)
+
+        prefix_part = f"{emoji_prefix} " if emoji_prefix else ""
+        title_text = f"**{prefix_part}{self.title}**" if self.title else ""
+        desc_text = self.description.strip() if self.description else ""
+
+        if title_text and desc_text:
+            section_content = f"{title_text}\n> {desc_text}"
+        elif title_text:
+            section_content = title_text
+        else:
+            section_content = desc_text
+
+        accessory = None
+        if self.thumbnail_url:
+            accessory = {"type": 11, "media": {"url": self.thumbnail_url}}
+
+        if section_content:
+            container.add_section(content=section_content, accessory=accessory)
+
+        if self.fields:
+            container.add_separator(divider=True)
+            field_lines = []
+            for name, val, _ in self.fields:
+                field_lines.append(f"{bullet_icon} **{name}:** {val}")
+            container.add_text("\n".join(field_lines))
+
+        if self.image_url:
+            container.add_media(self.image_url)
+
+        if self.footer_text:
+            container.add_separator(divider=True)
+            clean_footer = self.footer_text.strip()
+            if not clean_footer.startswith("-#"):
+                clean_footer = f"-# {clean_footer}"
+            container.add_text(clean_footer)
+            container.add_separator(divider=True)
+
+        return container
+
     # ── Factory Constructors ─────────────────────────────────────────────────
 
     @classmethod
@@ -431,17 +496,34 @@ async def send_response(
     files: Optional[list[discord.File]] = None,
 ) -> Any:
     """
-    Unified response sender for KYOKA.
-    Handles Interactions, Contexts, Channels, and DMs consistently with zero clutter.
+    Unified response sender for KYOKA powered by Discord Components V2 Container Cards.
+    Handles Interactions, Contexts, Channels, and DMs with native Components V2 cards,
+    falling back to rich embeds if V2 is unsupported.
     """
+    from src.utils.containers import send_container_response
+
     # Resolve bot instance defensively
     bot = getattr(target, "bot", getattr(target, "client", None))
     if not bot and hasattr(target, "_state"):
         bot = getattr(target._state, "_parent", getattr(target._state, "bot", None))
 
+    # Attempt native Components V2 Container response first
+    try:
+        container = response.to_container(bot=bot)
+        return await send_container_response(
+            target,
+            container,
+            view=view,
+            ephemeral=ephemeral,
+            file=file,
+            files=files,
+        )
+    except Exception as e:
+        logger.debug(f"Components V2 container dispatch fallback ({e}); using rich embed...")
+
     embed = response.build_embed(bot=bot)
 
-    # Apply guild custom UI color if configured (e.g. ?uicolour grey)
+    # Apply guild custom UI color if configured
     guild = getattr(target, "guild", None)
     if guild and bot and hasattr(bot, "guild_mgr"):
         custom_color = bot.guild_mgr.get_ui_color(guild.id, default=None)
@@ -469,7 +551,6 @@ async def send_response(
                     files=file_list or discord.utils.MISSING,
                 )
         except (discord.NotFound, discord.HTTPException):
-            # Interaction expired (3s limit reached before dispatch): fallback to channel send
             channel = getattr(interaction, "channel", None)
             if channel and hasattr(channel, "send"):
                 return await channel.send(embed=embed, view=view or discord.utils.MISSING, files=file_list or discord.utils.MISSING)
@@ -487,7 +568,6 @@ async def send_response(
         except discord.Forbidden:
             raise
         except Exception:
-            # Fallback if channel send encounters parameter error
             return await send_callable(embed=embed)
 
     # 3. User / Member DM

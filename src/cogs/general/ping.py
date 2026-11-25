@@ -136,28 +136,45 @@ class Ping(commands.Cog):
             self.bot.record_slow_operation("ping", cmd_latency, f"Guild {ctx.guild.id if ctx.guild else 0}")
 
         e_reg = getattr(self.bot, "custom_emojis", None)
-        dot = e_reg.get("heart_dot", e_reg.get("icons_rightarrow", "•")) if e_reg else "•"
+        dot = (
+            getattr(e_reg, "heart_dot", "")
+            or e_reg.animated("heart_pulse", fallback="")
+            or e_reg.get("heart_pulse", "")
+            or e_reg.get("heart_dot", "•")
+        ) if e_reg else "•"
 
         # Identify current hosting region
         reg_env = (os.getenv("RENDER_REGION") or os.getenv("REGION") or "virginia").strip().lower()
         if "singapore" in reg_env or "asia" in reg_env:
-            host_region = "Singapore (Asia) 🇸🇬"
+            host_region = "Singapore (Asia)"
         elif "frankfurt" in reg_env or "eu" in reg_env:
-            host_region = "Frankfurt (Europe) 🇩🇪"
+            host_region = "Frankfurt (Europe)"
         elif "oregon" in reg_env:
-            host_region = "Oregon (US West) 🇺🇸"
+            host_region = "Oregon (US West)"
         elif "virginia" in reg_env or "us" in reg_env:
-            host_region = "Virginia (US East) 🇺🇸"
+            host_region = "Virginia (US East)"
         else:
             host_region = reg_env.title()
+
+        shard_id = ctx.guild.shard_id if ctx.guild else 0
 
         container = KyokaContainer(accent_color=None)
         container.add_section(
             content=(
-                f"**Aizen Latency & System Diagnostics**\n"
-                f"> Real-time diagnostics for Discord Gateway, HTTP REST API, Database, and Hosting Host."
+                "**Kyoka Latency**\n"
+                "> Real-time gateway latency, database response speed, and system uptime."
             )
         )
+        container.add_separator(divider=True)
+
+        container.add_text(
+            f"{dot} **Gateway:** `{ws_latency:.2f}ms` | **Database:** `{db_str}`\n"
+            f"{dot} **Uptime:** `{uptime_str}` | **Shard:** `#{shard_id}`"
+        )
+        container.add_separator(divider=True)
+        container.add_text(f"-# Requested by {ctx.author.display_name}")
+
+        await send_container_response(ctx, container)
         container.add_separator(divider=True)
 
         # Check Lavalink audio engine status
