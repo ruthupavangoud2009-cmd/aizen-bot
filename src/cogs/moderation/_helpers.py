@@ -111,19 +111,39 @@ async def dispatch_mod_log(
     reason: Optional[str] = None,
     extra: Optional[str] = None,
     channel: Optional[discord.TextChannel | discord.Thread | discord.abc.GuildChannel] = None,
-) -> None:
-    """Post a sleek audit log card to the configured mod-log channel if available."""
-    log_channel = bot.log_mgr.get_log_channel(guild, "mod")
-    if not log_channel:
-        return
+    duration: Optional[str] = None,
+) -> Optional[int]:
+    """Record a persistent moderation case and post an audit log card to the configured mod-log channel."""
+    case_id: Optional[int] = None
+    case_mgr = getattr(bot, "case_mgr", None)
+    if case_mgr is not None and target is not None and moderator is not None:
+        normalized_action = action.lower().replace("member ", "").replace("timeout removed", "untimeout").strip()
+        try:
+            case_id = await case_mgr.create_case(
+                guild_id=guild.id,
+                action=normalized_action,
+                user_id=target.id,
+                moderator_id=moderator.id,
+                reason=reason or "No reason provided",
+                duration=duration,
+                notes=extra,
+            )
+        except Exception as case_err:
+            logger.debug("Notice recording moderation case: %s", case_err)
 
-    e_reg = getattr(bot, "custom_emojis", {})
-    dot = e_reg.get("heart_dot", "-")
-    badge = e_reg.get("icon_moderation", "")
+    log_mgr = getattr(bot, "log_mgr", None)
+    log_channel = log_mgr.get_log_channel(guild, "mod") if log_mgr else None
+    if not log_channel:
+        return case_id
+
+    e_reg = getattr(bot, "custom_emojis", None) or {}
+    dot = getattr(e_reg, "heart_dot", None) or (e_reg.get("heart_dot", "-") if hasattr(e_reg, "get") else "-")
+    badge = e_reg.get("icon_moderation", "") if hasattr(e_reg, "get") else ""
     badge_str = f"{badge} " if badge else ""
+    case_suffix = f" (Case #{case_id})" if case_id is not None else ""
 
     container = KyokaContainer(accent_color=None)
-    container.add_section(content=f"**{badge_str}Moderation Log — {action}**")
+    container.add_section(content=f"**{badge_str}Moderation Log — {action}{case_suffix}**")
     container.add_separator(divider=True)
 
     items = []
@@ -152,3 +172,4 @@ async def dispatch_mod_log(
         await send_container_response(log_channel, container)
     except Exception as e:
         logger.warning(f"Failed to dispatch mod log in {guild.name}: {e}")
+    return case_id

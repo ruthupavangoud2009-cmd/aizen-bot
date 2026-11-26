@@ -63,11 +63,7 @@ async def get_prefix(bot: KyokaBot, message: discord.Message) -> list[str]:
         except Exception:
             logger.exception("Could not resolve guild prefix; using the configured default.")
 
-    # Support configured prefix plus common prefixes (?, !, +) so users never get locked out
     prefixes: list[str] = [configured_prefix]
-    for alt_p in ("?", "!", "+"):
-        if alt_p not in prefixes:
-            prefixes.append(alt_p)
 
     author_id = message.author.id if message.author else None
     no_prefix_users = getattr(bot, "no_prefix_users", set())
@@ -189,6 +185,8 @@ class KyokaBot(commands.Bot):
         self.voice_welcome_mgr: VoiceWelcomeManager = VoiceWelcomeManager(self, self.db)
         from src.managers.automod_manager import AutoModManager
         self.automod_mgr: AutoModManager = AutoModManager(self.db, bot=self)
+        from src.managers.case_manager import CaseManager
+        self.case_mgr: CaseManager = CaseManager(self.db)
         from src.core.task_manager import TaskManager
         self.task_mgr: TaskManager = TaskManager(self)
         from src.core.feature_registry import FeatureRegistry

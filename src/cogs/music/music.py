@@ -70,7 +70,9 @@ class Music(commands.Cog):
         else:
             self.cache_mgr = MusicCacheManager(bot)
             bot._music_cache_mgr = self.cache_mgr
-        asyncio.create_task(self.cache_mgr.initialize())
+        init_res = self.cache_mgr.initialize()
+        if asyncio.iscoroutine(init_res):
+            asyncio.create_task(init_res)
 
         # Microsecond Search Result Cache
         if hasattr(bot, "_music_search_cache") and bot._music_search_cache:
@@ -174,17 +176,19 @@ class Music(commands.Cog):
         logger.error(f"Lavalink Track Exception for '{title}': {exception}")
         player_obj = getattr(payload, "player", None)
         guild_id = player_obj.guild.id if player_obj and player_obj.guild else None
-        if hasattr(self.bot, "sentinel") and self.bot.sentinel:
-            from src.sentinel.models import SubsystemType, IncidentSeverity
-            self.bot.sentinel.record_incident(
-                SubsystemType.MUSIC,
-                IncidentSeverity.WARNING,
-                "Lavalink Track Exception",
-                f"Track '{title}': {exception}",
-                action_taken="Advanced queue to next available stream",
-                resolved=True,
-                guild_id=guild_id,
-            )
+        if hasattr(self.bot, "sentinel") and self.bot.sentinel and hasattr(self.bot.sentinel, "record_incident"):
+            try:
+                self.bot.sentinel.record_incident(
+                    "music",
+                    "warning",
+                    "Lavalink Track Exception",
+                    f"Track '{title}': {exception}",
+                    action_taken="Advanced queue to next available stream",
+                    resolved=True,
+                    guild_id=guild_id,
+                )
+            except Exception:
+                pass
         if player_obj and player_obj.guild:
             player = self.controller.get_player(player_obj.guild.id)
             if player and hasattr(player, "on_track_end"):
@@ -218,17 +222,19 @@ class Music(commands.Cog):
             except Exception:
                 pass
 
-        if hasattr(self.bot, "sentinel") and self.bot.sentinel:
-            from src.sentinel.models import SubsystemType, IncidentSeverity
-            self.bot.sentinel.record_incident(
-                SubsystemType.MUSIC,
-                IncidentSeverity.WARNING,
-                "Lavalink Track Stuck",
-                f"Playback buffer stalled for '{title}'",
-                action_taken="Force terminated stuck track to unblock queue",
-                resolved=True,
-                guild_id=guild_id,
-            )
+        if hasattr(self.bot, "sentinel") and self.bot.sentinel and hasattr(self.bot.sentinel, "record_incident"):
+            try:
+                self.bot.sentinel.record_incident(
+                    "music",
+                    "warning",
+                    "Lavalink Track Stuck",
+                    f"Playback buffer stalled for '{title}'",
+                    action_taken="Force terminated stuck track to unblock queue",
+                    resolved=True,
+                    guild_id=guild_id,
+                )
+            except Exception:
+                pass
         if player_obj and player_obj.guild:
             player = self.controller.get_player(player_obj.guild.id)
             if player and hasattr(player, "on_track_end"):

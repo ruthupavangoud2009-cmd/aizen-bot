@@ -1607,6 +1607,69 @@ class PostgresDatabase(BaseDatabase):
                 updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
             );
             """,
+            # Moderation Case Ledger
+            """
+            CREATE TABLE IF NOT EXISTS mod_cases (
+                id SERIAL PRIMARY KEY,
+                guild_id BIGINT NOT NULL,
+                case_id INT NOT NULL,
+                action VARCHAR(32) NOT NULL,
+                user_id BIGINT NOT NULL,
+                moderator_id BIGINT NOT NULL,
+                reason TEXT DEFAULT 'No reason provided',
+                duration VARCHAR(64),
+                evidence TEXT,
+                notes TEXT,
+                active BOOLEAN DEFAULT TRUE,
+                created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
+                updated_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
+                UNIQUE (guild_id, case_id)
+            );
+            """,
+            "CREATE INDEX IF NOT EXISTS idx_mod_cases_guild_user ON mod_cases (guild_id, user_id, case_id DESC);",
+            # Persistent User Reminders
+            """
+            CREATE TABLE IF NOT EXISTS user_reminders (
+                id SERIAL PRIMARY KEY,
+                guild_id BIGINT,
+                channel_id BIGINT NOT NULL,
+                user_id BIGINT NOT NULL,
+                reason TEXT NOT NULL,
+                duration_label VARCHAR(32),
+                remind_at TIMESTAMPTZ NOT NULL,
+                completed BOOLEAN DEFAULT FALSE,
+                created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
+            );
+            """,
+            "CREATE INDEX IF NOT EXISTS idx_user_reminders_due ON user_reminders (completed, remind_at);",
+            # Safe Server Custom Commands
+            """
+            CREATE TABLE IF NOT EXISTS guild_custom_commands (
+                guild_id BIGINT NOT NULL,
+                name VARCHAR(64) NOT NULL,
+                response TEXT NOT NULL,
+                use_embed BOOLEAN DEFAULT FALSE,
+                embed_title VARCHAR(256),
+                required_role_id BIGINT,
+                cooldown_seconds INT DEFAULT 3,
+                uses INT DEFAULT 0,
+                created_by BIGINT NOT NULL,
+                created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
+                updated_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
+                PRIMARY KEY (guild_id, name)
+            );
+            """,
+            # Per-guild Modular Feature Enable/Disable States
+            """
+            CREATE TABLE IF NOT EXISTS guild_module_states (
+                guild_id BIGINT NOT NULL,
+                module_id VARCHAR(64) NOT NULL,
+                enabled BOOLEAN DEFAULT TRUE,
+                updated_by BIGINT,
+                updated_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
+                PRIMARY KEY (guild_id, module_id)
+            );
+            """,
         ]
         if not self.pool or self.pool._closed:
             await self._heal_pool()

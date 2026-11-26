@@ -331,7 +331,7 @@ class AFKCog(commands.Cog, name="AFK"):
             thumbnail_url=ctx.author.display_avatar.url,
             footer_text=f"-# Requested by {ctx.author.display_name}",
         )
-        await send_response(ctx, resp)
+        await send_container_response(ctx, resp.to_container(bot=self.bot))
 
     @commands.command(name="gafk", help="Activate a global AFK status across all servers.")
     async def gafk(self, ctx: CustomContext, *, reason: Optional[str] = None) -> None:
@@ -374,7 +374,7 @@ class AFKCog(commands.Cog, name="AFK"):
             thumbnail_url=ctx.author.display_avatar.url,
             footer_text=f"-# Requested by {ctx.author.display_name}",
         )
-        await send_response(ctx, resp)
+        await send_container_response(ctx, resp.to_container(bot=self.bot))
 
     @commands.Cog.listener()
     async def on_message(self, message: discord.Message) -> None:
@@ -485,7 +485,7 @@ class AFKCog(commands.Cog, name="AFK"):
                 footer_text=f"-# Welcome back {message.author.name}",
             )
             try:
-                await send_response(message.channel, resp)
+                await send_container_response(message.channel, resp.to_container(bot=self.bot))
             except Exception as e:
                 logger.debug(f"Failed to send AFK welcome back notice: {e}")
 
@@ -513,7 +513,7 @@ class AFKCog(commands.Cog, name="AFK"):
                         footer_text=f"-# Mentioned by {message.author.name}",
                     )
                     try:
-                        await send_response(message.channel, resp)
+                        await send_container_response(message.channel, resp.to_container(bot=self.bot))
                     except Exception as error:
                         logger.debug("Global AFK mention notice failed: %s", error)
 
@@ -560,7 +560,7 @@ class AFKCog(commands.Cog, name="AFK"):
                     )
                     view = AFKLeaveNoteView(self.bot, mentioned_user.id, mentioned_user.display_name, guild_id)
                     try:
-                        await send_response(message.channel, resp, view=view)
+                        await send_container_response(message.channel, resp.to_container(bot=self.bot), view=view)
                     except Exception as e:
                         logger.debug(f"Failed to send AFK mention notification: {e}")
 

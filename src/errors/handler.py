@@ -7,6 +7,7 @@ import discord
 from discord import app_commands
 from discord.ext import commands
 
+from src.utils.containers import KyokaContainer, send_container_response
 from src.utils.emojis import sanitize_emoji_string
 from src.ui.theme import KyokaTheme
 
@@ -142,7 +143,7 @@ class ErrorHandler(commands.Cog, name="ErrorHandler"):
 
         elif isinstance(error, commands.MissingRequiredArgument):
             color = KyokaTheme.WARNING
-            title = f"{warn_icon} Missing Parameter"
+            title = f"{warn_icon} Invalid Command Usage"
             body = (
                 f"> Missing required parameter: `{error.param.name}`\n\n"
                 f"> 💜 **Usage:** `{ctx.prefix}{ctx.command.qualified_name} {ctx.command.signature}`\n"
@@ -152,11 +153,11 @@ class ErrorHandler(commands.Cog, name="ErrorHandler"):
 
         elif isinstance(error, (commands.MemberNotFound, commands.UserNotFound)):
             color = KyokaTheme.WARNING
-            title = f"{warn_icon} Member Not Found"
+            title = f"{warn_icon} User Not Found"
             arg_clean = discord.utils.escape_markdown(str(getattr(error, "argument", "Unknown")))
             body = (
                 f"> Could not find a member matching `{arg_clean}`.\n\n"
-                f"> 💜 **Tip:** Mention the user (`@User`) or provide their 17–19 digit Discord snowflake ID."
+                f"> 💜 **Tip: Try mentioning the user** (`@User`) or provide their 17–19 digit Discord snowflake ID."
             )
             author_badge = "Target Unresolved"
 
@@ -264,10 +265,10 @@ class ErrorHandler(commands.Cog, name="ErrorHandler"):
             tb = "".join(traceback.format_exception(type(error), error, error.__traceback__))
             logger.error(f"[Incident {incident_id}] Unhandled error in '{ctx.command}': {error}\n{tb}")
 
-            title = f"{err_icon} System Diagnostic Alert"
+            title = f"{err_icon} Internal Error"
             body = (
                 f"> An unexpected internal exception interrupted `{ctx.command.qualified_name}`.\n\n"
-                f"> 💜 **Incident Reference:** `{incident_id}`\n"
+                f"> 💜 **Diagnostic Incident ID:** `{incident_id}`\n"
                 f"> 💜 **Status:** Telemetry securely recorded on host server.\n\n"
                 f"> *Please report this Incident ID to bot administrators if the issue persists.*"
             )
@@ -277,31 +278,39 @@ class ErrorHandler(commands.Cog, name="ErrorHandler"):
         guild = getattr(ctx, "guild", None)
         if guild and hasattr(self.bot, "guild_mgr"):
             custom_color = self.bot.guild_mgr.get_ui_color(guild.id, default=None)
-            if custom_color is not None and color == KyokaTheme.ERROR:
-                pass  # Keep high-visibility red for critical errors, but respect theme for others
-            elif custom_color is not None:
+            if isinstance(custom_color, int) and not isinstance(custom_color, bool) and color != KyokaTheme.ERROR:
                 color = custom_color
 
-        # Build signature Kyoka Sovereign Embed
         clean_title = sanitize_emoji_string(title, bot=self.bot)
         clean_body = sanitize_emoji_string(body, bot=self.bot)
+        author = getattr(ctx, "author", None)
+        cmd_name = getattr(ctx.command, "qualified_name", "unknown")
 
+        container = KyokaContainer(accent_color=color)
+        container.add_section(content=f"**{clean_title}**\n{clean_body}")
+        container.add_separator(divider=True)
+        req_name = getattr(author, "display_name", "User") if author else "User"
+        container.add_text(f"-# Requested by {req_name} • ✧ KYOKA Suigetsu Protocol • {ctx.prefix}{cmd_name}")
+
+        try:
+            await send_container_response(ctx, container, ephemeral=True)
+            return
+        except Exception:
+            pass
+
+        # Fallback to rich Embed when Components V2 dispatch is unavailable
         embed = discord.Embed(
             title=clean_title[:256],
             description=clean_body[:4000],
             color=color,
             timestamp=discord.utils.utcnow(),
         )
-
-        author = ctx.author
         if author:
             embed.set_author(
                 name=f"{author.display_name} • {author_badge}",
                 icon_url=author.display_avatar.url,
             )
-
-        footer_icon = self.bot.user.display_avatar.url if self.bot.user else None
-        cmd_name = getattr(ctx.command, "qualified_name", "unknown")
+        footer_icon = self.bot.user.display_avatar.url if getattr(self.bot, "user", None) else None
         embed.set_footer(
             text=f"✧ KYOKA Suigetsu Protocol • {ctx.prefix}{cmd_name}",
             icon_url=footer_icon,
@@ -382,10 +391,10 @@ class ErrorHandler(commands.Cog, name="ErrorHandler"):
                 str(error),
                 tb,
             )
-            title = "❌ System Diagnostic Alert"
+            title = "❌ Internal Error"
             body = (
                 f"> An unexpected internal exception interrupted `/{command_name}`.\n\n"
-                f"> 💜 **Incident Reference:** `{incident_id}`\n"
+                f"> 💜 **Diagnostic Incident ID:** `{incident_id}`\n"
                 f"> 💜 **Status:** Telemetry securely recorded on host server.\n\n"
                 f"> *Please report this Incident ID to bot administrators if the issue persists.*"
             )
@@ -411,15 +420,16 @@ class ErrorHandler(commands.Cog, name="ErrorHandler"):
             icon_url=footer_icon,
         )
 
+        msg = f"❌ **{title}** — `{incident_id}`" if "Internal" in title else f"⚠️ **{title}**"
         try:
             if not interaction.response.is_done():
-                await interaction.response.send_message(embed=embed, ephemeral=True)
+                await interaction.response.send_message(msg, embed=embed, ephemeral=True)
             else:
-                await interaction.followup.send(embed=embed, ephemeral=True)
+                await interaction.followup.send(msg, embed=embed, ephemeral=True)
         except (discord.NotFound, discord.InteractionResponded):
             if interaction.channel and hasattr(interaction.channel, "send"):
                 try:
-                    await interaction.channel.send(embed=embed)
+                    await interaction.channel.send(msg, embed=embed)
                 except Exception:
                     pass
         except Exception as send_err:

@@ -17,7 +17,11 @@ from dataclasses import dataclass
 import aiohttp
 import discord
 from discord.ext import commands
-from PIL import Image, ImageSequence
+try:
+    from PIL import Image, ImageSequence
+except ImportError:
+    Image = None  # type: ignore[assignment]
+    ImageSequence = None  # type: ignore[assignment]
 
 from src.core.context import CustomContext
 from src.utils.containers import KyokaContainer, send_container_response, edit_container_response
@@ -82,6 +86,11 @@ async def fetch_and_compress_image(
 
     if len(data) <= max_size and not is_sticker and not url.lower().endswith(".webp"):
         return data
+
+    if Image is None:
+        if len(data) <= max_size:
+            return data
+        raise ValueError("Image processing library (Pillow) is unavailable to compress this asset.")
 
     def _process_sync() -> bytes:
         img = Image.open(io.BytesIO(data))

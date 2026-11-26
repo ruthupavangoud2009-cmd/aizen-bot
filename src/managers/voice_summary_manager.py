@@ -24,7 +24,10 @@ import aiohttp
 import discord
 from discord.ext import commands
 
-import static_ffmpeg
+try:
+    import static_ffmpeg
+except ImportError:
+    static_ffmpeg = None
 
 try:
     import discord.ext.voice_recv as voice_recv

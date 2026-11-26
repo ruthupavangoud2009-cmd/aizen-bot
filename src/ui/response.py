@@ -11,10 +11,13 @@ and zero cluttered text outside embeds.
 from __future__ import annotations
 
 import datetime
+import logging
 from enum import Enum
 from typing import TYPE_CHECKING, Any, Optional, Sequence
 import discord
 from discord.ext import commands
+
+logger = logging.getLogger("Kyoka.UI.Response")
 
 try:
     from src.utils.emojis import CATEGORY_FALLBACK_EMOJIS, sanitize_emoji_string
@@ -527,7 +530,7 @@ async def send_response(
     guild = getattr(target, "guild", None)
     if guild and bot and hasattr(bot, "guild_mgr"):
         custom_color = bot.guild_mgr.get_ui_color(guild.id, default=None)
-        if custom_color is not None:
+        if isinstance(custom_color, int) and not isinstance(custom_color, bool):
             embed.color = discord.Color(custom_color)
 
     file_list = [file] if file else (files or None)

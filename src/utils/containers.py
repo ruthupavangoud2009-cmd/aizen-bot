@@ -6,6 +6,7 @@ Sections, Separators, and integrated Action Rows (Dropdowns/Buttons inside the c
 
 from __future__ import annotations
 
+import inspect
 import logging
 from typing import Any
 
@@ -341,12 +342,8 @@ async def send_container_response(
     allowed_mentions: discord.AllowedMentions | dict[str, Any] | None = None,
 ) -> Any:
     """Send or edit a message using Components V2 Container(s) with optional file attachments."""
-    # resolve hybrid context interaction if present
-    interaction = getattr(interaction_or_ctx, "interaction", None)
-    if interaction is not None:
-        target = interaction
-    else:
-        target = interaction_or_ctx
+    raw_inter = getattr(interaction_or_ctx, "interaction", None)
+    target = raw_inter if isinstance(raw_inter, discord.Interaction) else interaction_or_ctx
 
     payload = build_container_payload(
         container,
@@ -356,11 +353,7 @@ async def send_container_response(
     )
     file_list = [file] if file is not None else (files or [])
 
-    interaction = None
-    if isinstance(target, discord.Interaction):
-        interaction = target
-    elif hasattr(target, "interaction") and getattr(target, "interaction", None) is not None:
-        interaction = target.interaction
+    interaction = target if isinstance(target, discord.Interaction) else None
 
     if interaction:
         bot = getattr(interaction, "client", getattr(interaction, "bot", None))
@@ -471,115 +464,146 @@ async def send_container_response(
                     logger.warning("Interaction expired (10062), falling back to channel dispatch...")
                 else:
                     raise
+            except TypeError:
+                pass
+
+    obj = target
+
+    # Handle User / Member DMs
+    if isinstance(obj, (discord.User, discord.Member)):
+        bot_instance = getattr(obj, "_state", None)
+        http_client = getattr(bot_instance, "http", None)
+        req_fn = getattr(http_client, "request", None)
+        if not inspect.iscoroutinefunction(req_fn) and hasattr(obj, "send"):
+            primary = container if isinstance(container, KyokaContainer) else container[0]
+            return await obj.send(embed=primary.to_embed(content=content), view=view or discord.utils.MISSING)
+        dm = await obj.create_dm()
+        channel_id = dm.id
+    elif isinstance(obj, discord.abc.GuildChannel) or (isinstance(obj, discord.abc.Messageable) and hasattr(obj, "id") and not hasattr(obj, "channel")):
+        channel_id = obj.id
+        bot_instance = getattr(obj, "bot", getattr(obj, "_state", None))
+        http_client = getattr(bot_instance, "http", None) or getattr(getattr(obj, "_state", None), "http", None)
+    elif hasattr(obj, "channel") and getattr(obj, "channel", None) is not None and hasattr(obj.channel, "id"):
+        channel_id = obj.channel.id
+        bot_instance = getattr(obj, "bot", getattr(obj, "_state", None))
+        http_client = getattr(bot_instance, "http", None) or getattr(getattr(obj, "_state", None), "http", None)
+    elif isinstance(obj, int):
+        channel_id = obj
+        bot_instance = None
+        http_client = None
     else:
-        obj = target
+        channel_id = None
+        bot_instance = getattr(obj, "bot", getattr(obj, "_state", None))
+        http_client = getattr(bot_instance, "http", None) or getattr(getattr(obj, "_state", None), "http", None)
 
-        # Handle User / Member DMs
-        if isinstance(obj, (discord.User, discord.Member)):
-            dm = await obj.create_dm()
-            channel_id = dm.id
-            bot_instance = getattr(obj, "_state", None)
-            http_client = getattr(bot_instance, "http", None)
-        elif isinstance(obj, discord.abc.GuildChannel) or (isinstance(obj, discord.abc.Messageable) and hasattr(obj, "id") and not hasattr(obj, "channel")):
-            channel_id = obj.id
-            bot_instance = getattr(obj, "bot", getattr(obj, "_state", None))
-            http_client = getattr(bot_instance, "http", None) or getattr(getattr(obj, "_state", None), "http", None)
-        elif hasattr(obj, "channel"):
-            channel_id = obj.channel.id
-            bot_instance = getattr(obj, "bot", getattr(obj, "_state", None))
-            http_client = getattr(bot_instance, "http", None) or getattr(getattr(obj, "_state", None), "http", None)
-        else:
-            channel_id = int(obj)
-            bot_instance = getattr(obj, "bot", getattr(obj, "_state", None))
-            http_client = getattr(bot_instance, "http", None) or getattr(getattr(obj, "_state", None), "http", None)
+    async def _embed_fallback() -> Any:
+        target_send = getattr(obj, "send", None) or getattr(getattr(obj, "channel", None), "send", None)
+        if target_send:
+            primary = container if isinstance(container, KyokaContainer) else container[0]
 
-        # Direct bot channel message dispatch via raw Components V2 payload
-        try:
+            fallback_view = view
+            if fallback_view is None:
+                container_list = container if isinstance(container, list) else [container]
+                link_view = discord.ui.View(timeout=None)
+                has_buttons = False
+                for c in container_list:
+                    for comp in c.components:
+                        if comp.get("type") == 1:
+                            for item in comp.get("components", []):
+                                if item.get("type") == 2 and item.get("style") == 5:
+                                    lbl = item.get("label", "Link")
+                                    u = item.get("url", "https://discord.com")
+                                    if u and u.startswith("http"):
+                                        link_view.add_item(discord.ui.Button(label=lbl, url=u, style=discord.ButtonStyle.link))
+                                        has_buttons = True
+                if has_buttons:
+                    fallback_view = link_view
+
+            send_kwargs: dict[str, Any] = {
+                "content": content,
+                "embed": primary.to_embed(content=content),
+                "view": fallback_view,
+                "allowed_mentions": allowed_mentions or discord.AllowedMentions(users=True),
+            }
             if file_list:
-                form = _prepare_multipart_form(payload, file_list)
-                msg_data = await http_client.request(
-                    discord.http.Route("POST", f"/channels/{channel_id}/messages"),
-                    form=form,
-                    files=file_list,
-                )
-            else:
-                msg_data = await http_client.request(
-                    discord.http.Route("POST", f"/channels/{channel_id}/messages"),
-                    json=payload,
-                )
-            if view and msg_data and isinstance(msg_data, dict) and "id" in msg_data:
-                msg_id = int(msg_data["id"])
-                if not getattr(view, "message_id", None):
-                    setattr(view, "message_id", msg_id)
-                if not getattr(view, "channel_id", None):
-                    setattr(view, "channel_id", channel_id)
-                state = getattr(bot_instance, "_connection", None) or getattr(bot_instance, "_state", None) or bot_instance
-                if hasattr(state, "store_view"):
-                    state.store_view(view, msg_id)
+                if len(file_list) == 1:
+                    send_kwargs["file"] = file_list[0]
+                else:
+                    send_kwargs["files"] = file_list
 
-            # Reconstruct discord.Message if state is accessible
-            if isinstance(msg_data, dict):
-                msg_data["_bot"] = bot_instance
-                msg_data["channel_id"] = channel_id
-                channel_obj = getattr(obj, "channel", obj if isinstance(obj, discord.abc.Messageable) else None)
-                state = getattr(bot_instance, "_connection", bot_instance)
-                if hasattr(state, "create_message") and channel_obj:
-                    try:
-                        return state.create_message(channel=channel_obj, data=msg_data)
-                    except Exception as cm_err:
-                        logger.debug(f"create_message channel notice: {cm_err}")
-            return msg_data
-        except discord.Forbidden:
-            raise
-        except discord.HTTPException as e:
-            if e.status == 429:
-                logger.error(f"Discord 429 Too Many Requests (Rate limit): {e}")
-                raise
-            logger.warning(f"Raw Components V2 HTTP request failed ({e}), attempting standard send fallback...")
-            target_send = getattr(obj, "send", None) or getattr(getattr(obj, "channel", None), "send", None)
-            if target_send:
-                primary = container if isinstance(container, KyokaContainer) else container[0]
-
-                # Extract link buttons from container into a fallback View if no view is provided
-                fallback_view = view
-                if fallback_view is None:
-                    container_list = container if isinstance(container, list) else [container]
-                    link_view = discord.ui.View(timeout=None)
-                    has_buttons = False
-                    for c in container_list:
-                        for comp in c.components:
-                            if comp.get("type") == 1:
-                                for item in comp.get("components", []):
-                                    if item.get("type") == 2 and item.get("style") == 5:
-                                        lbl = item.get("label", "Link")
-                                        u = item.get("url", "https://discord.com")
-                                        if u and u.startswith("http"):
-                                            link_view.add_item(discord.ui.Button(label=lbl, url=u, style=discord.ButtonStyle.link))
-                                            has_buttons = True
-                    if has_buttons:
-                        fallback_view = link_view
-
-                send_kwargs: dict[str, Any] = {
-                    "content": content,
-                    "embed": primary.to_embed(content=content),
-                    "view": fallback_view,
-                    "allowed_mentions": allowed_mentions or discord.AllowedMentions(users=True),
-                }
-                if file_list:
-                    if len(file_list) == 1:
-                        send_kwargs["file"] = file_list[0]
-                    else:
-                        send_kwargs["files"] = file_list
-
+            try:
                 msg = await target_send(**send_kwargs)
-                if view and msg and hasattr(msg, "id"):
-                    setattr(view, "message_id", msg.id)
-                    setattr(view, "channel_id", getattr(msg.channel, "id", None))
-                    bot_instance = getattr(msg, "_state", None)
-                    if bot_instance and hasattr(bot_instance, "store_view"):
-                        bot_instance.store_view(view, msg.id)
-                return msg
+            except TypeError:
+                text_fallback = "\n".join(
+                    str(c.get("content", ""))
+                    for c in getattr(primary, "components", [])
+                    if isinstance(c, dict) and c.get("content")
+                ).strip() or (content or "Done.")
+                msg = await target_send(text_fallback)
+            if view and msg and hasattr(msg, "id"):
+                setattr(view, "message_id", msg.id)
+                setattr(view, "channel_id", getattr(msg.channel, "id", None))
+                msg_state = getattr(msg, "_state", None)
+                if msg_state and hasattr(msg_state, "store_view"):
+                    msg_state.store_view(view, msg.id)
+            return msg
+        return None
+
+    req_fn = getattr(http_client, "request", None)
+    if channel_id is None or http_client is None or not inspect.iscoroutinefunction(req_fn):
+        res = await _embed_fallback()
+        if res is not None:
+            return res
+        if channel_id is None:
+            return None
+
+    # Direct bot channel message dispatch via raw Components V2 payload
+    try:
+        if file_list:
+            form = _prepare_multipart_form(payload, file_list)
+            msg_data = await http_client.request(
+                discord.http.Route("POST", f"/channels/{channel_id}/messages"),
+                form=form,
+                files=file_list,
+            )
+        else:
+            msg_data = await http_client.request(
+                discord.http.Route("POST", f"/channels/{channel_id}/messages"),
+                json=payload,
+            )
+        if view and msg_data and isinstance(msg_data, dict) and "id" in msg_data:
+            msg_id = int(msg_data["id"])
+            if not getattr(view, "message_id", None):
+                setattr(view, "message_id", msg_id)
+            if not getattr(view, "channel_id", None):
+                setattr(view, "channel_id", channel_id)
+            state = getattr(bot_instance, "_connection", None) or getattr(bot_instance, "_state", None) or bot_instance
+            if hasattr(state, "store_view"):
+                state.store_view(view, msg_id)
+
+        # Reconstruct discord.Message if state is accessible
+        if isinstance(msg_data, dict):
+            msg_data["_bot"] = bot_instance
+            msg_data["channel_id"] = channel_id
+            channel_obj = getattr(obj, "channel", obj if isinstance(obj, discord.abc.Messageable) else None)
+            state = getattr(bot_instance, "_connection", bot_instance)
+            if hasattr(state, "create_message") and channel_obj:
+                try:
+                    return state.create_message(channel=channel_obj, data=msg_data)
+                except Exception as cm_err:
+                    logger.debug(f"create_message channel notice: {cm_err}")
+        return msg_data
+    except discord.Forbidden:
+        raise
+    except (discord.HTTPException, TypeError, AttributeError) as e:
+        if isinstance(e, discord.HTTPException) and e.status == 429:
+            logger.error(f"Discord 429 Too Many Requests (Rate limit): {e}")
             raise
+        logger.warning(f"Raw Components V2 HTTP request failed ({e}), attempting standard send fallback...")
+        res = await _embed_fallback()
+        if res is not None:
+            return res
+        raise
 
 
 async def edit_container_response(

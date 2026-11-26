@@ -12,7 +12,14 @@ import logging
 from pathlib import Path
 from typing import Optional, Union
 import aiohttp
-from PIL import Image, ImageDraw, ImageFont, ImageFilter, ImageOps
+try:
+    from PIL import Image, ImageDraw, ImageFont, ImageFilter, ImageOps
+except ImportError:
+    Image = None  # type: ignore[assignment]
+    ImageDraw = None  # type: ignore[assignment]
+    ImageFont = None  # type: ignore[assignment]
+    ImageFilter = None  # type: ignore[assignment]
+    ImageOps = None  # type: ignore[assignment]
 
 logger = logging.getLogger("Kyoka.UI.WelcomeCard")
 
@@ -124,6 +131,10 @@ def generate_aizen_welcome_card(
                 break
         if not matched:
             preset = THEME_PRESETS["aizen_throne"]
+
+    if Image is None or ImageDraw is None or ImageFont is None:
+        logger.warning("Pillow is not installed; skipping welcome card rendering.")
+        return None
 
     base = Image.new("RGBA", (width, height), (10, 6, 18, 255))
 

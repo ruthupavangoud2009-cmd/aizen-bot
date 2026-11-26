@@ -56,7 +56,7 @@ class Ping(commands.Cog):
     @commands.hybrid_command(
         name="ping",
         aliases=["pong", "pung", "latency"],
-        description="Check Aizen Bot's websocket, REST API, event-loop, and database response speed.",
+        description="Check KYOKA's websocket, REST API, event-loop, and database response speed.",
     )
     async def ping(self, ctx: CustomContext, *, target_and_count: str = "") -> None:
         """Check latency, or make a small, allowlisted test ping with a target and count."""
@@ -87,7 +87,7 @@ class Ping(commands.Cog):
             }
             self._mention_ping_at[ctx.author.id] = now
             mentions = " ".join(target.mention for _ in range(count))
-            return await ctx.send(f"🔔 **Aizen ping test ({count}/5):** {mentions}", allowed_mentions=discord.AllowedMentions(users=[target]))
+            return await ctx.send(f"🔔 **KYOKA ping test ({count}/5):** {mentions}", allowed_mentions=discord.AllowedMentions(users=[target]))
 
         cmd_start = time.perf_counter()
 
@@ -98,7 +98,7 @@ class Ping(commands.Cog):
             await ctx.typing()
             rest_ms = (time.perf_counter() - t_api_start) * 1000
         except Exception:
-            msg_dt = getattr(ctx.message, "created_at", None) or getattr(getattr(ctx, "interaction", None), "created_at", None)
+            msg_dt = getattr(getattr(ctx, "message", None), "created_at", None) or getattr(getattr(ctx, "interaction", None), "created_at", None)
             if msg_dt:
                 rest_ms = max(0.0, (discord.utils.utcnow() - msg_dt).total_seconds() * 1000)
 
@@ -156,58 +156,43 @@ class Ping(commands.Cog):
         else:
             host_region = reg_env.title()
 
-        shard_id = ctx.guild.shard_id if ctx.guild else 0
-
-        container = KyokaContainer(accent_color=None)
-        container.add_section(
-            content=(
-                "**Kyoka Latency**\n"
-                "> Real-time gateway latency, database response speed, and system uptime."
-            )
-        )
-        container.add_separator(divider=True)
-
-        container.add_text(
-            f"{dot} **Gateway:** `{ws_latency:.2f}ms` | **Database:** `{db_str}`\n"
-            f"{dot} **Uptime:** `{uptime_str}` | **Shard:** `#{shard_id}`"
-        )
-        container.add_separator(divider=True)
-        container.add_text(f"-# Requested by {ctx.author.display_name}")
-
-        await send_container_response(ctx, container)
-        container.add_separator(divider=True)
-
         # Check Lavalink audio engine status
         ll_status = "Offline"
         try:
             import wavelink
             node = wavelink.Pool.get_node()
             if node and node.status == wavelink.NodeStatus.CONNECTED:
-                ll_status = "Online (Lossless Public Cluster)"
+                ll_status = "Online (Lossless Cluster)"
             elif node:
                 ll_status = f"{node.status.name.title()}"
         except Exception:
             pass
 
         rest_display = f"`{rest_ms:.1f}ms`" if rest_ms is not None else "`N/A`"
+        shard_id = ctx.guild.shard_id if ctx.guild else 0
+
+        container = KyokaContainer(accent_color=None)
+        container.add_section(
+            content=(
+                "**KYOKA Latency & Diagnostics**\n"
+                "> Real-time telemetry for Discord Gateway, REST API, Event Loop, Database, and Audio Engine."
+            )
+        )
+        container.add_separator(divider=True)
 
         container.add_text(
-            f"{dot} **Discord Gateway:** {_format_latency_status(ws_latency)}\n"
-            f"{dot} **REST API Roundtrip:** {rest_display} | **Processing:** `{cmd_latency:.1f}ms`\n"
+            f"{dot} **Gateway:** `{ws_latency:.2f}ms` ({_format_latency_status(ws_latency)})\n"
+            f"{dot} **REST API:** {rest_display} | **Bot Processing:** `{cmd_latency:.1f}ms`\n"
             f"{dot} **Event-Loop Lag:** `{loop_lag:.2f}ms` | **Database:** {db_str}\n"
-            f"{dot} **Server Region:** `{host_region}` | **Process Uptime:** `{uptime_str}`\n"
+            f"{dot} **Uptime:** `{uptime_str}` | **Shard:** `#{shard_id}` | **Region:** `{host_region}`\n"
             f"{dot} **Audio Engine:** `{ll_status}`"
         )
         container.add_separator(divider=True)
 
-        # If latency is elevated due to intercontinental routing, give helpful advice
         if ws_latency > 150.0 or (rest_ms and rest_ms > 200.0):
             container.add_text(
                 "💡 **Regional Latency Insight:**\n"
-                f"> The bot container is hosted in **{host_region}**.\n"
-                "> Discord users and servers connecting from Asia/India or Europe to US East experience 150–250ms "
-                "transatlantic physical fiber ping. If you want ultra-low **30–50ms ping**, switch the Render service region "
-                "to **Singapore** (for Asia/India) or **Frankfurt** (for Europe) in Render Settings."
+                f"> Hosted in **{host_region}**. Switch region closer to your server if transatlantic latency is high."
             )
             container.add_separator(divider=True)
 

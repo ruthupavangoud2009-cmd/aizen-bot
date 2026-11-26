@@ -7,7 +7,8 @@ from discord.ext import commands
 
 from src.core.context import CustomContext
 from src.cogs.moderation._helpers import dispatch_mod_log
-from src.ui.response import KyokaResponse, send_response
+from src.ui.response import KyokaResponse
+from src.utils.containers import send_container_response
 
 if TYPE_CHECKING:
     from src.core.bot import KyokaBot
@@ -39,7 +40,7 @@ class LockCog(commands.Cog):
         target_channel = channel or ctx.channel
         if not isinstance(target_channel, discord.TextChannel):
             resp = KyokaResponse.warning("Error", "Lock command only applies to text channels.", author=ctx.author)
-            await send_response(ctx, resp, ephemeral=True)
+            await send_container_response(ctx, resp.to_container(bot=self.bot), ephemeral=True)
             return
 
         overwrite = target_channel.overwrites_for(ctx.guild.default_role)
@@ -66,7 +67,7 @@ class LockCog(commands.Cog):
             ],
             author=ctx.author,
         )
-        await send_response(ctx, resp)
+        await send_container_response(ctx, resp.to_container(bot=self.bot))
 
     @commands.hybrid_command(
         name="unlock",
@@ -87,7 +88,7 @@ class LockCog(commands.Cog):
         target_channel = channel or ctx.channel
         if not isinstance(target_channel, discord.TextChannel):
             resp = KyokaResponse.warning("Error", "Unlock command only applies to text channels.", author=ctx.author)
-            await send_response(ctx, resp, ephemeral=True)
+            await send_container_response(ctx, resp.to_container(bot=self.bot), ephemeral=True)
             return
 
         overwrite = target_channel.overwrites_for(ctx.guild.default_role)
@@ -120,7 +121,7 @@ class LockCog(commands.Cog):
             ],
             author=ctx.author,
         )
-        await send_response(ctx, resp)
+        await send_container_response(ctx, resp.to_container(bot=self.bot))
 
     @commands.command(
         name="hide",
@@ -140,7 +141,7 @@ class LockCog(commands.Cog):
         target_channel = channel or ctx.channel
         if not isinstance(target_channel, discord.TextChannel):
             resp = KyokaResponse.warning("Error", "Hide command only applies to text channels.", author=ctx.author)
-            return await send_response(ctx, resp, ephemeral=True)
+            return await send_container_response(ctx, resp.to_container(bot=self.bot), ephemeral=True)
 
         overwrite = target_channel.overwrites_for(ctx.guild.default_role)
         overwrite.view_channel = False
@@ -167,7 +168,7 @@ class LockCog(commands.Cog):
             ],
             author=ctx.author,
         )
-        await send_response(ctx, resp)
+        await send_container_response(ctx, resp.to_container(bot=self.bot))
 
     @commands.command(
         name="unhide",
@@ -187,7 +188,7 @@ class LockCog(commands.Cog):
         target_channel = channel or ctx.channel
         if not isinstance(target_channel, discord.TextChannel):
             resp = KyokaResponse.warning("Error", "Unhide command only applies to text channels.", author=ctx.author)
-            return await send_response(ctx, resp, ephemeral=True)
+            return await send_container_response(ctx, resp.to_container(bot=self.bot), ephemeral=True)
 
         overwrite = target_channel.overwrites_for(ctx.guild.default_role)
         overwrite.view_channel = None
@@ -214,7 +215,7 @@ class LockCog(commands.Cog):
             ],
             author=ctx.author,
         )
-        await send_response(ctx, resp)
+        await send_container_response(ctx, resp.to_container(bot=self.bot))
 
 
 async def setup(bot: KyokaBot) -> None:

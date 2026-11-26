@@ -387,9 +387,15 @@ class CompanionAI(commands.Cog):
         channel_id = message.channel.id
         if message.guild:
             ticket_mgr = getattr(self.bot, "ticket_mgr", None)
-            if ticket_mgr is not None:
+            get_ticket = getattr(ticket_mgr, "get_ticket", None) if ticket_mgr is not None else None
+            if callable(get_ticket):
                 try:
-                    active_ticket = await ticket_mgr.get_ticket(channel_id)
+                    import inspect
+                    res = get_ticket(channel_id)
+                    if inspect.isawaitable(res):
+                        active_ticket = await res
+                    else:
+                        active_ticket = None
                 except Exception as exc:
                     # Fail closed: if ticket state cannot be checked, do not
                     # allow another AI listener to answer in a possible ticket.

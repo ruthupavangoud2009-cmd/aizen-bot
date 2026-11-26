@@ -26,7 +26,10 @@ import discord
 from discord import app_commands
 from discord.ext import commands
 
-import static_ffmpeg
+try:
+    import static_ffmpeg
+except ImportError:
+    static_ffmpeg = None
 import wavelink
 from src.ui.asset_manager import AssetManager
 from gtts import gTTS
