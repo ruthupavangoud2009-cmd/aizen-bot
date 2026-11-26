@@ -300,9 +300,10 @@ class CompanionAI(commands.Cog):
 
         session = self._get_session()
 
-        # Concurrently launch AI text generation and optional GIF fetch
+        # Concurrently launch AI text generation and optional GIF fetch.
+        # Natural Friend ("normal") stays plain-text unless user explicitly asks for a GIF/action.
         should_gif = (
-            random.random() < 0.28
+            (p_def["key"] != "normal" and random.random() < 0.28)
             or any(kw in prompt.lower() for kw in ("gif", "show me", "hug", "kiss", "look", "smile", "tease", "roast", "burn"))
         ) and bool(p_def.get("gif_category"))
 

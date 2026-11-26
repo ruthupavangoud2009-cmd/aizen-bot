@@ -583,15 +583,6 @@ def resolve_command_category(cmd: Any) -> CategoryMeta:
         if parent_name in ("mod", "warn", "lock"):
             return CATEGORY_BY_ID["moderation"]
 
-    # Prefix-only economy/casino, global AFK, and owner override commands get explicit modular help placement.
-    root_name = getattr(cmd, "qualified_name", getattr(cmd, "name", "")).lower().split()[0]
-    if root_name in ("casino", "gamble", "bet", "lottery", "lotto"):
-        return CATEGORY_BY_ID["casino"]
-    if root_name in ("inf",):
-        return CATEGORY_BY_ID["owner"]
-    if root_name in ("afk", "gafk", "setafk", "resetafk", "viewafk", "back"):
-        return CATEGORY_BY_ID["afk"]
-
     # 2. Check Cog ownership via COG_MAPPINGS
     cog = getattr(cmd, "cog", None)
     if cog:
@@ -607,9 +598,17 @@ def resolve_command_category(cmd: Any) -> CategoryMeta:
             if cat.tag.lower() == cog_cat or cat.name.lower() == cog_cat or cat.id == cog_cat:
                 return cat
 
-    # 3. Check explicit command name
+    # 3. Check explicit command name (only when cog ownership did not specify a category)
     name = getattr(cmd, "name", "").lower()
     root_name = getattr(cmd, "qualified_name", name).lower().split()[0]
+
+    # Prefix-only casino, global AFK, and owner override fallbacks
+    if root_name in ("casino", "gamble", "bet", "lottery", "lotto"):
+        return CATEGORY_BY_ID["casino"]
+    if root_name in ("inf",):
+        return CATEGORY_BY_ID["owner"]
+    if root_name in ("afk", "gafk", "setafk", "resetafk", "viewafk", "back"):
+        return CATEGORY_BY_ID["afk"]
 
     # AI Commands (Strict check)
     if root_name in (

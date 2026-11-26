@@ -32,7 +32,7 @@ def test_extract_vouch_patterns():
 
     parsed = cog._extract_vouch_from_message(msg1)
     assert parsed is not None
-    target_id, voucher_id, reason, service_type = parsed
+    target_id, voucher_id, reason, service_type, rating = parsed
     assert target_id == 123456789012345678
     assert voucher_id == 987654321098765432
     assert "dough raids" in reason
@@ -46,7 +46,7 @@ def test_extract_vouch_patterns():
 
     parsed2 = cog._extract_vouch_from_message(msg2)
     assert parsed2 is not None
-    t2, v2, r2, s2 = parsed2
+    t2, v2, r2, s2, rating2 = parsed2
     assert t2 == 123456789012345678
     assert s2 == "fruit"
 

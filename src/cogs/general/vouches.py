@@ -423,6 +423,11 @@ class Vouches(commands.Cog, name="Vouches"):
             if subcommand in {"update", "scan", "register"}:
                 return await ctx.invoke(self.vouchregister, limit=1000)
             return await ctx.reply("Use ?vouch @user <reason>, ?vouch lb, ?vouch wlb, or staff-only ?vouch update.", mention_author=False)
+        # Anti-abuse guards fire BEFORE channel config check
+        if getattr(member, "bot", False) or member.id == ctx.author.id:
+            return await ctx.reply('Self-vouches and bot vouches are not allowed.', mention_author=False)
+        if reason is None:
+            return await ctx.reply("Add a reason, for example: ?vouch @user Fast delivery.", mention_author=False)
         with conn() as c:
             cfg = c.execute("SELECT channel_id, reaction_1, reaction_2 FROM vouch_config WHERE guild_id=?", (ctx.guild.id,)).fetchone()
         if not cfg or not cfg["channel_id"]:
@@ -432,10 +437,6 @@ class Vouches(commands.Cog, name="Vouches"):
             if ch:
                 return await ctx.reply(f"Vouches can only be submitted in {ch.mention}.", mention_author=False)
             return await ctx.reply("The configured vouch channel is unavailable.", mention_author=False)
-        if reason is None:
-            return await ctx.reply("Add a reason, for example: ?vouch @user Fast delivery.", mention_author=False)
-        if getattr(member, "bot", False) or member.id == ctx.author.id:
-            return await ctx.reply('Self-vouches and bot vouches are not allowed.', mention_author=False)
 
         reason, rating = self._parse_rating(reason)
         service_type, clean_reason = self._parse_service_and_reason(reason)
@@ -1006,17 +1007,19 @@ class Vouches(commands.Cog, name="Vouches"):
             return await ctx.reply('❌ Only authorized Bot Staff or administrators can remove vouches.', mention_author=False)
 
         with conn() as c:
-            row = c.execute('SELECT * FROM vouches WHERE id=? AND is_active=1', (vouch_id,)).fetchone()
+            row = c.execute('SELECT * FROM vouches WHERE id=?', (vouch_id,)).fetchone()
             if not row:
-                return await ctx.reply(f'Vouch `#{vouch_id}` not found or already inactive.', mention_author=False)
+                return await ctx.reply(f'Vouch `#{vouch_id}` not found.', mention_author=False)
 
-            c.execute('UPDATE vouches SET is_active=0, reviewer_id=? WHERE id=?', (ctx.author.id, vouch_id))
+            # Log to audit before deleting (audit log retains record)
             c.execute(
                 'INSERT INTO vouch_audit_log(guild_id, mod_id, action, vouch_id, reason, created) VALUES(?,?,?,?,?,?)',
                 (ctx.guild.id, ctx.author.id, 'REMOVE', vouch_id, reason, time.time())
             )
+            # Hard delete — permanently purges from database; audit log retains history
+            c.execute('DELETE FROM vouches WHERE id=?', (vouch_id,))
 
-        await ctx.reply(f'✅ Vouch `#{vouch_id:04d}` has been removed from global records. Audit log recorded.', mention_author=False)
+        await ctx.reply(f'✅ Vouch `#{vouch_id:04d}` has been permanently removed from global records. Audit log recorded.', mention_author=False)
 
     # ── 7. HELD VOUCHES REVIEW QUEUE ──────────────────────────────────────────
     @commands.command(name='heldvouches')

@@ -1328,9 +1328,30 @@ class Help(commands.Cog, name="Help"):
             or ("Aizen Gemini AI engine, 10 personalities & auto chat channels" if "AI" in raw_title.upper() else "Commands in this system.")
         )
         container = KyokaContainer(accent_color=ui_color)
-        container.add_text(f"### {cat_icon} {raw_title} Module (Page {curr_page}/{total_pages})")
-        container.add_text(f"> {cat_desc}")
-        container.add_separator()
+        if cat_name in ("🤖・ARTIFICIAL INTELLIGENCE", "⛩️・AIZEN AI SYSTEM") or "AIZEN AI" in raw_title.upper():
+            container.add_section(
+                content=(
+                    f"**{cat_icon} AIZEN AI SYSTEM MODULE**\n"
+                    f"> High-performance conversational AI engine with 10 distinct personalities, natural automatic channel conversations, and real-time diagnostics."
+                )
+            )
+            container.add_separator(divider=True)
+            container.add_text(
+                f"**Available Personalities (10 Total):**\n"
+                f"> 🌸 `girlfriend` • 💅 `baddie` • 😈 `special` (Restricted) • 🤝 `friendly` • 🎭 `funny`\n"
+                f"> 🔥 `savage` • ⚡ `anime` • ⛩️ `aizen` • 🌟 `friend` • ⚙️ `custom`\n\n"
+                f"**Core AI Commands & Syntax:**\n"
+                f"• `{prefix}ai <message>` — Direct conversation with active personality\n"
+                f"• `{prefix}ai personalities` — Browse all 10 personalities with interactive selector\n"
+                f"• `{prefix}ai setup [#channel]` — Enable automatic natural chat in a channel\n"
+                f"• `{prefix}aidiag` — Real-time performance & provider latency diagnostics\n"
+                f"• `{prefix}aigf`, `{prefix}aibaddie`, `{prefix}aispecial` — Direct persona shortcuts"
+            )
+            container.add_separator()
+        else:
+            container.add_text(f"### {cat_icon} {raw_title} Module (Page {curr_page}/{total_pages})")
+            container.add_text(f"> {cat_desc}")
+            container.add_separator()
 
         cmd_lines = [f"**Commands ({len(unique_cmds)}):**"]
         for cmd in page_cmds:

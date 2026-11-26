@@ -26,6 +26,9 @@ from src.cogs.general.vouches import Vouches, conn, DB
 def clean_test_reputation_db(tmp_path, monkeypatch):
     test_db = tmp_path / "kyoka_reputation.sqlite3"
     monkeypatch.setattr("src.cogs.general.vouches.DB", test_db)
+    with __import__("src.cogs.general.vouches", fromlist=["conn"]).conn() as c:
+        c.execute("INSERT OR IGNORE INTO vouch_config(guild_id, channel_id) VALUES(?,?)", (10000001, 55555551))
+        c.execute("INSERT OR IGNORE INTO vouch_config(guild_id, channel_id) VALUES(?,?)", (20000002, 55555552))
     yield test_db
 
 
@@ -72,6 +75,10 @@ def guild_a_ctx(target_user):
     ctx.author.id = 70000001
     ctx.author.mention = "<@70000001>"
     ctx.author.guild_permissions.administrator = False
+    ctx.channel = MagicMock()
+    ctx.channel.id = 55555551
+    ctx.message = MagicMock()
+    ctx.message.id = 911222333444555661
     ctx.reply = AsyncMock()
     return ctx
 
@@ -88,6 +95,10 @@ def guild_b_ctx():
     ctx.author.id = 70000002
     ctx.author.mention = "<@70000002>"
     ctx.author.guild_permissions.administrator = False
+    ctx.channel = MagicMock()
+    ctx.channel.id = 55555552
+    ctx.message = MagicMock()
+    ctx.message.id = 911222333444555662
     ctx.reply = AsyncMock()
     return ctx
 

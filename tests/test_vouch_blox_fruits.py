@@ -24,6 +24,12 @@ from src.cogs.general.vouches import Vouches, conn, SERVICE_TYPES
 def clean_test_db(tmp_path, monkeypatch):
     test_db = tmp_path / "kyoka_reputation.sqlite3"
     monkeypatch.setattr("src.cogs.general.vouches.DB", test_db)
+    # Seed vouch channel config so channel check passes in tests
+    with __import__("src.cogs.general.vouches", fromlist=["conn"]).conn() as c:
+        c.execute(
+            "INSERT OR IGNORE INTO vouch_config(guild_id, channel_id) VALUES(?,?)",
+            (11111111, 55555555)
+        )
     yield test_db
 
 
@@ -39,6 +45,10 @@ def mock_ctx():
     ctx.author.name = "TraderBob"
     ctx.author.mention = "<@22222222>"
     ctx.author.guild_permissions.administrator = False
+    ctx.channel = MagicMock()
+    ctx.channel.id = 55555555  # matches seeded vouch_config channel_id
+    ctx.message = MagicMock()
+    ctx.message.id = 111222333444555666
     ctx.reply = AsyncMock()
     return ctx
 
@@ -110,6 +120,7 @@ async def test_duplicate_vouch_held_for_review(cog, mock_ctx, target_member):
         c.execute("DELETE FROM vouch_global_cooldowns")
 
     mock_ctx.reply.reset_mock()
+    mock_ctx.message.id += 1
     # Second vouch by same user for same target
     await cog.vouch(mock_ctx, target_member, reason="fruit another great trade")
 
