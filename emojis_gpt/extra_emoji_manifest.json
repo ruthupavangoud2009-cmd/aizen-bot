@@ -1,0 +1,542 @@
+[
+  {
+    "name": "admin",
+    "category": "extras",
+    "glyph": "⚙",
+    "fallback": "⚙",
+    "usage": "Administration",
+    "animated": false,
+    "source": "extra_emoji_sheet.svg"
+  },
+  {
+    "name": "staff",
+    "category": "extras",
+    "glyph": "♟",
+    "fallback": "♟",
+    "usage": "Staff",
+    "animated": false,
+    "source": "extra_emoji_sheet.svg"
+  },
+  {
+    "name": "owner",
+    "category": "extras",
+    "glyph": "♛",
+    "fallback": "♛",
+    "usage": "Owner",
+    "animated": false,
+    "source": "extra_emoji_sheet.svg"
+  },
+  {
+    "name": "developer",
+    "category": "extras",
+    "glyph": "⌘",
+    "fallback": "⌘",
+    "usage": "Developer",
+    "animated": false,
+    "source": "extra_emoji_sheet.svg"
+  },
+  {
+    "name": "server",
+    "category": "extras",
+    "glyph": "▣",
+    "fallback": "▣",
+    "usage": "Server",
+    "animated": false,
+    "source": "extra_emoji_sheet.svg"
+  },
+  {
+    "name": "member",
+    "category": "extras",
+    "glyph": "♙",
+    "fallback": "♙",
+    "usage": "Member",
+    "animated": false,
+    "source": "extra_emoji_sheet.svg"
+  },
+  {
+    "name": "role",
+    "category": "extras",
+    "glyph": "♧",
+    "fallback": "♧",
+    "usage": "Role",
+    "animated": false,
+    "source": "extra_emoji_sheet.svg"
+  },
+  {
+    "name": "channel",
+    "category": "extras",
+    "glyph": "▤",
+    "fallback": "▤",
+    "usage": "Channel",
+    "animated": false,
+    "source": "extra_emoji_sheet.svg"
+  },
+  {
+    "name": "voice",
+    "category": "extras",
+    "glyph": "♫",
+    "fallback": "♫",
+    "usage": "Voice",
+    "animated": false,
+    "source": "extra_emoji_sheet.svg"
+  },
+  {
+    "name": "stage",
+    "category": "extras",
+    "glyph": "◉",
+    "fallback": "◉",
+    "usage": "Stage",
+    "animated": false,
+    "source": "extra_emoji_sheet.svg"
+  },
+  {
+    "name": "warning_alt",
+    "category": "extras",
+    "glyph": "⚠",
+    "fallback": "⚠",
+    "usage": "Warning",
+    "animated": false,
+    "source": "extra_emoji_sheet.svg"
+  },
+  {
+    "name": "verified_alt",
+    "category": "extras",
+    "glyph": "✓",
+    "fallback": "✓",
+    "usage": "Verified",
+    "animated": false,
+    "source": "extra_emoji_sheet.svg"
+  },
+  {
+    "name": "deny",
+    "category": "extras",
+    "glyph": "✕",
+    "fallback": "✕",
+    "usage": "Deny",
+    "animated": false,
+    "source": "extra_emoji_sheet.svg"
+  },
+  {
+    "name": "approve",
+    "category": "extras",
+    "glyph": "✔",
+    "fallback": "✔",
+    "usage": "Approve",
+    "animated": false,
+    "source": "extra_emoji_sheet.svg"
+  },
+  {
+    "name": "delete",
+    "category": "extras",
+    "glyph": "⌫",
+    "fallback": "⌫",
+    "usage": "Delete",
+    "animated": false,
+    "source": "extra_emoji_sheet.svg"
+  },
+  {
+    "name": "edit",
+    "category": "extras",
+    "glyph": "✎",
+    "fallback": "✎",
+    "usage": "Edit",
+    "animated": false,
+    "source": "extra_emoji_sheet.svg"
+  },
+  {
+    "name": "refresh",
+    "category": "extras",
+    "glyph": "⟳",
+    "fallback": "⟳",
+    "usage": "Refresh",
+    "animated": false,
+    "source": "extra_emoji_sheet.svg"
+  },
+  {
+    "name": "reload",
+    "category": "extras",
+    "glyph": "↻",
+    "fallback": "↻",
+    "usage": "Reload",
+    "animated": false,
+    "source": "extra_emoji_sheet.svg"
+  },
+  {
+    "name": "restore",
+    "category": "extras",
+    "glyph": "↶",
+    "fallback": "↶",
+    "usage": "Restore",
+    "animated": false,
+    "source": "extra_emoji_sheet.svg"
+  },
+  {
+    "name": "backup",
+    "category": "extras",
+    "glyph": "▣",
+    "fallback": "▣",
+    "usage": "Backup",
+    "animated": false,
+    "source": "extra_emoji_sheet.svg"
+  },
+  {
+    "name": "pin",
+    "category": "extras",
+    "glyph": "⌖",
+    "fallback": "⌖",
+    "usage": "Pin",
+    "animated": false,
+    "source": "extra_emoji_sheet.svg"
+  },
+  {
+    "name": "location",
+    "category": "extras",
+    "glyph": "⌖",
+    "fallback": "⌖",
+    "usage": "Location",
+    "animated": false,
+    "source": "extra_emoji_sheet.svg"
+  },
+  {
+    "name": "filter",
+    "category": "extras",
+    "glyph": "▽",
+    "fallback": "▽",
+    "usage": "Filter",
+    "animated": false,
+    "source": "extra_emoji_sheet.svg"
+  },
+  {
+    "name": "sort",
+    "category": "extras",
+    "glyph": "⇅",
+    "fallback": "⇅",
+    "usage": "Sort",
+    "animated": false,
+    "source": "extra_emoji_sheet.svg"
+  },
+  {
+    "name": "bug",
+    "category": "extras",
+    "glyph": "♧",
+    "fallback": "♧",
+    "usage": "Bug",
+    "animated": false,
+    "source": "extra_emoji_sheet.svg"
+  },
+  {
+    "name": "report",
+    "category": "extras",
+    "glyph": "⚑",
+    "fallback": "⚑",
+    "usage": "Report",
+    "animated": false,
+    "source": "extra_emoji_sheet.svg"
+  },
+  {
+    "name": "appeal",
+    "category": "extras",
+    "glyph": "⚖",
+    "fallback": "⚖",
+    "usage": "Appeal",
+    "animated": false,
+    "source": "extra_emoji_sheet.svg"
+  },
+  {
+    "name": "shield_alt",
+    "category": "extras",
+    "glyph": "⬡",
+    "fallback": "⬡",
+    "usage": "Shield",
+    "animated": false,
+    "source": "extra_emoji_sheet.svg"
+  },
+  {
+    "name": "firewall",
+    "category": "extras",
+    "glyph": "▤",
+    "fallback": "▤",
+    "usage": "Firewall",
+    "animated": false,
+    "source": "extra_emoji_sheet.svg"
+  },
+  {
+    "name": "scan",
+    "category": "extras",
+    "glyph": "⌕",
+    "fallback": "⌕",
+    "usage": "Scan",
+    "animated": false,
+    "source": "extra_emoji_sheet.svg"
+  },
+  {
+    "name": "boost",
+    "category": "extras",
+    "glyph": "↗",
+    "fallback": "↗",
+    "usage": "Boost",
+    "animated": false,
+    "source": "extra_emoji_sheet.svg"
+  },
+  {
+    "name": "starred",
+    "category": "extras",
+    "glyph": "★",
+    "fallback": "★",
+    "usage": "Starred",
+    "animated": false,
+    "source": "extra_emoji_sheet.svg"
+  },
+  {
+    "name": "favorite",
+    "category": "extras",
+    "glyph": "♥",
+    "fallback": "♥",
+    "usage": "Favorite",
+    "animated": false,
+    "source": "extra_emoji_sheet.svg"
+  },
+  {
+    "name": "party",
+    "category": "extras",
+    "glyph": "✦",
+    "fallback": "✦",
+    "usage": "Party",
+    "animated": false,
+    "source": "extra_emoji_sheet.svg"
+  },
+  {
+    "name": "giftbox",
+    "category": "extras",
+    "glyph": "▣",
+    "fallback": "▣",
+    "usage": "Giftbox",
+    "animated": false,
+    "source": "extra_emoji_sheet.svg"
+  },
+  {
+    "name": "badge_alt",
+    "category": "extras",
+    "glyph": "✪",
+    "fallback": "✪",
+    "usage": "Badge",
+    "animated": false,
+    "source": "extra_emoji_sheet.svg"
+  },
+  {
+    "name": "medal",
+    "category": "extras",
+    "glyph": "♜",
+    "fallback": "♜",
+    "usage": "Medal",
+    "animated": false,
+    "source": "extra_emoji_sheet.svg"
+  },
+  {
+    "name": "rank",
+    "category": "extras",
+    "glyph": "♕",
+    "fallback": "♕",
+    "usage": "Rank",
+    "animated": false,
+    "source": "extra_emoji_sheet.svg"
+  },
+  {
+    "name": "progress",
+    "category": "extras",
+    "glyph": "◔",
+    "fallback": "◔",
+    "usage": "Progress",
+    "animated": false,
+    "source": "extra_emoji_sheet.svg"
+  },
+  {
+    "name": "target",
+    "category": "extras",
+    "glyph": "◎",
+    "fallback": "◎",
+    "usage": "Target",
+    "animated": false,
+    "source": "extra_emoji_sheet.svg"
+  },
+  {
+    "name": "voice_join",
+    "category": "extras",
+    "glyph": "↗",
+    "fallback": "↗",
+    "usage": "Voice Join",
+    "animated": false,
+    "source": "extra_emoji_sheet.svg"
+  },
+  {
+    "name": "voice_leave",
+    "category": "extras",
+    "glyph": "↘",
+    "fallback": "↘",
+    "usage": "Voice Leave",
+    "animated": false,
+    "source": "extra_emoji_sheet.svg"
+  },
+  {
+    "name": "record",
+    "category": "extras",
+    "glyph": "●",
+    "fallback": "●",
+    "usage": "Record",
+    "animated": false,
+    "source": "extra_emoji_sheet.svg"
+  },
+  {
+    "name": "sound",
+    "category": "extras",
+    "glyph": "♫",
+    "fallback": "♫",
+    "usage": "Sound",
+    "animated": false,
+    "source": "extra_emoji_sheet.svg"
+  },
+  {
+    "name": "volume_up",
+    "category": "extras",
+    "glyph": "◖",
+    "fallback": "◖",
+    "usage": "Volume Up",
+    "animated": false,
+    "source": "extra_emoji_sheet.svg"
+  },
+  {
+    "name": "volume_down",
+    "category": "extras",
+    "glyph": "◗",
+    "fallback": "◗",
+    "usage": "Volume Down",
+    "animated": false,
+    "source": "extra_emoji_sheet.svg"
+  },
+  {
+    "name": "mute_alt",
+    "category": "extras",
+    "glyph": "⊘",
+    "fallback": "⊘",
+    "usage": "Mute",
+    "animated": false,
+    "source": "extra_emoji_sheet.svg"
+  },
+  {
+    "name": "broadcast",
+    "category": "extras",
+    "glyph": "⌁",
+    "fallback": "⌁",
+    "usage": "Broadcast",
+    "animated": false,
+    "source": "extra_emoji_sheet.svg"
+  },
+  {
+    "name": "bell_alt",
+    "category": "extras",
+    "glyph": "♧",
+    "fallback": "♧",
+    "usage": "Bell",
+    "animated": false,
+    "source": "extra_emoji_sheet.svg"
+  },
+  {
+    "name": "message_alt",
+    "category": "extras",
+    "glyph": "✉",
+    "fallback": "✉",
+    "usage": "Message",
+    "animated": false,
+    "source": "extra_emoji_sheet.svg"
+  },
+  {
+    "name": "bot_status",
+    "category": "extras",
+    "glyph": "◉",
+    "fallback": "◉",
+    "usage": "Bot Status",
+    "animated": false,
+    "source": "extra_emoji_sheet.svg"
+  },
+  {
+    "name": "api",
+    "category": "extras",
+    "glyph": "⌘",
+    "fallback": "⌘",
+    "usage": "API",
+    "animated": false,
+    "source": "extra_emoji_sheet.svg"
+  },
+  {
+    "name": "webhook",
+    "category": "extras",
+    "glyph": "↗",
+    "fallback": "↗",
+    "usage": "Webhook",
+    "animated": false,
+    "source": "extra_emoji_sheet.svg"
+  },
+  {
+    "name": "cloud",
+    "category": "extras",
+    "glyph": "☁",
+    "fallback": "☁",
+    "usage": "Cloud",
+    "animated": false,
+    "source": "extra_emoji_sheet.svg"
+  },
+  {
+    "name": "network",
+    "category": "extras",
+    "glyph": "⌁",
+    "fallback": "⌁",
+    "usage": "Network",
+    "animated": false,
+    "source": "extra_emoji_sheet.svg"
+  },
+  {
+    "name": "storage",
+    "category": "extras",
+    "glyph": "▣",
+    "fallback": "▣",
+    "usage": "Storage",
+    "animated": false,
+    "source": "extra_emoji_sheet.svg"
+  },
+  {
+    "name": "sync",
+    "category": "extras",
+    "glyph": "⟳",
+    "fallback": "⟳",
+    "usage": "Sync",
+    "animated": false,
+    "source": "extra_emoji_sheet.svg"
+  },
+  {
+    "name": "time",
+    "category": "extras",
+    "glyph": "◷",
+    "fallback": "◷",
+    "usage": "Time",
+    "animated": false,
+    "source": "extra_emoji_sheet.svg"
+  },
+  {
+    "name": "timer",
+    "category": "extras",
+    "glyph": "◴",
+    "fallback": "◴",
+    "usage": "Timer",
+    "animated": false,
+    "source": "extra_emoji_sheet.svg"
+  },
+  {
+    "name": "date",
+    "category": "extras",
+    "glyph": "▦",
+    "fallback": "▦",
+    "usage": "Date",
+    "animated": false,
+    "source": "extra_emoji_sheet.svg"
+  }
+]
