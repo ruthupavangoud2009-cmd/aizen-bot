@@ -20,21 +20,27 @@ from discord.ext import commands
 logger = logging.getLogger("Kyoka.UI.Response")
 
 try:
-    from src.utils.emojis import CATEGORY_FALLBACK_EMOJIS, sanitize_emoji_string
+    from src.utils.emojis import CATEGORY_FALLBACK_EMOJIS, resolve_emoji, sanitize_emoji_string
 except ImportError:
     CATEGORY_FALLBACK_EMOJIS = {
         "SUCCESS": "✅",
         "ERROR": "❌",
         "WARNING": "⚠️",
-        "LOADING": "🔄",
-        "ARROW": "💜",
+        "LOADING": "⏳",
+        "ARROW": "»",
         "MODERATION": "⚔️",
         "MUSIC": "🎵",
         "TICKET": "🎫",
-        "AI": "🧠",
-        "PREMIUM": "👑",
+        "AI": "🤖",
+        "PREMIUM": "💎",
         "INFO": "ℹ️",
+        "PERMISSION": "🔒",
+        "SYSTEM": "⚙️",
+        "CONFIRMATION": "✅",
+        "VERIFICATION": "✅",
     }
+    def resolve_emoji(source: Any, key: str, *, fallback: str = "", **_: Any) -> str:
+        return fallback or CATEGORY_FALLBACK_EMOJIS.get(str(key).upper(), "•")
     def sanitize_emoji_string(text: str, bot: Any = None) -> str:
         return text
 
@@ -104,6 +110,7 @@ class KyokaResponse:
         footer_text: Optional[str] = None,
         footer_icon_url: Optional[str] = None,
         custom_emoji: Optional[str] = None,
+        emoji_key: Optional[str] = None,
         color: Optional[int] = None,
         timestamp: Optional[datetime.datetime] = None,
     ) -> None:
@@ -118,6 +125,7 @@ class KyokaResponse:
         self.footer_text = footer_text or "KYOKA — Aizen Edition"
         self.footer_icon_url = footer_icon_url
         self.custom_emoji = custom_emoji
+        self.emoji_key = emoji_key
         self.color = color if color is not None else KyokaPalette.get_color(response_type)
         self.timestamp = timestamp or discord.utils.utcnow()
 
@@ -127,29 +135,30 @@ class KyokaResponse:
 
     def build_embed(self, bot: Optional[KyokaBot] = None) -> discord.Embed:
         """Construct the unified mobile-optimized discord.Embed."""
-        emoji_prefix = ""
-        bullet_icon = "•"
-
-        # Resolve custom animated or static emoji from registry
         cat_name = self.response_type.value.upper()
+        key_map = {
+            "PERMISSION": "LOCK",
+            "CONFIRMATION": "SUCCESS",
+            "SYSTEM": "OWNER",
+        }
+        resolved_key = self.emoji_key or key_map.get(cat_name, cat_name)
+        prefer_anim = resolved_key in ("LOADING", "MUSIC", "PREMIUM", "AI", "SUCCESS")
+
         if self.custom_emoji:
             emoji_prefix = self.custom_emoji
-        elif bot and hasattr(bot, "custom_emojis"):
-            reg = bot.custom_emojis
-            emoji_prefix = reg.get_category(cat_name, fallback="")
-            bullet_icon = reg.get("heart_dot", reg.get("icons_rightarrow", "•"))
+        else:
+            emoji_prefix = resolve_emoji(bot, resolved_key, prefer_animated=prefer_anim)
 
-        if not emoji_prefix:
-            emoji_prefix = CATEGORY_FALLBACK_EMOJIS.get(cat_name, "💜")
+        bullet_icon = resolve_emoji(bot, "ARROW", fallback="»")
 
         # Clean title with custom emoji
         formatted_title = f"{emoji_prefix} {self.title}".strip() if emoji_prefix else self.title
 
-        # Mobile-First Kyoka Sovereign quote block formatting with signature violet diamonds
+        # Mobile-First Kyoka quote block formatting with central arrow/bullet icon
         final_desc = self.description or ""
         fields_to_add = []
         if self.fields and not any(isinstance(f[1], str) and len(f[1]) > 500 for f in self.fields):
-            quote_lines = [f"> 💜 **{name}:** {value}" for name, value, _ in self.fields]
+            quote_lines = [f"> {bullet_icon} **{name}:** {value}" for name, value, _ in self.fields]
             block = "\n".join(quote_lines)
             if final_desc:
                 final_desc = f"{final_desc}\n{block}"
@@ -197,32 +206,26 @@ class KyokaResponse:
         """Construct a high-performance Components V2 container card matching Cicada/Kyro layout."""
         from src.utils.containers import KyokaContainer
 
-        emoji_prefix = ""
-        bullet_icon = ">"
-
         cat_name = self.response_type.value.upper()
+        key_map = {
+            "PERMISSION": "LOCK",
+            "CONFIRMATION": "SUCCESS",
+            "SYSTEM": "OWNER",
+        }
+        resolved_key = self.emoji_key or key_map.get(cat_name, cat_name)
+        prefer_anim = resolved_key in ("LOADING", "MUSIC", "PREMIUM", "AI", "SUCCESS")
+
         if self.custom_emoji:
             emoji_prefix = self.custom_emoji
-        elif bot and hasattr(bot, "custom_emojis"):
-            reg = bot.custom_emojis
-            emoji_prefix = (
-                getattr(reg, "verified", "") if cat_name == "SUCCESS"
-                else getattr(reg, "loading", "") if cat_name == "LOADING"
-                else getattr(reg, "antinuke", "") if cat_name in ("SECURITY", "ANTI_NUKE")
-                else getattr(reg, "coin", "") if cat_name in ("ECONOMY", "CASINO")
-                else getattr(reg, "sparkle", "") if cat_name == "AI"
-                else reg.get_category(cat_name, fallback="")
-            )
-            bullet_icon = getattr(reg, "heart_dot", "") or ">"
+        else:
+            emoji_prefix = resolve_emoji(bot, resolved_key, prefer_animated=prefer_anim)
 
-        if not emoji_prefix:
-            emoji_prefix = CATEGORY_FALLBACK_EMOJIS.get(cat_name, "")
-
+        bullet_icon = resolve_emoji(bot, "ARROW", fallback=">")
         container = KyokaContainer(accent_color=None)
 
         prefix_part = f"{emoji_prefix} " if emoji_prefix else ""
-        title_text = f"**{prefix_part}{self.title}**" if self.title else ""
-        desc_text = self.description.strip() if self.description else ""
+        title_text = sanitize_emoji_string(f"**{prefix_part}{self.title}**", bot=bot) if self.title else ""
+        desc_text = sanitize_emoji_string(self.description.strip(), bot=bot) if self.description else ""
 
         if title_text and desc_text:
             section_content = f"{title_text}\n> {desc_text}"
@@ -381,6 +384,7 @@ class KyokaResponse:
         moderator: discord.User | discord.Member,
         reason: str = "No reason provided",
         extra_fields: Optional[Sequence[tuple[str, Any, bool]]] = None,
+        bot: Optional[KyokaBot] = None,
     ) -> KyokaResponse:
         fields = [
             ("Target", f"**{target}** `「{target.id}」`", True),
@@ -389,11 +393,35 @@ class KyokaResponse:
         ]
         if extra_fields:
             fields.extend(extra_fields)
+
+        act_low = action.lower()
+        mod_key = "MODERATION"
+        if "ban" in act_low and "unban" not in act_low:
+            mod_key = "BAN"
+        elif "unban" in act_low:
+            mod_key = "APPROVE"
+        elif "kick" in act_low:
+            mod_key = "KICK"
+        elif "unmute" in act_low or "untimeout" in act_low:
+            mod_key = "UNMUTE"
+        elif "mute" in act_low or "timeout" in act_low:
+            mod_key = "MUTE"
+        elif "warn" in act_low:
+            mod_key = "WARN"
+        elif "unlock" in act_low:
+            mod_key = "UNLOCK"
+        elif "lock" in act_low:
+            mod_key = "LOCK"
+        elif "purge" in act_low or "clear" in act_low:
+            mod_key = "PURGE"
+
         return cls(
             response_type=ResponseType.MODERATION,
             title=f"Member {action.title()}",
-            description=f"\n💜 Member **{action.lower()}** executed successfully.",
+            description=f"\nMember **{action.lower()}** executed successfully.",
             fields=fields,
+            emoji_key=mod_key,
+            custom_emoji=resolve_emoji(bot, mod_key) if bot is not None else None,
             author_name=moderator.display_name if moderator else None,
             author_icon_url=moderator.display_avatar.url if moderator else None,
             thumbnail_url=target.display_avatar.url if hasattr(target, "display_avatar") else None,

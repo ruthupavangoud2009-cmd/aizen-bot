@@ -21,6 +21,7 @@ from discord.ext import commands
 from src.core.context import CustomContext
 from src.managers.economy_manager import EconomyManager
 from src.security.owner import OWNER_ID
+from src.utils.emojis import resolve_emoji, resolve_select_emoji
 from src.utils.ui import AizenPalette, AizenSymbols, KyokaEmbed
 
 if TYPE_CHECKING:
@@ -47,8 +48,11 @@ class PagedLeaderboardView(discord.ui.View):
     def _update_buttons(self):
         self.btn_prev.disabled = self.page <= 1
         self.btn_next.disabled = self.page >= self.total_pages
+        bot_ref = getattr(self.cog, "bot", None)
+        self.btn_prev.emoji = resolve_select_emoji(bot_ref, "BACK", fallback="◀️")
+        self.btn_next.emoji = resolve_select_emoji(bot_ref, "NEXT", fallback="▶️")
 
-    @discord.ui.button(label="◀ Previous", style=discord.ButtonStyle.secondary)
+    @discord.ui.button(label="Previous", style=discord.ButtonStyle.secondary)
     async def btn_prev(self, interaction: discord.Interaction, button: discord.ui.Button):
         if interaction.user.id != self.ctx.author.id:
             return await interaction.response.send_message("This menu belongs to someone else!", ephemeral=True)
@@ -57,7 +61,7 @@ class PagedLeaderboardView(discord.ui.View):
         embed = await self.cog.build_rich_embed(self.guild_id, self.page, self.currency, self.emoji, self.total_pages)
         await interaction.response.edit_message(embed=embed, view=self)
 
-    @discord.ui.button(label="Next ▶", style=discord.ButtonStyle.secondary)
+    @discord.ui.button(label="Next", style=discord.ButtonStyle.secondary)
     async def btn_next(self, interaction: discord.Interaction, button: discord.ui.Button):
         if interaction.user.id != self.ctx.author.id:
             return await interaction.response.send_message("This menu belongs to someone else!", ephemeral=True)
@@ -84,13 +88,17 @@ class PagedShopView(discord.ui.View):
     def _update_buttons(self):
         self.btn_prev.disabled = self.page <= 1
         self.btn_next.disabled = self.page >= self.total_pages
+        bot_ref = getattr(self.ctx, "bot", None)
+        self.btn_prev.emoji = resolve_select_emoji(bot_ref, "BACK", fallback="◀️")
+        self.btn_next.emoji = resolve_select_emoji(bot_ref, "NEXT", fallback="▶️")
 
     def build_embed(self) -> discord.Embed:
         start_idx = (self.page - 1) * self.per_page
         current_items = self.items[start_idx : start_idx + self.per_page]
+        shop_em = resolve_emoji(getattr(self.ctx, "bot", None), "SHOP")
 
         embed = discord.Embed(
-            title=f"🏪 Aizen's Sovereign Emporium",
+            title=f"{shop_em} Aizen's Sovereign Emporium",
             description=f"> All goods certified by Kyoka Suigetsu.\n> Use `{self.ctx.clean_prefix}buy <item_id> [amount]` to purchase.\n",
             color=AIZEN_PURPLE,
         )
@@ -111,7 +119,7 @@ class PagedShopView(discord.ui.View):
         self._update_buttons()
         await interaction.response.edit_message(embed=self.build_embed(), view=self)
 
-    @discord.ui.button(label="Next ▶", style=discord.ButtonStyle.secondary)
+    @discord.ui.button(label="Next", style=discord.ButtonStyle.secondary)
     async def btn_next(self, interaction: discord.Interaction, button: discord.ui.Button):
         if interaction.user.id != self.ctx.author.id:
             return await interaction.response.send_message("Only the command requester can navigate!", ephemeral=True)
@@ -137,6 +145,12 @@ class Economy(commands.Cog):
 
     async def _get_settings(self, guild_id: int) -> dict[str, Any]:
         return await self.eco.get_guild_settings(guild_id)
+
+    def _currency_icon(self, settings: dict[str, Any]) -> str:
+        raw = settings.get("currency_emoji", "🪙")
+        if raw == "🪙":
+            return resolve_emoji(self.bot, "COINS", prefer_animated=True, fallback="🪙")
+        return raw
 
     @commands.command(name="casino", aliases=["kyokacasino"], help="Open the KYOKA Casino module overview.")
     async def casino(self, ctx: CustomContext) -> None:
@@ -190,7 +204,7 @@ class Economy(commands.Cog):
         profile = await self.eco.get_or_create_profile(guild_id, target.id)
         settings = await self._get_settings(guild_id)
         curr_name = settings.get("currency_name", "KYOKA Coins")
-        curr_emoji = settings.get("currency_emoji", "🪙")
+        curr_emoji = self._currency_icon(settings)
 
         wallet = profile.get("balance", 0)
         bank = profile.get("bank", 0)
@@ -216,7 +230,7 @@ class Economy(commands.Cog):
         guild_id = ctx.guild.id if ctx.guild else 0
         settings = await self._get_settings(guild_id)
         curr_name = settings.get("currency_name", "KYOKA Coins")
-        curr_emoji = settings.get("currency_emoji", "🪙")
+        curr_emoji = self._currency_icon(settings)
 
         res = await self.eco.claim_daily(guild_id, ctx.author.id)
         if not res["success"]:
@@ -230,8 +244,9 @@ class Economy(commands.Cog):
         amt = res["amount"]
         new_bal = res["new_balance"]
 
+        gift_em = resolve_emoji(self.bot, "REWARDS")
         embed = discord.Embed(
-            title=f"🎁 Daily Allowance Granted!",
+            title=f"{gift_em} Daily Allowance Granted!",
             description=(
                 f"> **Sosuke Aizen acknowledges your daily loyalty.**\n\n"
                 f"• Payout: **+{amt:,}** {curr_emoji} {curr_name}\n"
@@ -248,7 +263,7 @@ class Economy(commands.Cog):
         guild_id = ctx.guild.id if ctx.guild else 0
         settings = await self._get_settings(guild_id)
         curr_name = settings.get("currency_name", "KYOKA Coins")
-        curr_emoji = settings.get("currency_emoji", "🪙")
+        curr_emoji = self._currency_icon(settings)
 
         res = await self.eco.claim_weekly(guild_id, ctx.author.id)
         if not res["success"]:
@@ -274,7 +289,7 @@ class Economy(commands.Cog):
         guild_id = ctx.guild.id if ctx.guild else 0
         settings = await self._get_settings(guild_id)
         curr_name = settings.get("currency_name", "KYOKA Coins")
-        curr_emoji = settings.get("currency_emoji", "🪙")
+        curr_emoji = self._currency_icon(settings)
 
         res = await self.eco.work(guild_id, ctx.author.id)
         if not res.get("success"):
@@ -293,7 +308,7 @@ class Economy(commands.Cog):
         guild_id = ctx.guild.id if ctx.guild else 0
         settings = await self._get_settings(guild_id)
         curr_name = settings.get("currency_name", "KYOKA Coins")
-        curr_emoji = settings.get("currency_emoji", "🪙")
+        curr_emoji = self._currency_icon(settings)
 
         res = await self.eco.crime(guild_id, ctx.author.id)
         if not res.get("success"):
@@ -319,7 +334,7 @@ class Economy(commands.Cog):
         guild_id = ctx.guild.id if ctx.guild else 0
         settings = await self._get_settings(guild_id)
         curr_name = settings.get("currency_name", "KYOKA Coins")
-        curr_emoji = settings.get("currency_emoji", "🪙")
+        curr_emoji = self._currency_icon(settings)
 
         res = await self.eco.beg(guild_id, ctx.author.id)
         if res["amount"] == 0:
@@ -332,7 +347,7 @@ class Economy(commands.Cog):
         guild_id = ctx.guild.id if ctx.guild else 0
         settings = await self._get_settings(guild_id)
         curr_name = settings.get("currency_name", "KYOKA Coins")
-        curr_emoji = settings.get("currency_emoji", "🪙")
+        curr_emoji = self._currency_icon(settings)
 
         profile = await self.eco.get_or_create_profile(guild_id, ctx.author.id)
         wallet = profile.get("balance", 0)
@@ -360,7 +375,7 @@ class Economy(commands.Cog):
         guild_id = ctx.guild.id if ctx.guild else 0
         settings = await self._get_settings(guild_id)
         curr_name = settings.get("currency_name", "KYOKA Coins")
-        curr_emoji = settings.get("currency_emoji", "🪙")
+        curr_emoji = self._currency_icon(settings)
 
         profile = await self.eco.get_or_create_profile(guild_id, ctx.author.id)
         bank = profile.get("bank", 0)
@@ -395,7 +410,7 @@ class Economy(commands.Cog):
         guild_id = ctx.guild.id if ctx.guild else 0
         settings = await self._get_settings(guild_id)
         curr_name = settings.get("currency_name", "KYOKA Coins")
-        curr_emoji = settings.get("currency_emoji", "🪙")
+        curr_emoji = self._currency_icon(settings)
 
         try:
             sender_bal, receiver_bal = await self.eco.transfer_funds(guild_id, ctx.author.id, member.id, amount)
@@ -416,7 +431,7 @@ class Economy(commands.Cog):
         guild_id = ctx.guild.id if ctx.guild else 0
         settings = await self._get_settings(guild_id)
         curr_name = settings.get("currency_name", "KYOKA Coins")
-        curr_emoji = settings.get("currency_emoji", "🪙")
+        curr_emoji = self._currency_icon(settings)
 
         res = await self.eco.rob(guild_id, ctx.author.id, member.id)
         if "error" in res:
@@ -429,8 +444,9 @@ class Economy(commands.Cog):
 
     async def build_rich_embed(self, guild_id: int, page: int, currency: str, emoji: str, total_pages: int) -> discord.Embed:
         rows, total = await self.eco.get_rich_leaderboard(guild_id, page=page, per_page=10)
+        lb_em = resolve_emoji(self.bot, "LEADERBOARD")
         embed = discord.Embed(
-            title=f"👑 High Society • Wealth Leaderboard",
+            title=f"{lb_em} High Society • Wealth Leaderboard",
             description=f"> Ranking members by Total Net Worth (Wallet + Bank).\n",
             color=AIZEN_PURPLE,
         )
@@ -455,7 +471,7 @@ class Economy(commands.Cog):
         guild_id = ctx.guild.id if ctx.guild else 0
         settings = await self._get_settings(guild_id)
         curr_name = settings.get("currency_name", "KYOKA Coins")
-        curr_emoji = settings.get("currency_emoji", "🪙")
+        curr_emoji = self._currency_icon(settings)
 
         _, total = await self.eco.get_rich_leaderboard(guild_id, page=1, per_page=10)
         total_pages = max(1, math.ceil(total / 10))
@@ -470,7 +486,7 @@ class Economy(commands.Cog):
         guild_id = ctx.guild.id if ctx.guild else 0
         settings = await self._get_settings(guild_id)
         curr_name = settings.get("currency_name", "KYOKA Coins")
-        curr_emoji = settings.get("currency_emoji", "🪙")
+        curr_emoji = self._currency_icon(settings)
 
         items = await self.eco.get_shop_items()
         view = PagedShopView(items, ctx, curr_name, curr_emoji, page=page)
@@ -481,7 +497,7 @@ class Economy(commands.Cog):
         guild_id = ctx.guild.id if ctx.guild else 0
         settings = await self._get_settings(guild_id)
         curr_name = settings.get("currency_name", "KYOKA Coins")
-        curr_emoji = settings.get("currency_emoji", "🪙")
+        curr_emoji = self._currency_icon(settings)
 
         res = await self.eco.buy_item(guild_id, ctx.author.id, item_id, quantity)
         if "error" in res:
@@ -498,7 +514,7 @@ class Economy(commands.Cog):
         guild_id = ctx.guild.id if ctx.guild else 0
         settings = await self._get_settings(guild_id)
         curr_name = settings.get("currency_name", "KYOKA Coins")
-        curr_emoji = settings.get("currency_emoji", "🪙")
+        curr_emoji = self._currency_icon(settings)
 
         res = await self.eco.sell_item(guild_id, ctx.author.id, item_id, quantity)
         if "error" in res:
@@ -513,8 +529,9 @@ class Economy(commands.Cog):
         guild_id = ctx.guild.id if ctx.guild else 0
 
         inv = await self.eco.get_inventory(guild_id, target.id)
+        inv_em = resolve_emoji(self.bot, "INVENTORY")
         embed = discord.Embed(
-            title=f"🎒 {target.display_name}'s Vault & Inventory",
+            title=f"{inv_em} {target.display_name}'s Vault & Inventory",
             color=AIZEN_PURPLE,
         )
         embed.set_thumbnail(url=target.display_avatar.url)
@@ -540,7 +557,7 @@ class Economy(commands.Cog):
         guild_id = ctx.guild.id if ctx.guild else 0
         settings = await self._get_settings(guild_id)
         curr_name = settings.get("currency_name", "KYOKA Coins")
-        curr_emoji = settings.get("currency_emoji", "🪙")
+        curr_emoji = self._currency_icon(settings)
 
         max_limit = settings.get("gamble_limit", 50000)
         if amount > max_limit:
@@ -601,7 +618,7 @@ class Economy(commands.Cog):
         guild_id = ctx.guild.id if ctx.guild else 0
         settings = await self._get_settings(guild_id)
         curr_name = settings.get("currency_name", "KYOKA Coins")
-        curr_emoji = settings.get("currency_emoji", "🪙")
+        curr_emoji = self._currency_icon(settings)
 
         q_list = await self.eco.get_or_create_daily_quests(guild_id, ctx.author.id)
         embed = discord.Embed(
@@ -624,7 +641,7 @@ class Economy(commands.Cog):
         guild_id = ctx.guild.id if ctx.guild else 0
         settings = await self._get_settings(guild_id)
         curr_name = settings.get("currency_name", "KYOKA Coins")
-        curr_emoji = settings.get("currency_emoji", "🪙")
+        curr_emoji = self._currency_icon(settings)
 
         res = await self.eco.claim_quest_reward(guild_id, ctx.author.id, quest_id)
         if "error" in res:
@@ -636,7 +653,7 @@ class Economy(commands.Cog):
         guild_id = ctx.guild.id if ctx.guild else 0
         settings = await self._get_settings(guild_id)
         curr_name = settings.get("currency_name", "KYOKA Coins")
-        curr_emoji = settings.get("currency_emoji", "🪙")
+        curr_emoji = self._currency_icon(settings)
 
         if tickets <= 0:
             lottery = await self.eco.get_active_lottery(guild_id)
@@ -694,7 +711,7 @@ class Economy(commands.Cog):
         guild_id = ctx.guild.id if ctx.guild else 0
         settings = await self._get_settings(guild_id)
         curr_name = settings.get("currency_name", "KYOKA Coins")
-        curr_emoji = settings.get("currency_emoji", "🪙")
+        curr_emoji = self._currency_icon(settings)
 
         profile = await self.eco.get_or_create_profile(guild_id, target.id)
         inv = await self.eco.get_inventory(guild_id, target.id)
@@ -703,17 +720,21 @@ class Economy(commands.Cog):
         bank = profile.get("bank", 0)
         net_worth = wallet + bank
 
+        wallet_em = resolve_emoji(self.bot, "WALLET")
+        bal_em = resolve_emoji(self.bot, "BALANCE")
+        inv_em = resolve_emoji(self.bot, "INVENTORY")
+        srv_em = resolve_emoji(self.bot, "SERVER")
         embed = discord.Embed(
-            title=f"💳 {target.display_name}'s Executive Profile",
+            title=f"{wallet_em} {target.display_name}'s Executive Profile",
             color=AIZEN_PURPLE,
         )
         embed.set_thumbnail(url=target.display_avatar.url)
-        embed.add_field(name="💰 Net Worth", value=f"`{net_worth:,}` {curr_emoji}", inline=True)
-        embed.add_field(name="💵 Wallet", value=f"`{wallet:,}` {curr_emoji}", inline=True)
+        embed.add_field(name=f"{bal_em} Net Worth", value=f"`{net_worth:,}` {curr_emoji}", inline=True)
+        embed.add_field(name=f"{wallet_em} Wallet", value=f"`{wallet:,}` {curr_emoji}", inline=True)
         embed.add_field(name="🏛️ Bank Vault", value=f"`{bank:,}` {curr_emoji}", inline=True)
         embed.add_field(name="🔥 Daily Streak", value=f"`{profile.get('daily_streak', 0)}` Days", inline=True)
-        embed.add_field(name="🎒 Inventory Stacks", value=f"`{len(inv)}` Items", inline=True)
-        embed.add_field(name="🌐 Currency", value=f"{curr_emoji} {curr_name}", inline=True)
+        embed.add_field(name=f"{inv_em} Inventory Stacks", value=f"`{len(inv)}` Items", inline=True)
+        embed.add_field(name=f"{srv_em} Currency", value=f"{curr_emoji} {curr_name}", inline=True)
 
         embed.set_footer(text=f"KYOKA Sovereign Economy • ID: {target.id}")
         await ctx.send(embed=embed)

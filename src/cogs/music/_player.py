@@ -1392,18 +1392,9 @@ class GuildPlayer:
 
     def build_now_playing_container(self, track: Track) -> KyokaContainer:
         """Construct the Components V2 Now Playing card matching custom layout."""
-        e_reg = getattr(self.bot, "custom_emojis", None)
-        heart_e = ""
-        music_anim = ""
-        if e_reg:
-            heart_e = (
-                getattr(e_reg, "heart_dot", "")
-                or e_reg.animated("heart_pulse", fallback="")
-                or e_reg.get("heart_pulse", "")
-                or e_reg.get("heart_dot", "")
-                or e_reg.get("icons_heart", "")
-            )
-            music_anim = getattr(e_reg, "music_playing", "") or e_reg.get("music_playing", "")
+        from src.utils.emojis import resolve_emoji
+        heart_e = resolve_emoji(self.bot, "HEART", prefer_animated=True, fallback="")
+        music_anim = resolve_emoji(self.bot, "MUSIC", prefer_animated=True, fallback="🎵")
 
         container = KyokaContainer(accent_color=None)
 

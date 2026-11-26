@@ -20,6 +20,7 @@ from discord.ext import commands
 from src.core.config import Config
 from src.core.context import CustomContext
 from src.utils.containers import KyokaContainer, send_container_response
+from src.utils.emojis import resolve_select_emoji
 
 if TYPE_CHECKING:
     from src.core.bot import KyokaBot
@@ -82,14 +83,8 @@ class PersistentVerifyView(discord.ui.View):
     def __init__(self, cog: Verification) -> None:
         super().__init__(timeout=None)
         self.cog = cog
-        e_reg = getattr(cog.bot, "custom_emojis", None)
-        if e_reg:
-            v_em = e_reg.get_emoji_obj("icons_verified") or e_reg.get_emoji_obj("icon_verified")
-            if v_em:
-                self.btn_verify.emoji = v_em
-            q_em = e_reg.get_emoji_obj("spy_icons_question") or e_reg.get_emoji_obj("icon_info")
-            if q_em:
-                self.btn_help.emoji = q_em
+        self.btn_verify.emoji = resolve_select_emoji(cog.bot, "VERIFICATION", fallback="✅")
+        self.btn_help.emoji = resolve_select_emoji(cog.bot, "INFO", fallback="❓")
 
     @discord.ui.button(
         label="Verify Me",

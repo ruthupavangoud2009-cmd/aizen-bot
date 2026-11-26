@@ -13,6 +13,7 @@ from discord.ext import commands
 from src.security.owner import is_owner_or_staff
 from src.ui.theme import KyokaTheme
 from src.ui.asset_manager import AssetManager
+from src.utils.emojis import resolve_emoji
 
 logger = logging.getLogger("Kyoka.Vouches")
 DB = Path('data/kyoka_reputation.sqlite3')
@@ -499,9 +500,10 @@ class Vouches(commands.Cog, name="Vouches"):
                 mention_author=False
             )
 
+        vouch_em = resolve_emoji(self.bot, "VOUCH", prefer_animated=True)
         icon, s_label = SERVICE_TYPES.get(service_type, ("🛡️", service_type.title()))
         e = discord.Embed(
-            title='✦ KYŌKA • BLOX FRUITS VOUCH REGISTERED',
+            title=f'{vouch_em} KYŌKA • BLOX FRUITS VOUCH REGISTERED',
             description=f'**{member.mention}** received a verified reputation vouch!\n\n'
                         f"> {discord.utils.escape_markdown(clean_reason)}",
             color=KyokaTheme.PRIMARY,
@@ -539,8 +541,9 @@ class Vouches(commands.Cog, name="Vouches"):
                 'WHERE held=0 AND is_active=1 GROUP BY target_id ORDER BY total DESC, average_rating DESC LIMIT 10'
             ).fetchall()
 
+        lb_em = resolve_emoji(self.bot, "LEADERBOARD")
         embed = discord.Embed(
-            title='✦ KYŌKA • GLOBAL VOUCH LEADERBOARD',
+            title=f'{lb_em} KYŌKA • GLOBAL VOUCH LEADERBOARD',
             description='Top trusted Blox Fruits service providers and traders across all servers:\n\n',
             color=KyokaTheme.PRIMARY,
             timestamp=discord.utils.utcnow()
@@ -643,8 +646,9 @@ class Vouches(commands.Cog, name="Vouches"):
 
         disp_name = getattr(member, "display_name", getattr(member, "name", str(member.id)))
         live_count = max(0, total - imported_count)
+        rep_em = resolve_emoji(self.bot, "REPUTATION")
         e = discord.Embed(
-            title=f'✦ {disp_name} • GLOBAL REPUTATION PROFILE',
+            title=f'{rep_em} {disp_name} • GLOBAL REPUTATION PROFILE',
             description=f'{member.mention}\n{badge}\n\n'
                         f'**Global Verified Vouches:** `{total}`\n'
                         f'**Verified Vouches:** `{total}`\n'

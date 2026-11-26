@@ -11,6 +11,7 @@ from discord.ext import commands
 from src.core.config import Config
 from src.core.context import CustomContext
 from src.utils.containers import KyokaContainer, send_container_response
+from src.utils.emojis import resolve_emoji
 
 if TYPE_CHECKING:
     from src.core.bot import KyokaBot
@@ -100,11 +101,16 @@ def build_botinfo_container(bot: KyokaBot, guild_id: int | None = None) -> Kyoka
     )
     support_url = Config.SUPPORT_URL or "https://discord.gg/7q4tn6dA6V"
 
+    brand_em = resolve_emoji(bot, "KYOKA")
+    status_em = resolve_emoji(bot, "BOT_STATUS", prefer_animated=True)
+    stats_em = resolve_emoji(bot, "STATS")
+    prem_em = resolve_emoji(bot, "PREMIUM", prefer_animated=True)
+
     container = KyokaContainer()
     bio_text = branding.get("bio") if branding else "Power isn't given. It's taken. — Sosuke Aizen"
     bio_line = f"\n> **Bio:** {bio_text}" if bio_text else ""
     container.add_text(
-        f"### {bot_name} Information\n"
+        f"### {brand_em} {bot_name} Information\n"
         f"> **Creator:** Aizen\n"
         f"> **Owner ID:** `{OWNER_ID}`\n"
         f"> **Bot ID:** `{bot_id if bot_id is not None else 'Unavailable'}`{bio_line}"
@@ -113,14 +119,14 @@ def build_botinfo_container(bot: KyokaBot, guild_id: int | None = None) -> Kyoka
         container.add_media(avatar_url)
     container.add_separator(divider=True)
     container.add_text(
-        f"**Status**\n"
+        f"**{status_em} Status**\n"
         f"> **Uptime:** `{uptime}`\n"
         f"> **API latency:** `{gateway_ping}` • **Gateway ping:** `{gateway_ping}`\n"
         f"> **Servers:** `{len(guilds):,}` • **Members across servers:** `{total_members:,}` • **Members:** {total_members:,} Members\n\n"
-        f"**Runtime**\n"
+        f"**{stats_em} Runtime**\n"
         f"> **Library:** `discord.py {discord.__version__}`\n"
         f"> **Python:** `{platform.python_version()}`\n\n"
-        f"**Commands & Premium**\n"
+        f"**{prem_em} Commands & Premium**\n"
         f"> **Prefix:** `{prefix}` • **Help:** `{prefix}help` or `/help`\n"
         f"> **Web Dashboard:** [aizen-bot.pages.dev](https://aizen-bot.pages.dev/)\n"
         f"> **Premium:** {premium_status}\n\n"

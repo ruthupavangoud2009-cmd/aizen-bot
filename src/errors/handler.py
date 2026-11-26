@@ -8,7 +8,7 @@ from discord import app_commands
 from discord.ext import commands
 
 from src.utils.containers import KyokaContainer, send_container_response
-from src.utils.emojis import sanitize_emoji_string
+from src.utils.emojis import resolve_emoji, sanitize_emoji_string
 from src.ui.theme import KyokaTheme
 
 logger = logging.getLogger("Kyoka.ErrorHandler")
@@ -17,24 +17,19 @@ logger = logging.getLogger("Kyoka.ErrorHandler")
 def _error_emoji(bot: commands.Bot, *names: str, fallback: str = "❌") -> str:
     """Resolve an emoji defensively; ensure it is usable so unrendered <:id:> never leaks."""
     registry = getattr(bot, "custom_emojis", None)
-    if registry is None:
-        return fallback
     for name in names:
-        try:
-            emoji = registry.get_emoji_obj(name)
-            if emoji is not None:
-                if isinstance(emoji, discord.Emoji):
-                    if not getattr(emoji, "is_usable", lambda: True)():
+        if registry is not None and hasattr(registry, "get_emoji_obj"):
+            try:
+                emoji = registry.get_emoji_obj(name)
+                if emoji is not None:
+                    if isinstance(emoji, discord.Emoji) and not getattr(emoji, "is_usable", lambda: True)():
                         continue
                     return str(emoji)
-                elif isinstance(emoji, discord.PartialEmoji):
-                    if hasattr(bot, "emojis"):
-                        matched = discord.utils.get(bot.emojis, id=emoji.id)
-                        if matched and not getattr(matched, "is_usable", lambda: True)():
-                            continue
-                    return str(emoji)
-        except Exception:
-            continue
+            except Exception:
+                pass
+        resolved = resolve_emoji(bot, name, fallback="")
+        if resolved and resolved != "•":
+            return resolved
     return fallback
 
 

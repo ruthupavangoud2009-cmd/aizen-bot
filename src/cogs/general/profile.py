@@ -7,6 +7,7 @@ from discord.ext import commands
 
 from src.core.context import CustomContext
 from src.utils.containers import KyokaContainer, send_container_response
+from src.utils.emojis import resolve_emoji
 
 if TYPE_CHECKING:
     from src.core.bot import KyokaBot
@@ -128,14 +129,19 @@ class Profile(commands.Cog):
 
         avatar_url = target.display_avatar.url if target.display_avatar else None
 
+        prof_em = resolve_emoji(self.bot, "PROFILE")
+        prem_em = resolve_emoji(self.bot, "PREMIUM", prefer_animated=True)
+        music_em = resolve_emoji(self.bot, "MUSIC", prefer_animated=True)
+        queue_em = resolve_emoji(self.bot, "QUEUE")
+
         # Build Clean Components V2 Card
         container = KyokaContainer(accent_color=None)
         container.add_section(
             content=(
-                f"### {target.name}\n"
+                f"### {prof_em} {target.name}\n"
                 f"> **Standing** • `{standing}`\n"
                 f"> **Access** • `{access_str}`\n"
-                f"> **Tier** • `{tier_str}`"
+                f"> {prem_em} **Tier** • `{tier_str}`"
             ),
             accessory={"type": 11, "media": {"url": avatar_url}} if avatar_url else None,
         )
@@ -146,14 +152,14 @@ class Profile(commands.Cog):
             link_str = f"[{live_audio_title}]({live_audio_url})" if live_audio_url else f"`{live_audio_title}`"
             author_str = f" by `{live_audio_author}`" if live_audio_author else ""
             audio_lines = (
-                f"> **Playlists** • {pl_display}\n"
-                f"> **Live Audio** • {link_str}{author_str}\n"
+                f"> {queue_em} **Playlists** • {pl_display}\n"
+                f"> {music_em} **Live Audio** • {link_str}{author_str}\n"
                 f"> **Channel** • `{live_audio_vc}` • `320kbps Studio Master`\n\n"
             )
         else:
             audio_lines = (
-                f"> **Playlists** • {pl_display}\n"
-                f"> **Live Audio** • `Idle (Not Listening)`\n\n"
+                f"> {queue_em} **Playlists** • {pl_display}\n"
+                f"> {music_em} **Live Audio** • `Idle (Not Listening)`\n\n"
             )
 
         container.add_text(

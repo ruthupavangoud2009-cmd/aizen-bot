@@ -11,6 +11,7 @@ from discord.ext import commands
 
 from src.core.context import CustomContext
 from src.utils.containers import KyokaContainer, send_container_response
+from src.utils.emojis import resolve_emoji
 
 logger = logging.getLogger("Kyoka.Ping")
 
@@ -135,13 +136,8 @@ class Ping(commands.Cog):
         if cmd_latency > 250.0 and hasattr(self.bot, "record_slow_operation"):
             self.bot.record_slow_operation("ping", cmd_latency, f"Guild {ctx.guild.id if ctx.guild else 0}")
 
-        e_reg = getattr(self.bot, "custom_emojis", None)
-        dot = (
-            getattr(e_reg, "heart_dot", "")
-            or e_reg.animated("heart_pulse", fallback="")
-            or e_reg.get("heart_pulse", "")
-            or e_reg.get("heart_dot", "•")
-        ) if e_reg else "•"
+        dot = resolve_emoji(self.bot, "ARROW", fallback="•")
+        ping_em = resolve_emoji(self.bot, "PING")
 
         # Identify current hosting region
         reg_env = (os.getenv("RENDER_REGION") or os.getenv("REGION") or "virginia").strip().lower()
@@ -174,7 +170,7 @@ class Ping(commands.Cog):
         container = KyokaContainer(accent_color=None)
         container.add_section(
             content=(
-                "**KYOKA Latency & Diagnostics**\n"
+                f"**{ping_em} KYOKA Latency & Diagnostics**\n"
                 "> Real-time telemetry for Discord Gateway, REST API, Event Loop, Database, and Audio Engine."
             )
         )

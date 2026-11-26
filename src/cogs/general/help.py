@@ -30,6 +30,7 @@ from src.utils.containers import (
     send_container_response,
     edit_container_response,
 )
+from src.utils.emojis import resolve_emoji, resolve_select_emoji
 from src.ui.categories import (
     CATEGORIES,
     CATEGORY_BY_TAG,
@@ -221,7 +222,8 @@ class HelpCategorySelect(discord.ui.Select):
                 "OWNER": "👑", "GAMES": "🎮", "VOICE": "🎙️", "CASINO": "🎰",
                 "LOGGING": "📜", "SETTINGS": "⚙️",
             }
-            return fallback_map.get(cat_key, "📁")
+            bot_ref = getattr(getattr(help_view, "cog", None), "bot", None)
+            return resolve_select_emoji(bot_ref, cat_key, fallback=fallback_map.get(cat_key, "📁"))
 
         options: list[discord.SelectOption] = [
             discord.SelectOption(
@@ -325,9 +327,9 @@ class HelpView(discord.ui.View):
     def _build_components(self) -> None:
         self.clear_items()
 
-        def btn_emoji(cat_name: str) -> str:
-            fb = {"BACK": "◀️", "HOME": "🏠", "NEXT": "▶️"}
-            return fb.get(cat_name, "•")
+        def btn_emoji(cat_name: str) -> Any:
+            fb = {"BACK": "◀️", "HOME": "🏠", "NEXT": "▶️", "SEARCH": "🔍", "DELETE": "🗑️"}
+            return resolve_select_emoji(self.cog.bot, cat_name, fallback=fb.get(cat_name, "•"))
 
         # Row 0: Dropdown
         self.category_select = HelpCategorySelect(
@@ -350,7 +352,7 @@ class HelpView(discord.ui.View):
                 self.add_item(discord.ui.Button(label="Support Server", style=discord.ButtonStyle.link, url=support_url, row=1))
             btn_search = discord.ui.Button(
                 label="Search",
-                emoji="🔍",
+                emoji=btn_emoji("SEARCH"),
                 style=discord.ButtonStyle.secondary,
                 row=1,
             )
@@ -391,7 +393,7 @@ class HelpView(discord.ui.View):
 
             btn_search = discord.ui.Button(
                 label="Search",
-                emoji="🔍",
+                emoji=btn_emoji("SEARCH"),
                 style=discord.ButtonStyle.secondary,
                 row=1,
             )
@@ -421,8 +423,7 @@ class HelpView(discord.ui.View):
                 comps.append({"type": 1, "components": btn_comps[:5]})
 
         prefix = self.cog.bot.guild_mgr.get_prefix(self.ctx.guild.id if self.ctx.guild else None)
-        reg = getattr(self.cog.bot, "custom_emojis", None)
-        book_em = reg.get("book", fallback="📖") if reg else "📖"
+        book_em = resolve_emoji(self.cog.bot, "BOOK", fallback="📖")
         comps.append({
             "type": 10,
             "content": f"-# {book_em} Use `{prefix}help (command)` for details on a specific command",
@@ -623,24 +624,25 @@ class HCAView(discord.ui.View):
     def _build_components(self) -> None:
         self.clear_items()
         self.add_item(HCACategorySelect(self, self.all_categories, current_selection=self.current_category))
+        bot_ref = getattr(self.cog, "bot", None)
 
-        btn_back = discord.ui.Button(label="Back", emoji="◀️", style=discord.ButtonStyle.secondary, row=1)
+        btn_back = discord.ui.Button(label="Back", emoji=resolve_select_emoji(bot_ref, "BACK", fallback="◀️"), style=discord.ButtonStyle.secondary, row=1)
         btn_back.callback = self.btn_back_callback
         self.add_item(btn_back)
 
-        btn_home = discord.ui.Button(label="Index", style=discord.ButtonStyle.primary, row=1)
+        btn_home = discord.ui.Button(label="Index", emoji=resolve_select_emoji(bot_ref, "HOME", fallback="🏠"), style=discord.ButtonStyle.primary, row=1)
         btn_home.callback = self.btn_home_callback
         self.add_item(btn_home)
 
-        btn_next = discord.ui.Button(label="Next", emoji="▶️", style=discord.ButtonStyle.secondary, row=1)
+        btn_next = discord.ui.Button(label="Next", emoji=resolve_select_emoji(bot_ref, "NEXT", fallback="▶️"), style=discord.ButtonStyle.secondary, row=1)
         btn_next.callback = self.btn_next_callback
         self.add_item(btn_next)
 
-        btn_search = discord.ui.Button(label="Search", emoji="🔍", style=discord.ButtonStyle.secondary, row=1)
+        btn_search = discord.ui.Button(label="Search", emoji=resolve_select_emoji(bot_ref, "SEARCH", fallback="🔍"), style=discord.ButtonStyle.secondary, row=1)
         btn_search.callback = self.btn_search_callback
         self.add_item(btn_search)
 
-        btn_close = discord.ui.Button(label="Close", emoji="🗑️", style=discord.ButtonStyle.danger, row=1)
+        btn_close = discord.ui.Button(label="Close", emoji=resolve_select_emoji(bot_ref, "DELETE", fallback="🗑️"), style=discord.ButtonStyle.danger, row=1)
         btn_close.callback = self.btn_close_callback
         self.add_item(btn_close)
 
@@ -948,20 +950,10 @@ class Help(commands.Cog, name="Help"):
 
     def build_home_container(self, ctx: CustomContext, visible_categories: dict[str, list[commands.Command]]) -> KyokaContainer:
         """Construct the signature Greed-style KyokaContainer (Components V2)."""
-        reg = getattr(self.bot, "custom_emojis", None)
-
-        def get_em(name_or_cat: str, fallback: str = "") -> str:
-            if not reg:
-                return fallback
-            res = reg.animated(name_or_cat, fallback="") or reg.get_category(name_or_cat, fallback="")
-            if not res:
-                res = reg.get(name_or_cat, fallback=fallback)
-            return res or fallback
-
-        term_icon = get_em("terminal", fallback=">_")
-        cmd_icon = get_em("brackets", fallback="{ }")
-        mod_icon = get_em("modules", fallback="⊞")
-        dot = (getattr(reg, "heart_dot", "") if reg else "") or "💜"
+        term_icon = resolve_emoji(self.bot, "TERMINAL", fallback=">_")
+        cmd_icon = resolve_emoji(self.bot, "BRACKETS", fallback="{ }")
+        mod_icon = resolve_emoji(self.bot, "MODULES", fallback="⊞")
+        dot = resolve_emoji(self.bot, "ARROW", fallback="»")
 
         prefix = self.bot.guild_mgr.get_prefix(ctx.guild.id if ctx.guild else None)
         latency_ms = self._get_latency_ms()
@@ -1007,20 +999,12 @@ class Help(commands.Cog, name="Help"):
     def resolve_command_emoji(self, cmd_name: str, cat_name: str = "") -> str:
         """
         Resolve a dedicated custom emoji for every single command in KYOKA.
-        Prefers application emojis (<:name:id> / <a:name:id>), falls back to dedicated clean symbols.
+        Prefers custom emojis (<:name:id> / <a:name:id>), falls back cleanly to category/manifest symbols.
         """
-        reg = getattr(self.bot, "custom_emojis", None)
         clean = cmd_name.lower().strip()
 
         def em(key: str, fallback: str) -> str:
-            if reg:
-                val = reg.get(key)
-                if val:
-                    return val
-                cat_val = reg.get_category(key, fallback="")
-                if cat_val:
-                    return cat_val
-            return fallback
+            return resolve_emoji(self.bot, key, fallback=fallback)
 
         # 1. Exact command lookup table
         EXACT_MAP: dict[str, tuple[str, str]] = {
@@ -1223,20 +1207,19 @@ class Help(commands.Cog, name="Help"):
 
         # 3. Fallback to category icon
         if cat_name:
-            cat_em = reg.get_category(cat_name, fallback="") if reg else ""
-            if cat_em:
+            cat_em = resolve_emoji(self.bot, cat_name, fallback="")
+            if cat_em and cat_em != "•":
                 return cat_em
-        return em("heart_dot", "💜")
+        return em("heart_dot", "»")
 
     def _get_category_emoji(self, cat_name: str) -> str:
         """Resolve custom application emoji or unicode fallback for category header."""
-        e_reg = getattr(self.bot, "custom_emojis", None)
-        if e_reg:
-            raw = cat_name.split("・", 1)[-1].strip()
-            custom = e_reg.get_category(raw, fallback="") or e_reg.get_category(cat_name, fallback="")
-            if custom:
-                return custom
-        return UNICODE_CATEGORY_EMOJIS.get(cat_name, "•")
+        raw = cat_name.split("・", 1)[-1].strip()
+        fb = UNICODE_CATEGORY_EMOJIS.get(cat_name, "•")
+        resolved = resolve_emoji(self.bot, raw, fallback="")
+        if resolved and resolved != "•":
+            return resolved
+        return resolve_emoji(self.bot, cat_name, fallback=fb)
 
     async def _get_all_registered_categories(self, ctx: CustomContext) -> dict[str, list[commands.Command]]:
         """Collect all registered prefix and slash commands for the public Help Command Archive (HCA)."""
@@ -1320,7 +1303,7 @@ class Help(commands.Cog, name="Help"):
         end_idx = start_idx + HELP_COMMANDS_PER_PAGE
         page_cmds = unique_cmds[start_idx:end_idx]
 
-        cat_icon = get_em(raw_title) or get_em("SETTINGS") or "⚔️"
+        cat_icon = self._get_category_emoji(cat_name) or resolve_emoji(self.bot, "SETTINGS", fallback="⚔️")
         ui_color = self.bot.guild_mgr.get_ui_color(ctx.guild.id if ctx.guild else None, default=0x2B2D31)
 
         cat_desc = (
@@ -1380,21 +1363,11 @@ class Help(commands.Cog, name="Help"):
 
     def build_home_embed(self, ctx: CustomContext, visible_categories: dict[str, list[commands.Command]]) -> discord.Embed:
         """Construct the signature KYOKA Help Homepage (compact embed fallback)."""
-        reg = getattr(self.bot, "custom_emojis", None)
-
-        def get_em(name_or_cat: str, fallback: str = "") -> str:
-            if not reg:
-                return fallback
-            res = reg.animated(name_or_cat, fallback="") or reg.get_category(name_or_cat, fallback="")
-            if not res:
-                res = reg.get(name_or_cat, fallback=fallback)
-            return res or fallback
-
-        term_icon = get_em("terminal", fallback=">_")
-        cmd_icon = get_em("brackets", fallback="{ }")
-        mod_icon = get_em("modules", fallback="⊞")
-        book_icon = get_em("book", fallback="📖")
-        dot = (getattr(reg, "heart_dot", "") if reg else "") or "💜"
+        term_icon = resolve_emoji(self.bot, "TERMINAL", fallback=">_")
+        cmd_icon = resolve_emoji(self.bot, "BRACKETS", fallback="{ }")
+        mod_icon = resolve_emoji(self.bot, "MODULES", fallback="⊞")
+        book_icon = resolve_emoji(self.bot, "BOOK", fallback="📖")
+        dot = resolve_emoji(self.bot, "ARROW", fallback="»")
 
         gid = ctx.guild.id if ctx.guild else None
         branding = self._get_cached_branding(gid)
@@ -1464,14 +1437,6 @@ class Help(commands.Cog, name="Help"):
         """Construct a sleek, compact category command viewer matching KYOKA & Greed style."""
         if isinstance(visible_categories, int):
             page = visible_categories
-        reg = getattr(self.bot, "custom_emojis", None)
-
-        def get_em(category_name: str) -> str:
-            if not reg:
-                return ""
-            return reg.get_category(category_name, fallback="")
-
-        heart = reg.get("heart_dot", "💜") if reg else "💜"
         prefix = self.bot.guild_mgr.get_prefix(ctx.guild.id if ctx.guild else None)
         raw_title = cat_name.split("・", 1)[-1].strip()
 
@@ -1491,7 +1456,7 @@ class Help(commands.Cog, name="Help"):
         end_idx = start_idx + HELP_COMMANDS_PER_PAGE
         page_cmds = unique_cmds[start_idx:end_idx]
 
-        cat_icon = get_em(raw_title) or get_em("SETTINGS") or "⚔️"
+        cat_icon = self._get_category_emoji(cat_name) or resolve_emoji(self.bot, "SETTINGS", fallback="⚔️")
         desc_lines = [
             f"> {CATEGORY_DESCRIPTIONS.get(cat_name, 'Commands in this system.')}\n",
             f"**Page {curr_page}/{total_pages} • Commands ({len(unique_cmds)}):**",
@@ -1539,14 +1504,7 @@ class Help(commands.Cog, name="Help"):
 
     def build_command_embed(self, ctx: CustomContext, cmd: commands.Command) -> discord.Embed:
         """Construct detailed single-command inspector card."""
-        reg = getattr(self.bot, "custom_emojis", None)
-
-        def get_em(category_name: str) -> str:
-            if not reg:
-                return ""
-            return reg.get_category(category_name, fallback="")
-
-        arrow_icon = get_em("ARROW")
+        arrow_icon = resolve_emoji(self.bot, "ARROW", fallback="•")
         bullet = arrow_icon if arrow_icon else "•"
 
         prefix = self.bot.guild_mgr.get_prefix(ctx.guild.id if ctx.guild else None)

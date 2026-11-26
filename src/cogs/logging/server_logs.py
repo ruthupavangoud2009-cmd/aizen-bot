@@ -11,6 +11,7 @@ from discord.ext import commands
 
 from src.core.context import CustomContext
 from src.utils.containers import KyokaContainer, send_container_response
+from src.utils.emojis import resolve_emoji
 
 if TYPE_CHECKING:
     from src.core.bot import KyokaBot
@@ -45,10 +46,11 @@ class ServerLogsCog(commands.Cog):
         if channel is None:
             return
 
-        dot = getattr(self.bot, "custom_emojis", {}).get("heart_dot", "•")
+        dot = resolve_emoji(self.bot, "ARROW", fallback="•")
+        log_em = resolve_emoji(self.bot, "LOGGING")
 
         container = KyokaContainer(accent_color=None)
-        container.add_section(content=f"**{title}**")
+        container.add_section(content=f"**{log_em} {title}**")
         container.add_separator(divider=True)
         body = "\n".join(
             f"> {dot} {ln}" if not ln.startswith("> ") else ln

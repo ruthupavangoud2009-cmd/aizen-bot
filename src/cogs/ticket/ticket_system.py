@@ -19,6 +19,7 @@ from src.core.bot import KyokaBot
 from src.core.context import CustomContext
 from src.security.owner import OWNER_ID, is_owner_or_staff, is_primary_owner
 from src.utils.containers import KyokaContainer, send_container_response, edit_container_response, build_container_payload
+from src.utils.emojis import resolve_emoji, resolve_select_emoji
 from src.utils.transcript import generate_html_transcript
 from src.cogs.utility.embed_builder import ContainerDraft
 
@@ -51,19 +52,9 @@ class TicketInsideControlsView(discord.ui.View):
     def __init__(self, cog: TicketSystem) -> None:
         super().__init__(timeout=None)
         self.cog = cog
-        e_reg = getattr(cog.bot, "custom_emojis", None)
-        if e_reg and hasattr(e_reg, "get_emoji_obj"):
-            lock_em = e_reg.get_emoji_obj("icons_locked") or e_reg.get_emoji_obj("icon_lock")
-            if isinstance(lock_em, (str, discord.Emoji, discord.PartialEmoji)):
-                self.btn_close.emoji = lock_em
-
-            staff_em = e_reg.get_emoji_obj("icons_staff") or e_reg.get_emoji_obj("icon_mod")
-            if isinstance(staff_em, (str, discord.Emoji, discord.PartialEmoji)):
-                self.btn_claim.emoji = staff_em
-
-            file_em = e_reg.get_emoji_obj("icons_file") or e_reg.get_emoji_obj("icons_files")
-            if isinstance(file_em, (str, discord.Emoji, discord.PartialEmoji)):
-                self.btn_transcript.emoji = file_em
+        self.btn_close.emoji = resolve_select_emoji(cog.bot, "TICKET_CLOSE", fallback="🔒")
+        self.btn_claim.emoji = resolve_select_emoji(cog.bot, "TICKET_CLAIM", fallback="📌")
+        self.btn_transcript.emoji = resolve_select_emoji(cog.bot, "TRANSCRIPT", fallback="📄")
 
     @discord.ui.button(
         label="Close Ticket",
@@ -187,19 +178,9 @@ class TicketClosedControlsView(discord.ui.View):
     def __init__(self, cog: TicketSystem) -> None:
         super().__init__(timeout=None)
         self.cog = cog
-        e_reg = getattr(cog.bot, "custom_emojis", None)
-        if e_reg and hasattr(e_reg, "get_emoji_obj"):
-            unlock_em = e_reg.get_emoji_obj("icons_unlock") or e_reg.get_emoji_obj("icon_lock")
-            if isinstance(unlock_em, (str, discord.Emoji, discord.PartialEmoji)):
-                self.btn_reopen.emoji = unlock_em
-
-            file_em = e_reg.get_emoji_obj("icons_file") or e_reg.get_emoji_obj("icons_files")
-            if isinstance(file_em, (str, discord.Emoji, discord.PartialEmoji)):
-                self.btn_transcript.emoji = file_em
-
-            del_em = e_reg.get_emoji_obj("icons_delete") or e_reg.get_emoji_obj("icon_delete")
-            if isinstance(del_em, (str, discord.Emoji, discord.PartialEmoji)):
-                self.btn_delete.emoji = del_em
+        self.btn_reopen.emoji = resolve_select_emoji(cog.bot, "TICKET_OPEN", fallback="🔓")
+        self.btn_transcript.emoji = resolve_select_emoji(cog.bot, "TRANSCRIPT", fallback="📄")
+        self.btn_delete.emoji = resolve_select_emoji(cog.bot, "DELETE", fallback="🗑️")
 
     @discord.ui.button(
         label="Reopen Ticket",
@@ -918,7 +899,7 @@ class TicketSetupWizard(discord.ui.View):
         """Render the single sleek Components V2 Ticket Dashboard Container."""
         container = KyokaContainer(accent_color=None)
         slide_key, slide_title, slide_desc = self.SLIDES[self.current_slide_idx]
-        arrow = self.bot.custom_emojis.get("icons_rightarrow", self.bot.custom_emojis.get("icons_arrow", "›"))
+        arrow = resolve_emoji(self.bot, "ARROW", fallback="›")
 
         container.add_section(
             content=(
@@ -1133,11 +1114,7 @@ class TicketSetupWizard(discord.ui.View):
         }
 
         # Attach interactive persistent button inside panel container
-        ticket_emoji = (
-            self.bot.custom_emojis.get_select_emoji("ticket_nox")
-            or self.bot.custom_emojis.get_select_emoji("ticket_support")
-            or self.bot.custom_emojis.get_select_emoji("icon_ticket")
-        )
+        ticket_emoji = resolve_select_emoji(self.bot, "TICKET", fallback="🎫")
         btn_action_row: dict[str, Any] = {
             "type": 1,
             "components": [
@@ -1193,7 +1170,7 @@ class TicketSetupWizard(discord.ui.View):
             )
 
         # Success confirmation on dashboard
-        arrow = self.bot.custom_emojis.get("icons_rightarrow", self.bot.custom_emojis.get("icons_arrow", "›"))
+        arrow = resolve_emoji(self.bot, "ARROW", fallback="›")
         conf_container = KyokaContainer(accent_color=5763719)  # Green
         conf_container.add_section(
             content=(
@@ -1439,7 +1416,7 @@ class TicketSystem(commands.Cog):
                 return
 
             # Send welcome card in ticket channel
-            arrow = self.bot.custom_emojis.get("icons_rightarrow", "›")
+            arrow = resolve_emoji(self.bot, "ARROW", fallback="›")
             welcome_msg_text = (
                 custom_cat_info.get("welcome_message")
                 if (custom_cat_info and custom_cat_info.get("welcome_message"))
@@ -1579,11 +1556,12 @@ class TicketSystem(commands.Cog):
         available = [m for m in candidates if getattr(m, "status", discord.Status.offline) in (discord.Status.online, discord.Status.idle)]
         selected = available[0] if available else (candidates[0] if candidates else None)
         staff_ping = selected.mention if selected else (support_role.mention if support_role else "")
-        arrow = self.bot.custom_emojis.get("icons_rightarrow", "›")
+        arrow = resolve_emoji(self.bot, "ARROW", fallback="›")
+        bell_em = resolve_emoji(self.bot, "BELL_ALT", fallback="🔔")
         staff_card = KyokaContainer(accent_color=0xF59E0B)
         staff_card.add_section(
             content=(
-                "🔔 **Staff Assistance Requested**\n"
+                f"{bell_em} **Staff Assistance Requested**\n"
                 f"> {staff_ping or 'No configured staff member was found; check the ticket staff role.'} — please assist {requested_by.mention}.\n\n"
                 f"{arrow} **Reason:** *{reason}*\n"
                 f"{arrow} **Ticket:** #{ticket.get('ticket_number', 0):04d} • {ticket.get('category', 'Support')}"

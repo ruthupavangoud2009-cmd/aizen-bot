@@ -5,6 +5,7 @@ import discord
 from discord.ext import commands
 
 from src.utils.containers import KyokaContainer, send_container_response
+from src.utils.emojis import resolve_emoji
 
 
 class CustomContext(commands.Context):
@@ -30,6 +31,23 @@ class CustomContext(commands.Context):
             files=files,
         )
 
+    async def _send_status_card(
+        self,
+        emoji_key: str,
+        message: str,
+        title: str,
+        *,
+        ephemeral: bool = False,
+        prefer_animated: bool = False,
+    ) -> Any:
+        icon = resolve_emoji(self.bot, emoji_key, prefer_animated=prefer_animated)
+        icon_str = f"{icon} " if icon else ""
+        container = KyokaContainer(accent_color=None)
+        container.add_text(f"{icon_str}**{title}**\n> {message}")
+        container.add_separator(divider=True)
+        container.add_text(f"-# Requested by {self.author.display_name}")
+        return await self.send_container(container, ephemeral=ephemeral)
+
     async def send_success(
         self,
         message: str,
@@ -37,18 +55,9 @@ class CustomContext(commands.Context):
         ephemeral: bool = False,
     ) -> Any:
         """Send a formatted success container card."""
-        e_reg = getattr(self.bot, "custom_emojis", None)
-        icon = (e_reg.animated("success", "icons_correct", fallback="") or e_reg.get("success", e_reg.get("icons_correct", "✅"))) if e_reg else "✅"
-        icon_str = f"{icon} " if icon else ""
-
-        container = KyokaContainer(accent_color=None)
-        container.add_text(
-            f"{icon_str}**{title}**\n"
-            f"> {message}"
+        return await self._send_status_card(
+            "SUCCESS", message, title, ephemeral=ephemeral, prefer_animated=True
         )
-        container.add_separator(divider=True)
-        container.add_text(f"-# Requested by {self.author.display_name}")
-        return await self.send_container(container, ephemeral=ephemeral)
 
     async def send_error(
         self,
@@ -57,18 +66,9 @@ class CustomContext(commands.Context):
         ephemeral: bool = True,
     ) -> Any:
         """Send a formatted error container card."""
-        e_reg = getattr(self.bot, "custom_emojis", None)
-        icon = (e_reg.animated("error", "icons_wrong", "icon_x", fallback="") or e_reg.get("error", e_reg.get("icons_wrong", e_reg.get("icon_x", "❌")))) if e_reg else "❌"
-        icon_str = f"{icon} " if icon else ""
-
-        container = KyokaContainer(accent_color=None)
-        container.add_text(
-            f"{icon_str}**{title}**\n"
-            f"> {message}"
+        return await self._send_status_card(
+            "ERROR", message, title, ephemeral=ephemeral, prefer_animated=False
         )
-        container.add_separator(divider=True)
-        container.add_text(f"-# Requested by {self.author.display_name}")
-        return await self.send_container(container, ephemeral=ephemeral)
 
     async def send_warning(
         self,
@@ -77,15 +77,28 @@ class CustomContext(commands.Context):
         ephemeral: bool = False,
     ) -> Any:
         """Send a formatted warning container card."""
-        e_reg = getattr(self.bot, "custom_emojis", None)
-        icon = (e_reg.animated("warning", "icons_warning", "icon_warning", fallback="") or e_reg.get("warning", e_reg.get("icons_warning", e_reg.get("icon_warning", "⚠️")))) if e_reg else "⚠️"
-        icon_str = f"{icon} " if icon else ""
-
-        container = KyokaContainer(accent_color=None)
-        container.add_text(
-            f"{icon_str}**{title}**\n"
-            f"> {message}"
+        return await self._send_status_card(
+            "WARNING", message, title, ephemeral=ephemeral, prefer_animated=False
         )
-        container.add_separator(divider=True)
-        container.add_text(f"-# Requested by {self.author.display_name}")
-        return await self.send_container(container, ephemeral=ephemeral)
+
+    async def send_info(
+        self,
+        message: str,
+        title: str = "Information",
+        ephemeral: bool = False,
+    ) -> Any:
+        """Send a formatted informational container card."""
+        return await self._send_status_card(
+            "INFO", message, title, ephemeral=ephemeral, prefer_animated=False
+        )
+
+    async def send_loading(
+        self,
+        message: str = "Processing request...",
+        title: str = "Working",
+        ephemeral: bool = False,
+    ) -> Any:
+        """Send a formatted loading container card with optional animated indicator."""
+        return await self._send_status_card(
+            "LOADING", message, title, ephemeral=ephemeral, prefer_animated=True
+        )

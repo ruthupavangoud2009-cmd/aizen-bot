@@ -149,9 +149,11 @@ def build_antinuke_card(bot: KyokaBot, guild: discord.Guild, author_id: int) -> 
             pass
     eo_count = len(bot.antinuke_mgr.get_extra_owners(guild.id))
 
-    dot = bot.custom_emojis.get("heart_dot", "•")
-    sw_on = bot.custom_emojis.get("icon_switch_on", "`[ON]`")
-    sw_off = bot.custom_emojis.get("icon_switch_off", "`[OFF]`")
+    from src.utils.emojis import resolve_emoji
+    dot = resolve_emoji(bot, "ARROW", fallback="•")
+    anti_em = resolve_emoji(bot, "ANTI_NUKE", prefer_animated=True)
+    sw_on = resolve_emoji(bot, "icon_switch_on", fallback="`[ON]`")
+    sw_off = resolve_emoji(bot, "icon_switch_off", fallback="`[OFF]`")
 
     container = KyokaContainer(accent_color=None)
     tagline = (
@@ -161,7 +163,7 @@ def build_antinuke_card(bot: KyokaBot, guild: discord.Guild, author_id: int) -> 
     )
     container.add_section(
         content=(
-            "**Kyoka Antinuke**\n"
+            f"**{anti_em} Kyoka Antinuke**\n"
             f"{tagline}"
         )
     )

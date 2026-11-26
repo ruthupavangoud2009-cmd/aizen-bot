@@ -102,12 +102,9 @@ class AizenSymbols:
     GEAR: str = "⚙️"
     WRENCH: str = "🔧"
     CHART: str = "📊"
-    HEART: str = "💖"
-    MUSIC: str = "🎵"
-    TICKET: str = "🎫"
-    GIFT: str = "🎉"
-    SEARCH: str = "🔍"
+    GIFT: str = "🎁"
     LOCK: str = "🔒"
+    UNLOCK: str = "🔓"
     CHECK: str = "✅"
     CROSS: str = "❌"
     WARN: str = "⚠️"
@@ -116,6 +113,16 @@ class AizenSymbols:
     STAR: str = "✦"
     BAR_FULL: str = "▰"
     BAR_EMPTY: str = "▱"
+
+    @classmethod
+    def resolve(cls, key: str, bot: Any = None, *, animated: bool = False) -> str:
+        """Resolve icon through central KYOKA custom emoji registry, falling back to AizenSymbols."""
+        try:
+            from src.utils.emojis import resolve_emoji
+            default_sym = getattr(cls, key.upper(), "")
+            return resolve_emoji(bot, key, animated=animated, fallback=default_sym)
+        except Exception:
+            return getattr(cls, key.upper(), "•")
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -183,10 +190,12 @@ class KyokaEmbed(discord.Embed):
         *,
         footer: str | None = None,
         footer_icon: str | None = None,
+        bot: Any = None,
     ) -> KyokaEmbed:
         """Create a green-accented operation success embed."""
+        icon = AizenSymbols.resolve("SUCCESS", bot=bot, animated=True)
         embed = cls(
-            title=f"{AizenSymbols.CHECK} {title}",
+            title=f"{icon} {title}".strip(),
             description=f"> {description}",
             color=AizenPalette.EMERALD_SUCCESS,
         )
@@ -205,13 +214,15 @@ class KyokaEmbed(discord.Embed):
         suggestion: str | None = None,
         footer: str | None = None,
         footer_icon: str | None = None,
+        bot: Any = None,
     ) -> KyokaEmbed:
         """Create a crimson-accented error embed."""
+        icon = AizenSymbols.resolve("ERROR", bot=bot)
         desc = f"> {description}"
         if suggestion:
             desc += f"\n\n**Suggestion:**\n> {suggestion}"
         embed = cls(
-            title=f"{AizenSymbols.CROSS} {title}",
+            title=f"{icon} {title}".strip(),
             description=desc,
             color=AizenPalette.CRIMSON,
         )
@@ -229,10 +240,12 @@ class KyokaEmbed(discord.Embed):
         *,
         footer: str | None = None,
         footer_icon: str | None = None,
+        bot: Any = None,
     ) -> KyokaEmbed:
         """Create an amber-accented warning embed."""
+        icon = AizenSymbols.resolve("WARNING", bot=bot)
         embed = cls(
-            title=f"{AizenSymbols.WARN} {title}",
+            title=f"{icon} {title}".strip(),
             description=f"> {description}",
             color=AizenPalette.AMBER_WARN,
         )
@@ -251,10 +264,12 @@ class KyokaEmbed(discord.Embed):
         thumbnail: str | None = None,
         footer: str | None = None,
         footer_icon: str | None = None,
+        bot: Any = None,
     ) -> KyokaEmbed:
         """Create an indigo/cyan-accented informational embed."""
+        icon = AizenSymbols.resolve("INFO", bot=bot)
         embed = cls(
-            title=f"{AizenSymbols.ORB} {title}",
+            title=f"{icon} {title}".strip(),
             description=description,
             color=AizenPalette.INDIGO_INFO,
         )
@@ -271,10 +286,13 @@ class KyokaEmbed(discord.Embed):
         cls,
         title: str = "Processing Command...",
         description: str = "Consulting the Hogyoku. Please hold...",
+        *,
+        bot: Any = None,
     ) -> KyokaEmbed:
         """Create a loading / waiting state embed."""
+        icon = AizenSymbols.resolve("LOADING", bot=bot, animated=True)
         return cls(
-            title=f"{AizenSymbols.SPARKLE} {title}",
+            title=f"{icon} {title}".strip(),
             description=f"> {description}",
             color=AizenPalette.ROYAL_VIOLET,
         )
@@ -283,10 +301,13 @@ class KyokaEmbed(discord.Embed):
     def denied(
         cls,
         reason: str = "You lack the required authorization to execute this command.",
+        *,
+        bot: Any = None,
     ) -> KyokaEmbed:
         """Create an access denied embed."""
+        icon = AizenSymbols.resolve("LOCK", bot=bot)
         embed = cls(
-            title=f"{AizenSymbols.LOCK} Access Restricted",
+            title=f"{icon} Access Restricted".strip(),
             description=f"> {reason}\n\n*“Admiration is the furthest thing from understanding.”* — Sosuke Aizen",
             color=AizenPalette.BLOOD_MOON,
         )
@@ -302,10 +323,24 @@ class KyokaEmbed(discord.Embed):
         reason: str = "No reason provided",
         *,
         duration: str | None = None,
+        bot: Any = None,
     ) -> KyokaEmbed:
         """Create a standardized dark-purple moderation audit embed."""
         t_name = getattr(target, "display_name", str(target))
         m_name = getattr(moderator, "display_name", str(moderator))
+        act_low = action.lower()
+        mod_key = (
+            "BAN" if "ban" in act_low and "unban" not in act_low
+            else "KICK" if "kick" in act_low
+            else "UNMUTE" if "unmute" in act_low or "untimeout" in act_low
+            else "MUTE" if "mute" in act_low or "timeout" in act_low
+            else "WARN" if "warn" in act_low
+            else "UNLOCK" if "unlock" in act_low
+            else "LOCK" if "lock" in act_low
+            else "PURGE" if "purge" in act_low or "clear" in act_low
+            else "MODERATION"
+        )
+        icon = AizenSymbols.resolve(mod_key, bot=bot)
         desc = (
             f"**Action:** `{action.upper()}`\n"
             f"**Target:** {getattr(target, 'mention', t_name)} `「{getattr(target, 'id', '0')}」`\n"
@@ -315,7 +350,7 @@ class KyokaEmbed(discord.Embed):
         if duration:
             desc += f"\n**Duration:** `{duration}`"
         embed = cls(
-            title=f"{AizenSymbols.SHIELD} Moderation Action • {action.title()}",
+            title=f"{icon} Moderation Action • {action.title()}".strip(),
             description=desc,
             color=AizenPalette.ROYAL_VIOLET,
         )

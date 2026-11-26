@@ -240,12 +240,14 @@ class AntinukeSetupWizard(ui.View):
         """Render the clean Components V2 Antinuke Setup container."""
         container = KyokaContainer(accent_color=None)
         slide_key, slide_title, slide_desc = self.SLIDES[self.current_slide_idx]
-        dot = self.bot.custom_emojis.get("heart_dot", "•")
-        sw_on = self.bot.custom_emojis.get("icon_switch_on", "[ON]")
+        from src.utils.emojis import resolve_emoji
+        dot = resolve_emoji(self.bot, "ARROW", fallback="•")
+        anti_em = resolve_emoji(self.bot, "ANTI_NUKE", prefer_animated=True)
+        sw_on = resolve_emoji(self.bot, "icon_switch_on", fallback="[ON]")
 
         container.add_section(
             content=(
-                "**Kyoka Antinuke**\n"
+                f"**{anti_em} Kyoka Antinuke**\n"
                 f"> **{slide_title}**\n"
                 f"> *{slide_desc}*"
             )

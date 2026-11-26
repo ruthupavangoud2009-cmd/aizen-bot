@@ -348,8 +348,8 @@ class CompanionAI(commands.Cog):
             await ctx.send(reply[:1950])
             return
 
-        reg = getattr(self.bot, "custom_emojis", None)
-        sparkle = reg.get_animated("sparkle", fallback="") if reg else ""
+        from src.utils.emojis import resolve_emoji
+        sparkle = resolve_emoji(self.bot, "SPARKLE", prefer_animated=True, fallback="")
         formatted_title = f"{sparkle} {p_def['title']}".strip() if sparkle else p_def["title"]
 
         embed = discord.Embed(

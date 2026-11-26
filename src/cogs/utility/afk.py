@@ -20,6 +20,7 @@ from discord.ext import commands
 from src.core.context import CustomContext
 from src.ui.response import KyokaResponse, ResponseType, send_response
 from src.utils.containers import KyokaContainer, send_container_response
+from src.utils.emojis import resolve_emoji
 from src.utils.ui import AizenSymbols
 
 def _afk_emoji(bot, *names: str) -> str:
@@ -310,11 +311,8 @@ class AFKCog(commands.Cog, name="AFK"):
             logger.error(f"Failed to persist AFK record for user {user_id}: {e}", exc_info=e)
 
         # Dispatch confirmation using unified KyokaResponse (Nyxium style - Image 2)
-        dot = "💜"
-        check = "✅"
-        if self.bot and hasattr(self.bot, "custom_emojis"):
-            dot = self.bot.custom_emojis.get("heart_dot", "💜")
-            check = self.bot.custom_emojis.get("success", "✅")
+        dot = resolve_emoji(self.bot, "ARROW", fallback="💜")
+        check = resolve_emoji(self.bot, "SUCCESS", prefer_animated=True)
 
         desc = (
             f"> {ctx.author.mention} Your AFK status is now activated in the Server\n"
@@ -354,11 +352,8 @@ class AFKCog(commands.Cog, name="AFK"):
             )
         except Exception as error:
             logger.error("Could not persist global AFK for %s: %s", ctx.author.id, error)
-        dot = "💜"
-        check = "✅"
-        if self.bot and hasattr(self.bot, "custom_emojis"):
-            dot = self.bot.custom_emojis.get("heart_dot", "💜")
-            check = self.bot.custom_emojis.get("success", "✅")
+        dot = resolve_emoji(self.bot, "ARROW", fallback="💜")
+        check = resolve_emoji(self.bot, "SUCCESS", prefer_animated=True)
 
         desc = (
             f"> {ctx.author.mention} Your Global AFK status is now activated\n"
@@ -456,9 +451,8 @@ class AFKCog(commands.Cog, name="AFK"):
                 logger.debug(f"Failed to fetch AFK notes: {e}")
 
             # Send welcome back card (Nyxium style)
-            dot = "💜"
-            if self.bot and hasattr(self.bot, "custom_emojis"):
-                dot = self.bot.custom_emojis.get("heart_dot", "💜")
+            dot = resolve_emoji(self.bot, "ARROW", fallback="💜")
+            wel_em = resolve_emoji(self.bot, "WELCOMER", fallback="👋")
 
             elapsed_seconds = max((now - afk_data.created_at).total_seconds(), 0.0)
             duration_str = format_duration(elapsed_seconds)
@@ -479,7 +473,7 @@ class AFKCog(commands.Cog, name="AFK"):
             resp = KyokaResponse(
                 response_type=ResponseType.SUCCESS,
                 title=f"Welcome Back, {message.author.name}!",
-                custom_emoji="👋",
+                custom_emoji=wel_em,
                 description=welcome_desc,
                 thumbnail_url=message.author.display_avatar.url,
                 footer_text=f"-# Welcome back {message.author.name}",
@@ -496,13 +490,12 @@ class AFKCog(commands.Cog, name="AFK"):
                     continue
                 target_afk = self._global_afk_cache.get(target.id)
                 if target_afk:
-                    dot = "💜"
-                    if self.bot and hasattr(self.bot, "custom_emojis"):
-                        dot = self.bot.custom_emojis.get("heart_dot", "💜")
+                    dot = resolve_emoji(self.bot, "ARROW", fallback="💜")
+                    afk_em = resolve_emoji(self.bot, "AFK", fallback="💤")
                     resp = KyokaResponse(
                         response_type=ResponseType.INFO,
                         title=f"{target.display_name} is Globally AFK",
-                        custom_emoji="💤",
+                        custom_emoji=afk_em,
                         description=(
                             f"> {target.mention} is currently globally AFK across all shared servers\n"
                             f"> **Reason:** {target_afk.reason}\n"
@@ -539,9 +532,7 @@ class AFKCog(commands.Cog, name="AFK"):
                     raw_reason = target_afk.reason.strip() if target_afk.reason else ""
                     reason_val = raw_reason if (raw_reason and raw_reason.lower() != "afk") else "None"
 
-                    dot = "💜"
-                    if self.bot and hasattr(self.bot, "custom_emojis"):
-                        dot = self.bot.custom_emojis.get("heart_dot", "💜")
+                    dot = resolve_emoji(self.bot, "ARROW", fallback="💜")
 
                     mention_desc = (
                         f"> {mentioned_user.mention} is currently AFK in this server\n"

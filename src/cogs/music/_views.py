@@ -5,6 +5,7 @@ from typing import TYPE_CHECKING, Optional, Any
 import discord
 
 from src.utils.containers import KyokaContainer, KyroContainer, send_container_response
+from src.utils.emojis import resolve_select_emoji
 from src.security.owner import is_owner_or_staff
 
 if TYPE_CHECKING:
@@ -33,17 +34,8 @@ class MusicControlView(discord.ui.View):
         self._apply_custom_emojis()
 
     def _apply_custom_emojis(self) -> None:
-        e_reg = getattr(self.bot, "custom_emojis", None)
-
-        def _safe_emoji(name: str, fallback: str) -> Optional[discord.PartialEmoji | str]:
-            if e_reg and hasattr(e_reg, "get_emoji_obj"):
-                try:
-                    res = e_reg.get_emoji_obj(name)
-                    if isinstance(res, (str, discord.Emoji, discord.PartialEmoji)):
-                        return res
-                except Exception:
-                    pass
-            return fallback
+        def _safe_emoji(key: str, fallback: str) -> discord.Emoji | discord.PartialEmoji | str:
+            return resolve_select_emoji(self.bot, key, fallback=fallback)
 
         is_paused = bool(self.player and self.player.is_paused)
 
@@ -53,28 +45,28 @@ class MusicControlView(discord.ui.View):
                 if "playpause" in cid:
                     if is_paused:
                         child.label = "Resume"
-                        child.emoji = _safe_emoji("music", "▶️")
+                        child.emoji = _safe_emoji("PLAY", "▶️")
                     else:
                         child.label = "Pause"
-                        child.emoji = _safe_emoji("paused", "⏸️")
+                        child.emoji = _safe_emoji("PAUSE", "⏸️")
                 elif "skip" in cid:
-                    child.emoji = _safe_emoji("skip", "⏭️")
+                    child.emoji = _safe_emoji("SKIP", "⏭️")
                 elif "voldown" in cid:
-                    child.emoji = _safe_emoji("volume_down", "🔉")
+                    child.emoji = _safe_emoji("VOLUME_DOWN", "🔉")
                 elif "volup" in cid:
-                    child.emoji = _safe_emoji("volume_up", "🔊")
+                    child.emoji = _safe_emoji("VOLUME_UP", "🔊")
                 elif "stop" in cid:
-                    child.emoji = _safe_emoji("icons_stop_button", "⏹️")
+                    child.emoji = _safe_emoji("STOP", "⏹️")
                 elif "like" in cid:
-                    child.emoji = _safe_emoji("like", "💜")
+                    child.emoji = _safe_emoji("FAVORITE", "💜")
                 elif "loop" in cid:
-                    child.emoji = _safe_emoji("loop", "🔁")
+                    child.emoji = _safe_emoji("LOOP", "🔁")
                 elif "autoplay" in cid:
-                    child.emoji = _safe_emoji("autoplay", "📻")
+                    child.emoji = _safe_emoji("MUSIC", "📻")
                 elif "queue" in cid:
-                    child.emoji = _safe_emoji("queue", "📜")
+                    child.emoji = _safe_emoji("QUEUE", "📜")
                 elif "shuffle" in cid:
-                    child.emoji = _safe_emoji("shuffle", "🔀")
+                    child.emoji = _safe_emoji("SHUFFLE", "🔀")
 
     def _get_player(self, interaction: discord.Interaction) -> Optional[GuildPlayer]:
         if interaction.guild_id:
@@ -147,18 +139,15 @@ class MusicControlView(discord.ui.View):
             await send_container_response(interaction, c, ephemeral=True)
             return
 
-        e_reg = getattr(self.bot, "custom_emojis", None)
         if player.is_paused:
             player.resume()
             button.label = "Pause"
-            if e_reg:
-                button.emoji = e_reg.get_emoji_obj("paused")
+            button.emoji = resolve_select_emoji(self.bot, "PAUSE", fallback="⏸️")
             state_text = "Resumed"
         elif player.is_playing:
             player.pause()
             button.label = "Resume"
-            if e_reg:
-                button.emoji = e_reg.get_emoji_obj("music") or e_reg.get_emoji_obj("paused")
+            button.emoji = resolve_select_emoji(self.bot, "PLAY", fallback="▶️")
             state_text = "Paused"
         else:
             state_text = "Toggled"

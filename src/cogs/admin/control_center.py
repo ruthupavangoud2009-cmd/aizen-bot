@@ -18,6 +18,7 @@ from src.core.context import CustomContext
 from src.security.owner import is_owner_or_staff
 from src.ui.response import KyokaResponse, send_response
 from src.utils.containers import KyokaContainer, edit_container_response, send_container_response
+from src.utils.emojis import resolve_emoji, resolve_select_emoji
 
 if TYPE_CHECKING:
     from src.core.bot import KyokaBot
@@ -42,12 +43,23 @@ class SetupSectionSelect(discord.ui.Select):
 
     def __init__(self, view: ControlCenterView, current_section: str = "overview") -> None:
         self.cc_view = view
+        mod_emoji_keys = {
+            "moderation": "MODERATION",
+            "automod": "SECURITY",
+            "antinuke": "ANTI_NUKE",
+            "welcome": "WELCOMER",
+            "tickets": "TICKET",
+            "music": "MUSIC",
+            "ai": "AI",
+            "leveling": "LEVEL",
+            "suggestions": "UTILITY",
+        }
         options = [
             discord.SelectOption(
                 label="Control Center Overview",
                 value="overview",
                 description="Live module status, prefix, and server health summary",
-                emoji="🎛️",
+                emoji=resolve_select_emoji(view.bot, "SETTINGS", fallback="🎛️"),
                 default=(current_section == "overview"),
             )
         ]
@@ -57,6 +69,7 @@ class SetupSectionSelect(discord.ui.Select):
                     label=label[:100],
                     value=mod_id,
                     description=desc[:100],
+                    emoji=resolve_select_emoji(view.bot, mod_emoji_keys.get(mod_id, "MODULES")),
                     default=(current_section == mod_id),
                 )
             )
@@ -113,6 +126,7 @@ class ControlCenterView(discord.ui.View):
 
         refresh_btn = discord.ui.Button(
             label="Refresh",
+            emoji=resolve_select_emoji(self.bot, "REFRESH", fallback="🔄"),
             style=discord.ButtonStyle.primary,
             custom_id="kyoka:cc:refresh",
             row=1,
@@ -122,6 +136,7 @@ class ControlCenterView(discord.ui.View):
 
         close_btn = discord.ui.Button(
             label="Close",
+            emoji=resolve_select_emoji(self.bot, "DELETE", fallback="🗑️"),
             style=discord.ButtonStyle.secondary,
             custom_id="kyoka:cc:close",
             row=1,
@@ -174,8 +189,8 @@ class ControlCenterView(discord.ui.View):
 
     def build_container(self) -> KyokaContainer:
         guild = self.ctx.guild
-        e_reg = getattr(self.bot, "custom_emojis", None)
-        dot = (getattr(e_reg, "heart_dot", "") if e_reg else "") or "•"
+        dot = resolve_emoji(self.bot, "ARROW", fallback="•")
+        admin_em = resolve_emoji(self.bot, "ADMIN")
         prefix = self.bot.guild_mgr.get_prefix(guild.id) if hasattr(self.bot, "guild_mgr") else "+"
 
         container = KyokaContainer(accent_color=None)
@@ -183,7 +198,7 @@ class ControlCenterView(discord.ui.View):
         if self.current_section == "overview":
             container.add_section(
                 content=(
-                    f"**KYOKA Control Center — {guild.name}**\n"
+                    f"**{admin_em} KYOKA Control Center — {guild.name}**\n"
                     "> Unified module toggles, live configuration health, and guided server setup."
                 ),
                 accessory={"type": 11, "media": {"url": guild.icon.url}} if guild.icon else None,

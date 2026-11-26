@@ -17,6 +17,7 @@ except ImportError:
 from src.core.context import CustomContext
 from src.managers.permission_manager import is_owner
 from src.utils.containers import KyokaContainer
+from src.utils.emojis import resolve_emoji
 
 if TYPE_CHECKING:
     from src.core.bot import KyokaBot
@@ -47,10 +48,11 @@ class MonitorCog(commands.Cog, name="Developer-Monitor"):
           ?htop
           ?live
         """
+        load_em = resolve_emoji(self.bot, "LOADING", animated=True)
         container = KyokaContainer(accent_color=None)
         container.add_section(content="```yaml\ninitializing live telemetry stream...\n```")
         container.add_separator(divider=True)
-        container.add_text("-# connecting to runtime stream...")
+        container.add_text(f"-# {load_em} connecting to runtime stream...")
 
         msg = await ctx.reply(embed=container.build())
 
@@ -112,10 +114,15 @@ class MonitorCog(commands.Cog, name="Developer-Monitor"):
                 "===========================================================",
             ]
 
+            status_em = resolve_emoji(self.bot, "SUCCESS" if is_last else "LOADING", prefer_animated=True)
             frame = KyokaContainer(accent_color=None)
             frame.add_section(content="```yaml\n" + "\n".join(matrix) + "\n```")
             frame.add_separator(divider=True)
-            status_text = f"-# stream finished • {total_ticks} ticks recorded" if is_last else f"-# live streaming • updating every 1.5s • tick {tick}/{total_ticks}"
+            status_text = (
+                f"-# {status_em} stream finished • {total_ticks} ticks recorded"
+                if is_last
+                else f"-# {status_em} live streaming • updating every 1.5s • tick {tick}/{total_ticks}"
+            )
             frame.add_text(status_text)
 
             try:

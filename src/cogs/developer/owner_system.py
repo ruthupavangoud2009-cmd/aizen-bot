@@ -11,6 +11,7 @@ from discord.ext import commands, tasks
 from src.core.config import Config
 from src.security.owner import audit, authorize_owner, is_owner_or_staff
 from src.managers.premium_service import PremiumService, parse_duration
+from src.utils.emojis import resolve_emoji
 
 if TYPE_CHECKING:
     from src.core.bot import KyokaBot
@@ -73,7 +74,8 @@ class OwnerSystem(commands.Cog):
         row = await self.bot.db.fetch_one("SELECT balance FROM user_profiles WHERE guild_id = $1 AND user_id = $2;", guild_id, member.id)
         bal = row["balance"] if row else amount
         await audit(self.bot, ctx.author.id, "owner-cash", member.id, f"+{amount}")
-        await ctx.send(f"👑 **Owner Override:** Added **+{amount:,}** to {member.mention}'s wallet! (New Balance: `{bal:,}`)", delete_after=10)
+        owner_em = resolve_emoji(self.bot, "OWNER")
+        await ctx.send(f"{owner_em} **Owner Override:** Added **+{amount:,}** to {member.mention}'s wallet! (New Balance: `{bal:,}`)", delete_after=10)
 
     @owner_help.command(name="setcash", hidden=True)
     async def owner_setcash(self, ctx, member: discord.Member, amount: int):
@@ -91,7 +93,8 @@ class OwnerSystem(commands.Cog):
             guild_id, member.id, amount
         )
         await audit(self.bot, ctx.author.id, "owner-setcash", member.id, f"={amount}")
-        await ctx.send(f"👑 **Owner Override:** Set {member.mention}'s wallet to **{amount:,}**!", delete_after=10)
+        owner_em = resolve_emoji(self.bot, "OWNER")
+        await ctx.send(f"{owner_em} **Owner Override:** Set {member.mention}'s wallet to **{amount:,}**!", delete_after=10)
 
     @owner_help.command(name="removecash", hidden=True)
     async def owner_removecash(self, ctx, member: discord.Member, amount: int):
@@ -108,7 +111,8 @@ class OwnerSystem(commands.Cog):
             guild_id, member.id, amount
         )
         await audit(self.bot, ctx.author.id, "owner-removecash", member.id, f"-{amount}")
-        await ctx.send(f"👑 **Owner Override:** Deducted **-{amount:,}** from {member.mention}'s wallet!", delete_after=10)
+        owner_em = resolve_emoji(self.bot, "OWNER")
+        await ctx.send(f"{owner_em} **Owner Override:** Deducted **-{amount:,}** from {member.mention}'s wallet!", delete_after=10)
 
     @owner_help.command(name="giveitem", hidden=True)
     async def owner_giveitem(self, ctx, member: discord.Member, item: str, quantity: int = 1):
@@ -127,7 +131,8 @@ class OwnerSystem(commands.Cog):
             guild_id, member.id, item_id, quantity
         )
         await audit(self.bot, ctx.author.id, "owner-giveitem", member.id, f"{quantity}x {item_id}")
-        await ctx.send(f"👑 **Owner Override:** Granted **{quantity}x `{item_id}`** to {member.mention}!", delete_after=10)
+        owner_em = resolve_emoji(self.bot, "OWNER")
+        await ctx.send(f"{owner_em} **Owner Override:** Granted **{quantity}x `{item_id}`** to {member.mention}!", delete_after=10)
 
     @owner_help.command(name="setitem", hidden=True)
     async def owner_setitem(self, ctx, member: discord.Member, item: str, amount: int):
@@ -152,7 +157,8 @@ class OwnerSystem(commands.Cog):
                 guild_id, member.id, item_id, amount
             )
         await audit(self.bot, ctx.author.id, "owner-setitem", member.id, f"{amount}x {item_id}")
-        await ctx.send(f"👑 **Owner Override:** Set {member.mention}'s `{item_id}` stock to **{amount}**!", delete_after=10)
+        owner_em = resolve_emoji(self.bot, "OWNER")
+        await ctx.send(f"{owner_em} **Owner Override:** Set {member.mention}'s `{item_id}` stock to **{amount}**!", delete_after=10)
 
     @owner_help.command(name="spawn", hidden=True)
     async def owner_spawn(self, ctx, creature: str, member: Optional[discord.Member] = None):
@@ -173,7 +179,8 @@ class OwnerSystem(commands.Cog):
             guild_id, target.id, cid
         )
         await audit(self.bot, ctx.author.id, "owner-spawn", target.id, cid)
-        await ctx.send(f"👑 **Owner Override:** Spawned **`{cid}`** into {target.mention}'s zoo!", delete_after=10)
+        owner_em = resolve_emoji(self.bot, "OWNER")
+        await ctx.send(f"{owner_em} **Owner Override:** Spawned **`{cid}`** into {target.mention}'s zoo!", delete_after=10)
 
     @owner_help.command(name="reseteco", hidden=True)
     async def owner_reseteco(self, ctx, member: discord.Member):
@@ -185,7 +192,8 @@ class OwnerSystem(commands.Cog):
         await self.bot.db.execute("DELETE FROM economy_inventory WHERE guild_id = $1 AND user_id = $2;", guild_id, member.id)
         await self.bot.db.execute("DELETE FROM user_zoo WHERE guild_id = $1 AND user_id = $2;", guild_id, member.id)
         await audit(self.bot, ctx.author.id, "owner-reseteco", member.id, "full reset")
-        await ctx.send(f"👑 **Owner Override:** Economy profile for {member.mention} has been completely reset.", delete_after=10)
+        owner_em = resolve_emoji(self.bot, "OWNER")
+        await ctx.send(f"{owner_em} **Owner Override:** Economy profile for {member.mention} has been completely reset.", delete_after=10)
 
     @owner_help.command(name="event", hidden=True)
     async def owner_event(self, ctx, amount: float):
@@ -218,7 +226,8 @@ class OwnerSystem(commands.Cog):
         guild_id = ctx.guild.id if ctx.guild else 0
         await self.bot.db.execute("UPDATE user_profiles SET balance = 1000, bank = 0 WHERE guild_id = $1;", guild_id)
         await audit(self.bot, ctx.author.id, "owner-leaderboard-reset", None, f"guild={guild_id}")
-        await ctx.send("👑 **Owner Override:** Server economy leaderboard has been reset to base starting balances.", delete_after=10)
+        owner_em = resolve_emoji(self.bot, "OWNER")
+        await ctx.send(f"{owner_em} **Owner Override:** Server economy leaderboard has been reset to base starting balances.", delete_after=10)
 
     @commands.command(name="owner-botinfo", description="Owner-only bot diagnostics.")
     async def botinfo(self, ctx):

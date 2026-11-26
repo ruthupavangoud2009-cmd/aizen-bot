@@ -18,6 +18,7 @@ from src.utils.containers import (
     send_container_response,
     edit_container_response,
 )
+from src.utils.emojis import resolve_emoji, resolve_select_emoji
 
 if TYPE_CHECKING:
     from src.core.bot import KyokaBot
@@ -43,10 +44,12 @@ class UserInfoView(discord.ui.View):
 
     def _build_tabs(self) -> None:
         self.clear_items()
+        bot_ref = getattr(self.ctx, "bot", None)
 
         # Tab 1: Profile
         btn_profile = discord.ui.Button(
             label="Profile",
+            emoji=resolve_select_emoji(bot_ref, "PROFILE", fallback="👤"),
             style=discord.ButtonStyle.primary if self.current_tab == "profile" else discord.ButtonStyle.secondary,
             custom_id="tab_profile",
         )
@@ -57,6 +60,7 @@ class UserInfoView(discord.ui.View):
         if isinstance(self.target, discord.Member):
             btn_server = discord.ui.Button(
                 label="Server",
+                emoji=resolve_select_emoji(bot_ref, "SERVER", fallback="🌐"),
                 style=discord.ButtonStyle.primary if self.current_tab == "server" else discord.ButtonStyle.secondary,
                 custom_id="tab_server",
             )
@@ -66,6 +70,7 @@ class UserInfoView(discord.ui.View):
             # Tab 3: Roles
             btn_roles = discord.ui.Button(
                 label="Roles",
+                emoji=resolve_select_emoji(bot_ref, "ROLE", fallback="🏷️"),
                 style=discord.ButtonStyle.primary if self.current_tab == "roles" else discord.ButtonStyle.secondary,
                 custom_id="tab_roles",
             )

@@ -17,6 +17,7 @@ from src.core.context import CustomContext
 from src.managers.case_manager import CaseManager
 from src.ui.response import KyokaResponse, send_response
 from src.utils.containers import KyokaContainer, edit_container_response, send_container_response
+from src.utils.emojis import resolve_emoji, resolve_select_emoji
 
 if TYPE_CHECKING:
     from src.core.bot import KyokaBot
@@ -52,9 +53,8 @@ class CasePaginatorView(discord.ui.View):
         self.indicator_btn.label = f"{self.page}/{self.total_pages}"
 
     def build_container(self) -> KyokaContainer:
-        e_reg = getattr(self.bot, "custom_emojis", None)
-        dot = (getattr(e_reg, "heart_dot", "") if e_reg else "") or "•"
-        shield = (getattr(e_reg, "antinuke", "") if e_reg else "") or "🛡️"
+        dot = resolve_emoji(self.bot, "ARROW", fallback="•")
+        shield = resolve_emoji(self.bot, "MODERATION")
 
         start = (self.page - 1) * CASES_PER_PAGE
         chunk = self.cases[start : start + CASES_PER_PAGE]

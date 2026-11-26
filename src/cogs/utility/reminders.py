@@ -19,6 +19,7 @@ from discord.ext import commands, tasks
 from src.core.context import CustomContext
 from src.ui.response import KyokaResponse, send_response
 from src.utils.containers import KyokaContainer, send_container_response
+from src.utils.emojis import resolve_emoji
 
 if TYPE_CHECKING:
     from src.core.bot import KyokaBot
@@ -76,13 +77,12 @@ class Reminders(commands.Cog):
         reason = str(row.get("reason") or "Reminder")
         dur_label = str(row.get("duration_label") or "earlier")
 
-        e_reg = getattr(self.bot, "custom_emojis", None)
-        spark = (getattr(e_reg, "sparkle", "") if e_reg else "") or "⏰"
+        rem_icon = resolve_emoji(self.bot, "REMINDER", prefer_animated=True)
 
         container = KyokaContainer(accent_color=None)
         container.add_section(
             content=(
-                f"**{spark} Reminder Alert**\n"
+                f"**{rem_icon} Reminder Alert**\n"
                 f"> <@{user_id}>, you asked KYOKA to remind you:\n"
                 f"> **{reason}**"
             )

@@ -9,6 +9,7 @@ import discord
 
 from src.core.context import CustomContext
 from src.utils.containers import KyokaContainer, send_container_response
+from src.utils.emojis import resolve_emoji
 
 if TYPE_CHECKING:
     from src.core.bot import KyokaBot
@@ -136,9 +137,8 @@ async def dispatch_mod_log(
     if not log_channel:
         return case_id
 
-    e_reg = getattr(bot, "custom_emojis", None) or {}
-    dot = getattr(e_reg, "heart_dot", None) or (e_reg.get("heart_dot", "-") if hasattr(e_reg, "get") else "-")
-    badge = e_reg.get("icon_moderation", "") if hasattr(e_reg, "get") else ""
+    dot = resolve_emoji(bot, "ARROW", fallback="-")
+    badge = resolve_emoji(bot, "MODERATION")
     badge_str = f"{badge} " if badge else ""
     case_suffix = f" (Case #{case_id})" if case_id is not None else ""
 

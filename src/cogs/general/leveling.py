@@ -13,6 +13,7 @@ from discord.ext import commands
 from src.core.context import CustomContext
 from src.utils.canvas import render_rank_card
 from src.utils.containers import KyokaContainer, send_container_response
+from src.utils.emojis import resolve_emoji
 from src.utils.image_tools import download_image_bytes
 
 if TYPE_CHECKING:
@@ -103,17 +104,22 @@ class Leveling(commands.Cog, name="General-Leveling"):
             blocks = int(pct / 10)
             bar = "▰" * blocks + "▱" * (10 - blocks)
 
+            rank_em = resolve_emoji(self.bot, "RANK")
+            lvl_em = resolve_emoji(self.bot, "LEVEL")
+            xp_em = resolve_emoji(self.bot, "XP")
+            stats_em = resolve_emoji(self.bot, "STATS")
+
             container = KyokaContainer()
             container.add_section(
-                content=f"# **Rank: {target.display_name}**\n> Server: **{ctx.guild.name}**"
+                content=f"# {rank_em} **Rank: {target.display_name}**\n> Server: **{ctx.guild.name}**"
             )
             container.add_separator(divider=True)
             container.add_text(
-                f"🏆 **Server Rank:** `#{stats['rank']}`\n"
-                f"⭐ **Current Level:** `Level {stats['level']}`\n"
-                f"📈 **Level Progress:** `{stats['current_xp']:,} / {stats['needed_xp']:,} XP` ({pct}%)\n"
+                f"{rank_em} **Server Rank:** `#{stats['rank']}`\n"
+                f"{lvl_em} **Current Level:** `Level {stats['level']}`\n"
+                f"{stats_em} **Level Progress:** `{stats['current_xp']:,} / {stats['needed_xp']:,} XP` ({pct}%)\n"
                 f"> `[{bar}]`\n"
-                f"✨ **Total Experience:** `{stats['total_xp']:,} XP`"
+                f"{xp_em} **Total Experience:** `{stats['total_xp']:,} XP`"
             )
             container.add_thumbnail(target.display_avatar.url)
             container.add_separator(divider=True)
@@ -139,11 +145,13 @@ class Leveling(commands.Cog, name="General-Leveling"):
             return await ctx.send_error("Leveling system is initializing.")
 
         rows = await level_mgr.get_leaderboard(ctx.guild.id, limit=limit)
-        dot = self.bot.custom_emojis.get("heart_dot", "•")
+        dot = resolve_emoji(self.bot, "ARROW", fallback="•")
+        lb_em = resolve_emoji(self.bot, "LEADERBOARD")
+        info_em = resolve_emoji(self.bot, "INFO")
 
         container = KyokaContainer()
         container.add_section(
-            content=f"# **Progression Leaderboard • {ctx.guild.name}**\n> Ranking members by total experience"
+            content=f"# {lb_em} **Progression Leaderboard • {ctx.guild.name}**\n> Ranking members by total experience"
         )
         container.add_separator(divider=True)
 
@@ -161,7 +169,7 @@ class Leveling(commands.Cog, name="General-Leveling"):
 
         container.add_separator(divider=True)
         if not level_mgr.is_enabled(ctx.guild.id):
-            container.add_text("-# ℹ️ XP progression is optional & currently disabled in this server. Existing records are preserved. Admins can enable via `?levelenable`.")
+            container.add_text(f"-# {info_em} XP progression is optional & currently disabled in this server. Existing records are preserved. Admins can enable via `?levelenable`.")
         else:
             container.add_text("-# Earn XP by actively chatting in server text channels")
         await send_container_response(ctx, container)
@@ -182,9 +190,10 @@ class Leveling(commands.Cog, name="General-Leveling"):
             return await ctx.send_error("Leveling system is initializing.")
 
         await level_mgr.set_guild_enabled(ctx.guild.id, True, announce=announce)
+        lvl_em = resolve_emoji(self.bot, "LEVEL")
         container = KyokaContainer()
         container.add_section(
-            content=f"## ⭐ XP Progression Enabled • {ctx.guild.name}\n"
+            content=f"## {lvl_em} XP Progression Enabled • {ctx.guild.name}\n"
                     f"> Automatic XP tracking is now **Active** for this server."
         )
         container.add_separator(divider=True)

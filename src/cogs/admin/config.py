@@ -11,6 +11,7 @@ from src.cogs.utility.giveaway import is_giveaway_authorized
 from src.core.context import CustomContext
 from src.security.owner import is_owner_or_staff
 from src.utils.containers import KyokaContainer, send_container_response
+from src.utils.emojis import resolve_emoji
 
 if TYPE_CHECKING:
     from src.core.bot import KyokaBot
@@ -92,9 +93,10 @@ class ServerConfig(commands.Cog):
         ai_cfg = self.bot.ai_mgr.get_server_config(gid)
         act_cfg = self.bot.activity_mgr.get_guild_config(gid)
 
-        dot = self.bot.custom_emojis.get("heart_dot", "•")
+        dot = resolve_emoji(self.bot, "ARROW", fallback="•")
+        set_em = resolve_emoji(self.bot, "SETTINGS")
         container = KyokaContainer()
-        container.add_section(content=f"# **Server Configuration: {interaction.guild.name}**")
+        container.add_section(content=f"# {set_em} **Server Configuration: {interaction.guild.name}**")
         container.add_separator(divider=True)
 
         # Giveaways & Channels
@@ -436,9 +438,10 @@ class ServerConfig(commands.Cog):
     async def prefix_config_view(self, ctx: commands.Context) -> None:
         gid = ctx.guild.id
         row = await self.bot.db.fetch_one("SELECT * FROM server_giveaway_config WHERE guild_id = $1;", gid)
-        dot = self.bot.custom_emojis.get("heart_dot", "•")
+        dot = resolve_emoji(self.bot, "ARROW", fallback="•")
+        set_em = resolve_emoji(self.bot, "SETTINGS")
         container = KyokaContainer()
-        container.add_section(content=f"# **Server Configuration: {ctx.guild.name}**")
+        container.add_section(content=f"# {set_em} **Server Configuration: {ctx.guild.name}**")
         container.add_separator(divider=True)
         gw_chan = f"<#{row['giveaway_channel_id']}>" if row and row.get("giveaway_channel_id") else "None"
         mgr_role = f"<@&{row['manager_role_id']}>" if row and row.get("manager_role_id") else "Default (Staff)"
