@@ -13,6 +13,7 @@ import discord
 from discord.ext import commands
 
 from src.core.context import CustomContext
+from src.utils.emojis import em
 
 if TYPE_CHECKING:
     from src.core.bot import KyokaBot
@@ -44,21 +45,25 @@ class AutoModCog(commands.Cog, name="AutoMod"):
             return
         enabled = [rule for rule in rules if rule.enabled]
         prefix = self.bot.guild_mgr.get_prefix(ctx.guild.id)
+        e_shield = em(self.bot, "ANTINUKE", animated=True)
+        e_on = em(self.bot, "ONLINE")
+        e_off = em(self.bot, "OFFLINE")
+        e_arrow = em(self.bot, "ARROW")
         embed = discord.Embed(
-            title="🛡️ KYOKA • Official Discord AutoMod",
+            title=f"{e_shield} KYOKA • Official Discord AutoMod",
             description=(
-                f"**Status:** {'🟢 Enabled' if enabled else '⚪ Not enabled'}\n"
+                f"**Status:** {f'{e_on} Enabled' if enabled else f'{e_off} Not enabled'}\n"
                 f"**KYOKA rules:** {len(rules)} total • {len(enabled)} active\n\n"
                 "**Protection installed by setup**\n"
-                "• Discord spam detection\n"
-                "• Mention-spam and raid protection\n"
-                "• Discord harmful-link detection\n"
-                "• Profanity, sexual-content and slur presets\n\n"
+                f"{e_arrow} Discord spam detection\n"
+                f"{e_arrow} Mention-spam and raid protection\n"
+                f"{e_arrow} Discord harmful-link detection\n"
+                f"{e_arrow} Profanity, sexual-content and slur presets\n\n"
                 "**Commands**\n"
-                f"• `{prefix}automod setup` — install protection\n"
-                f"• `{prefix}automod enable` / `disable`\n"
-                f"• `{prefix}automod config` — show native rules\n"
-                f"• `{prefix}automod reset` — remove KYOKA rules only"
+                f"{e_arrow} `{prefix}automod setup` — install protection\n"
+                f"{e_arrow} `{prefix}automod enable` / `disable`\n"
+                f"{e_arrow} `{prefix}automod config` — show native rules\n"
+                f"{e_arrow} `{prefix}automod reset` — remove KYOKA rules only"
             ),
             color=0x7C3AED,
         )
@@ -113,7 +118,7 @@ class AutoModCog(commands.Cog, name="AutoMod"):
         if not lines:
             lines.append("No rules were changed.")
         embed = discord.Embed(
-            title="🛡️ KYOKA AutoMod setup",
+            title=f"{em(self.bot, 'ANTINUKE', animated=True)} KYOKA AutoMod setup",
             description=(
                 "KYOKA has configured genuine rules using Discord's official Auto Moderation API.\n\n"
                 + "\n".join(lines)
@@ -179,11 +184,13 @@ class AutoModCog(commands.Cog, name="AutoMod"):
         if not rules:
             await ctx.send_warning("No KYOKA AutoMod rules are installed. Run `?automod setup` to opt in.")
             return
-        embed = discord.Embed(title="⚙️ KYOKA AutoMod configuration", color=0x7C3AED)
+        e_on = em(self.bot, "ONLINE")
+        e_off = em(self.bot, "OFFLINE")
+        embed = discord.Embed(title=f"{em(self.bot, 'SETTINGS')} KYOKA AutoMod configuration", color=0x7C3AED)
         for rule in rules:
             embed.add_field(
                 name=rule.name.removeprefix(RULE_PREFIX),
-                value=f"{'🟢 Enabled' if rule.enabled else '⚪ Disabled'} • Discord rule ID: `{rule.id}`",
+                value=f"{f'{e_on} Enabled' if rule.enabled else f'{e_off} Disabled'} • Discord rule ID: `{rule.id}`",
                 inline=False,
             )
         await ctx.send(embed=embed)

@@ -66,6 +66,7 @@ def test_configured_static_and_animated_resolution_with_fallback():
     bot.emojis = []
     reg = EmojiRegistry(bot)
     bot.custom_emojis = reg
+    bot.custom_emojis = reg
 
     with patch.dict(
         KYOKA_CUSTOM_EMOJI_IDS,
@@ -146,3 +147,63 @@ def test_ui_views_and_responses_render_without_emoji_crashes():
     ui_emb = KyokaEmbed.success("Done", "Saved settings", bot=bot)
     assert "✅" in ui_emb.title or "<" in ui_emb.title
     assert "EMOJI_ID" not in ui_emb.title
+
+
+def test_standalone_em_and_active_registry_renderers():
+    from src.utils.emojis import em, set_active_emoji_registry, get_active_emoji_registry
+    from src.ui.help_renderer import HelpRenderer
+    from src.ui.feature_renderers import FeatureRenderer
+    from src.ui.categories import resolve_category_emoji, format_category_tag, CATEGORY_BY_ID
+
+    bot = MagicMock()
+    bot.emojis = []
+    reg = EmojiRegistry(bot)
+    bot.custom_emojis = reg
+
+    class _MockEmoji:
+        def __init__(self, name, eid, animated=False):
+            self.name = name
+            self.id = eid
+            self.animated = animated
+        def __str__(self):
+            prefix = "a" if self.animated else ""
+            return f"<{prefix}:{self.name}:{self.id}>"
+
+    reg._emojis = {
+        "verified_glow": _MockEmoji("verified_glow", 111111111111111111, animated=True),
+        "icons_correct": _MockEmoji("icons_correct", 222222222222222222, animated=False),
+        "icons_wrong": _MockEmoji("icons_wrong", 333333333333333333, animated=False),
+        "icons_coin": _MockEmoji("icons_coin", 444444444444444444, animated=False),
+        "music_playing": _MockEmoji("music_playing", 555555555555555555, animated=True),
+        "sparkle_shine": _MockEmoji("sparkle_shine", 666666666666666666, animated=True),
+        "icons_info": _MockEmoji("icons_info", 777777777777777777, animated=False),
+        "icons_folder": _MockEmoji("icons_folder", 888888888888888888, animated=False),
+        "antinuke_pulse": _MockEmoji("antinuke_pulse", 999999999999999999, animated=True),
+    }
+
+    prev = get_active_emoji_registry()
+    set_active_emoji_registry(reg)
+    try:
+        # Both calling forms work
+        assert em("SUCCESS") == "<a:verified_glow:111111111111111111>"
+        assert em(bot, "SUCCESS", prefer_animated=False) == "<:icons_correct:222222222222222222>"
+        assert em("ERROR") == "<:icons_wrong:333333333333333333>"
+        assert em("COINS") == "<:icons_coin:444444444444444444>"
+
+        # Category & Help/Feature renderers resolve active custom emojis instead of plain Unicode
+        assert resolve_category_emoji("music") == "<a:music_playing:555555555555555555>"
+        tag_str = format_category_tag(CATEGORY_BY_ID["moderation"])
+        assert "🛡️" not in tag_str or "<" in tag_str
+
+        home_emb = HelpRenderer.render_home_embed(None, "+", 120, 20)
+        assert "<a:sparkle_shine:666666666666666666>" in (home_emb.description or "")
+        assert any("<:icons_info:777777777777777777>" in f.name for f in home_emb.fields)
+
+        music_emb = FeatureRenderer.render_music_card("Treachery", "Shiro Sagisu", "3:12", "Aizen")
+        assert "<a:music_playing:555555555555555555>" in (music_emb.title or "")
+
+        ai_emb = FeatureRenderer.render_ai_chat_card("hello", "world")
+        assert "<a:sparkle_shine:666666666666666666>" in (ai_emb.title or "")
+    finally:
+        set_active_emoji_registry(prev)
+

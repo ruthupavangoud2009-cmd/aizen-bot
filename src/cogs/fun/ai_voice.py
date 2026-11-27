@@ -25,6 +25,7 @@ import aiohttp
 import discord
 from discord import app_commands
 from discord.ext import commands
+from src.utils.emojis import em
 
 try:
     import static_ffmpeg
@@ -1022,31 +1023,40 @@ class AIVoice(commands.Cog, name="AIVoice"):
         ping = round(vc.latency * 1000) if (vc and hasattr(vc, "latency") and vc.latency) else "N/A"
         is_listening = self.summary_mgr.is_listening(ctx.guild.id) if ctx.guild else False
 
+        e_ai = em(self.bot, "AI", animated=True)
+        e_music = em(self.bot, "MUSIC", animated=True)
+        e_on = em(self.bot, "ONLINE")
+        e_off = em(self.bot, "OFFLINE")
+        e_ok = em(self.bot, "SUCCESS", animated=True)
+        e_err = em(self.bot, "ERROR")
+        e_warn = em(self.bot, "WARNING")
+        e_arrow = em(self.bot, "ARROW")
+        e_voice = em(self.bot, "VOICE")
         embed = discord.Embed(
-            title="🩺 AI Voice Engine Diagnostics",
+            title=f"{e_ai} AI Voice Engine Diagnostics",
             color=0x2ECC71 if (ffmpeg_bin and opus_loaded) else 0xED4245,
         )
 
         embed.add_field(
-            name="🎵 Audio Binaries",
+            name=f"{e_music} Audio Binaries",
             value=(
-                f"• **FFmpeg:** `{'✅ Found' if ffmpeg_bin else '❌ Missing'}` ({ffmpeg_bin or 'None'})\n"
-                f"• **Opus:** `{'✅ Loaded' if opus_loaded else '❌ Not Loaded'}`\n"
-                f"• **Edge-TTS:** `{'✅ Installed (Primary)' if HAS_EDGE_TTS else '⚠️ Missing'}`\n"
-                f"• **Voice Receiver:** `{'✅ Active (discord-ext-voice-recv)' if HAS_VOICE_RECV else '⚠️ Not Loaded'}`\n"
-                f"• **gTTS Fallback:** `✅ Ready`"
+                f"{e_arrow} **FFmpeg:** {f'{e_ok} Found' if ffmpeg_bin else f'{e_err} Missing'} ({ffmpeg_bin or 'None'})\n"
+                f"{e_arrow} **Opus:** {f'{e_ok} Loaded' if opus_loaded else f'{e_err} Not Loaded'}\n"
+                f"{e_arrow} **Edge-TTS:** {f'{e_ok} Installed (Primary)' if HAS_EDGE_TTS else f'{e_warn} Missing'}\n"
+                f"{e_arrow} **Voice Receiver:** {f'{e_ok} Active (discord-ext-voice-recv)' if HAS_VOICE_RECV else f'{e_warn} Not Loaded'}\n"
+                f"{e_arrow} **gTTS Fallback:** {e_ok} Ready"
             ),
             inline=False,
         )
 
         embed.add_field(
-            name="📡 Connection & Listening State",
+            name=f"{e_voice} Connection & Listening State",
             value=(
-                f"• **Connected:** `{'✅ Yes' if connected else '⚪ Disconnected'}`\n"
-                f"• **Active Channel:** `{channel_name}`\n"
-                f"• **Voice Ping:** `{ping}ms`\n"
-                f"• **VC Listening Active:** `{'🟢 Yes' if is_listening else '⚪ No'}`\n"
-                f"• **Music Isolation:** `✅ Safe (Separate Handlers)`"
+                f"{e_arrow} **Connected:** {f'{e_ok} Yes' if connected else f'{e_off} Disconnected'}\n"
+                f"{e_arrow} **Active Channel:** `{channel_name}`\n"
+                f"{e_arrow} **Voice Ping:** `{ping}ms`\n"
+                f"{e_arrow} **VC Listening Active:** {f'{e_on} Yes' if is_listening else f'{e_off} No'}\n"
+                f"{e_arrow} **Music Isolation:** {e_ok} Safe (Separate Handlers)"
             ),
             inline=False,
         )

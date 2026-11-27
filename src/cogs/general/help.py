@@ -30,10 +30,12 @@ from src.utils.containers import (
     send_container_response,
     edit_container_response,
 )
-from src.utils.emojis import resolve_emoji, resolve_select_emoji
+from src.utils.emojis import em, resolve_emoji, resolve_select_emoji
 from src.ui.categories import (
     CATEGORIES,
     CATEGORY_BY_TAG,
+    resolve_category_emoji,
+    resolve_category_select_emoji,
     resolve_command_category,
     get_category_by_query,
 )
@@ -159,9 +161,14 @@ class HelpCategorySelect(discord.ui.Select):
     ) -> None:
         self.help_view = help_view
 
-        def resolve_menu_emoji(cat_name: Optional[str] = None) -> str:
+        def resolve_menu_emoji(cat_name: Optional[str] = None) -> Any:
+            bot_ref = getattr(getattr(help_view, "cog", None), "bot", None)
             if not cat_name or cat_name.lower() == "home":
-                return "🏠"
+                return resolve_select_emoji(bot_ref, "HOME", fallback="🏠")
+
+            cat_meta = CATEGORY_BY_TAG.get(cat_name)
+            if cat_meta is not None:
+                return resolve_category_select_emoji(cat_meta, bot=bot_ref)
 
             raw = cat_name.split("・", 1)[-1].strip().upper()
             mapping = {
@@ -174,19 +181,20 @@ class HelpCategorySelect(discord.ui.Select):
                 "VERIFICATION": "VERIFICATION",
                 "TICKETS & SUPPORT": "TICKET",
                 "TICKET": "TICKET",
-                "REACTION ROLES": "ROLE",
+                "REACTION ROLES": "ROLES",
                 "GIVEAWAYS & EVENTS": "GIVEAWAY",
                 "GIVEAWAY": "GIVEAWAY",
                 "MUSIC": "MUSIC",
                 "AFK": "AFK",
-                "VOUCHES & REPUTATION": "LEVEL",
-                "BLOX FRUITS AI": "AI",
+                "VOUCHES & REPUTATION": "VOUCH",
+                "BLOX FRUITS SERVICE BILLS": "BILLS",
+                "BLOX FRUITS AI": "BLOXFRUITS",
                 "ARTIFICIAL INTELLIGENCE": "AI",
                 "AI": "AI",
-                "LEVELS & COMMUNITY": "LEVEL",
+                "LEVELS & COMMUNITY": "LEVELING",
                 "IMAGES & AVATARS": "MEDIA",
                 "MEDIA": "MEDIA",
-                "SOCIAL & FUN": "MEMBERS",
+                "SOCIAL & FUN": "FUN",
                 "PREMIUM": "PREMIUM",
                 "SERVER ADMINISTRATION": "ADMIN",
                 "ADMIN": "ADMIN",
@@ -194,13 +202,13 @@ class HelpCategorySelect(discord.ui.Select):
                 "UTILITY": "UTILITY",
                 "OWNER & DEVELOPER": "OWNER",
                 "OWNER": "OWNER",
-                "MULTIPLAYER GAMES": "GAMES",
-                "MINI-GAMES": "GAMES",
-                "GAMES": "GAMES",
+                "MULTIPLAYER GAMES": "MULTIPLAYER",
+                "MINI-GAMES": "MULTIPLAYER",
+                "GAMES": "MULTIPLAYER",
                 "WATCH PARTY": "VOICE",
                 "KYOKA CASINO": "CASINO",
                 "CASINO": "CASINO",
-                "HUNTING & ANIMALS": "GAMES",
+                "HUNTING & ANIMALS": "HUNTING",
                 "JOIN TO CREATE": "VOICE",
                 "MEETING": "VOICE",
                 "LOGGING": "LOGGING",
@@ -213,17 +221,7 @@ class HelpCategorySelect(discord.ui.Select):
                         break
             if not cat_key:
                 cat_key = "SETTINGS"
-
-            fallback_map = {
-                "HOME": "🏠", "MODERATION": "⚔️", "ANTI_NUKE": "🛡️", "WELCOMER": "🚪",
-                "VERIFICATION": "✅", "TICKET": "🎫", "ROLE": "🏷️", "GIVEAWAY": "🎉",
-                "MUSIC": "🎵", "AFK": "💤", "AI": "🤖", "LEVEL": "⭐", "MEDIA": "🖼️",
-                "MEMBERS": "👥", "PREMIUM": "💎", "ADMIN": "⚙️", "UTILITY": "🔧",
-                "OWNER": "👑", "GAMES": "🎮", "VOICE": "🎙️", "CASINO": "🎰",
-                "LOGGING": "📜", "SETTINGS": "⚙️",
-            }
-            bot_ref = getattr(getattr(help_view, "cog", None), "bot", None)
-            return resolve_select_emoji(bot_ref, cat_key, fallback=fallback_map.get(cat_key, "📁"))
+            return resolve_select_emoji(bot_ref, cat_key, fallback="📁")
 
         options: list[discord.SelectOption] = [
             discord.SelectOption(
@@ -251,10 +249,10 @@ class HelpCategorySelect(discord.ui.Select):
             )
 
         if current_selection == "home":
-            placeholder_text = "🏠 Home — Select a module to view commands..."
+            placeholder_text = "Home — Select a module to view commands..."
         else:
             cur_clean = current_selection.split("・", 1)[-1].strip()
-            placeholder_text = f"📁 {cur_clean.title() if cur_clean.isupper() else cur_clean} — Switch module..."
+            placeholder_text = f"{cur_clean.title() if cur_clean.isupper() else cur_clean} — Switch module..."
 
         super().__init__(
             placeholder=placeholder_text[:150],
@@ -532,19 +530,28 @@ class HCACategorySelect(discord.ui.Select):
         current_selection: str = "home",
     ) -> None:
         self.hca_view = hca_view
+        bot_ref = getattr(getattr(hca_view, "cog", None), "bot", None)
+
+        def _hca_emoji(cat_name: str) -> Any:
+            cat_meta = CATEGORY_BY_TAG.get(cat_name)
+            if cat_meta is not None:
+                return resolve_category_select_emoji(cat_meta, bot=bot_ref)
+            raw = cat_name.split("・", 1)[-1].strip().upper()
+            return resolve_select_emoji(bot_ref, raw, fallback="📁")
+
         options: list[discord.SelectOption] = [
             discord.SelectOption(
                 label="Archive Index",
                 value="home",
                 description="Complete directory index of all categories",
-                emoji=None,
+                emoji=resolve_select_emoji(bot_ref, "HOME", fallback="🏠"),
                 default=(current_selection == "home"),
             ),
             discord.SelectOption(
                 label="All Commands",
                 value="all",
                 description="Browse every registered command A-Z with pagination",
-                emoji=None,
+                emoji=resolve_select_emoji(bot_ref, "BOOK", fallback="📖"),
                 default=(current_selection == "all"),
             ),
         ]
@@ -558,7 +565,7 @@ class HCACategorySelect(discord.ui.Select):
                     label=clean_label,
                     value=cat_name.lower(),
                     description=desc,
-                    emoji=None,
+                    emoji=_hca_emoji(cat_name),
                     default=(current_selection.lower() == cat_name.lower()),
                 )
             )
@@ -575,7 +582,7 @@ class HCACategorySelect(discord.ui.Select):
         await self.hca_view.switch_category(interaction, self.values[0])
 
 
-class HCASearchModal(discord.ui.Modal, title="📚 Search Command Archive"):
+class HCASearchModal(discord.ui.Modal, title="Search Command Archive"):
     query_input = discord.ui.TextInput(
         label="Command Name or Keyword",
         placeholder="e.g. play, ban, fruitvalues, aivoice, bill, ticket...",
@@ -950,6 +957,7 @@ class Help(commands.Cog, name="Help"):
 
     def build_home_container(self, ctx: CustomContext, visible_categories: dict[str, list[commands.Command]]) -> KyokaContainer:
         """Construct the signature Greed-style KyokaContainer (Components V2)."""
+        brand_icon = resolve_emoji(self.bot, "BRANDING", prefer_animated=True)
         term_icon = resolve_emoji(self.bot, "TERMINAL", fallback=">_")
         cmd_icon = resolve_emoji(self.bot, "BRACKETS", fallback="{ }")
         mod_icon = resolve_emoji(self.bot, "MODULES", fallback="⊞")
@@ -973,7 +981,7 @@ class Help(commands.Cog, name="Help"):
         # 2. Section with Title and Description + Avatar Thumbnail
         avatar_url = self.bot.user.display_avatar.url if getattr(self.bot, "user", None) else None
         section_text = (
-            "### Hey, I'm KYOKA\n"
+            f"### {brand_icon} Hey, I'm KYOKA\n"
             "> Experience the ultimate Discord bot designed for seamless server management, "
             "bulletproof security, high-fidelity music, and community engagement."
         )
@@ -1214,6 +1222,11 @@ class Help(commands.Cog, name="Help"):
 
     def _get_category_emoji(self, cat_name: str) -> str:
         """Resolve custom application emoji or unicode fallback for category header."""
+        cat_meta = CATEGORY_BY_TAG.get(cat_name)
+        if cat_meta is not None:
+            resolved = resolve_category_emoji(cat_meta, bot=self.bot, animated=True)
+            if resolved and resolved != "•":
+                return resolved
         raw = cat_name.split("・", 1)[-1].strip()
         fb = UNICODE_CATEGORY_EMOJIS.get(cat_name, "•")
         resolved = resolve_emoji(self.bot, raw, fallback="")
@@ -1311,6 +1324,13 @@ class Help(commands.Cog, name="Help"):
             or ("Aizen Gemini AI engine, 10 personalities & auto chat channels" if "AI" in raw_title.upper() else "Commands in this system.")
         )
         container = KyokaContainer(accent_color=ui_color)
+        e_sparkle = resolve_emoji(self.bot, "SPARKLE", prefer_animated=True)
+        e_arrow = resolve_emoji(self.bot, "ARROW", fallback="»")
+        e_heart = resolve_emoji(self.bot, "HEART", prefer_animated=True)
+        e_crown = resolve_emoji(self.bot, "CROWN")
+        e_mod = resolve_emoji(self.bot, "MODERATION")
+        e_brand = resolve_emoji(self.bot, "BRANDING", prefer_animated=True)
+        e_cfg = resolve_emoji(self.bot, "SETTINGS")
         if cat_name in ("🤖・ARTIFICIAL INTELLIGENCE", "⛩️・AIZEN AI SYSTEM") or "AIZEN AI" in raw_title.upper():
             container.add_section(
                 content=(
@@ -1321,14 +1341,14 @@ class Help(commands.Cog, name="Help"):
             container.add_separator(divider=True)
             container.add_text(
                 f"**Available Personalities (10 Total):**\n"
-                f"> 🌸 `girlfriend` • 💅 `baddie` • 😈 `special` (Restricted) • 🤝 `friendly` • 🎭 `funny`\n"
-                f"> 🔥 `savage` • ⚡ `anime` • ⛩️ `aizen` • 🌟 `friend` • ⚙️ `custom`\n\n"
+                f"> {e_heart} `girlfriend` • {e_sparkle} `baddie` • {e_crown} `special` (Restricted) • {e_arrow} `friendly` • {e_sparkle} `funny`\n"
+                f"> {e_mod} `savage` • {e_sparkle} `anime` • {e_brand} `aizen` • {e_arrow} `friend` • {e_cfg} `custom`\n\n"
                 f"**Core AI Commands & Syntax:**\n"
-                f"• `{prefix}ai <message>` — Direct conversation with active personality\n"
-                f"• `{prefix}ai personalities` — Browse all 10 personalities with interactive selector\n"
-                f"• `{prefix}ai setup [#channel]` — Enable automatic natural chat in a channel\n"
-                f"• `{prefix}aidiag` — Real-time performance & provider latency diagnostics\n"
-                f"• `{prefix}aigf`, `{prefix}aibaddie`, `{prefix}aispecial` — Direct persona shortcuts"
+                f"{e_arrow} `{prefix}ai <message>` — Direct conversation with active personality\n"
+                f"{e_arrow} `{prefix}ai personalities` — Browse all 10 personalities with interactive selector\n"
+                f"{e_arrow} `{prefix}ai setup [#channel]` — Enable automatic natural chat in a channel\n"
+                f"{e_arrow} `{prefix}aidiag` — Real-time performance & provider latency diagnostics\n"
+                f"{e_arrow} `{prefix}aigf`, `{prefix}aibaddie`, `{prefix}aispecial` — Direct persona shortcuts"
             )
             container.add_separator()
         else:
@@ -1387,10 +1407,11 @@ class Help(commands.Cog, name="Help"):
         total_commands = sum(len(cmds) for cmds in visible_categories.values())
         modules_count = len(visible_categories)
 
+        brand_icon = resolve_emoji(self.bot, "BRANDING", prefer_animated=True)
         raw_color = self.bot.guild_mgr.get_ui_color(gid, default=0x2B0938)
         embed_color = raw_color if isinstance(raw_color, int) and not isinstance(raw_color, bool) else 0x2B0938
         embed = discord.Embed(
-            title=f"⛩️ Hey, I'm {brand_name}",
+            title=f"{brand_icon} Hey, I'm {brand_name}",
             description=(
                 f"{bio_text}\n\n"
                 f"{dot} **Latency:** `{latency_ms}ms`\n"
@@ -1420,7 +1441,7 @@ class Help(commands.Cog, name="Help"):
         embed.set_image(url=banner_url)
 
         embed.set_footer(
-            text=f"{book_icon} Use {prefix}help <command> for details • Requested by {ctx.author.display_name}",
+            text=f"Use {prefix}help <command> for details • Requested by {ctx.author.display_name}",
             icon_url=ctx.author.display_avatar.url if ctx.author else None,
         )
 
@@ -1496,7 +1517,7 @@ class Help(commands.Cog, name="Help"):
             embed.set_image(url=custom_banner)
 
         embed.set_footer(
-            text=f"📖 Page {curr_page}/{total_pages} • Use {prefix}help <command> for syntax • Requested by {ctx.author.display_name}",
+            text=f"Page {curr_page}/{total_pages} • Use {prefix}help <command> for syntax • Requested by {ctx.author.display_name}",
             icon_url=ctx.author.display_avatar.url if ctx.author else None,
         )
 
@@ -1510,9 +1531,10 @@ class Help(commands.Cog, name="Help"):
         prefix = self.bot.guild_mgr.get_prefix(ctx.guild.id if ctx.guild else None)
         resolved_cat = self._resolve_category(cmd)
         badge = self._get_badge(cmd)
+        cmd_icon = self.resolve_command_emoji(cmd.qualified_name, resolved_cat)
 
         embed = discord.Embed(
-            title=f"Command Manual: `{cmd.qualified_name}` {badge}".strip(),
+            title=f"{cmd_icon} Command Manual: `{cmd.qualified_name}` {badge}".strip(),
             description=f"> {cmd.description or cmd.help or 'No detailed description provided for this command.'}",
             color=0x2B0938,
             timestamp=discord.utils.utcnow(),
@@ -1520,20 +1542,20 @@ class Help(commands.Cog, name="Help"):
 
         sig = f" {cmd.signature}" if cmd.signature else ""
         embed.add_field(
-            name="Syntax & Usage",
+            name=f"{bullet} Syntax & Usage",
             value=f"`{prefix}{cmd.qualified_name}{sig}`",
             inline=False,
         )
 
         if getattr(cmd, "aliases", None):
             embed.add_field(
-                name="Aliases",
+                name=f"{resolve_emoji(self.bot, 'REFRESH')} Aliases",
                 value=", ".join(f"`{a}`" for a in cmd.aliases),
                 inline=True,
             )
 
         embed.add_field(
-            name="Category",
+            name=f"{resolve_emoji(self.bot, 'CATEGORY')} Category",
             value=f"`{resolved_cat}`",
             inline=True,
         )
@@ -1541,7 +1563,7 @@ class Help(commands.Cog, name="Help"):
         try:
             if getattr(cmd, "_buckets", None) and hasattr(cmd._buckets, "_cooldown") and cmd._buckets._cooldown:
                 cd = cmd._buckets._cooldown.per
-                embed.add_field(name="Cooldown", value=f"`{cd:.1f}s`", inline=True)
+                embed.add_field(name=f"{resolve_emoji(self.bot, 'TIMER')} Cooldown", value=f"`{cd:.1f}s`", inline=True)
         except Exception:
             pass
 
@@ -1579,8 +1601,9 @@ class Help(commands.Cog, name="Help"):
                 return ""
             return reg.get_category(category_name, fallback="")
 
-        arrow_icon = get_em("ARROW")
-        search_icon = get_em("SEARCH")
+        arrow_icon = resolve_emoji(self.bot, "ARROW", fallback="•")
+        search_icon = resolve_emoji(self.bot, "SEARCH", fallback="")
+        warn_icon = resolve_emoji(self.bot, "WARNING", fallback="!")
         bullet = arrow_icon if arrow_icon else "•"
 
         prefix = self.bot.guild_mgr.get_prefix(ctx.guild.id if ctx.guild else None)
@@ -1596,7 +1619,7 @@ class Help(commands.Cog, name="Help"):
                     matched.append((cmd, cat_name))
 
         embed = discord.Embed(
-            title=f"🔍 Search Results for: `{clean_query}`" if matched else "⚠️ Command or Category Not Found",
+            title=f"{search_icon} Search Results for: `{clean_query}`".strip() if matched else f"{warn_icon} Command or Category Not Found".strip(),
             color=0x2B0938,
             timestamp=discord.utils.utcnow(),
         )
@@ -1632,16 +1655,19 @@ class Help(commands.Cog, name="Help"):
         guild = ctx.guild
         p = self.bot.guild_mgr.get_prefix(guild.id if guild else None)
         total_commands = sum(len(cmds) for cmds in all_categories.values())
+        book_icon = resolve_emoji(self.bot, "BOOK")
+        sparkle_icon = resolve_emoji(self.bot, "SPARKLE", prefer_animated=True)
+        arrow_icon = resolve_emoji(self.bot, "ARROW", fallback="•")
 
         embed = discord.Embed(
-            title="📚 KYOKA — Help Command Archive (HCA)",
+            title=f"{book_icon} KYOKA — Help Command Archive (HCA)",
             description=(
                 "> **Complete Public Command Directory & Architecture Index**\n"
                 "> Accessible to every server member. Explore all loaded features, aliases, and syntax.\n\n"
-                f"• **Global Prefix:** `{p}<command>` · **Slash Support:** `/<command>`\n"
-                f"• **Total Commands:** `{total_commands}` across `{len(all_categories)}` active modules\n"
-                f"• **Legend:** `[+]` Prefix · `[/]` Slash · `[Public]` Everyone · `[Mod]` Staff · `[Admin]` Admin · `[Owner]` Dev\n\n"
-                f"💡 *Select a module from the dropdown or click **Search** to find any command.*"
+                f"{arrow_icon} **Global Prefix:** `{p}<command>` · **Slash Support:** `/<command>`\n"
+                f"{arrow_icon} **Total Commands:** `{total_commands}` across `{len(all_categories)}` active modules\n"
+                f"{arrow_icon} **Legend:** `[+]` Prefix · `[/]` Slash · `[Public]` Everyone · `[Mod]` Staff · `[Admin]` Admin · `[Owner]` Dev\n\n"
+                f"{sparkle_icon} *Select a module from the dropdown or click **Search** to find any command.*"
             ),
             color=0x2B0938,
         )
@@ -1743,8 +1769,10 @@ class Help(commands.Cog, name="Help"):
                     if (cmd, cat_name) not in matched:
                         matched.append((cmd, cat_name))
 
+        search_icon = resolve_emoji(self.bot, "SEARCH")
+        arrow_icon = resolve_emoji(self.bot, "ARROW", fallback="•")
         embed = discord.Embed(
-            title=f"🔍 Archive Search Results: `{clean_query}`",
+            title=f"{search_icon} Archive Search Results: `{clean_query}`",
             color=0x2B0938,
         )
 
@@ -1752,9 +1780,9 @@ class Help(commands.Cog, name="Help"):
             embed.description = (
                 f"> No registered commands matching **`{clean_query}`** were found in the archive.\n\n"
                 f"**Suggestions:**\n"
-                f"• Try keywords: `music`, `ban`, `ticket`, `fruit`, `voice`, `bill`, `level`\n"
-                f"• Use the dropdown category selector to browse the entire directory\n"
-                f"• Type `{p}hca` to view the master index"
+                f"{arrow_icon} Try keywords: `music`, `ban`, `ticket`, `fruit`, `voice`, `bill`, `level`\n"
+                f"{arrow_icon} Use the dropdown category selector to browse the entire directory\n"
+                f"{arrow_icon} Type `{p}hca` to view the master index"
             )
             embed.color = 0xED4245
         else:
@@ -1815,7 +1843,7 @@ class Help(commands.Cog, name="Help"):
         page_items = all_items[start_idx : start_idx + per_page]
 
         embed = discord.Embed(
-            title="📋 KYOKA — All Commands Archive",
+            title=f"{resolve_emoji(self.bot, 'LIST')} KYOKA — All Commands Archive",
             description=(
                 f"> **Page **{safe_page}/{total_pages}** • `{len(all_items)}` total commands across all modules**\n"
                 f"> Use `{p}help <command>` for detailed syntax and examples."
@@ -1952,14 +1980,16 @@ class Help(commands.Cog, name="Help"):
                 prefix = self.bot.guild_mgr.get_prefix(ctx.guild.id if ctx.guild else None)
             except Exception:
                 prefix = "+"
+            book_icon = resolve_emoji(self.bot, "BOOK")
+            arrow_icon = resolve_emoji(self.bot, "ARROW", fallback="•")
             try:
                 emb = discord.Embed(
-                    title="📖 KYOKA Help Menu",
+                    title=f"{book_icon} KYOKA Help Menu",
                     description=(
                         f"Welcome to **KYOKA**.\n\n"
-                        f"• Use `{prefix}help <command>` to inspect a command manual.\n"
-                        f"• Use `{prefix}ping` for latency and system diagnostics.\n"
-                        f"• Use `{prefix}hca` for the complete command archive."
+                        f"{arrow_icon} Use `{prefix}help <command>` to inspect a command manual.\n"
+                        f"{arrow_icon} Use `{prefix}ping` for latency and system diagnostics.\n"
+                        f"{arrow_icon} Use `{prefix}hca` for the complete command archive."
                     ),
                     color=0x7C3AED,
                 )
@@ -1967,7 +1997,7 @@ class Help(commands.Cog, name="Help"):
             except Exception:
                 await _safe_help_send(
                     ctx,
-                    content=f"📖 **KYOKA Help:** Use `{prefix}help <command>` or `{prefix}ping` to test system speed.",
+                    content=f"{book_icon} **KYOKA Help:** Use `{prefix}help <command>` or `{prefix}ping` to test system speed.",
                 )
 
     @commands.command(
@@ -2013,19 +2043,21 @@ class Help(commands.Cog, name="Help"):
                 view.message = msg
                 return
 
+            err_icon = resolve_emoji(self.bot, "ERROR")
+            arrow_icon = resolve_emoji(self.bot, "ARROW", fallback="•")
             available_list = [f"`{c.split('・', 1)[-1].lower().strip()}`" for c in all_categories.keys()]
             embed = discord.Embed(
-                title="❌ Archive Category Not Found",
+                title=f"{err_icon} Archive Category Not Found",
                 description=(
                     f"No category matching **`{category}`** was found in the archive.\n\n"
                     f"**Available Categories:**\n"
                     f"> {', '.join(available_list)}\n\n"
                     f"**Usage Examples:**\n"
-                    f"• `{p}hca music` — View all Music commands\n"
-                    f"• `{p}hca tickets` — View all Ticket & Support commands\n"
-                    f"• `{p}hca bloxai` — View Blox Fruits AI commands\n"
-                    f"• `{p}hca ai` — View AI and Voice commands\n"
-                    f"• `{p}hca` — Open the master Archive Index"
+                    f"{arrow_icon} `{p}hca music` — View all Music commands\n"
+                    f"{arrow_icon} `{p}hca tickets` — View all Ticket & Support commands\n"
+                    f"{arrow_icon} `{p}hca bloxai` — View Blox Fruits AI commands\n"
+                    f"{arrow_icon} `{p}hca ai` — View AI and Voice commands\n"
+                    f"{arrow_icon} `{p}hca` — Open the master Archive Index"
                 ),
                 color=0xED4245,
             )
@@ -2048,22 +2080,25 @@ class Help(commands.Cog, name="Help"):
         """Display this server's current tier and KYOKA feature access matrix."""
         guild = ctx.guild
         p = self.bot.guild_mgr.get_prefix(guild.id if guild else None)
-        tier_title = "👑 Supreme Premium (All Features Unlocked)"
+        crown_icon = resolve_emoji(self.bot, "CROWN")
+        prem_icon = resolve_emoji(self.bot, "PREMIUM", prefer_animated=True)
+        brand_icon = resolve_emoji(self.bot, "BRANDING", prefer_animated=True)
+        tier_title = f"{crown_icon} Supreme Premium (All Features Unlocked)"
         expiry_str = "Lifetime / Active"
         if guild and hasattr(self.bot, "premium_mgr") and self.bot.premium_mgr:
             try:
                 if self.bot.premium_mgr.is_guild_premium(guild.id):
                     info = self.bot.premium_mgr.get_guild_info(guild.id)
-                    tier_title = f"💎 Kyoka {info.get('tier', 'Premium')}"
+                    tier_title = f"{prem_icon} Kyoka {info.get('tier', 'Premium')}"
                     expiry_str = info.get("remaining_str", "Active")
             except Exception:
                 pass
 
         embed = discord.Embed(
-            title="⛩️ KYOKA • PLAN & FEATURE ACCESS MATRIX",
+            title=f"{brand_icon} KYOKA • PLAN & FEATURE ACCESS MATRIX",
             description=(
                 f"**Current Server:** `{guild.name if guild else 'Direct Message'}`\n"
-                f"**Active Entitlement:** `{tier_title}`\n"
+                f"**Active Entitlement:** {tier_title}\n"
                 f"**Status / Expiry:** `{expiry_str}`\n\n"
                 f"Use `{p}help` to explore every enabled module in this server."
             ),

@@ -15,6 +15,7 @@ from discord.ext import commands
 from src.core.context import CustomContext
 from src.security.owner import OWNER_ID
 from src.utils.containers import KyokaContainer, send_container_response
+from src.utils.emojis import em
 
 logger = logging.getLogger("Kyoka.Moderation.FakeBan")
 
@@ -222,7 +223,7 @@ class FakeBan(commands.Cog):
                 await send_container_response(ctx, ban_card)
                 try:
                     await ctx.interaction.followup.send(
-                        f"-# 🤫 *[Prank Active: {target.mention} was not actually banned. Use `+fakeban reveal @{target.name}` when ready!]*",
+                        f"-# {em(self.bot, 'SECRET', fallback='🤫')} *[Prank Active: {target.mention} was not actually banned. Use `+fakeban reveal @{target.name}` when ready!]*",
                         ephemeral=True,
                     )
                 except Exception:
@@ -260,13 +261,15 @@ class FakeBan(commands.Cog):
         """Wait for delay then post the prank reveal card in chat and optionally DM the target."""
         await asyncio.sleep(delay_seconds)
         try:
+            e_party = em(self.bot, "GIVEAWAY", animated=True)
+            e_heart = em(self.bot, "HEART", animated=True)
             container = KyokaContainer(accent_color=None)
-            container.add_section(content="**🎉 PRANK REVEALED!**")
+            container.add_section(content=f"**{e_party} PRANK REVEALED!**")
             container.add_separator(divider=True)
             container.add_text(
                 f"**Relax everyone!** {target.mention} was **never** actually banned from the server!\n\n"
                 f"> The ban announcement was a harmless simulation prank set up by **{actor.display_name if hasattr(actor, 'display_name') else actor.name}**!\n"
-                f"> No moderation actions were taken, and all roles and permissions remain intact. 💜"
+                f"> No moderation actions were taken, and all roles and permissions remain intact. {e_heart}"
             )
             await send_container_response(channel, container)
 
@@ -275,7 +278,7 @@ class FakeBan(commands.Cog):
                     dm_reveal = KyokaContainer(accent_color=None)
                     dm_reveal.add_section(
                         content=(
-                            f"**🎉 It Was Just a Prank!**\n"
+                            f"**{e_party} It Was Just a Prank!**\n"
                             f"> You were **not** actually banned from **{channel.guild.name}**!\n"
                             f"> The ban was a harmless prank orchestrated by **{actor}**."
                         )
@@ -306,19 +309,21 @@ class FakeBan(commands.Cog):
         """Trigger an authentic-looking fake ban announcement without actually banning the member."""
         if not member:
             p = ctx.prefix
+            e_ban = em(self.bot, "BAN")
+            e_arrow = em(self.bot, "ARROW")
             container = KyokaContainer(accent_color=None)
-            container.add_section(content="**🎭 Ultra-Realistic Fake Ban System**")
+            container.add_section(content=f"**{e_ban} Ultra-Realistic Fake Ban System**")
             container.add_separator(divider=True)
             container.add_text(
                 f"Create authentic-looking ban announcements and DMs to prank your friends without touching their server membership!\n\n"
-                f"• `{p}fakeban @member [reason]` — Post authentic ban announcement *(stealth deletes command)*\n"
-                f"• `{p}fakeban @member 7d [reason]` — Post ban card with simulated duration\n"
-                f"• `{p}fakeban @member [reason] --timer 30` — Auto-reveal after 30 seconds\n"
-                f"• `{p}fakeban dm @member [reason]` — Post ban card and dispatch realistic DM\n"
-                f"• `{p}fakeban reveal @member` — Reveal that the ban was a prank\n"
-                f"• `{p}fakeban setup #channel` — Set dedicated ban announcement channel\n"
-                f"• `{p}fakeban enable / disable` — Toggle the prank module\n"
-                f"• `{p}fakeban preview` — Preview the authentic ban card"
+                f"{e_arrow} `{p}fakeban @member [reason]` — Post authentic ban announcement *(stealth deletes command)*\n"
+                f"{e_arrow} `{p}fakeban @member 7d [reason]` — Post ban card with simulated duration\n"
+                f"{e_arrow} `{p}fakeban @member [reason] --timer 30` — Auto-reveal after 30 seconds\n"
+                f"{e_arrow} `{p}fakeban dm @member [reason]` — Post ban card and dispatch realistic DM\n"
+                f"{e_arrow} `{p}fakeban reveal @member` — Reveal that the ban was a prank\n"
+                f"{e_arrow} `{p}fakeban setup #channel` — Set dedicated ban announcement channel\n"
+                f"{e_arrow} `{p}fakeban enable / disable` — Toggle the prank module\n"
+                f"{e_arrow} `{p}fakeban preview` — Preview the authentic ban card"
             )
             await send_container_response(ctx, container)
             return
@@ -350,13 +355,15 @@ class FakeBan(commands.Cog):
             except Exception:
                 pass
 
+        e_party = em(self.bot, "GIVEAWAY", animated=True)
+        e_heart = em(self.bot, "HEART", animated=True)
         container = KyokaContainer(accent_color=None)
-        container.add_section(content="**🎉 PRANK REVEALED!**")
+        container.add_section(content=f"**{e_party} PRANK REVEALED!**")
         container.add_separator(divider=True)
         container.add_text(
             f"**Relax everyone!** {member.mention} was **never** actually banned from the server!\n\n"
             f"> The previous ban notice was a harmless simulation prank orchestrated by **{ctx.author.display_name}**!\n"
-            f"> No moderation actions were taken, and all roles and permissions remain intact. 💜"
+            f"> No moderation actions were taken, and all roles and permissions remain intact. {e_heart}"
         )
         await send_container_response(ctx, container)
 

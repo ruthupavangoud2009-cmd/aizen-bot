@@ -14,6 +14,7 @@ from discord.ext import commands
 from src.core.config import Config
 from src.core.context import CustomContext
 from src.security.owner import is_primary_owner, is_owner_or_staff
+from src.utils.emojis import em
 
 if TYPE_CHECKING:
     from src.core.bot import KyokaBot
@@ -67,12 +68,12 @@ class Prefix(commands.Cog, name="Admin-Prefix"):
         Old prefixes (such as +, ?, etc.) will no longer be accepted.
         """
         if not self._can_manage_prefix(ctx):
-            await ctx.send_warning("❌ You need **Manage Server** permission or Server Ownership to change the bot prefix.")
+            await ctx.send_warning("You need **Manage Server** permission or Server Ownership to change the bot prefix.")
             return
 
         valid, err = self._validate_prefix(new_prefix)
         if not valid:
-            await ctx.send_warning(f"❌ {err}")
+            await ctx.send_warning(str(err))
             return
 
         clean_prefix = new_prefix.strip()
@@ -81,14 +82,18 @@ class Prefix(commands.Cog, name="Admin-Prefix"):
         old_prefix = self.bot.guild_mgr.get_prefix(ctx.guild.id)
         await self.bot.guild_mgr.set_prefix(ctx.guild.id, clean_prefix)
 
+        e_brand = em(self.bot, "BRANDING", animated=True)
+        e_ok = em(self.bot, "SUCCESS", animated=True)
+        e_warn = em(self.bot, "WARNING")
+        e_arrow = em(self.bot, "ARROW")
         embed = discord.Embed(
-            title="⛩️ KYOKA 3.0 • PREFIX CONFIGURED",
+            title=f"{e_brand} KYOKA 3.0 • PREFIX CONFIGURED",
             description=(
-                f"✅ **Command prefix for `{ctx.guild.name}` has been successfully updated!**\n\n"
-                f"• **New Active Prefix:** `{clean_prefix}`\n"
-                f"• **Previous Prefix:** `{old_prefix}` *(No longer recognized)*\n"
-                f"• **Slash Commands:** `/` *(Always available)*\n\n"
-                f"⚠️ **Single Active Prefix Enforced:**\n"
+                f"{e_ok} **Command prefix for `{ctx.guild.name}` has been successfully updated!**\n\n"
+                f"{e_arrow} **New Active Prefix:** `{clean_prefix}`\n"
+                f"{e_arrow} **Previous Prefix:** `{old_prefix}` *(No longer recognized)*\n"
+                f"{e_arrow} **Slash Commands:** `/` *(Always available)*\n\n"
+                f"{e_warn} **Single Active Prefix Enforced:**\n"
                 f"> All subsequent text commands in this server must now begin with `{clean_prefix}`.\n"
                 f"> Try running: `{clean_prefix}help` or `{clean_prefix}prefix`."
             ),
@@ -123,25 +128,28 @@ class Prefix(commands.Cog, name="Admin-Prefix"):
         Usage: +resetprefix or !resetprefix
         """
         if not self._can_manage_prefix(ctx):
-            await ctx.send_warning("❌ You need **Manage Server** permission or Server Ownership to reset the bot prefix.")
+            await ctx.send_warning("You need **Manage Server** permission or Server Ownership to reset the bot prefix.")
             return
 
         old_prefix = self.bot.guild_mgr.get_prefix(ctx.guild.id)
         default_p = Config.DEFAULT_PREFIX
 
         if old_prefix == default_p:
-            await ctx.send_info(f"ℹ️ This server is already using the default prefix (`{default_p}`).")
+            await ctx.send_info(f"This server is already using the default prefix (`{default_p}`).")
             return
 
         await self.bot.guild_mgr.reset_prefix(ctx.guild.id)
 
+        e_brand = em(self.bot, "BRANDING", animated=True)
+        e_ok = em(self.bot, "SUCCESS", animated=True)
+        e_arrow = em(self.bot, "ARROW")
         embed = discord.Embed(
-            title="⛩️ KYOKA 3.0 • PREFIX RESTORED",
+            title=f"{e_brand} KYOKA 3.0 • PREFIX RESTORED",
             description=(
-                f"✅ **Command prefix for `{ctx.guild.name}` has been reset to default.**\n\n"
-                f"• **Active Prefix:** `{default_p}`\n"
-                f"• **Previous Prefix:** `{old_prefix}` *(Revoked)*\n"
-                f"• **Example Command:** `{default_p}help`\n\n"
+                f"{e_ok} **Command prefix for `{ctx.guild.name}` has been reset to default.**\n\n"
+                f"{e_arrow} **Active Prefix:** `{default_p}`\n"
+                f"{e_arrow} **Previous Prefix:** `{old_prefix}` *(Revoked)*\n"
+                f"{e_arrow} **Example Command:** `{default_p}help`\n\n"
                 f"> Use `{default_p}setprefix <new_prefix>` anytime to customize it again."
             ),
             color=0x7C3AED,
@@ -165,17 +173,19 @@ class Prefix(commands.Cog, name="Admin-Prefix"):
         default_p = Config.DEFAULT_PREFIX
         is_custom = current_p != default_p
 
+        e_brand = em(self.bot, "BRANDING", animated=True)
+        e_arrow = em(self.bot, "ARROW")
         embed = discord.Embed(
-            title=f"⛩️ Command Prefix • {ctx.guild.name}",
+            title=f"{e_brand} Command Prefix • {ctx.guild.name}",
             description=(
-                f"• **Active Text Prefix:** `{current_p}`\n"
-                f"• **Prefix Status:** `{'Custom Guild Prefix' if is_custom else 'Default Global Prefix'}`\n"
-                f"• **Slash Commands:** `/<command>` *(Prefix-independent)*\n"
-                f"• **Mention Invocation:** `<@{self.bot.user.id}> <command>`\n\n"
+                f"{e_arrow} **Active Text Prefix:** `{current_p}`\n"
+                f"{e_arrow} **Prefix Status:** `{'Custom Guild Prefix' if is_custom else 'Default Global Prefix'}`\n"
+                f"{e_arrow} **Slash Commands:** `/<command>` *(Prefix-independent)*\n"
+                f"{e_arrow} **Mention Invocation:** `<@{self.bot.user.id}> <command>`\n\n"
                 f"**Quick Usage Examples:**\n"
-                f"• `{current_p}help` — Browse all accessible commands\n"
-                f"• `{current_p}setprefix <symbol>` — (Admin) Set a custom prefix\n"
-                f"• `{current_p}resetprefix` — (Admin) Reset to default `{default_p}`"
+                f"{e_arrow} `{current_p}help` — Browse all accessible commands\n"
+                f"{e_arrow} `{current_p}setprefix <symbol>` — (Admin) Set a custom prefix\n"
+                f"{e_arrow} `{current_p}resetprefix` — (Admin) Reset to default `{default_p}`"
             ),
             color=0x7C3AED,
         )

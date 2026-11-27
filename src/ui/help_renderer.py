@@ -13,7 +13,8 @@ import discord
 
 from src.ui.theme import KyokaTheme
 from src.ui.asset_manager import AssetManager
-from src.ui.categories import CATEGORY_BY_TAG, get_category_by_query
+from src.ui.categories import CATEGORY_BY_TAG, get_category_by_query, resolve_category_emoji
+from src.utils.emojis import em
 
 logger = logging.getLogger("Kyoka.UI.HelpRenderer")
 
@@ -37,26 +38,36 @@ class HelpRenderer:
         total_commands: int,
         total_categories: int,
         guild_name: Optional[str] = None,
+        bot: Any = None,
     ) -> KyokaHelpEmbed:
         """Render the compact home console embed with high-res Aizen hero banner."""
+        e_brand = em(bot, "BRANDING")
+        e_sparkle = em(bot, "SPARKLE", animated=True)
+        e_info = em(bot, "INFO")
+        e_cat = em(bot, "CATEGORY")
+        e_search = em(bot, "SEARCH")
+        e_prev = em(bot, "PREV")
+        e_next = em(bot, "NEXT")
+        e_arrow = em(bot, "ARROW")
+
         embed = KyokaHelpEmbed(
-            title="⛩️ KYOKA 3.0 • Command Console",
+            title=f"{e_brand} KYOKA 3.0 • Command Console",
             description=(
                 f"*\"Power isn't given. It's taken.\"* — **Aizen**\n\n"
                 f"> **More Than a Bot, It's a Presence.**{f' Serving **{guild_name}**.' if guild_name else ''}\n"
                 f"> Built for high-performance communities: high-fidelity audio, Blox Fruits AI,\n"
                 f"> automated moderation, enterprise tickets, and community entertainment.\n\n"
-                f"⚡ **Quick Start:**\n"
-                f"• **Get Started:** Type `{prefix}help` to open the command menu\n"
-                f"• **Use Prefix:** All commands work with `{prefix}` (e.g. `{prefix}play`, `{prefix}ai`)\n"
-                f"• **Explore Categories:** Use the interactive menu or `{prefix}hca` for full archive\n"
-                f"• **Need Support?** Type `{prefix}ticket` or join our official support server"
+                f"{e_sparkle} **Quick Start:**\n"
+                f"{e_arrow} **Get Started:** Type `{prefix}help` to open the command menu\n"
+                f"{e_arrow} **Use Prefix:** All commands work with `{prefix}` (e.g. `{prefix}play`, `{prefix}ai`)\n"
+                f"{e_arrow} **Explore Categories:** Use the interactive menu or `{prefix}hca` for full archive\n"
+                f"{e_arrow} **Need Support?** Type `{prefix}ticket` or join our official support server"
             ),
             color=KyokaTheme.PRIMARY,
         )
 
         embed.add_field(
-            name="📊 Command Library",
+            name=f"{e_info} Command Library",
             value=(
                 f"**{total_commands} commands** · **{total_categories} modules**\n"
                 f"Prefix `{prefix}`  •  Slash commands available where supported"
@@ -65,18 +76,18 @@ class HelpRenderer:
         )
 
         embed.add_field(
-            name="🧩 Modular Navigation",
+            name=f"{e_cat} Modular Navigation",
             value=(
                 "Choose a module from the selector below to open its command shelf. "
                 "Each page keeps commands grouped, with usage and aliases at a glance.\n"
                 "━━━━━━━━━━━━━━━━━━━━\n"
-                "◀ **Previous**  ·  **Home**  ·  **Next** ▶"
+                f"{e_prev} **Previous**  ·  **Home**  ·  **Next** {e_next}"
             ),
             inline=False,
         )
 
         embed.add_field(
-            name="🔎 Quick Lookup",
+            name=f"{e_search} Quick Lookup",
             value=(
                 f"Search from the panel, or run `{prefix}help <command>` for a command's "
                 "syntax, aliases, type, and permission details.\n"
@@ -101,6 +112,7 @@ class HelpRenderer:
         page: int,
         total_pages: int,
         prefix: str,
+        bot: Any = None,
     ) -> KyokaHelpEmbed:
         """
         Render a category page with 5-15 commands, each displaying:
@@ -111,13 +123,16 @@ class HelpRenderer:
         - Distinct category artwork
         """
         clean_title = category_name.split("・", 1)[-1].strip() if "・" in category_name else category_name
+        cat_meta = CATEGORY_BY_TAG.get(category_name) or get_category_by_query(clean_title)
+        cat_icon = resolve_category_emoji(cat_meta, bot=bot) if cat_meta else em(bot, "SPARKLE", animated=True)
+        e_arrow = em(bot, "ARROW")
+
         embed = KyokaHelpEmbed(
-            title=f"🌀 {category_name.upper()} MODULE",
+            title=f"{cat_icon} {clean_title.upper()} MODULE",
             description=f"Showing page **{page}** of **{max(1, total_pages)}** • Use `{prefix}help <cmd>` for deep inspect.",
             color=KyokaTheme.PRIMARY,
         )
 
-        cat_meta = CATEGORY_BY_TAG.get(category_name) or get_category_by_query(clean_title)
         image_key = cat_meta.image_key if cat_meta else "general"
         banner_file = AssetManager.attach_help_banner(embed, image_key)
         embed.banner_file = banner_file
@@ -137,7 +152,7 @@ class HelpRenderer:
             alias_str = f" `[{', '.join(aliases[:3])}]`" if aliases else ""
             badge = " `[/]`" if is_slash else f" `[{prefix}]`"
 
-            field_title = f"`{prefix}{name}`{alias_str}{badge}"
+            field_title = f"{e_arrow} `{prefix}{name}`{alias_str}{badge}"
             field_value = f"{desc[:100]}\n> **Usage:** `{usage}`"
 
             embed.add_field(
@@ -161,27 +176,35 @@ class HelpRenderer:
         prefix: str,
         permissions: Optional[List[str]] = None,
         is_slash: bool = False,
+        bot: Any = None,
     ) -> discord.Embed:
         """Render detailed inspection card for a single command."""
+        e_sparkle = em(bot, "SPARKLE", animated=True)
+        e_cat = em(bot, "CATEGORY")
+        e_bot = em(bot, "BOT")
+        e_refresh = em(bot, "REFRESH")
+        e_info = em(bot, "INFO")
+        e_mod = em(bot, "MODERATION")
+
         embed = discord.Embed(
-            title=f"🌀 Command Details: `{prefix}{name}`",
+            title=f"{e_sparkle} Command Details: `{prefix}{name}`",
             description=description or "No documentation provided.",
             color=KyokaTheme.ACCENT,
         )
 
-        embed.add_field(name="📂 Category", value=f"`{category}`", inline=True)
-        embed.add_field(name="⚡ Type", value="`Slash Command`" if is_slash else "`Prefix Command`", inline=True)
-        embed.add_field(name="🔄 Aliases", value=", ".join(f"`{a}`" for a in aliases) if aliases else "*None*", inline=True)
+        embed.add_field(name=f"{e_cat} Category", value=f"`{category}`", inline=True)
+        embed.add_field(name=f"{e_bot} Type", value="`Slash Command`" if is_slash else "`Prefix Command`", inline=True)
+        embed.add_field(name=f"{e_refresh} Aliases", value=", ".join(f"`{a}`" for a in aliases) if aliases else "*None*", inline=True)
 
         embed.add_field(
-            name="📝 Usage Syntax",
+            name=f"{e_info} Usage Syntax",
             value=f"```{usage or f'{prefix}{name}'}```",
             inline=False,
         )
 
         if permissions:
             embed.add_field(
-                name="🛡️ Required Permissions",
+                name=f"{e_mod} Required Permissions",
                 value=", ".join(f"`{p}`" for p in permissions),
                 inline=False,
             )

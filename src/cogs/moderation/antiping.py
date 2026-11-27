@@ -15,6 +15,7 @@ from discord.ext import commands
 
 from src.core.context import CustomContext
 from src.utils.containers import KyokaContainer, send_container_response
+from src.utils.emojis import em
 
 if TYPE_CHECKING:
     from src.core.bot import KyokaBot
@@ -326,10 +327,14 @@ class AntiPingCog(commands.Cog, name="AntiPing"):
         action, timeout_sec = self._get_action(guild_id)
         wl = self._whitelist.get(guild_id, set())
 
-        status_badge = "🟢 **Active & Protecting**" if enabled else "🔴 **Disabled**"
+        e_on = em(self.bot, "ONLINE")
+        e_off = em(self.bot, "DND")
+        e_shield = em(self.bot, "ANTINUKE", animated=True)
+        e_arrow = em(self.bot, "ARROW")
+        status_badge = f"{e_on} **Active & Protecting**" if enabled else f"{e_off} **Disabled**"
 
         container = KyokaContainer(accent_color=None)
-        container.add_section(content="**🛡️ Anti-Ping Role Protection**")
+        container.add_section(content=f"**{e_shield} Anti-Ping Role Protection**")
         container.add_separator(divider=True)
 
         # Build list of protected roles
@@ -339,9 +344,9 @@ class AntiPingCog(commands.Cog, name="AntiPing"):
             for rid in protected:
                 r = ctx.guild.get_role(rid)
                 if r:
-                    role_lines.append(f"• {r.mention} `@{r.name}` `「{r.id}」`")
+                    role_lines.append(f"{e_arrow} {r.mention} `@{r.name}` `「{r.id}」`")
                 else:
-                    role_lines.append(f"• `[Deleted Role: {rid}]`")
+                    role_lines.append(f"{e_arrow} `[Deleted Role: {rid}]`")
             roles_text = "\n".join(role_lines)
         else:
             roles_text = "*No roles currently protected. Add one using `+antiping add @role`!*"
@@ -352,13 +357,13 @@ class AntiPingCog(commands.Cog, name="AntiPing"):
             f"**Protected Roles ({len(protected)}):**\n{roles_text}\n\n"
             f"**Whitelisted Entities ({len(wl)}):** `{len(wl)} exempt users/roles`\n\n"
             f"**Management Commands:**\n"
-            f"• `{p}antiping add @role` — Protect a role so no one can ping it\n"
-            f"• `{p}antiping remove @role` — Remove a role from protection\n"
-            f"• `{p}antiping list` — View all protected roles\n"
-            f"• `{p}antiping action <delete|timeout|kick>` — Set punishment\n"
-            f"• `{p}antiping timeout <seconds>` — Configure timeout duration\n"
-            f"• `{p}antiping whitelist add/remove <@user/@role>` — Manage immunity\n"
-            f"• `{p}antiping enable / disable` — Toggle system"
+            f"{e_arrow} `{p}antiping add @role` — Protect a role so no one can ping it\n"
+            f"{e_arrow} `{p}antiping remove @role` — Remove a role from protection\n"
+            f"{e_arrow} `{p}antiping list` — View all protected roles\n"
+            f"{e_arrow} `{p}antiping action <delete|timeout|kick>` — Set punishment\n"
+            f"{e_arrow} `{p}antiping timeout <seconds>` — Configure timeout duration\n"
+            f"{e_arrow} `{p}antiping whitelist add/remove <@user/@role>` — Manage immunity\n"
+            f"{e_arrow} `{p}antiping enable / disable` — Toggle system"
         )
         await send_container_response(ctx, container)
 
@@ -404,7 +409,7 @@ class AntiPingCog(commands.Cog, name="AntiPing"):
         container.add_section(content="**Role Added to AntiPing Protection**")
         container.add_separator(divider=True)
         container.add_text(
-            f"✅ **Protected Role:** {role.mention} `@{role.name}` `「{role.id}」`\n\n"
+            f"{em(self.bot, 'SUCCESS', animated=True)} **Protected Role:** {role.mention} `@{role.name}` `「{role.id}」`\n\n"
             f"> Anyone who mentions this role in chat will immediately have their message deleted and face the configured punishment.{mentionable_note}"
         )
         await send_container_response(ctx, container)
@@ -435,7 +440,7 @@ class AntiPingCog(commands.Cog, name="AntiPing"):
         container = KyokaContainer(accent_color=None)
         container.add_section(content="**Role Removed from AntiPing Protection**")
         container.add_separator(divider=True)
-        container.add_text(f"🗑️ {role.mention} `@{role.name}` has been removed from AntiPing protection.")
+        container.add_text(f"{em(self.bot, 'DELETE')} {role.mention} `@{role.name}` has been removed from AntiPing protection.")
         await send_container_response(ctx, container)
 
     @antiping_group.command(name="list", description="List all roles protected by AntiPing in this server.")

@@ -15,6 +15,7 @@ import discord
 from src.ui.theme import KyokaTheme
 from src.ui.asset_manager import AssetManager
 from src.ui.help_renderer import KyokaHelpEmbed
+from src.utils.emojis import em
 
 
 class FeatureRenderer:
@@ -34,10 +35,12 @@ class FeatureRenderer:
         queue_count: int = 0,
         track_url: Optional[str] = None,
         thumbnail_url: Optional[str] = None,
+        bot: Any = None,
     ) -> KyokaHelpEmbed:
         """Render the sleek Eclipse Interface Now Playing card."""
+        e_music = em(bot, "MUSIC", animated=True)
         embed = KyokaHelpEmbed(
-            title=f"🎵 {title[:60]}",
+            title=f"{e_music} {title[:60]}",
             url=track_url if track_url else None,
             color=KyokaTheme.PRIMARY,
         )
@@ -70,11 +73,13 @@ class FeatureRenderer:
         personality: str = "aizen",
         latency_ms: Optional[int] = None,
         user_name: Optional[str] = None,
+        bot: Any = None,
     ) -> KyokaHelpEmbed:
         """Render conversational Aizen Gemini AI interaction card."""
         pers_clean = personality.title()
+        e_ai = em(bot, "SPARKLE", animated=True)
         embed = KyokaHelpEmbed(
-            title=f"⛩️ Kyoka AI · {pers_clean} Mind",
+            title=f"{e_ai} Kyoka AI · {pers_clean} Mind",
             description=response[:4000],
             color=KyokaTheme.PRIMARY,
         )
@@ -99,16 +104,20 @@ class FeatureRenderer:
         personality: str,
         status: str = "Active",
         latency_ms: Optional[int] = None,
+        bot: Any = None,
     ) -> KyokaHelpEmbed:
         """Render neural AI Voice channel control & TTS dashboard."""
+        e_voice = em(bot, "VOICE")
+        e_sparkle = em(bot, "SPARKLE", animated=True)
+        e_arrow = em(bot, "ARROW")
         embed = KyokaHelpEmbed(
-            title="🎙️ Neural Voice Matrix · Kyoka Suigetsu",
+            title=f"{e_voice} Neural Voice Matrix · Kyoka Suigetsu {e_sparkle}",
             description=(
-                f"> **Voice Channel:** `🔊 {channel_name}`\n"
+                f"> **Voice Channel:** `{channel_name}`\n"
                 f"> **Personality Core:** `{personality.title()}`\n"
                 f"> **Synthesizer Status:** `{status}`\n\n"
-                f"• Speak naturally with `@Kyoka` or use `+aivoice speak <text>`\n"
-                f"• Use `+aivoice stop` to silence or `+aivoice leave` to disconnect."
+                f"{e_arrow} Speak naturally with `@Kyoka` or use `+aivoice speak <text>`\n"
+                f"{e_arrow} Use `+aivoice stop` to silence or `+aivoice leave` to disconnect."
             ),
             color=KyokaTheme.PRIMARY,
         )
@@ -127,20 +136,24 @@ class FeatureRenderer:
         market_value: Optional[str] = None,
         trade_demand: Optional[str] = None,
         requester: Optional[str] = None,
+        bot: Any = None,
     ) -> KyokaHelpEmbed:
         """Render Blox Fruits game analysis, fruit values, and carry guides."""
+        e_bf = em(bot, "BLOXFRUITS")
+        e_stats = em(bot, "STATS")
+        e_arrow = em(bot, "ARROW")
         embed = KyokaHelpEmbed(
-            title=f"🍎 Blox Fruits Companion • {topic.title()}",
+            title=f"{e_bf} Blox Fruits Companion • {topic.title()}",
             description=f"> {advice[:2000]}",
             color=KyokaTheme.PRIMARY,
         )
 
         if fruit_name and (market_value or trade_demand):
             embed.add_field(
-                name=f"📊 Market Valuation: {fruit_name}",
+                name=f"{e_stats} Market Valuation: {fruit_name}",
                 value=(
-                    f"• **Value:** `{market_value or 'N/A'}`\n"
-                    f"• **Trade Demand:** `{trade_demand or 'Stable'}`"
+                    f"{e_arrow} **Value:** `{market_value or 'N/A'}`\n"
+                    f"{e_arrow} **Trade Demand:** `{trade_demand or 'Stable'}`"
                 ),
                 inline=False,
             )
@@ -167,51 +180,62 @@ class FeatureRenderer:
         notes: str = "",
         created_timestamp: int = 0,
         guild_name: str = "KYŌKA SERVICES",
+        bot: Any = None,
     ) -> KyokaHelpEmbed:
         """Render official itemized Blox Fruits service receipt and ledger card."""
         is_paid = status.upper() == "PAID"
-        status_icon = "🟢" if is_paid else "🟡"
+        status_icon = em(bot, "ONLINE") if is_paid else em(bot, "IDLE")
         status_label = "PAID & VERIFIED" if is_paid else "PENDING PAYMENT"
         color = KyokaTheme.SUCCESS if is_paid else KyokaTheme.PRIMARY
+
+        e_bills = em(bot, "BILLS")
+        e_arrow = em(bot, "ARROW")
+        e_user = em(bot, "USER")
+        e_shield = em(bot, "MODERATION")
+        e_tag = em(bot, "ROLES")
+        e_box = em(bot, "ARCHIVE")
+        e_coin = em(bot, "ECONOMY", animated=True)
+        e_stats = em(bot, "STATS")
+        e_edit = em(bot, "EDIT")
 
         created_str = f"<t:{created_timestamp}:f> (<t:{created_timestamp}:R>)" if created_timestamp else "Recent"
 
         embed = KyokaHelpEmbed(
-            title=f"🧾 {guild_name} • INVOICE `{invoice_id}`",
+            title=f"{e_bills} {guild_name} • INVOICE `{invoice_id}`",
             description=(
                 f"**Official Blox Fruits Service Receipt & Payment Ledger**\n"
-                f"• **Status:** {status_icon} **`{status_label}`**\n"
-                f"• **Issued:** {created_str}"
+                f"{e_arrow} **Status:** {status_icon} **`{status_label}`**\n"
+                f"{e_arrow} **Issued:** {created_str}"
             ),
             color=color,
         )
 
-        embed.add_field(name="👤 Customer", value=f"<@{customer_id}>\n`ID: {customer_id}`", inline=True)
-        embed.add_field(name="🛡️ Service Provider", value=f"<@{creator_id}>", inline=True)
-        embed.add_field(name="🏷️ Category", value=f"`{category}`", inline=True)
+        embed.add_field(name=f"{e_user} Customer", value=f"<@{customer_id}>\n`ID: {customer_id}`", inline=True)
+        embed.add_field(name=f"{e_shield} Service Provider", value=f"<@{creator_id}>", inline=True)
+        embed.add_field(name=f"{e_tag} Category", value=f"`{category}`", inline=True)
 
         embed.add_field(
-            name="📦 Service Details",
+            name=f"{e_box} Service Details",
             value=f"> {discord.utils.escape_markdown(service_item)}",
             inline=False,
         )
 
         embed.add_field(
-            name="💰 Agreed Payment / Total Due",
+            name=f"{e_coin} Agreed Payment / Total Due",
             value=f"**`{agreed_payment}`**",
             inline=True,
         )
 
         if subtotal > 0:
             embed.add_field(
-                name="📊 Price Breakdown",
+                name=f"{e_stats} Price Breakdown",
                 value=f"Subtotal: `{currency} {subtotal:,.2f}`\nTax: `{currency} {tax:,.2f}`\nTotal: `**{currency} {total:,.2f}**`",
                 inline=True,
             )
 
         if notes:
             embed.add_field(
-                name="📝 Payment Instructions & Terms",
+                name=f"{e_edit} Payment Instructions & Terms",
                 value=f"> {notes[:800]}",
                 inline=False,
             )
@@ -229,11 +253,14 @@ class FeatureRenderer:
         total_vouches: int,
         rating_avg: float = 5.0,
         recent_vouches: Optional[List[Dict[str, Any]]] = None,
+        bot: Any = None,
     ) -> KyokaHelpEmbed:
         """Render member trust summary and reputation profile."""
-        stars = "⭐" * int(round(rating_avg))
+        e_star = em(bot, "STAR")
+        e_vouch = em(bot, "VOUCH")
+        stars = e_star * max(1, min(5, int(round(rating_avg))))
         embed = KyokaHelpEmbed(
-            title=f"⭐ {target_name} • Trust & Reputation Profile",
+            title=f"{e_vouch} {target_name} • Trust & Reputation Profile",
             description=(
                 f"> **Total Verified Vouches:** `{total_vouches}`\n"
                 f"> **Average Rating:** {stars} (`{rating_avg:.1f}/5.0`)\n"
@@ -246,7 +273,7 @@ class FeatureRenderer:
         if recent_vouches:
             for v in recent_vouches[:3]:
                 stype = v.get("service_type", "General")
-                v_stars = "⭐" * int(v.get("rating", 5))
+                v_stars = f"{e_star} `{int(v.get('rating', 5))}/5`"
                 embed.add_field(
                     name=f"`#{v.get('id', 'VOUCH')}` {stype.title()} · {v_stars}",
                     value=f"> {v.get('reason', 'Great service!')}\n> *By <@{v.get('voucher_id', '0')}>*",
@@ -266,18 +293,21 @@ class FeatureRenderer:
         panels_count: int,
         panel_names: Optional[List[str]] = None,
         prefix: str = "+",
+        bot: Any = None,
     ) -> KyokaHelpEmbed:
         """Render the enterprise ticket system hub card."""
+        e_ticket = em(bot, "TICKET")
+        e_arrow = em(bot, "ARROW")
         p_list = ", ".join(f"`{name}`" for name in (panel_names or [])[:10]) or "*None configured yet*"
         embed = KyokaHelpEmbed(
-            title=f"🎫 Support Ticket Hub • {guild_name}",
+            title=f"{e_ticket} Support Ticket Hub • {guild_name}",
             description=(
                 f"> **Enterprise Support & Staff Claiming Engine**\n"
                 f"> Deploy customizable, secure ticket panels with HTML transcripts.\n\n"
-                f"• **Active Panels ({panels_count}):** {p_list}\n"
-                f"• **Deploy Panel:** `{prefix}ticket setup`\n"
-                f"• **Staff Controls:** `{prefix}ticket claim`, `{prefix}ticket close`\n"
-                f"• **HTML Transcripts:** Automatically saved & secure"
+                f"{e_arrow} **Active Panels ({panels_count}):** {p_list}\n"
+                f"{e_arrow} **Deploy Panel:** `{prefix}ticket setup`\n"
+                f"{e_arrow} **Staff Controls:** `{prefix}ticket claim`, `{prefix}ticket close`\n"
+                f"{e_arrow} **HTML Transcripts:** Automatically saved & secure"
             ),
             color=KyokaTheme.PRIMARY,
         )
@@ -292,15 +322,18 @@ class FeatureRenderer:
     def render_verification_card(
         guild_name: str,
         instructions: Optional[str] = None,
+        bot: Any = None,
     ) -> KyokaHelpEmbed:
         """Render the verification gatekeeper embed."""
+        e_ver = em(bot, "VERIFICATION", animated=True)
+        e_arrow = em(bot, "ARROW")
         embed = KyokaHelpEmbed(
-            title=f"🛡️ Gateway Verification • {guild_name}",
+            title=f"{e_ver} Gateway Verification • {guild_name}",
             description=(
                 f"> {instructions or 'To unlock access to the server, click the Verify button below.'}\n\n"
-                f"• **Security Policy:** Anti-raid challenge enforcement\n"
-                f"• **Permissions:** Access granted immediately upon verification\n"
-                f"• **Assistance:** Contact staff if you encounter difficulties."
+                f"{e_arrow} **Security Policy:** Anti-raid challenge enforcement\n"
+                f"{e_arrow} **Permissions:** Access granted immediately upon verification\n"
+                f"{e_arrow} **Assistance:** Contact staff if you encounter difficulties."
             ),
             color=KyokaTheme.PRIMARY,
         )
@@ -318,17 +351,21 @@ class FeatureRenderer:
         guild_name: str,
         member_count: int,
         avatar_url: Optional[str] = None,
+        bot: Any = None,
     ) -> KyokaHelpEmbed:
         """Render stylish welcome arrival card."""
+        e_welcome = em(bot, "WELCOME")
+        e_sparkle = em(bot, "SPARKLE", animated=True)
+        e_arrow = em(bot, "ARROW")
         embed = KyokaHelpEmbed(
-            title=f"👋 Welcome to {guild_name}!",
+            title=f"{e_welcome} Welcome to {guild_name}!",
             description=(
                 f"**A new presence enters the realm.**\n"
                 f"> Greetings, {member_mention}! You are member **#{member_count}**.\n\n"
-                f"⚡ **Next Steps:**\n"
-                f"• Check the server channels and rules\n"
-                f"• Type `+help` to inspect KYOKA's command console\n"
-                f"• Enjoy your journey!"
+                f"{e_sparkle} **Next Steps:**\n"
+                f"{e_arrow} Check the server channels and rules\n"
+                f"{e_arrow} Type `+help` to inspect KYOKA's command console\n"
+                f"{e_arrow} Enjoy your journey!"
             ),
             color=KyokaTheme.PRIMARY,
         )
@@ -346,10 +383,12 @@ class FeatureRenderer:
         guild_name: str,
         member_count: int,
         avatar_url: Optional[str] = None,
+        bot: Any = None,
     ) -> KyokaHelpEmbed:
         """Render departure card."""
+        e_leave = em(bot, "GOODBYE")
         embed = KyokaHelpEmbed(
-            title=f"Farewell from {guild_name}",
+            title=f"{e_leave} Farewell from {guild_name}",
             description=(
                 f"**A presence departs the citadel.**\n"
                 f"> **{member_name}** has left the server.\n"
@@ -375,21 +414,24 @@ class FeatureRenderer:
         reason: str,
         case_id: Optional[int] = None,
         duration: Optional[str] = None,
+        bot: Any = None,
     ) -> KyokaHelpEmbed:
         """Render high-contrast security audit moderation card."""
         action_upper = action.upper()
         is_danger = action_upper in ("BAN", "SOFTBAN", "NUKE")
         color = KyokaTheme.CRIMSON if is_danger else KyokaTheme.PRIMARY
+        e_mod = em(bot, "BAN" if is_danger else "MODERATION")
+        e_arrow = em(bot, "ARROW")
 
         case_tag = f"Case #{case_id:04d} • " if case_id else ""
-        dur_str = f"• **Duration:** `{duration}`\n" if duration else ""
+        dur_str = f"{e_arrow} **Duration:** `{duration}`\n" if duration else ""
         embed = KyokaHelpEmbed(
-            title=f"🛡️ {case_tag}{action_upper}",
+            title=f"{e_mod} {case_tag}{action_upper}",
             description=(
-                f"• **Target:** `{target_name}` (<@{target_id}>)\n"
-                f"• **Moderator:** `{moderator_name}`\n"
+                f"{e_arrow} **Target:** `{target_name}` (<@{target_id}>)\n"
+                f"{e_arrow} **Moderator:** `{moderator_name}`\n"
                 f"{dur_str}"
-                f"• **Reason:** {discord.utils.escape_markdown(reason)}"
+                f"{e_arrow} **Reason:** {discord.utils.escape_markdown(reason)}"
             ),
             color=color,
         )
@@ -407,16 +449,19 @@ class FeatureRenderer:
         end_timestamp: int,
         winners_count: int = 1,
         entries_count: int = 0,
+        bot: Any = None,
     ) -> KyokaHelpEmbed:
         """Render giveaway countdown panel."""
+        e_gw = em(bot, "GIVEAWAY")
+        e_arrow = em(bot, "ARROW")
         embed = KyokaHelpEmbed(
-            title=f"🎉 GIVEAWAY: {prize}",
+            title=f"{e_gw} GIVEAWAY: {prize}",
             description=(
-                f"> Click **🎉 Enter** below to participate!\n\n"
-                f"• **Host:** `{host_name}`\n"
-                f"• **Winners:** `{winners_count}`\n"
-                f"• **Entries:** `{entries_count}`\n"
-                f"• **Ends:** <t:{end_timestamp}:R> (<t:{end_timestamp}:f>)"
+                f"> Click **{e_gw} Enter** below to participate!\n\n"
+                f"{e_arrow} **Host:** `{host_name}`\n"
+                f"{e_arrow} **Winners:** `{winners_count}`\n"
+                f"{e_arrow} **Entries:** `{entries_count}`\n"
+                f"{e_arrow} **Ends:** <t:{end_timestamp}:R> (<t:{end_timestamp}:f>)"
             ),
             color=KyokaTheme.PRIMARY,
         )
@@ -433,18 +478,21 @@ class FeatureRenderer:
         reason: str,
         elapsed_seconds: Optional[float] = None,
         is_return: bool = False,
+        bot: Any = None,
     ) -> KyokaHelpEmbed:
         """Render AFK status set or welcome back card."""
         if is_return:
+            e_back = em(bot, "WELCOME")
             duration_str = f" after `{int(elapsed_seconds or 0)}s`" if elapsed_seconds else ""
             embed = KyokaHelpEmbed(
-                title=f"👋 Welcome back, {member_name}!",
+                title=f"{e_back} Welcome back, {member_name}!",
                 description=f"> Your AFK status has been cleared{duration_str}.",
                 color=KyokaTheme.SUCCESS,
             )
         else:
+            e_afk = em(bot, "AFK")
             embed = KyokaHelpEmbed(
-                title=f"💤 {member_name} is now AFK",
+                title=f"{e_afk} {member_name} is now AFK",
                 description=f"> **Reason:** {discord.utils.escape_markdown(reason)}",
                 color=KyokaTheme.PRIMARY,
             )
@@ -463,11 +511,13 @@ class FeatureRenderer:
         needed_xp: int,
         rank: int,
         total_xp: int,
+        bot: Any = None,
     ) -> KyokaHelpEmbed:
         """Render XP progress and server standing."""
+        e_lvl = em(bot, "LEVELING")
         bar = KyokaTheme.progress_bar(current_xp, needed_xp, length=12)
         embed = KyokaHelpEmbed(
-            title=f"⭐ Rank Standing • {member_name}",
+            title=f"{e_lvl} Rank Standing • {member_name}",
             description=(
                 f"> **Server Rank:** `#{rank}`\n"
                 f"> **Level:** `{level}`\n"
@@ -491,21 +541,29 @@ class FeatureRenderer:
         tier: str = "Free",
         expiration: Optional[str] = None,
         features: Optional[List[str]] = None,
+        bot: Any = None,
     ) -> KyokaHelpEmbed:
         """Render Kyoka Prime tier status and exclusive perks."""
-        status_tag = "💎 PRIME ACTIVE" if is_premium else "🔒 FREE EDITION"
+        e_prem = em(bot, "PREMIUM", animated=True)
+        e_lock = em(bot, "LOCK")
+        e_sparkle = em(bot, "SPARKLE", animated=True)
+        e_arrow = em(bot, "ARROW")
+        status_tag = f"{e_prem} PRIME ACTIVE" if is_premium else f"{e_lock} FREE EDITION"
         color = KyokaTheme.PRIMARY if is_premium else KyokaTheme.SECONDARY
 
-        feat_lines = "\n".join(f"• {f}" for f in (features or ["High-fidelity Audio", "Enterprise Tickets", "Blox Fruits AI"]))
+        feat_lines = "\n".join(
+            f"{e_arrow} {f}"
+            for f in (features or ["High-fidelity Audio", "Enterprise Tickets", "Blox Fruits AI"])
+        )
         expires_line = f"> **Expires:** `{expiration}`\n" if expiration else ""
 
         embed = KyokaHelpEmbed(
-            title=f"💎 Kyoka Prime • {guild_name}",
+            title=f"{e_prem} Kyoka Prime • {guild_name}",
             description=(
-                f"> **Status:** **`{status_tag}`**\n"
+                f"> **Status:** **{status_tag}**\n"
                 f"> **Current Tier:** `{tier}`\n"
                 f"{expires_line}\n"
-                f"✨ **Active Privileges:**\n{feat_lines}"
+                f"{e_sparkle} **Active Privileges:**\n{feat_lines}"
             ),
             color=color,
         )

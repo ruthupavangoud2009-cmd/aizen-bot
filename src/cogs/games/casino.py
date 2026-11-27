@@ -18,6 +18,7 @@ from discord.ext import commands
 
 from src.core.context import CustomContext
 from src.managers.economy_manager import EconomyManager
+from src.utils.emojis import em, resolve_select_emoji
 
 if TYPE_CHECKING:
     from src.core.bot import KyokaBot
@@ -42,6 +43,10 @@ class BlackjackGameView(discord.ui.View):
         self.player_hand = [self._draw(), self._draw()]
         self.dealer_hand = [self._draw(), self._draw()]
         self.is_over = False
+        bot_ref = getattr(cog, "bot", None)
+        self.btn_hit.emoji = resolve_select_emoji(bot_ref, "CASINO", fallback="🃏")
+        self.btn_stand.emoji = resolve_select_emoji(bot_ref, "STOP", fallback="🛑")
+        self.btn_double.emoji = resolve_select_emoji(bot_ref, "COINS", fallback="💰")
 
     def _draw(self) -> int:
         val = random.randint(1, 13)
@@ -107,15 +112,15 @@ class BlackjackGameView(discord.ui.View):
 
         if d_val > 21:
             await self.cog.eco.update_balance(self.guild_id, self.ctx.author.id, wallet_delta=self.bet, tx_type="blackjack", metadata="Dealer bust win")
-            final = f"🎉 **DEALER BUSTED ({d_val})!** You won **+{self.bet:,}**!"
+            final = f"{em(self.cog.bot, 'GIVEAWAY', animated=True)} **DEALER BUSTED ({d_val})!** You won **+{self.bet:,}**!"
         elif p_val > d_val:
             await self.cog.eco.update_balance(self.guild_id, self.ctx.author.id, wallet_delta=self.bet, tx_type="blackjack", metadata="Player win")
-            final = f"🏆 **YOU WIN!** ({p_val} vs {d_val}) • Won **+{self.bet:,}**!"
+            final = f"{em(self.cog.bot, 'BADGE')} **YOU WIN!** ({p_val} vs {d_val}) • Won **+{self.bet:,}**!"
         elif d_val > p_val:
             await self.cog.eco.update_balance(self.guild_id, self.ctx.author.id, wallet_delta=-self.bet, tx_type="blackjack", metadata="Dealer win")
-            final = f"💀 **DEALER WINS!** ({d_val} vs {p_val}) • Lost **-{self.bet:,}**."
+            final = f"{em(self.cog.bot, 'ERROR')} **DEALER WINS!** ({d_val} vs {p_val}) • Lost **-{self.bet:,}**."
         else:
-            final = f"🤝 **PUSH!** Both tied at **{p_val}** • Bet returned."
+            final = f"{em(self.cog.bot, 'INFO')} **PUSH!** Both tied at **{p_val}** • Bet returned."
 
         embed = self.build_embed(hide_dealer=False, final_text=final)
         await interaction.response.edit_message(embed=embed, view=self)
@@ -183,7 +188,7 @@ class HighLowGameView(discord.ui.View):
             self.streak += 1
             self.card = next_card
             embed = discord.Embed(
-                title=f"✅ Correct! Card: **{next_card}**",
+                title=f"{em(self.cog.bot, 'SUCCESS', animated=True)} Correct! Card: **{next_card}**",
                 description=f"> Streak: **{self.streak}** • Current multiplier: **{1.0 + (self.streak * 0.5):.1f}x**\n> Will the next card be higher or lower?",
                 color=EMBED_GREEN
             )
@@ -193,7 +198,7 @@ class HighLowGameView(discord.ui.View):
             for c in self.children: c.disabled = True
             await self.cog.eco.update_balance(self.guild_id, self.ctx.author.id, wallet_delta=-self.bet, tx_type="highlow", metadata="Lost highlow")
             embed = discord.Embed(
-                title=f"❌ Incorrect! Card was **{next_card}**",
+                title=f"{em(self.cog.bot, 'ERROR')} Incorrect! Card was **{next_card}**",
                 description=f"> You lost **-{self.bet:,}**!",
                 color=EMBED_RED
             )
@@ -525,14 +530,14 @@ class Casino(commands.Cog):
             payout = bet * (multiplier - 1)
             await self.eco.update_balance(guild_id, ctx.author.id, wallet_delta=payout, tx_type="roulette", metadata="Won roulette")
             embed = discord.Embed(
-                title=f"🎡 Roulette Landed on: **{rolled_num} ({rolled_color.title()})**!",
+                title=f"{em(self.bot, 'CASINO', animated=True)} Roulette Landed on: **{rolled_num} ({rolled_color.title()})**!",
                 description=f"> You predicted `{space}` accurately and won **+{payout:,}**!",
                 color=EMBED_GREEN
             )
         else:
             await self.eco.update_balance(guild_id, ctx.author.id, wallet_delta=-bet, tx_type="roulette", metadata="Lost roulette")
             embed = discord.Embed(
-                title=f"🎡 Roulette Landed on: **{rolled_num} ({rolled_color.title()})**!",
+                title=f"{em(self.bot, 'CASINO')} Roulette Landed on: **{rolled_num} ({rolled_color.title()})**!",
                 description=f"> You bet on `{space}` and lost **-{bet:,}**.",
                 color=EMBED_RED
             )
@@ -732,15 +737,15 @@ class Casino(commands.Cog):
                 payout = bet
             await self.eco.update_balance(guild_id, ctx.author.id, wallet_delta=payout, tx_type="baccarat", metadata=f"Won {outcome}")
             embed = discord.Embed(
-                title=f"🎴 Baccarat: {outcome.upper()} WINS! ({p_score} vs {b_score})",
-                description=f"> **Player Hand:** {p_cards} (Score: `{p_score}`)\n> **Banker Hand:** {b_cards} (Score: `{b_score}`)\n\n> 🏆 You predicted `{target_side}` and won **+{payout:,}**!",
+                title=f"{em(self.bot, 'CASINO', animated=True)} Baccarat: {outcome.upper()} WINS! ({p_score} vs {b_score})",
+                description=f"> **Player Hand:** {p_cards} (Score: `{p_score}`)\n> **Banker Hand:** {b_cards} (Score: `{b_score}`)\n\n> {em(self.bot, 'BADGE')} You predicted `{target_side}` and won **+{payout:,}**!",
                 color=EMBED_GREEN,
             )
         else:
             await self.eco.update_balance(guild_id, ctx.author.id, wallet_delta=-bet, tx_type="baccarat", metadata=f"Lost {outcome}")
             embed = discord.Embed(
-                title=f"🎴 Baccarat: {outcome.upper()} WINS! ({p_score} vs {b_score})",
-                description=f"> **Player Hand:** {p_cards} (Score: `{p_score}`)\n> **Banker Hand:** {b_cards} (Score: `{b_score}`)\n\n> 💀 You bet on `{target_side}` and lost **-{bet:,}**.",
+                title=f"{em(self.bot, 'CASINO')} Baccarat: {outcome.upper()} WINS! ({p_score} vs {b_score})",
+                description=f"> **Player Hand:** {p_cards} (Score: `{p_score}`)\n> **Banker Hand:** {b_cards} (Score: `{b_score}`)\n\n> {em(self.bot, 'ERROR')} You bet on `{target_side}` and lost **-{bet:,}**.",
                 color=EMBED_RED,
             )
         await ctx.send(embed=embed)

@@ -27,6 +27,7 @@ from src.core.config import Config
 from src.core.context import CustomContext
 from src.security.owner import is_owner_or_staff
 from src.utils.containers import KyokaContainer, send_container_response
+from src.utils.emojis import em, resolve_select_emoji
 
 if TYPE_CHECKING:
     from src.core.bot import KyokaBot
@@ -43,6 +44,7 @@ class SetupResetConfirmView(discord.ui.View):
         self.guild_id = guild_id
         self.user_id = user_id
         self.scope = scope.lower().strip()
+        self.confirm.emoji = resolve_select_emoji(bot, "WARNING", fallback="⚠️")
 
     @discord.ui.button(label="Confirm Reset", style=discord.ButtonStyle.danger, emoji="⚠️")
     async def confirm(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
@@ -95,7 +97,7 @@ class SetupResetConfirmView(discord.ui.View):
 
         summary = ", ".join(reset_msgs) if reset_msgs else self.scope
         await interaction.response.edit_message(
-            content=f"✅ **Reset Complete:** `{summary}` have been restored to factory defaults.",
+            content=f"{em(self.bot, 'SUCCESS', animated=True)} **Reset Complete:** `{summary}` have been restored to factory defaults.",
             view=self,
         )
 
@@ -106,7 +108,7 @@ class SetupResetConfirmView(discord.ui.View):
         for child in self.children:
             child.disabled = True
         self.stop()
-        await interaction.response.edit_message(content="❌ **Reset cancelled.**", view=self)
+        await interaction.response.edit_message(content=f"{em(self.bot, 'ERROR')} **Reset cancelled.**", view=self)
 
 
 class SetupWizardSelect(discord.ui.Select):
@@ -115,54 +117,55 @@ class SetupWizardSelect(discord.ui.Select):
     def __init__(self, cog: Onboarding, prefix: str) -> None:
         self.cog = cog
         self.prefix = prefix
+        bot_ref = getattr(cog, "bot", None)
         options = [
             discord.SelectOption(
                 label="Welcome Messages",
                 value="welcome",
                 description="Greet new members automatically when they join",
-                emoji="👋",
+                emoji=resolve_select_emoji(bot_ref, "WELCOME", fallback="👋"),
             ),
             discord.SelectOption(
                 label="Goodbye Messages",
                 value="goodbye",
                 description="Farewell announcement when members leave",
-                emoji="🚪",
+                emoji=resolve_select_emoji(bot_ref, "GOODBYE", fallback="🚪"),
             ),
             discord.SelectOption(
                 label="Moderation Logs",
                 value="logs",
                 description="Track bans, kicks, mutes, warnings, and locks",
-                emoji="🛡️",
+                emoji=resolve_select_emoji(bot_ref, "MODERATION", fallback="🛡️"),
             ),
             discord.SelectOption(
                 label="Community Suggestions",
                 value="suggestions",
                 description="Member ideas channel with upvote/downvote buttons",
-                emoji="💡",
+                emoji=resolve_select_emoji(bot_ref, "INFO", fallback="💡"),
             ),
             discord.SelectOption(
                 label="Join Autorole",
                 value="autorole",
                 description="Automatically give a role to newly joined members",
-                emoji="🏷️",
+                emoji=resolve_select_emoji(bot_ref, "ROLES", fallback="🏷️"),
             ),
             discord.SelectOption(
                 label="Support Tickets",
                 value="tickets",
                 description="Interactive ticket panel for private member support",
-                emoji="🎫",
+                emoji=resolve_select_emoji(bot_ref, "TICKET", fallback="🎫"),
             ),
             discord.SelectOption(
                 label="Level-up Announcements",
                 value="levels",
                 description="Broadcast XP rank advancements in a designated channel",
-                emoji="⭐",
+                emoji=resolve_select_emoji(bot_ref, "LEVELING", fallback="⭐"),
             ),
             discord.SelectOption(
                 label="AI Companion Chat",
                 value="ai",
                 description="Conversational AI channel with 10 customizable personas",
-                emoji="🤖",
+                emoji=resolve_select_emoji(bot_ref, "AI", fallback="🤖"),
             ),
         ]
         super().__init__(
@@ -175,80 +178,82 @@ class SetupWizardSelect(discord.ui.Select):
     async def callback(self, interaction: discord.Interaction) -> None:
         selected = self.values[0]
         prefix = self.prefix
+        b = self.cog.bot
+        arrow = em(b, "ARROW")
 
         guides = {
             "welcome": (
-                "👋 **Welcome Messages**\n"
+                f"{em(b, 'WELCOME')} **Welcome Messages**\n"
                 "> Automatically greet newly joined members with custom cards and messages.\n\n"
                 "**Required Permissions:**\n"
-                "• Bot needs `Send Messages` and `Embed Links` in target channel.\n\n"
+                f"{arrow} Bot needs `Send Messages` and `Embed Links` in target channel.\n\n"
                 f"**How to Configure:**\n"
                 f"`{prefix}setup welcome #channel` — Sets and enables the welcome channel.\n"
                 f"`{prefix}welcome test` — Send a test welcome greeting.\n"
                 f"`{prefix}welcome message <text>` — Customize the greeting message."
             ),
             "goodbye": (
-                "🚪 **Goodbye / Leave Messages**\n"
+                f"{em(b, 'GOODBYE')} **Goodbye / Leave Messages**\n"
                 "> Send an announcement whenever a member departs or leaves the server.\n\n"
                 "**Required Permissions:**\n"
-                "• Bot needs `Send Messages` and `Embed Links` in target channel.\n\n"
+                f"{arrow} Bot needs `Send Messages` and `Embed Links` in target channel.\n\n"
                 f"**How to Configure:**\n"
                 f"`{prefix}setup goodbye #channel` — Sets and enables the leave channel.\n"
                 f"`{prefix}leave test` — Preview the departure message."
             ),
             "logs": (
-                "🛡️ **Moderation Logs**\n"
+                f"{em(b, 'MODERATION')} **Moderation Logs**\n"
                 "> Audit trail for bans, kicks, timeouts, warnings, unbans, and channel locks.\n\n"
                 "**Required Permissions:**\n"
-                "• Bot needs `Send Messages`, `Embed Links`, and `View Audit Log`.\n\n"
+                f"{arrow} Bot needs `Send Messages`, `Embed Links`, and `View Audit Log`.\n\n"
                 f"**How to Configure:**\n"
                 f"`{prefix}setup logs #channel` — Sets the moderation audit channel.\n"
                 f"`{prefix}modlog` — Check current audit log channel."
             ),
             "suggestions": (
-                "💡 **Community Suggestions**\n"
-                "> Collect member feedback with interactive 👍 Upvote and 👎 Downvote voting buttons.\n\n"
+                f"{em(b, 'INFO')} **Community Suggestions**\n"
+                "> Collect member feedback with interactive Upvote and Downvote voting buttons.\n\n"
                 "**Required Permissions:**\n"
-                "• Bot needs `Send Messages` and `Embed Links` in target channel.\n\n"
+                f"{arrow} Bot needs `Send Messages` and `Embed Links` in target channel.\n\n"
                 f"**How to Configure:**\n"
                 f"`{prefix}setup suggestions #channel` — Sets the suggestions channel.\n"
                 f"`{prefix}suggest <idea>` — Submit a community idea with voting."
             ),
             "autorole": (
-                "🏷️ **Join Autorole**\n"
+                f"{em(b, 'ROLES')} **Join Autorole**\n"
                 "> Automatically grants a base member role to users when they join.\n\n"
                 "**Required Permissions:**\n"
-                "• Bot needs `Manage Roles` permission.\n"
-                "• Kyoka's bot role must be positioned higher than the assigned role in Server Settings.\n\n"
+                f"{arrow} Bot needs `Manage Roles` permission.\n"
+                f"{arrow} Kyoka's bot role must be positioned higher than the assigned role in Server Settings.\n\n"
                 f"**How to Configure:**\n"
                 f"`{prefix}setup autorole @Role` — Set auto-assigned role.\n"
                 f"`{prefix}autorole config` — Inspect current autorole settings."
             ),
             "tickets": (
-                "🎫 **Support Tickets**\n"
+                f"{em(b, 'TICKET')} **Support Tickets**\n"
                 "> Private channels for member inquiries, support requests, and billing.\n\n"
                 "**Required Permissions:**\n"
-                "• Bot needs `Manage Channels`, `Send Messages`, and `Manage Roles`.\n\n"
+                f"{arrow} Bot needs `Manage Channels`, `Send Messages`, and `Manage Roles`.\n\n"
                 f"**How to Configure:**\n"
                 f"`{prefix}setup tickets #channel` — Deploy a support ticket panel.\n"
                 f"`{prefix}ticket close` — Close an active ticket channel."
             ),
             "levels": (
-                "⭐ **Level-up Announcements**\n"
+                f"{em(b, 'LEVELING')} **Level-up Announcements**\n"
                 "> Reward member activity with XP progression, levels, and rank cards.\n\n"
                 "**Required Permissions:**\n"
-                "• Bot needs `Send Messages` and `Embed Links`.\n\n"
+                f"{arrow} Bot needs `Send Messages` and `Embed Links`.\n\n"
                 f"**How to Configure:**\n"
                 f"`{prefix}setup levels #channel` — Set the level-up celebration channel.\n"
                 f"`{prefix}rank` — View your personal level card.\n"
                 f"`{prefix}leaderboard` — View the top server members."
             ),
             "ai": (
-                "🤖 **AI Companion Chat**\n"
+                f"{em(b, 'AI', animated=True)} **AI Companion Chat**\n"
                 "> Enable natural, prefix-free conversational AI powered by Google Gemini.\n"
                 "> Choose between 10 distinct personalities (Girlfriend, Baddie, Wise Aizen, etc.).\n\n"
                 "**Required Permissions:**\n"
-                "• Bot needs `Send Messages` and `Embed Links`.\n\n"
+                f"{arrow} Bot needs `Send Messages` and `Embed Links`.\n\n"
                 f"**How to Configure:**\n"
                 f"`{prefix}setup ai #channel [persona]` — Enable natural chat in channel.\n"
                 f"`{prefix}ai personalities` — Browse and select from all 10 personalities.\n"
@@ -257,7 +262,7 @@ class SetupWizardSelect(discord.ui.Select):
         }
 
         embed = discord.Embed(
-            title=f"⚙️ Setup Guide: {selected.title()}",
+            title=f"{em(b, 'SETTINGS')} Setup Guide: {selected.title()}",
             description=guides.get(selected, "No guide available."),
             color=0x7C3AED,
         )

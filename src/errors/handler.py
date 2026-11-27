@@ -83,6 +83,11 @@ class ErrorHandler(commands.Cog, name="ErrorHandler"):
         warn_icon = _error_emoji(self.bot, "WARNING", "icons_warning", "icon_warning", fallback="⚠️")
         clock_icon = _error_emoji(self.bot, "TIME", "icons_clock", "loading", fallback="⏳")
         lock_icon = _error_emoji(self.bot, "LOCK", "icons_locked", "icon_lock", fallback="🔒")
+        arrow_icon = _error_emoji(self.bot, "ARROW", "white_arrow", fallback="»")
+        brand_icon = _error_emoji(self.bot, "BRANDING", "sparkle_shine", fallback="⛩️")
+        prem_icon = _error_emoji(self.bot, "PREMIUM", "verified_premium", fallback="💎")
+        music_icon = _error_emoji(self.bot, "MUSIC", "music_playing", fallback="🎵")
+        mail_icon = _error_emoji(self.bot, "DM", "icon_chat", fallback="📩")
 
         # Color and header states
         color = KyokaTheme.ERROR
@@ -107,7 +112,7 @@ class ErrorHandler(commands.Cog, name="ErrorHandler"):
             body = (
                 "> Discord rejected this operation because KYOKA lacks the necessary server permissions, "
                 "or the target user/role is higher than or equal to KYOKA in the role hierarchy.\n\n"
-                "> 💜 **Resolution:** Move KYOKA's highest role higher in `Server Settings > Roles` "
+                f"> {arrow_icon} **Resolution:** Move KYOKA's highest role higher in `Server Settings > Roles` "
                 "and ensure KYOKA has administrative or moderation rights."
             )
             author_badge = "Hierarchy Constraint"
@@ -123,11 +128,11 @@ class ErrorHandler(commands.Cog, name="ErrorHandler"):
 
         elif type(error).__name__ == "PremiumRequiredError":
             color = 0xA855F7
-            title = "👑 KYOKA Prime Feature"
+            title = f"{prem_icon} KYOKA Prime Feature"
             body = (
                 "> This command requires an active KYOKA Prime subscription.\n\n"
-                "> 💜 **Tiers:** Pro ($4.99/mo) or Ultimate ($9.99/mo)\n"
-                "> 💜 **Activate:** Use `+license activate <key>` or check bot settings."
+                f"> {arrow_icon} **Tiers:** Pro ($4.99/mo) or Ultimate ($9.99/mo)\n"
+                f"> {arrow_icon} **Activate:** Use `+license activate <key>` or check bot settings."
             )
             author_badge = "Prime Exclusive"
 
@@ -141,8 +146,8 @@ class ErrorHandler(commands.Cog, name="ErrorHandler"):
             title = f"{warn_icon} Invalid Command Usage"
             body = (
                 f"> Missing required parameter: `{error.param.name}`\n\n"
-                f"> 💜 **Usage:** `{ctx.prefix}{ctx.command.qualified_name} {ctx.command.signature}`\n"
-                f"> 💜 **Example:** `{ctx.prefix}{ctx.command.qualified_name} <{error.param.name}>`"
+                f"> {arrow_icon} **Usage:** `{ctx.prefix}{ctx.command.qualified_name} {ctx.command.signature}`\n"
+                f"> {arrow_icon} **Example:** `{ctx.prefix}{ctx.command.qualified_name} <{error.param.name}>`"
             )
             author_badge = "Invalid Usage"
 
@@ -152,7 +157,7 @@ class ErrorHandler(commands.Cog, name="ErrorHandler"):
             arg_clean = discord.utils.escape_markdown(str(getattr(error, "argument", "Unknown")))
             body = (
                 f"> Could not find a member matching `{arg_clean}`.\n\n"
-                f"> 💜 **Tip: Try mentioning the user** (`@User`) or provide their 17–19 digit Discord snowflake ID."
+                f"> {arrow_icon} **Tip: Try mentioning the user** (`@User`) or provide their 17–19 digit Discord snowflake ID."
             )
             author_badge = "Target Unresolved"
 
@@ -194,7 +199,7 @@ class ErrorHandler(commands.Cog, name="ErrorHandler"):
             title = f"{warn_icon} Too Many Arguments"
             body = (
                 f"> Too many arguments were provided for `{ctx.command.qualified_name}`.\n\n"
-                f"> 💜 **Usage:** `{ctx.prefix}{ctx.command.qualified_name} {ctx.command.signature}`"
+                f"> {arrow_icon} **Usage:** `{ctx.prefix}{ctx.command.qualified_name} {ctx.command.signature}`"
             )
             author_badge = "Syntax Error"
 
@@ -203,7 +208,7 @@ class ErrorHandler(commands.Cog, name="ErrorHandler"):
             title = f"{warn_icon} Invalid Command Argument"
             body = (
                 f"> {str(error)}\n\n"
-                f"> 💜 **Usage:** `{ctx.prefix}{ctx.command.qualified_name} {ctx.command.signature}`"
+                f"> {arrow_icon} **Usage:** `{ctx.prefix}{ctx.command.qualified_name} {ctx.command.signature}`"
             )
             author_badge = "Syntax Error"
 
@@ -213,17 +218,17 @@ class ErrorHandler(commands.Cog, name="ErrorHandler"):
             author_badge = "Disabled"
 
         elif isinstance(error, commands.NoPrivateMessage):
-            title = "⛩️ Server Channel Required"
+            title = f"{brand_icon} Server Channel Required"
             body = "> This command can only be used inside a Discord server channel, not in Direct Messages."
             author_badge = "Guild Only"
 
         elif isinstance(error, commands.PrivateMessageOnly):
-            title = "📩 Direct Message Required"
+            title = f"{mail_icon} Direct Message Required"
             body = "> This command is designed to be executed only inside Direct Messages with KYOKA."
             author_badge = "DM Only"
 
         elif isinstance(error, commands.NSFWChannelRequired):
-            title = "🔞 Age-Restricted Channel Required"
+            title = f"{lock_icon} Age-Restricted Channel Required"
             body = "> This command contains mature content and can only be used in Age-Restricted (NSFW) channels."
             author_badge = "NSFW Enforced"
 
@@ -235,10 +240,10 @@ class ErrorHandler(commands.Cog, name="ErrorHandler"):
 
         elif "wavelink" in type(error).__module__ or any(k in type(error).__name__ for k in ("NoNodeAvailable", "Lavalink", "NodeException", "TrackLoadError")):
             color = 0xEC4899  # Music Pink
-            title = "🎵 Audio Engine Synchronizing"
+            title = f"{music_icon} Audio Engine Synchronizing"
             body = (
                 "> The audio streaming node is currently synchronizing with Discord voice servers.\n\n"
-                f"> 💜 **Resolution:** Please verify you are in an active voice channel and retry `{ctx.prefix}{ctx.command.qualified_name}` in a few seconds."
+                f"> {arrow_icon} **Resolution:** Please verify you are in an active voice channel and retry `{ctx.prefix}{ctx.command.qualified_name}` in a few seconds."
             )
             author_badge = "Audio Protocol"
 
@@ -263,8 +268,8 @@ class ErrorHandler(commands.Cog, name="ErrorHandler"):
             title = f"{err_icon} Internal Error"
             body = (
                 f"> An unexpected internal exception interrupted `{ctx.command.qualified_name}`.\n\n"
-                f"> 💜 **Diagnostic Incident ID:** `{incident_id}`\n"
-                f"> 💜 **Status:** Telemetry securely recorded on host server.\n\n"
+                f"> {arrow_icon} **Diagnostic Incident ID:** `{incident_id}`\n"
+                f"> {arrow_icon} **Status:** Telemetry securely recorded on host server.\n\n"
                 f"> *Please report this Incident ID to bot administrators if the issue persists.*"
             )
             author_badge = "Diagnostic Trace"
@@ -338,13 +343,20 @@ class ErrorHandler(commands.Cog, name="ErrorHandler"):
         guild_id = interaction.guild_id
         user_id = interaction.user.id if interaction.user else None
 
+        err_icon = _error_emoji(self.bot, "ERROR", "icons_wrong", "icon_x", fallback="❌")
+        warn_icon = _error_emoji(self.bot, "WARNING", "icons_warning", "icon_warning", fallback="⚠️")
+        clock_icon = _error_emoji(self.bot, "TIME", "icons_clock", "loading", fallback="⏳")
+        lock_icon = _error_emoji(self.bot, "LOCK", "icons_locked", "icon_lock", fallback="🔒")
+        music_icon = _error_emoji(self.bot, "MUSIC", "music_playing", fallback="🎵")
+        arrow_icon = _error_emoji(self.bot, "ARROW", "white_arrow", fallback="»")
+
         color = KyokaTheme.ERROR
-        title = "❌ Slash Command Interrupted"
+        title = f"{err_icon} Slash Command Interrupted"
         author_badge = "Command Alert"
 
         if isinstance(error, app_commands.CommandOnCooldown):
             color = KyokaTheme.WARNING
-            title = "⏳ Cooldown Active"
+            title = f"{clock_icon} Cooldown Active"
             body = (
                 f"> This command is cooling down to preserve rate limits.\n"
                 f"> Please wait `{error.retry_after:.1f}s` before trying `/{command_name}` again."
@@ -352,12 +364,12 @@ class ErrorHandler(commands.Cog, name="ErrorHandler"):
             author_badge = "Rate Limited"
 
         elif isinstance(error, (app_commands.MissingPermissions, app_commands.BotMissingPermissions, app_commands.CheckFailure)):
-            title = "🔒 Access Denied"
+            title = f"{lock_icon} Access Denied"
             body = f"> {str(error) or 'You do not have permission to execute this slash command in this channel.'}"
             author_badge = "Access Denied"
 
         elif isinstance(error, discord.Forbidden):
-            title = "🔒 Action Forbidden (Discord 403)"
+            title = f"{lock_icon} Action Forbidden (Discord 403)"
             body = (
                 "> Discord rejected this operation because KYOKA lacks the necessary server permissions, "
                 "or the target user/role is higher than or equal to KYOKA in the role hierarchy."
@@ -366,7 +378,7 @@ class ErrorHandler(commands.Cog, name="ErrorHandler"):
 
         elif "wavelink" in type(error).__module__ or any(k in type(error).__name__ for k in ("NoNodeAvailable", "Lavalink", "NodeException")):
             color = 0xEC4899
-            title = "🎵 Audio Protocol Synchronizing"
+            title = f"{music_icon} Audio Protocol Synchronizing"
             body = (
                 "> The audio streaming node is currently synchronizing with Discord voice servers.\n"
                 "> Please verify you are in a voice channel and retry in a few moments."
@@ -386,11 +398,11 @@ class ErrorHandler(commands.Cog, name="ErrorHandler"):
                 str(error),
                 tb,
             )
-            title = "❌ Internal Error"
+            title = f"{err_icon} Internal Error"
             body = (
                 f"> An unexpected internal exception interrupted `/{command_name}`.\n\n"
-                f"> 💜 **Diagnostic Incident ID:** `{incident_id}`\n"
-                f"> 💜 **Status:** Telemetry securely recorded on host server.\n\n"
+                f"> {arrow_icon} **Diagnostic Incident ID:** `{incident_id}`\n"
+                f"> {arrow_icon} **Status:** Telemetry securely recorded on host server.\n\n"
                 f"> *Please report this Incident ID to bot administrators if the issue persists.*"
             )
             author_badge = "Diagnostic Trace"
@@ -415,7 +427,7 @@ class ErrorHandler(commands.Cog, name="ErrorHandler"):
             icon_url=footer_icon,
         )
 
-        msg = f"❌ **{title}** — `{incident_id}`" if "Internal" in title else f"⚠️ **{title}**"
+        msg = f"**{title}** — `{incident_id}`" if "Internal" in title else f"**{title}**"
         try:
             if not interaction.response.is_done():
                 await interaction.response.send_message(msg, embed=embed, ephemeral=True)

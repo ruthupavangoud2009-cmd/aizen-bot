@@ -11,7 +11,7 @@ from discord.ext import commands
 
 from src.core.context import CustomContext
 from src.utils.containers import KyokaContainer, send_container_response
-from src.utils.emojis import resolve_emoji
+from src.utils.emojis import em, resolve_emoji
 
 logger = logging.getLogger("Kyoka.Ping")
 
@@ -33,17 +33,17 @@ def parse_repeated_ping(value: str) -> tuple[int, int]:
     return target_id, count
 
 
-def _format_latency_status(ms: float) -> str:
+def _format_latency_status(ms: float, bot: object = None) -> str:
     """Format numeric latency with qualitative health indicator."""
     if ms <= 0:
-        return "⚪ `N/A`"
+        return f"{em(bot, 'OFFLINE')} `N/A`"
     if ms < 80:
-        return f"🟢 `{ms:.1f}ms` *(Fast)*"
+        return f"{em(bot, 'GOOD_PING')} `{ms:.1f}ms` *(Fast)*"
     if ms < 160:
-        return f"🟡 `{ms:.1f}ms` *(Normal)*"
+        return f"{em(bot, 'IDLE_PING')} `{ms:.1f}ms` *(Normal)*"
     if ms < 250:
-        return f"🟠 `{ms:.1f}ms` *(Intercontinental)*"
-    return f"🔴 `{ms:.1f}ms` *(High Latency)*"
+        return f"{em(bot, 'WARNING')} `{ms:.1f}ms` *(Intercontinental)*"
+    return f"{em(bot, 'BAD_PING')} `{ms:.1f}ms` *(High Latency)*"
 
 
 class Ping(commands.Cog):
@@ -177,7 +177,7 @@ class Ping(commands.Cog):
         container.add_separator(divider=True)
 
         container.add_text(
-            f"{dot} **Gateway:** `{ws_latency:.2f}ms` ({_format_latency_status(ws_latency)})\n"
+            f"{dot} **Gateway:** `{ws_latency:.2f}ms` ({_format_latency_status(ws_latency, self.bot)})\n"
             f"{dot} **REST API:** {rest_display} | **Bot Processing:** `{cmd_latency:.1f}ms`\n"
             f"{dot} **Event-Loop Lag:** `{loop_lag:.2f}ms` | **Database:** {db_str}\n"
             f"{dot} **Uptime:** `{uptime_str}` | **Shard:** `#{shard_id}` | **Region:** `{host_region}`\n"
@@ -187,7 +187,7 @@ class Ping(commands.Cog):
 
         if ws_latency > 150.0 or (rest_ms and rest_ms > 200.0):
             container.add_text(
-                "💡 **Regional Latency Insight:**\n"
+                f"{em(self.bot, 'INFO')} **Regional Latency Insight:**\n"
                 f"> Hosted in **{host_region}**. Switch region closer to your server if transatlantic latency is high."
             )
             container.add_separator(divider=True)
@@ -203,7 +203,7 @@ class Ping(commands.Cog):
                 await ctx.send(embed=emb)
             except Exception:
                 await ctx.send(
-                    f"🏓 **Pong!** Gateway: `{ws_latency:.1f}ms` | Host: {host_region}"
+                    f"{em(self.bot, 'PING')} **Pong!** Gateway: `{ws_latency:.1f}ms` | Host: {host_region}"
                 )
 
 

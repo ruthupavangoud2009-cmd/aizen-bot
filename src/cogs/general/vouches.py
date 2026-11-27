@@ -13,7 +13,7 @@ from discord.ext import commands
 from src.security.owner import is_owner_or_staff
 from src.ui.theme import KyokaTheme
 from src.ui.asset_manager import AssetManager
-from src.utils.emojis import resolve_emoji
+from src.utils.emojis import em, resolve_emoji, resolve_select_emoji
 
 logger = logging.getLogger("Kyoka.Vouches")
 DB = Path('data/kyoka_reputation.sqlite3')
@@ -156,6 +156,8 @@ class VouchesPaginationView(discord.ui.View):
     def _update_buttons(self):
         self.btn_prev.disabled = (self.current_page <= 1)
         self.btn_next.disabled = (self.current_page >= self.total_pages)
+        self.btn_prev.emoji = resolve_select_emoji(None, "BACK", fallback="◀️")
+        self.btn_next.emoji = resolve_select_emoji(None, "NEXT", fallback="▶️")
 
     def build_embed(self) -> discord.Embed:
         offset = (self.current_page - 1) * self.per_page
@@ -168,7 +170,7 @@ class VouchesPaginationView(discord.ui.View):
 
         display_name = getattr(self.target_member, "display_name", getattr(self.target_member, "name", str(self.target_member.id)))
         embed = discord.Embed(
-            title=f"✦ {display_name} • GLOBAL VOUCH REVIEWS",
+            title=f"{em('VOUCH')} {display_name} • GLOBAL VOUCH REVIEWS",
             description=f"**Global Verified Vouches:** `{self.total_count}`\n"
                         f"**Page:** `{self.current_page}/{self.total_pages}`\n\n",
             color=KyokaTheme.PRIMARY,

@@ -37,27 +37,28 @@ _DATA_DIR = Path(__file__).resolve().parent.parent.parent / "data"
 _PERSISTENT_MAPPINGS_FILE = _DATA_DIR / "emoji_mappings.json"
 
 # All official KYOKA system & emojis_gpt categories mapped to prioritized custom emoji names
+# Includes both `emojis_gpt` names (`kyoka_*`) and all 200+ assets in assets/emoji/, assets/emoji2/, assets/music/
 CATEGORY_CANDIDATES: dict[str, list[str]] = {
     # Branding & Core Feedback
-    "KYOKA": ["kyoka_brand", "kyoka", "heart_pulse", "sparkle_shine"],
-    "BRAND": ["kyoka_brand", "kyoka", "sparkle_shine"],
+    "KYOKA": ["kyoka_brand", "kyoka", "heart_pulse", "sparkle_shine", "icon_terminal"],
+    "BRAND": ["kyoka_brand", "kyoka", "sparkle_shine", "heart_pulse"],
     "SPARKLE": ["kyoka_sparkle", "sparkle_shine", "ai", "icons_magicwand", "icons_sparkles"],
-    "HEART": ["kyoka_heart", "heart_pulse", "heart_dot", "favorite"],
-    "SUCCESS": ["kyoka_success", "kyoka_success_glow", "verified_glow", "icon_success", "success", "icons_verified", "verified", "verified_alt", "approve", "icon_clear", "check"],
-    "SUCCESS_ANIM": ["kyoka_success_glow", "verified_glow", "kyoka_success", "icon_success"],
-    "APPROVE": ["kyoka_approve", "approve", "verified_glow", "icon_success", "success"],
-    "ERROR": ["kyoka_error", "icon_x", "icon_wrong", "error", "icons_wrong", "deny", "icon_delete", "cross"],
-    "DENY": ["kyoka_deny", "deny", "icon_x", "icon_wrong", "error"],
-    "WARNING": ["kyoka_warning", "warning_flash", "icons_warning", "icon_warning", "warning", "warning_alt", "icons_reminder"],
-    "WARNING_ALT": ["kyoka_warning_alt", "warning_alt", "warning_flash", "icons_warning", "warning"],
+    "HEART": ["kyoka_heart", "heart_pulse", "heart_dot", "icons_heart", "favorite"],
+    "SUCCESS": ["kyoka_success", "kyoka_success_glow", "verified_glow", "icons_correct", "icon_success", "success", "icons_verified", "verified", "verified_alt", "approve", "icon_clear", "check"],
+    "SUCCESS_ANIM": ["kyoka_success_glow", "verified_glow", "kyoka_success", "icons_correct", "icon_success"],
+    "APPROVE": ["kyoka_approve", "verified_glow", "approve", "icons_correct", "icon_success", "icons_verified", "success"],
+    "ERROR": ["kyoka_error", "icons_wrong", "icon_x", "icon_wrong", "error", "deny", "icon_delete", "cross"],
+    "DENY": ["kyoka_deny", "icons_wrong", "deny", "icon_x", "icon_wrong", "error"],
+    "WARNING": ["kyoka_warning", "warning_flash", "icons_warning", "icon_warning", "icons_exclamation", "warning", "warning_alt", "icons_reminder"],
+    "WARNING_ALT": ["kyoka_warning_alt", "warning_alt", "warning_flash", "icons_warning", "icons_exclamation", "warning"],
     "LOADING": ["kyoka_loading", "loading_pulse", "icons_loading", "loading", "ub_refresh_icon", "icons_update"],
-    "PROGRESS": ["kyoka_progress", "progress", "loading_pulse", "icons_loading"],
-    "SYNC": ["kyoka_sync", "sync", "ub_refresh_icon", "icons_update", "refresh"],
-    "REFRESH": ["kyoka_refresh", "refresh", "ub_refresh_icon", "reload", "icons_update"],
-    "ONLINE": ["kyoka_online", "icons_online", "bot_status"],
-    "OFFLINE": ["kyoka_offline", "icons_offline"],
-    "IDLE": ["kyoka_idle", "icons_reminder", "time"],
-    "BOT_STATUS": ["kyoka_bot_status", "bot_status", "icons_online", "icon_bot"],
+    "PROGRESS": ["kyoka_progress", "loading_pulse", "progress", "icons_loading", "icons_update"],
+    "SYNC": ["kyoka_sync", "sync", "ub_refresh_icon", "icons_update", "icons_connect", "refresh"],
+    "REFRESH": ["kyoka_refresh", "ub_refresh_icon", "refresh", "reload", "icons_update"],
+    "ONLINE": ["kyoka_online", "icons_online", "icons_goodping", "bot_status"],
+    "OFFLINE": ["kyoka_offline", "icons_offline", "icons_badping", "icons_dred"],
+    "IDLE": ["kyoka_idle", "icons_idle", "icons_idelping", "icons_dyellow", "icons_busy", "icons_reminder"],
+    "BOT_STATUS": ["kyoka_bot_status", "sparkle_shine", "bot_status", "icons_online", "icons_goodping", "icon_bot", "icons_bot"],
 
     # Navigation & Help UI
     "ARROW": ["kyoka_arrow", "heart_pulse", "heart_dot", "icons_rightarrow", "white_arrow", "tts_right_arrow", "icons_arrow"],
@@ -65,151 +66,151 @@ CATEGORY_CANDIDATES: dict[str, list[str]] = {
     "BACK": ["kyoka_back", "icons_leftarrow", "icon_arrow_left", "pmochii_arrow_left"],
     "NEXT": ["kyoka_next", "icons_rightarrow", "white_arrow", "icons_arrow"],
     "SEARCH": ["kyoka_search", "icon_search", "icons_search", "scan", "icons_todolist"],
-    "HELP": ["kyoka_help", "icon_book", "spy_icons_question", "icon_info"],
+    "HELP": ["kyoka_help", "icon_book", "spy_icons_question", "icons_generalinfo", "icon_info"],
     "BOOK": ["kyoka_book", "icon_book", "icons_rules", "icon_rules", "icons_file"],
-    "MODULES": ["kyoka_modules", "icon_modules", "icon_grid", "icon_menu", "icons_menu", "icon_forum"],
+    "MODULES": ["kyoka_modules", "icon_modules", "icon_grid", "icon_menu", "icons_menu", "icon_forum", "icons_createcategory"],
     "TERMINAL": ["kyoka_terminal", "icon_terminal", "icon_slash", "icons_slash", "icon_dev"],
     "BRACKETS": ["kyoka_brackets", "icon_brackets", "icon_code", "icon_developer", "icons_todolist", "icon_settings"],
     "STACK": ["kyoka_stack", "icon_stack", "icon_layers", "icon_home", "icons_menu"],
-    "PIN": ["kyoka_pin", "pin", "icons_pin"],
-    "LOCATION": ["kyoka_location", "location", "pin"],
-    "FILTER": ["kyoka_filter", "filter", "sort"],
-    "SORT": ["kyoka_sort", "sort", "filter"],
+    "PIN": ["kyoka_pin", "icons_pin", "pin"],
+    "LOCATION": ["kyoka_location", "location", "icons_pin", "pin"],
+    "FILTER": ["kyoka_filter", "filter", "icons_settings", "sort"],
+    "SORT": ["kyoka_sort", "sort", "icons_list", "filter"],
 
     # Moderation & Security / Anti-Nuke
     "MODERATION": ["kyoka_moderation", "icon_moderation", "icon_mod", "icons_guardian", "icons_staff"],
-    "BAN": ["kyoka_ban", "icon_unban", "icon_delete", "icons_locked", "icon_lock", "icon_x"],
-    "KICK": ["kyoka_kick", "icon_delete", "icons_leave", "icons_wrong"],
+    "BAN": ["kyoka_ban", "icons_ban", "icon_unban", "icon_delete", "icons_locked", "icon_lock", "icon_x"],
+    "KICK": ["kyoka_kick", "icons_kick", "icon_delete", "icons_leave", "icons_wrong"],
     "MUTE": ["kyoka_mute", "icons_micmute", "room_icon_mute", "icons_timeout", "mute_alt", "icons_locked"],
     "MUTE_ALT": ["kyoka_mute_alt", "mute_alt", "icons_micmute", "icons_timeout"],
-    "UNMUTE": ["kyoka_unmute", "icons_unlock", "icons_verified", "approve"],
-    "WARN": ["kyoka_warn", "warning_flash", "icons_warning", "icon_warning", "warning"],
-    "PURGE": ["kyoka_purge", "icon_clear", "icon_delete", "delete"],
-    "DELETE": ["kyoka_delete", "delete", "icon_delete", "icon_clear", "icons_delete"],
-    "EDIT": ["kyoka_edit", "edit", "icons_settings"],
+    "UNMUTE": ["kyoka_unmute", "icons_unlock", "icons_correct", "icons_verified", "approve"],
+    "WARN": ["kyoka_warn", "warning_flash", "icons_warning", "icon_warning", "icons_exclamation", "warning"],
+    "PURGE": ["kyoka_purge", "icon_clear", "icons_delete", "icon_delete", "delete"],
+    "DELETE": ["kyoka_delete", "icons_delete", "icon_delete", "delete", "icon_clear"],
+    "EDIT": ["kyoka_edit", "icons_edit", "edit", "icons_settings"],
     "LOCK": ["kyoka_lock", "icons_locked", "icon_lock", "locked"],
     "UNLOCK": ["kyoka_unlock", "icons_unlock", "unlock", "icons_locked"],
     "SECURITY": ["kyoka_security", "antinuke_pulse", "antinuke_shield", "shield_alt", "icons_guardian", "icon_shield", "icons_locked"],
     "ANTI_NUKE": ["kyoka_antinuke", "antinuke_pulse", "antinuke_shield", "shield_alt", "icons_guardian", "icon_shield"],
-    "SHIELD_ALT": ["kyoka_shield_alt", "shield_alt", "antinuke_shield", "icons_guardian"],
-    "FIREWALL": ["kyoka_firewall", "firewall", "antinuke_shield", "icons_guardian"],
-    "SCAN": ["kyoka_scan", "scan", "icon_search", "icons_search"],
-    "VERIFICATION": ["kyoka_verification", "verified_glow", "icons_verified", "icon_verified", "verified_alt", "verified_premium", "icons_guardian"],
-    "VERIFIED_ALT": ["kyoka_verified_alt", "verified_alt", "verified_glow", "icons_verified"],
+    "SHIELD_ALT": ["kyoka_shield_alt", "antinuke_shield", "shield_alt", "icons_guardian"],
+    "FIREWALL": ["kyoka_firewall", "firewall", "antinuke_shield", "icons_guardian", "icons_locked"],
+    "SCAN": ["kyoka_scan", "scan", "icons_ping", "icon_search", "icons_search"],
+    "VERIFICATION": ["kyoka_verification", "verified_glow", "icons_verified", "icon_verified", "icons_correct", "verified_alt", "verified_premium", "icons_guardian"],
+    "VERIFIED_ALT": ["kyoka_verified_alt", "verified_glow", "verified_alt", "icons_verified", "icons_correct"],
     "APPEAL": ["kyoka_appeal", "appeal", "icon_rules", "icons_rules"],
-    "REPORT": ["kyoka_report", "report", "warning_flash", "icons_warning"],
-    "BACKUP": ["kyoka_backup", "backup", "storage", "icons_download"],
-    "RESTORE": ["kyoka_restore", "restore", "ub_refresh_icon", "sync"],
+    "REPORT": ["kyoka_report", "icons_flag", "report", "warning_flash", "icons_warning"],
+    "BACKUP": ["kyoka_backup", "icons_archive", "icons_download", "backup", "storage"],
+    "RESTORE": ["kyoka_restore", "ub_refresh_icon", "restore", "sync", "icons_update"],
 
     # Tickets & Support
     "TICKET": ["kyoka_ticket", "icon_ticket", "ticket_support", "ticket", "ticket_nox"],
     "TICKET_OPEN": ["kyoka_ticket_open", "icon_ticket", "ticket_support", "ticket"],
-    "TICKET_CLOSE": ["kyoka_ticket_close", "icons_locked", "icon_lock", "icon_delete"],
-    "TICKET_CLAIM": ["kyoka_ticket_claim", "pin", "icons_pin", "icons_staff"],
+    "TICKET_CLOSE": ["kyoka_ticket_close", "icons_locked", "icon_lock", "icons_delete", "icon_delete"],
+    "TICKET_CLAIM": ["kyoka_ticket_claim", "icons_pin", "pin", "icons_staff"],
     "TICKET_UNCLAIM": ["kyoka_ticket_unclaim", "icons_unlock", "icons_supportteam"],
-    "TRANSCRIPT": ["kyoka_transcript", "transcript", "icons_todolist", "icons_file"],
+    "TRANSCRIPT": ["kyoka_transcript", "transcript", "icons_file", "icons_files", "icons_todolist"],
     "STAFF": ["kyoka_staff", "staff", "icons_staff", "icons_supportteam", "icon_support"],
 
     # Music & Voice
-    "MUSIC": ["kyoka_music", "music_music", "music_playing", "music", "icon_music", "sound"],
-    "PLAY": ["kyoka_play", "music_playing", "music", "icon_music", "icons_rightarrow"],
+    "MUSIC": ["kyoka_music", "music_playing", "music_music", "music", "icon_music", "sound"],
+    "PLAY": ["kyoka_play", "music_playing", "music_music", "music", "icon_music", "icons_rightarrow"],
     "PAUSE": ["kyoka_pause", "paused", "icons_pause", "icon_pause"],
-    "RESUME": ["kyoka_resume", "music_playing", "icons_rightarrow", "play"],
+    "RESUME": ["kyoka_resume", "music_playing", "icons_rightarrow", "music", "play"],
     "STOP": ["kyoka_stop", "icons_stop_button", "icon_stop", "icon_delete"],
     "SKIP": ["kyoka_skip", "skip", "icons_rightarrow", "icon_arrow_left"],
     "PREVIOUS": ["kyoka_previous", "icons_leftarrow", "icon_arrow_left", "pmochii_arrow_left"],
     "QUEUE": ["kyoka_queue", "queue", "icons_list", "icon_playlist", "icons_todolist"],
-    "VOLUME": ["kyoka_volume", "sound", "volume_up", "volume_down"],
+    "VOLUME": ["kyoka_volume", "volume_up", "volume_down", "sound"],
     "VOLUME_UP": ["kyoka_volume_up", "volume_up", "volup"],
     "VOLUME_DOWN": ["kyoka_volume_down", "volume_down", "voldown", "room_icon_mute"],
-    "LYRICS": ["kyoka_lyrics", "icon_book", "icons_message", "message_alt"],
+    "LYRICS": ["kyoka_lyrics", "lyrics", "icon_book", "icons_message", "message_alt"],
     "LOOP": ["kyoka_loop", "icons_loop", "loop", "ub_refresh_icon"],
     "SHUFFLE": ["kyoka_shuffle", "icons_shuffle", "icons_magicwand", "icons_splash"],
-    "SOUND": ["kyoka_sound", "sound", "music_music", "icon_music"],
+    "SOUND": ["kyoka_sound", "music_playing", "sound", "music_music", "icon_music"],
     "RECORD": ["kyoka_record", "record", "icons_podcast"],
     "VOICE": ["kyoka_voice", "voice", "icons_podcast", "room_icon_mute", "icon_voice"],
     "STAGE": ["kyoka_stage", "stage", "icons_stagerequesttospeaklist", "icons_podcast"],
-    "VOICE_JOIN": ["kyoka_voice_join", "voice_join", "icons_join"],
+    "VOICE_JOIN": ["kyoka_voice_join", "voice_join", "icons_join", "icons_connect"],
     "VOICE_LEAVE": ["kyoka_voice_leave", "voice_leave", "icons_leave"],
 
     # Economy & Casino
-    "ECONOMY": ["kyoka_economy", "coin_spin", "icon_dollar", "zefex_credit_cards", "cash"],
-    "BALANCE": ["kyoka_balance", "coin_spin", "icon_dollar", "zefex_credit_cards", "cash"],
-    "WALLET": ["kyoka_wallet", "zefex_credit_cards", "icon_dollar", "coin_spin"],
-    "COINS": ["kyoka_coins", "coin_spin", "cash", "icon_dollar"],
-    "SHOP": ["kyoka_shop", "giftbox", "icon_backpack", "icons_gift"],
-    "INVENTORY": ["kyoka_inventory", "icon_backpack", "storage", "icons_list"],
-    "REWARDS": ["kyoka_rewards", "giftbox", "prize", "icons_gift", "gpp_winner"],
+    "ECONOMY": ["kyoka_economy", "coin_spin", "icons_coin", "icon_dollar", "icons_creditcard", "zefex_credit_cards", "cash"],
+    "BALANCE": ["kyoka_balance", "coin_spin", "icons_coin", "icon_dollar", "icons_creditcard", "zefex_credit_cards", "cash"],
+    "WALLET": ["kyoka_wallet", "icons_creditcard", "zefex_credit_cards", "icon_dollar", "coin_spin"],
+    "COINS": ["kyoka_coins", "coin_spin", "icons_coin", "cash", "icon_dollar"],
+    "SHOP": ["kyoka_shop", "icon_shoppingcart", "giftbox", "icon_backpack", "icons_gift"],
+    "INVENTORY": ["kyoka_inventory", "icon_backpack", "icons_box", "icons_folder", "storage", "icons_list"],
+    "REWARDS": ["kyoka_rewards", "icons_gift", "icon_gift", "giftbox", "prize", "gpp_winner"],
     "DAILY": ["kyoka_daily", "icons_calender1", "date", "time", "coin_spin"],
-    "LEADERBOARD": ["kyoka_leaderboard", "rank", "medal", "btp_red_crown", "icon_stats"],
-    "TRANSACTIONS": ["kyoka_transactions", "zefex_credit_cards", "icons_todolist", "icon_dollar"],
-    "PURCHASES": ["kyoka_purchases", "zefex_credit_cards", "giftbox", "icon_backpack"],
-    "CASINO": ["kyoka_casino", "coin_spin", "icon_casino", "casino", "cash"],
-    "GAMES": ["kyoka_games", "icon_backpack", "icon_games", "icon_fun"],
+    "LEADERBOARD": ["kyoka_leaderboard", "icons_award", "rank", "medal", "btp_red_crown", "icon_stats"],
+    "TRANSACTIONS": ["kyoka_transactions", "icons_creditcard", "zefex_credit_cards", "icons_todolist", "icon_dollar"],
+    "PURCHASES": ["kyoka_purchases", "icon_shoppingcart", "icons_creditcard", "zefex_credit_cards", "giftbox"],
+    "CASINO": ["kyoka_casino", "coin_spin", "icons_coin", "icon_casino", "casino", "cash"],
+    "GAMES": ["kyoka_games", "icon_backpack", "icon_games", "icon_fun", "icons_tada"],
 
     # Levels, XP, Reputation & Social
-    "LEVEL": ["kyoka_level", "rank", "sparkle_shine", "icon_stats", "btp_red_crown", "icons_star", "icons_upvote"],
-    "XP": ["kyoka_xp", "starred", "icons_star", "icons_upvote", "sparkle_shine"],
-    "RANK": ["kyoka_rank", "rank", "medal", "badge_alt", "btp_red_crown"],
-    "MEDAL": ["kyoka_medal", "medal", "rank", "gpp_winner"],
-    "PROFILE": ["kyoka_profile", "icon_person", "user_badge", "icons_member", "icons_people"],
-    "VOUCH": ["kyoka_vouch", "verified_glow", "starred", "icons_star", "icons_verified"],
-    "REPUTATION": ["kyoka_reputation", "starred", "verified_glow", "medal", "icons_star"],
-    "SOCIAL": ["kyoka_social", "heart_pulse", "favorite", "party", "icons_people"],
-    "STARRED": ["kyoka_starred", "starred", "icons_star", "sparkle_shine"],
-    "FAVORITE": ["kyoka_favorite", "favorite", "heart_pulse", "heart_dot"],
-    "PARTY": ["kyoka_party", "party", "icons_tada", "s_giveaway"],
-    "GIFTBOX": ["kyoka_giftbox", "giftbox", "icons_gift", "prize"],
-    "GIVEAWAY": ["kyoka_giveaway", "s_giveaway", "discord_giveaway", "giveaway", "icons_gift"],
+    "LEVEL": ["kyoka_level", "sparkle_shine", "icons_award", "rank", "icon_stats", "btp_red_crown", "icons_star", "icons_upvote"],
+    "XP": ["kyoka_xp", "sparkle_shine", "icons_star", "starred", "icons_upvote"],
+    "RANK": ["kyoka_rank", "icons_award", "rank", "medal", "badge_alt", "btp_red_crown"],
+    "MEDAL": ["kyoka_medal", "icons_award", "medal", "rank", "gpp_winner"],
+    "PROFILE": ["kyoka_profile", "icons_human", "icon_person", "icons_person", "user_badge", "icons_member", "icons_id"],
+    "VOUCH": ["kyoka_vouch", "verified_glow", "icons_star", "starred", "icons_verified"],
+    "REPUTATION": ["kyoka_reputation", "verified_glow", "icons_award", "starred", "medal", "icons_star"],
+    "SOCIAL": ["kyoka_social", "heart_pulse", "icons_heart", "favorite", "party", "icons_people"],
+    "STARRED": ["kyoka_starred", "sparkle_shine", "icons_star", "starred"],
+    "FAVORITE": ["kyoka_favorite", "heart_pulse", "icons_heart", "favorite", "heart_dot"],
+    "PARTY": ["kyoka_party", "icons_tada", "party", "s_giveaway"],
+    "GIFTBOX": ["kyoka_giftbox", "icons_gift", "icon_gift", "giftbox", "prize"],
+    "GIVEAWAY": ["kyoka_giveaway", "s_giveaway", "discord_giveaway", "giveaway", "icons_gift", "icons_tada"],
     "TARGET": ["kyoka_target", "target", "icons_ping"],
 
     # Artificial Intelligence
-    "AI": ["kyoka_ai", "sparkle_shine", "ai", "icons_magicwand", "icons_sparkles", "icon_bot"],
+    "AI": ["kyoka_ai", "sparkle_shine", "ai", "icons_magicwand", "icons_sparkles", "icon_bot", "icons_bot"],
     "AI_LOADING": ["kyoka_ai_loading", "loading_pulse", "sparkle_shine", "icons_loading"],
     "AI_VOICE": ["kyoka_ai_voice", "voice", "icons_podcast", "sparkle_shine"],
-    "AI_PERSONALITY": ["kyoka_ai_personality", "sparkle_shine", "icons_magicwand", "icon_person"],
+    "AI_PERSONALITY": ["kyoka_ai_personality", "sparkle_shine", "icons_magicwand", "icon_person", "icons_human"],
 
     # Server Management & Utilities
     "ADMIN": ["kyoka_admin", "admin", "icons_staff", "icon_mod", "icon_developer", "icon_dev"],
-    "SERVER": ["kyoka_server", "server", "icon_forum", "icons_menu", "icon_home"],
-    "MEMBER": ["kyoka_member", "member", "icon_person", "icons_member", "user_badge"],
+    "SERVER": ["kyoka_server", "icons_globe", "server", "icon_forum", "icons_menu", "icon_home"],
+    "MEMBER": ["kyoka_member", "icons_human", "icons_member", "icons_person", "icon_person", "user_badge"],
     "MEMBERS": ["kyoka_members", "icons_people", "icons_member", "icon_person"],
     "ROLE": ["kyoka_role", "role", "lpf_icon_roles", "icons_staff", "user_badge"],
-    "CHANNEL": ["kyoka_channel", "channel", "icons_message", "icons_thread", "icons_podcast"],
+    "CHANNEL": ["kyoka_channel", "icons_channel", "icons_channelfollowed", "channel", "icons_message", "icons_thread"],
     "SETTINGS": ["kyoka_settings", "icons_settings", "icon_rules"],
-    "LOGGING": ["kyoka_logging", "icon_logging", "icons_todolist", "icons_file"],
+    "LOGGING": ["kyoka_logging", "icon_logging", "icons_todolist", "icons_file", "icons_files"],
     "WELCOMER": ["kyoka_welcomer", "icons_join", "icon_join", "icons_welcome", "001_cinnamoroll_welcome_nf2u"],
-    "BOOST": ["kyoka_boost", "boost", "icons_nitroboost", "icons_upvote"],
-    "BROADCAST": ["kyoka_broadcast", "broadcast", "bell_alt", "icons_ping"],
-    "BELL_ALT": ["kyoka_bell_alt", "bell_alt", "icons_reminder"],
-    "MESSAGE_ALT": ["kyoka_message_alt", "message_alt", "icons_message"],
+    "BOOST": ["kyoka_boost", "icons_colornitro", "icons_nitroboost", "boost", "icons_upvote"],
+    "BROADCAST": ["kyoka_broadcast", "icons_announce", "broadcast", "bell_alt", "webhook_1notificaes_nuvem"],
+    "BELL_ALT": ["kyoka_bell_alt", "icons_announce", "bell_alt", "icons_reminder"],
+    "MESSAGE_ALT": ["kyoka_message_alt", "icons_message", "message_alt", "icon_chat"],
     "UTILITY": ["kyoka_utility", "icons_utility", "icons_settings", "ub_refresh_icon"],
-    "AFK": ["kyoka_afk", "afk", "icons_clock", "icons_offline", "icons_richpresence"],
-    "REMINDER": ["kyoka_reminder", "icons_reminder", "timer", "time"],
-    "TIME": ["kyoka_time", "time", "icons_reminder", "icons_calender1", "icons_clock"],
-    "TIMER": ["kyoka_timer", "timer", "time", "icons_clock"],
-    "DATE": ["kyoka_date", "date", "icons_calender1"],
-    "PING": ["kyoka_ping", "icons_ping", "icons_richpresence", "network"],
-    "DATABASE": ["kyoka_database", "storage", "icons_todolist", "icons_file", "icons_files"],
+    "AFK": ["kyoka_afk", "afk", "icons_clock", "icons_idle", "icons_offline", "icons_richpresence"],
+    "REMINDER": ["kyoka_reminder", "icons_reminder", "icons_clock", "timer", "time"],
+    "TIME": ["kyoka_time", "icons_clock", "time", "icons_reminder", "icons_calender1"],
+    "TIMER": ["kyoka_timer", "icons_clock", "timer", "time"],
+    "DATE": ["kyoka_date", "icons_calender1", "date"],
+    "PING": ["kyoka_ping", "icons_goodping", "icons_ping", "icons_richpresence", "network"],
+    "DATABASE": ["kyoka_database", "icons_box", "icons_archive", "icons_todolist", "icons_file", "icons_files"],
     "SAVE": ["kyoka_save", "icons_download", "icons_todolist", "icon_upload"],
-    "INFO": ["kyoka_info", "icon_info", "spy_icons_question", "icons_todolist"],
+    "INFO": ["kyoka_info", "icons_generalinfo", "icons_info", "icon_info", "spy_icons_question"],
     "STATS": ["kyoka_stats", "icon_stats", "progress", "icons_richpresence"],
-    "API": ["kyoka_api", "api", "network", "webhook"],
-    "WEBHOOK": ["kyoka_webhook", "webhook", "api", "icons_link"],
-    "CLOUD": ["kyoka_cloud", "cloud", "network"],
-    "NETWORK": ["kyoka_network", "network", "cloud", "icons_ping"],
-    "STORAGE": ["kyoka_storage", "storage", "backup", "icons_files"],
+    "API": ["kyoka_api", "icons_connect", "api", "icons_link", "webhook"],
+    "WEBHOOK": ["kyoka_webhook", "webhook", "webhook_1notificaes_nuvem", "api", "icons_link"],
+    "CLOUD": ["kyoka_cloud", "webhook_1notificaes_nuvem", "cloud", "icons_globe"],
+    "NETWORK": ["kyoka_network", "icons_globe", "icons_connect", "network", "icons_ping"],
+    "STORAGE": ["kyoka_storage", "icons_box", "icons_archive", "icons_folder", "icons_files"],
     "MEDIA": ["kyoka_media", "media", "icon_media", "icons_image", "icons_file"],
 
     # Owner, Developer & Premium
-    "PREMIUM": ["kyoka_premium", "verified_premium", "icon_premium", "btp_red_crown", "icons_nitroboost"],
-    "BADGE_ALT": ["kyoka_badge_alt", "badge_alt", "user_badge", "verified_premium"],
+    "PREMIUM": ["kyoka_premium", "sparkle_shine", "verified_premium", "icon_premium", "icons_colornitro", "icons_nitroboost", "spy_icons_vip"],
+    "BADGE_ALT": ["kyoka_badge_alt", "icons_award", "user_badge", "verified_premium", "spy_icons_vip"],
     "OWNER": ["kyoka_owner", "owner", "icons_owner", "icon_owner", "btp_red_crown"],
-    "DEVELOPER": ["kyoka_developer", "developer", "icon_developer", "icon_dev", "icon_code"],
-    "DIAGNOSTICS": ["kyoka_diagnostics", "scan", "bug", "icon_stats", "icons_ping"],
+    "DEVELOPER": ["kyoka_developer", "icon_terminal", "developer", "icon_developer", "icon_dev", "icon_code", "icons_gitpullrequest"],
+    "DIAGNOSTICS": ["kyoka_diagnostics", "scan", "icons_bugs", "icon_stats", "icons_ping"],
     "MAINTENANCE": ["kyoka_maintenance", "icons_utility", "icons_settings", "reload"],
-    "BUG": ["kyoka_bug", "bug", "report", "warning_alt"],
-    "RELOAD": ["kyoka_reload", "reload", "refresh", "ub_refresh_icon", "sync"],
+    "BUG": ["kyoka_bug", "icons_bugs", "bug", "report", "warning_alt"],
+    "RELOAD": ["kyoka_reload", "ub_refresh_icon", "reload", "refresh", "sync"],
 }
 
 # Discord-safe Unicode fallbacks (valid in message prose, embed headers, AND Buttons/SelectOptions)
@@ -509,15 +510,44 @@ class EmojiRegistry:
             "gpp_winner": ["winner", "s_giveaway", "discord_giveaway", "icons_gift"],
             "winner": ["gpp_winner", "s_giveaway", "discord_giveaway", "icons_gift"],
             "verified": ["verified_glow", "verified_premium", "icons_verified"],
-            "verified_glow": ["verified_premium", "icons_verified", "icon_success"],
+            "verified_glow": ["verified_premium", "icons_verified", "icon_success", "icons_correct"],
             "loading": ["loading_pulse", "icons_loading", "ub_refresh_icon"],
             "loading_pulse": ["icons_loading", "ub_refresh_icon", "loading"],
             "antinuke": ["antinuke_pulse", "antinuke_shield", "icon_shield"],
             "antinuke_pulse": ["antinuke_shield", "icon_shield", "icons_guardian"],
-            "coin": ["coin_spin", "icon_casino", "cash"],
-            "coin_spin": ["icon_casino", "cash", "icon_dollar"],
+            "coin": ["coin_spin", "icons_coin", "icon_casino", "cash"],
+            "coin_spin": ["icons_coin", "icon_casino", "cash", "icon_dollar"],
             "sparkle": ["sparkle_shine", "ai", "icons_magicwand"],
             "sparkle_shine": ["ai", "icons_magicwand", "icons_sparkles"],
+            "icons_correct": ["verified_glow", "icon_success", "icons_verified"],
+            "icons_wrong": ["icon_x", "icons_delete", "icon_clear"],
+            "icons_ban": ["antinuke_shield", "icon_mod", "icons_hammer"],
+            "icons_kick": ["icons_outage", "icon_mod"],
+            "icons_coin": ["coin_spin", "icon_casino", "icons_creditcard"],
+            "icons_creditcard": ["coin_spin", "icons_coin", "icon_dollar"],
+            "icon_shoppingcart": ["icons_shoppingcart", "icons_coin"],
+            "icons_award": ["verified_premium", "badge", "icons_verified"],
+            "icons_bugs": ["icons_wrong", "icons_outage", "icons_warn"],
+            "icons_flag": ["icons_warn", "icons_generalinfo"],
+            "icons_goodping": ["icon_online", "icons_correct"],
+            "icons_badping": ["icon_dnd", "icons_wrong"],
+            "icons_idelping": ["icons_idle", "icon_idle"],
+            "icons_idle": ["icon_idle", "icons_idelping"],
+            "icons_busy": ["icon_dnd", "icons_badping"],
+            "icons_info": ["icons_generalinfo", "icons_question"],
+            "icons_generalinfo": ["icons_info", "icons_question"],
+            "icons_human": ["icon_users", "icons_id"],
+            "icons_id": ["icons_human", "icon_users"],
+            "icons_channel": ["icons_channelfollowed", "icons_announce"],
+            "icons_announce": ["icons_channelfollowed", "icons_channel"],
+            "icons_archive": ["icons_box", "icons_folder"],
+            "icons_box": ["icons_archive", "icons_folder"],
+            "icons_folder": ["icons_archive", "icons_box"],
+            "icons_globe": ["icon_link", "icons_connect"],
+            "icons_edit": ["icons_update", "ub_refresh_icon"],
+            "icons_pin": ["pin", "icons_flag"],
+            "lyrics": ["music_playing", "music_music", "icon_music"],
+            "icon_terminal": ["bot", "icons_info"],
         }
 
     async def _load_persistent_mappings(self) -> None:
@@ -574,6 +604,7 @@ class EmojiRegistry:
             parsed_id = int(match.group(3))
 
         self._custom_mappings[key] = val
+        set_active_emoji_registry(self)
 
         # Save to local disk cache
         try:
@@ -611,6 +642,8 @@ class EmojiRegistry:
         """Fetch all application emojis from Discord API, sync assets, and load persistent mappings."""
         try:
             await self._load_persistent_mappings()
+            if self._custom_mappings:
+                set_active_emoji_registry(self)
 
             if not hasattr(self.bot, "http") or not getattr(self.bot.http, "token", None):
                 return
@@ -628,6 +661,8 @@ class EmojiRegistry:
             if self.bot.application_id:
                 emojis = await self.bot.fetch_application_emojis()
                 self._emojis = {e.name.lower(): e for e in emojis}
+                if self._emojis:
+                    set_active_emoji_registry(self)
                 logger.info(f"Successfully cached {len(self._emojis)} custom Application Emoji(s).")
                 # Asynchronously sync missing local assets up to the 2,000 application emoji limit
                 asyncio.create_task(self.sync_assets_to_application())
@@ -687,6 +722,8 @@ class EmojiRegistry:
                 except Exception as e:
                     logger.debug(f"Notice uploading application emoji {clean_name}: {e}")
 
+        if self._emojis or self._custom_mappings:
+            set_active_emoji_registry(self)
         return created_count
 
     def _configured_for_key(self, key: str, *, allow_animated: bool = True) -> Optional[str]:
@@ -976,10 +1013,24 @@ class EmojiRegistry:
 # SHARED MODULE HELPERS (Safe across Bot, Context, Interaction, Dict/None mocks)
 # ─────────────────────────────────────────────────────────────────────────────
 
+_ACTIVE_REGISTRY: Optional[EmojiRegistry] = None
+
+
+def set_active_emoji_registry(registry: Optional[EmojiRegistry]) -> None:
+    """Register the active global EmojiRegistry used by static UI helpers (`em("KEY")`)."""
+    global _ACTIVE_REGISTRY
+    _ACTIVE_REGISTRY = registry
+
+
+def get_active_emoji_registry() -> Optional[EmojiRegistry]:
+    """Return the active global EmojiRegistry if initialized."""
+    return _ACTIVE_REGISTRY
+
+
 def get_emoji_registry(source: Any) -> Any:
     """Safely extract bot.custom_emojis from a Bot, Context, Interaction, Cog, or Registry."""
     if source is None:
-        return None
+        return _ACTIVE_REGISTRY
     if isinstance(source, EmojiRegistry):
         return source
     if hasattr(source, "custom_emojis"):
@@ -992,7 +1043,7 @@ def get_emoji_registry(source: Any) -> Any:
         c_bot = getattr(cog, "bot", None)
         if c_bot is not None and hasattr(c_bot, "custom_emojis"):
             return getattr(c_bot, "custom_emojis", None)
-    return None
+    return _ACTIVE_REGISTRY
 
 
 def resolve_emoji(
@@ -1072,15 +1123,33 @@ def resolve_emoji(
 
 
 def em(
-    source: Any,
-    key: str,
+    source_or_key: Any,
+    key: Optional[str] = None,
     fallback: str = "",
     *,
     animated: bool = False,
     prefer_animated: bool = True,
 ) -> str:
-    """Short alias for `resolve_emoji` to keep f-strings concise and readable."""
-    return resolve_emoji(source, key, animated=animated, prefer_animated=prefer_animated, fallback=fallback)
+    """
+    Concise custom emoji helper supporting both:
+    - `em(bot_or_ctx, "SUCCESS")`
+    - `em("SUCCESS")` (uses active global registry + KYOKA_CUSTOM_EMOJI_IDS)
+    """
+    if key is None:
+        return resolve_emoji(
+            None,
+            str(source_or_key or ""),
+            animated=animated,
+            prefer_animated=prefer_animated,
+            fallback=fallback,
+        )
+    return resolve_emoji(
+        source_or_key,
+        key,
+        animated=animated,
+        prefer_animated=prefer_animated,
+        fallback=fallback,
+    )
 
 
 def resolve_select_emoji(

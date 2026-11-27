@@ -17,6 +17,7 @@ from src.managers.ai_manager import AI_PERSONAS, resolve_persona
 from src.managers.gif_manager import GIFManager
 from src.security.adult_guard import authorize_adult, is_adult_authorized
 from src.security.owner import is_owner_or_staff, is_primary_owner
+from src.utils.emojis import em, resolve_select_emoji
 
 if TYPE_CHECKING:
     from src.core.bot import KyokaBot
@@ -47,7 +48,7 @@ class PersonaSelectMenu(discord.ui.Select):
             for p in AI_PERSONAS.values()
         ]
         super().__init__(
-            placeholder="⛩️ Choose a personality to inspect or activate...",
+            placeholder="Choose a personality to inspect or activate...",
             min_values=1,
             max_values=1,
             options=options,
@@ -192,8 +193,10 @@ class CompanionAI(commands.Cog):
 
         mode_str = "Mention & Reply Only" if mention_only else "Natural Chat (All Messages)"
         is_blox = persona_clean == "blox_fruits_expert"
+        e_ai = em(self.bot, "AI", animated=True)
+        e_bf = em(self.bot, "BLOXFRUITS")
         embed = discord.Embed(
-            title="🏴‍☠️ Blox Fruits AI Activated" if is_blox else "⛩️ Automatic AI Channel Configured",
+            title=f"{e_bf} Blox Fruits AI Activated" if is_blox else f"{e_ai} Automatic AI Channel Configured",
             description=(f"**KYŌKA Blox Fruits AI** is active in {channel.mention}!\nChat naturally for personalized combos, PvP builds, fruit advice, trading, grinding routes, raids and progression.\n\n**Proactive mode:** I can suggest upgrades and ask for your loadout when it matters." if is_blox else f"**{p_def['name']}** is now active in {channel.mention}!\nMembers can converse naturally without typing command prefixes."),
             color=p_def["color"],
         )
@@ -206,11 +209,12 @@ class CompanionAI(commands.Cog):
 
     async def _status_channel(self, guild: discord.Guild, channel: discord.TextChannel) -> discord.Embed:
         cfg = self._channel_configs.get(channel.id)
+        e_ai = em(self.bot, "AI", animated=True)
         if not cfg:
             server_cfg = self.bot.ai_mgr.get_server_config(guild.id)
             p_def = resolve_persona(server_cfg.get("personality", "aizen"))
             embed = discord.Embed(
-                title=f"⛩️ AI System Status — #{channel.name}",
+                title=f"{e_ai} AI System Status — #{channel.name}",
                 description=f"{channel.mention} does not have a dedicated automatic AI channel configuration.\n"
                             f"Using global server default personality: **{p_def['name']}**.",
                 color=AIZEN_PURPLE,
@@ -221,15 +225,15 @@ class CompanionAI(commands.Cog):
 
         persona = cfg.get("persona", "aizen")
         p_def = resolve_persona(persona)
-        status_str = "🟢 Active" if cfg.get("enabled", True) else "🔴 Disabled"
+        status_str = f"{em(self.bot, 'ONLINE')} Active" if cfg.get("enabled", True) else f"{em(self.bot, 'DND')} Disabled"
         mode_str = "Mention Only" if cfg.get("mention_only", False) else "All Normal Messages"
 
         embed = discord.Embed(
-            title=f"⛩️ AI Channel Status — #{channel.name}",
+            title=f"{e_ai} AI Channel Status — #{channel.name}",
             description=f"Configuration for {channel.mention}:",
             color=p_def["color"],
         )
-        embed.add_field(name="Status", value=f"`{status_str}`", inline=True)
+        embed.add_field(name="Status", value=status_str, inline=True)
         embed.add_field(name="Active Persona", value=f"`{p_def['name']}`", inline=True)
         embed.add_field(name="Trigger Mode", value=f"`{mode_str}`", inline=True)
         embed.add_field(name="Cooldown", value=f"`{cfg.get('cooldown_seconds', 2)}s`", inline=True)
@@ -240,7 +244,7 @@ class CompanionAI(commands.Cog):
         cfg = self._channel_configs.get(channel.id)
         if not cfg:
             return discord.Embed(
-                title="ℹ️ Channel Not Configured",
+                title=f"{em(self.bot, 'INFO')} Channel Not Configured",
                 description=f"{channel.mention} does not have an automatic AI persona active.",
                 color=AIZEN_DARK,
             )
@@ -250,7 +254,7 @@ class CompanionAI(commands.Cog):
             self._channel_configs[channel.id]["enabled"] = False
 
         return discord.Embed(
-            title="⏸️ AI Channel Disabled",
+            title=f"{em(self.bot, 'PAUSE')} AI Channel Disabled",
             description=f"Automatic AI responses have been paused in {channel.mention}.",
             color=AIZEN_DARK,
         )
@@ -259,7 +263,7 @@ class CompanionAI(commands.Cog):
         cfg = self._channel_configs.get(channel.id)
         if not cfg:
             return discord.Embed(
-                title="ℹ️ Channel Not Configured",
+                title=f"{em(self.bot, 'INFO')} Channel Not Configured",
                 description=f"{channel.mention} does not have an automatic AI persona active.",
                 color=AIZEN_DARK,
             )
@@ -268,7 +272,7 @@ class CompanionAI(commands.Cog):
         self._channel_configs.pop(channel.id, None)
 
         return discord.Embed(
-            title="🗑️ AI Channel Removed",
+            title=f"{em(self.bot, 'DELETE')} AI Channel Removed",
             description=f"Automatic AI companion configuration has been removed from {channel.mention}.",
             color=AIZEN_DARK,
         )
@@ -283,7 +287,7 @@ class CompanionAI(commands.Cog):
     ) -> None:
         if not prompt or not prompt.strip():
             p_def = resolve_persona(persona_key)
-            await ctx.send(f"💬 Tell me what you seek. Usage: `{ctx.prefix}ai <message>` or `{ctx.prefix}{p_def['key']} <message>`")
+            await ctx.send(f"{em(self.bot, 'AI', animated=True)} Tell me what you seek. Usage: `{ctx.prefix}ai <message>` or `{ctx.prefix}{p_def['key']} <message>`")
             return
 
         p_def = resolve_persona(persona_key)

@@ -11,6 +11,7 @@ from discord.ext import commands
 from src.security.owner import is_owner_or_staff
 from src.ui.theme import KyokaTheme
 from src.ui.asset_manager import AssetManager
+from src.utils.emojis import em
 
 DB = Path('data/kyoka_billing.sqlite3')
 
@@ -152,12 +153,21 @@ class Bills(commands.Cog, name="Bills"):
 
     def _format_invoice_embed(self, ctx, r: sqlite3.Row, cfg: sqlite3.Row) -> discord.Embed:
         status_key = (r['status'] or 'PENDING').upper()
-        s_icon, s_label = STATUS_BADGES.get(status_key, ("⚪", status_key))
+        _, s_label = STATUS_BADGES.get(status_key, ("⚪", status_key))
+        status_emoji_key = {
+            "PAID": "ONLINE",
+            "PENDING": "IDLE",
+            "UNPAID": "IDLE",
+            "CANCELLED": "DND",
+            "OVERDUE": "WARNING",
+            "REFUNDED": "INFO",
+        }.get(status_key, "INFO")
+        s_icon = em(self.bot, status_emoji_key)
         ts = int(r['created']) if r['created'] else int(time.time())
         category = r['category'] or 'Blox Fruits Service'
 
         embed = discord.Embed(
-            title=f"✦ {cfg['name']} • INVOICE `{r['id']}`",
+            title=f"{em(self.bot, 'BILLS')} {cfg['name']} • INVOICE `{r['id']}`",
             description=f"Official Blox Fruits Service Receipt & Payment Ledger\n"
                         f"**Status:** {s_icon} **{s_label}**\n"
                         f"**Issued:** <t:{ts}:f> (<t:{ts}:R>)",
@@ -169,26 +179,26 @@ class Bills(commands.Cog, name="Bills"):
         elif self.bot.user:
             embed.set_thumbnail(url=self.bot.user.display_avatar.url)
 
-        embed.add_field(name="👤 Customer", value=f"<@{r['customer']}>\n`ID: {r['customer']}`", inline=True)
-        embed.add_field(name="🛡️ Service Provider", value=f"<@{r['creator']}>", inline=True)
-        embed.add_field(name="🏷️ Category", value=f"`{category}`", inline=True)
+        embed.add_field(name=f"{em(self.bot, 'USER')} Customer", value=f"<@{r['customer']}>\n`ID: {r['customer']}`", inline=True)
+        embed.add_field(name=f"{em(self.bot, 'MODERATION')} Service Provider", value=f"<@{r['creator']}>", inline=True)
+        embed.add_field(name=f"{em(self.bot, 'ROLES')} Category", value=f"`{category}`", inline=True)
 
         item_name = r['service_item'] or r['description'] or "Blox Fruits Service"
-        embed.add_field(name="📦 Service / Item Details", value=f"> {discord.utils.escape_markdown(item_name)}", inline=False)
+        embed.add_field(name=f"{em(self.bot, 'ARCHIVE')} Service / Item Details", value=f"> {discord.utils.escape_markdown(item_name)}", inline=False)
 
         pay_method = r['payment_method'] or f"{cfg['currency']} {r['total']:,.2f}"
-        embed.add_field(name="💰 Agreed Payment / Total Due", value=f"**{pay_method}**", inline=True)
+        embed.add_field(name=f"{em(self.bot, 'COINS', animated=True)} Agreed Payment / Total Due", value=f"**{pay_method}**", inline=True)
 
         if r['subtotal'] and r['subtotal'] > 0:
             embed.add_field(
-                name="📊 Price Breakdown",
+                name=f"{em(self.bot, 'STATS')} Price Breakdown",
                 value=f"Subtotal: `{cfg['currency']} {r['subtotal']:,.2f}`\nTax: `{cfg['currency']} {r['tax']:,.2f}`\nTotal: `**{cfg['currency']} {r['total']:,.2f}**`",
                 inline=True
             )
 
         notes = r['notes'] or cfg['payment']
         if notes:
-            embed.add_field(name="📝 Payment Instructions & Terms", value=f"> {notes[:800]}", inline=False)
+            embed.add_field(name=f"{em(self.bot, 'EDIT')} Payment Instructions & Terms", value=f"> {notes[:800]}", inline=False)
 
         embed.set_footer(text=f"Issued by staff <@{r['creator']}> • KYŌKA Blox Fruits Invoicing")
         return embed
@@ -199,16 +209,17 @@ class Bills(commands.Cog, name="Bills"):
     async def billsetup(self, ctx):
         """View or configure the server's Blox Fruits invoicing settings."""
         cfg, _ = self.taxes(ctx.guild.id)
+        arrow = em(self.bot, "ARROW")
         e = discord.Embed(
-            title='✦ KYŌKA • BLOX FRUITS INVOICE CONFIGURATION',
+            title=f"{em(self.bot, 'BILLS')} KYŌKA • BLOX FRUITS INVOICE CONFIGURATION",
             description=f"**Provider Name:** `{cfg['name']}`\n"
                         f"**Default Currency:** `{cfg['currency']}`\n"
                         f"**Payment Instructions:**\n> {cfg['payment']}\n\n"
                         f"**Configuration Commands:**\n"
-                        f"• `+billname <business_name>` — Update server shop/service name\n"
-                        f"• `+billcurrency <code>` — Set default currency (e.g. `BELI`, `FRUIT`, `ROBUX`)\n"
-                        f"• `+billpayment <instructions>` — Set accepted fruit/payment instructions\n"
-                        f"• `+billtax <name> <percent>` — Set optional surcharge/tax rate",
+                        f"{arrow} `+billname <business_name>` — Update server shop/service name\n"
+                        f"{arrow} `+billcurrency <code>` — Set default currency (e.g. `BELI`, `FRUIT`, `ROBUX`)\n"
+                        f"{arrow} `+billpayment <instructions>` — Set accepted fruit/payment instructions\n"
+                        f"{arrow} `+billtax <name> <percent>` — Set optional surcharge/tax rate",
             color=KyokaTheme.PRIMARY
         )
         banner_file = AssetManager.attach_feature_banner(e, "service_bills")
@@ -223,7 +234,7 @@ class Bills(commands.Cog, name="Bills"):
         with db() as c:
             c.execute('INSERT OR IGNORE INTO config(guild) VALUES(?)', (ctx.guild.id,))
             c.execute('UPDATE config SET name=? WHERE guild=?', (clean_name, ctx.guild.id))
-        await ctx.reply(f'✅ Invoicing provider name updated to: **{clean_name}**', mention_author=False)
+        await ctx.reply(f"{em(self.bot, 'SUCCESS', animated=True)} Invoicing provider name updated to: **{clean_name}**", mention_author=False)
 
     @commands.command(name='billcurrency')
     @commands.guild_only()

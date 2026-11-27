@@ -208,18 +208,21 @@ class KyokaBot(commands.Bot):
             # Do not race commands that need to send their own initial interaction response.
             return
         frames = ("⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏")
-        loading_emoji = self.custom_emojis.get("loading", frames[0])
+        from src.utils.emojis import em
+        loading_emoji = em(self, "LOADING", fallback=frames[0], animated=True)
         try:
             message = await ctx.send(f"{loading_emoji} **KYŌKA is processing...**")
         except Exception:
             return
         ctx._kyoka_processing_message = message
+        if str(loading_emoji).startswith("<"):
+            return
         async def animate() -> None:
             index = 1
             try:
                 while True:
                     await asyncio.sleep(0.55)
-                    await message.edit(content=f"{loading_emoji} **KYŌKA is processing...**")
+                    await message.edit(content=f"{frames[index % len(frames)]} **KYŌKA is processing...**")
                     index += 1
             except (asyncio.CancelledError, discord.NotFound, discord.Forbidden, discord.HTTPException):
                 return

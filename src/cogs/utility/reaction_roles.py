@@ -15,6 +15,7 @@ from discord.ext import commands
 from src.core.bot import KyokaBot
 from src.core.config import Config
 from src.core.context import CustomContext
+from src.utils.emojis import em
 
 logger = logging.getLogger("Kyoka.Cogs.ReactionRoles")
 
@@ -60,7 +61,7 @@ class PersistentRoleButton(discord.ui.Button):
 
     async def callback(self, interaction: discord.Interaction) -> None:
         if not interaction.guild or not isinstance(interaction.user, discord.Member):
-            return await interaction.response.send_message("❌ This can only be used in a server.", ephemeral=True)
+            return await interaction.response.send_message(f"{em('ERROR')} This can only be used in a server.", ephemeral=True)
 
         parts = self.custom_id.split(":")
         role_id = int(parts[1])
@@ -71,20 +72,20 @@ class PersistentRoleButton(discord.ui.Button):
         role = guild.get_role(role_id)
 
         if not role:
-            return await interaction.response.send_message("❌ This role no longer exists.", ephemeral=True)
+            return await interaction.response.send_message(f"{em('ERROR')} This role no longer exists.", ephemeral=True)
 
         me = guild.me
         if not me.guild_permissions.manage_roles or role >= me.top_role:
             return await interaction.response.send_message(
-                f"⚠️ I cannot assign {role.mention} due to role hierarchy. Please place my bot role above it.",
+                f"{em('WARNING')} I cannot assign {role.mention} due to role hierarchy. Please place my bot role above it.",
                 ephemeral=True,
             )
 
         if mode == "verify":
             if role not in member.roles:
                 await member.add_roles(role, reason="Reaction Role: Verify claim")
-                return await interaction.response.send_message(f"✅ Verified! Granted {role.mention}.", ephemeral=True)
-            return await interaction.response.send_message(f"ℹ️ You already have {role.mention}.", ephemeral=True)
+                return await interaction.response.send_message(f"{em('VERIFICATION', animated=True)} Verified! Granted {role.mention}.", ephemeral=True)
+            return await interaction.response.send_message(f"{em('INFO')} You already have {role.mention}.", ephemeral=True)
 
         if mode == "unique":
             # Remove any sibling button roles from this message view
@@ -106,18 +107,18 @@ class PersistentRoleButton(discord.ui.Button):
                 await member.remove_roles(*view_roles, reason="Reaction Role: Exclusive choice switch")
             if role not in member.roles:
                 await member.add_roles(role, reason="Reaction Role: Exclusive choice select")
-                return await interaction.response.send_message(f"✅ Switched to {role.mention}!", ephemeral=True)
+                return await interaction.response.send_message(f"{em('SUCCESS', animated=True)} Switched to {role.mention}!", ephemeral=True)
             else:
                 await member.remove_roles(role, reason="Reaction Role: Exclusive toggle off")
-                return await interaction.response.send_message(f"❌ Removed {role.mention}.", ephemeral=True)
+                return await interaction.response.send_message(f"{em('ERROR')} Removed {role.mention}.", ephemeral=True)
 
         # Standard toggle mode
         if role in member.roles:
             await member.remove_roles(role, reason="Reaction Role: Toggle off")
-            await interaction.response.send_message(f"❌ Removed {role.mention}.", ephemeral=True)
+            await interaction.response.send_message(f"{em('ERROR')} Removed {role.mention}.", ephemeral=True)
         else:
             await member.add_roles(role, reason="Reaction Role: Toggle on")
-            await interaction.response.send_message(f"✅ Added {role.mention}!", ephemeral=True)
+            await interaction.response.send_message(f"{em('SUCCESS', animated=True)} Added {role.mention}!", ephemeral=True)
 
 
 class PersistentRoleView(discord.ui.View):

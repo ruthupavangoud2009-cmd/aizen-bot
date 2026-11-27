@@ -21,6 +21,7 @@ from discord.ext import commands
 
 from src.core.context import CustomContext
 from src.managers.invite_tracker_manager import InviteTrackerManager
+from src.utils.emojis import em, resolve_select_emoji
 
 if TYPE_CHECKING:
     from src.core.bot import KyokaBot
@@ -61,11 +62,14 @@ class InviteLeaderboardView(discord.ui.View):
         self.prev_button.disabled = self.page <= 1
         self.next_button.disabled = self.page >= self.total_pages
         self.page_indicator.label = f"Page {self.page}/{self.total_pages}"
+        bot_ref = getattr(self.cog, "bot", None)
+        self.prev_button.emoji = resolve_select_emoji(bot_ref, "BACK", fallback="◀️")
+        self.next_button.emoji = resolve_select_emoji(bot_ref, "NEXT", fallback="▶️")
 
     async def interaction_check(self, interaction: discord.Interaction) -> bool:
         if interaction.user.id != self.author_id:
             await interaction.response.send_message(
-                "❌ Only the member who requested this leaderboard can navigate it.",
+                f"{em(self.cog.bot, 'ERROR')} Only the member who requested this leaderboard can navigate it.",
                 ephemeral=True,
             )
             return False
@@ -74,9 +78,15 @@ class InviteLeaderboardView(discord.ui.View):
     async def build_embed(self) -> discord.Embed:
         offset = (self.page - 1) * self.per_page
         entries = await self.cog.manager.get_leaderboard(self.guild.id, limit=self.per_page, offset=offset)
+        b = getattr(self.cog, "bot", None)
+        e_trophy = em(b, "BADGE")
+        e_ok = em(b, "SUCCESS", animated=True)
+        e_err = em(b, "ERROR")
+        e_warn = em(b, "WARNING")
+        e_gift = em(b, "REWARDS")
 
         embed = discord.Embed(
-            title=f"🏆 Invite Leaderboard • {self.guild.name}",
+            title=f"{e_trophy} Invite Leaderboard • {self.guild.name}",
             description=f"> *Top inviters ranked by Net Invites (`Real - Left + Bonus`)*\n\n",
             color=KYOKA_VIOLET,
             timestamp=discord.utils.utcnow(),
@@ -99,7 +109,7 @@ class InviteLeaderboardView(discord.ui.View):
                 user_str = f"<@{user_id}>"
                 lines.append(
                     f"{medal} {user_str} — **{net:,}** invites\n"
-                    f"     -# `✅ {reg:,} real` · `❌ {left:,} left` · `⚠️ {fake:,} fake` · `🎁 {bonus:+,} bonus`"
+                    f"     -# {e_ok} `{reg:,} real` · {e_err} `{left:,} left` · {e_warn} `{fake:,} fake` · {e_gift} `{bonus:+,} bonus`"
                 )
             embed.description += "\n\n".join(lines)
 
@@ -332,7 +342,7 @@ class InviteTracker(commands.Cog):
     async def invites(self, ctx: CustomContext, member: discord.Member | None = None) -> None:
         """Display an itemized invite card showing real, left, fake, and bonus counts with rank."""
         if not ctx.guild:
-            return await ctx.send("❌ This command can only be used in a server.")
+            return await ctx.send(f"{em(self.bot, 'ERROR')} This command can only be used in a server.")
 
         target = member or ctx.author
         stats = await self.manager.get_user_stats(ctx.guild.id, target.id)
@@ -340,7 +350,7 @@ class InviteTracker(commands.Cog):
         inviter_info = await self.manager.get_user_inviter(ctx.guild.id, target.id)
 
         embed = discord.Embed(
-            title=f"📨 Invite Card • {target.display_name}",
+            title=f"{em(self.bot, 'INVITE')} Invite Card • {target.display_name}",
             color=KYOKA_VIOLET,
             timestamp=discord.utils.utcnow(),
         )
@@ -361,20 +371,29 @@ class InviteTracker(commands.Cog):
             invited_by_line = "*Unknown / Pre-dating tracker*"
 
         rank_display = f"#{rank:,}" if rank else "N/A"
+        e_arrow = em(self.bot, "ARROW")
+        e_spark = em(self.bot, "SPARKLE", animated=True)
+        e_trophy = em(self.bot, "BADGE")
+        e_link = em(self.bot, "LINK")
+        e_stats = em(self.bot, "STATS")
+        e_ok = em(self.bot, "SUCCESS", animated=True)
+        e_err = em(self.bot, "ERROR")
+        e_warn = em(self.bot, "WARNING")
+        e_gift = em(self.bot, "REWARDS")
 
         embed.description = (
-            f"> ⚡ **{stats['net']:,} Net Invites**\n\n"
-            f"• 🏆 **Server Rank:** **{rank_display}**\n"
-            f"• 🔗 **Invited By:** {invited_by_line}\n"
+            f"> {e_spark} **{stats['net']:,} Net Invites**\n\n"
+            f"{e_arrow} {e_trophy} **Server Rank:** **{rank_display}**\n"
+            f"{e_arrow} {e_link} **Invited By:** {invited_by_line}\n"
         )
 
         embed.add_field(
-            name="📊 Breakdown",
+            name=f"{e_stats} Breakdown",
             value=(
-                f"• ✅ **Real / Regular:** `{stats['regular']:,}`\n"
-                f"• ❌ **Left:** `{stats['left']:,}`\n"
-                f"• ⚠️ **Fake / Suspicious:** `{stats['fake']:,}`\n"
-                f"• 🎁 **Bonus Added:** `{stats['bonus']:+,}`"
+                f"{e_arrow} {e_ok} **Real / Regular:** `{stats['regular']:,}`\n"
+                f"{e_arrow} {e_err} **Left:** `{stats['left']:,}`\n"
+                f"{e_arrow} {e_warn} **Fake / Suspicious:** `{stats['fake']:,}`\n"
+                f"{e_arrow} {e_gift} **Bonus Added:** `{stats['bonus']:+,}`"
             ),
             inline=False,
         )

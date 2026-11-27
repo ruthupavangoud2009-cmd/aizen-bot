@@ -17,6 +17,7 @@ from src.core.context import CustomContext
 from src.managers.ai_manager import PERSONALITY_PRESETS
 from src.security.owner import OWNER_ID, is_primary_owner
 from src.utils.containers import KyokaContainer, send_container_response
+from src.utils.emojis import em
 
 log = logging.getLogger("Kyoka.AIInteractions")
 PURPLE = 0x7C3AED
@@ -40,7 +41,7 @@ class ConfirmAIResetView(discord.ui.View):
             await self.bot.ai_mgr.reset_server_config(self.guild_id)
         for item in self.children:
             item.disabled = True
-        await interaction.response.edit_message(content="✅ AI configuration for this server has been reset to defaults.", view=self)
+        await interaction.response.edit_message(content=f"{em(self.bot, 'SUCCESS', animated=True)} AI configuration for this server has been reset to defaults.", view=self)
 
     @discord.ui.button(label="Cancel", style=discord.ButtonStyle.secondary, custom_id="ai:cancel_reset")
     async def cancel(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
@@ -48,7 +49,7 @@ class ConfirmAIResetView(discord.ui.View):
             return await interaction.response.send_message("Only the command author can cancel this.", ephemeral=True)
         for item in self.children:
             item.disabled = True
-        await interaction.response.edit_message(content="❌ AI reset cancelled.", view=self)
+        await interaction.response.edit_message(content=f"{em(self.bot, 'ERROR')} AI reset cancelled.", view=self)
 
 
 class AIInteractions(commands.Cog):
@@ -291,18 +292,20 @@ class AIInteractions(commands.Cog):
     @commands.guild_only()
     async def ai_prefix_group(self, ctx: CustomContext):
         p = self.bot.guild_mgr.get_prefix(ctx.guild.id if ctx.guild else None)
+        e_ai = em(self.bot, "AI", animated=True)
+        e_arrow = em(self.bot, "ARROW")
         embed = discord.Embed(
-            title="🤖 KYOKA AI Configuration Suite",
+            title=f"{e_ai} KYOKA AI Configuration Suite",
             description=(
-                f"• `{p}ai setup <#channel|off>` — Opt in to automatic AI chat in one channel, or turn it off\n"
-                f"• `{p}ai personality <preset>` — Set AI personality preset\n"
-                f"• `{p}ai config` — View server AI settings\n"
-                f"• `{p}ai test <prompt>` — Test AI response\n"
-                f"• `{p}ai reset` — Reset AI server settings to default\n"
-                f"• `{p}ai enable [#channel]` — Enable AI in a channel or server-wide\n"
-                f"• `{p}ai disable [#channel]` — Disable AI in a channel or server-wide\n"
-                f"• `{p}ai clear` — Clear conversation history\n"
-                f"• `{p}ai status` — View AI system status"
+                f"{e_arrow} `{p}ai setup <#channel|off>` — Opt in to automatic AI chat in one channel, or turn it off\n"
+                f"{e_arrow} `{p}ai personality <preset>` — Set AI personality preset\n"
+                f"{e_arrow} `{p}ai config` — View server AI settings\n"
+                f"{e_arrow} `{p}ai test <prompt>` — Test AI response\n"
+                f"{e_arrow} `{p}ai reset` — Reset AI server settings to default\n"
+                f"{e_arrow} `{p}ai enable [#channel]` — Enable AI in a channel or server-wide\n"
+                f"{e_arrow} `{p}ai disable [#channel]` — Disable AI in a channel or server-wide\n"
+                f"{e_arrow} `{p}ai clear` — Clear conversation history\n"
+                f"{e_arrow} `{p}ai status` — View AI system status"
             ),
             color=PURPLE,
         )
@@ -332,7 +335,7 @@ class AIInteractions(commands.Cog):
     async def ai_cmd_reset(self, ctx: CustomContext):
         view = ConfirmAIResetView(self.bot, ctx.guild.id, ctx.author.id)
         await ctx.send(
-            "⚠️ **Are you sure you want to reset the AI configuration for this server?**\n"
+            f"{em(self.bot, 'WARNING')} **Are you sure you want to reset the AI configuration for this server?**\n"
             "> This will restore default Aizen settings and clear custom server rules.",
             view=view,
         )
@@ -353,10 +356,10 @@ class AIInteractions(commands.Cog):
                 excluded.remove(channel.id)
             current["excluded_channels"] = excluded
             await self.bot.ai_mgr.save_server_config(gid, current)
-            await ctx.send(f"✅ Enabled AI responses in {channel.mention}.")
+            await ctx.send(f"{em(self.bot, 'SUCCESS', animated=True)} Enabled AI responses in {channel.mention}.")
         else:
             await self.bot.ai_mgr.save_server_config(gid, current)
-            await ctx.send("✅ Enabled AI responses server-wide.")
+            await ctx.send(f"{em(self.bot, 'SUCCESS', animated=True)} Enabled AI responses server-wide.")
 
     @ai_prefix_group.command(name="disable", help="Disable AI responses in a specific channel or server-wide.")
     @commands.has_guild_permissions(manage_guild=True)
@@ -373,11 +376,11 @@ class AIInteractions(commands.Cog):
                 allowed.remove(channel.id)
             current["allowed_channels"] = allowed
             await self.bot.ai_mgr.save_server_config(gid, current)
-            await ctx.send(f"✅ Disabled AI responses in {channel.mention}.")
+            await ctx.send(f"{em(self.bot, 'SUCCESS', animated=True)} Disabled AI responses in {channel.mention}.")
         else:
             current["enabled"] = False
             await self.bot.ai_mgr.save_server_config(gid, current)
-            await ctx.send("✅ Disabled AI responses server-wide.")
+            await ctx.send(f"{em(self.bot, 'SUCCESS', animated=True)} Disabled AI responses server-wide.")
 
     @ai_prefix_group.command(name="clear", help="Clear recent conversation memory in this channel.")
     async def ai_cmd_clear(self, ctx: CustomContext):

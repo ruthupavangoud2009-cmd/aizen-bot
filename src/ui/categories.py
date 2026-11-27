@@ -746,3 +746,76 @@ def get_category_by_query(query: str) -> Optional[CategoryMeta]:
         if clean in cat.name.lower() or clean in cat.tag.lower() or cat.id in clean:
             return cat
     return None
+
+
+CATEGORY_EMOJI_KEYS: dict[str, str] = {
+    "general": "HOME",
+    "moderation": "MODERATION",
+    "automod": "ANTINUKE",
+    "welcome": "WELCOME",
+    "verification": "VERIFICATION",
+    "tickets": "TICKET",
+    "reaction_roles": "ROLES",
+    "giveaways": "GIVEAWAY",
+    "music": "MUSIC",
+    "watch_party": "MEDIA",
+    "afk": "AFK",
+    "vouches": "VOUCH",
+    "service_bills": "BILLS",
+    "blox_fruits": "BLOXFRUITS",
+    "ai": "AI",
+    "leveling": "LEVELING",
+    "images": "IMAGE",
+    "premium": "PREMIUM",
+    "config": "SETTINGS",
+    "utility": "UTILITY",
+    "social": "FUN",
+    "staff_applications": "EDIT",
+    "owner": "OWNER",
+    "economy": "ECONOMY",
+    "hunting": "HUNTING",
+    "pets": "PETS",
+    "rpg": "RPG",
+    "casino": "CASINO",
+    "multiplayer": "MULTIPLAYER",
+    "social_games": "GIVEAWAY",
+    "quests": "QUESTS",
+}
+
+
+def resolve_category_emoji(cat_or_id: Any, bot: Any = None, *, animated: bool = False) -> str:
+    """Resolve a custom/animated emoji string for any category ID or CategoryMeta."""
+    from src.utils.emojis import em
+
+    if isinstance(cat_or_id, CategoryMeta):
+        cat_id = cat_or_id.id
+        fb = cat_or_id.emoji
+    else:
+        cat_id = str(cat_or_id or "").strip().lower()
+        meta = CATEGORY_BY_ID.get(cat_id)
+        fb = meta.emoji if meta else "📁"
+    key = CATEGORY_EMOJI_KEYS.get(cat_id, cat_id.upper())
+    return em(bot, key, fallback=fb, animated=animated)
+
+
+def resolve_category_select_emoji(cat_or_id: Any, bot: Any = None) -> discord.Emoji | discord.PartialEmoji | str:
+    """Resolve a Discord-safe Emoji/PartialEmoji/Unicode for category dropdowns and buttons."""
+    from src.utils.emojis import resolve_select_emoji
+
+    if isinstance(cat_or_id, CategoryMeta):
+        cat_id = cat_or_id.id
+        fb = cat_or_id.emoji
+    else:
+        cat_id = str(cat_or_id or "").strip().lower()
+        meta = CATEGORY_BY_ID.get(cat_id)
+        fb = meta.emoji if meta else "📁"
+    key = CATEGORY_EMOJI_KEYS.get(cat_id, cat_id.upper())
+    return resolve_select_emoji(bot, key, fallback=fb)
+
+
+def format_category_tag(cat: CategoryMeta, bot: Any = None) -> str:
+    """Format a CategoryMeta header using resolved KYOKA custom emoji instead of static Unicode."""
+    icon = resolve_category_emoji(cat, bot=bot)
+    label = cat.tag.split("・", 1)[-1].strip() if "・" in cat.tag else cat.name.upper()
+    return f"{icon} ・ **{label}**"
+

@@ -23,6 +23,7 @@ from discord.ext import commands
 from src.core.config import Config
 from src.core.context import CustomContext
 from src.security.owner import is_primary_owner, is_owner_or_staff, audit
+from src.utils.emojis import em
 
 if TYPE_CHECKING:
     from src.core.bot import KyokaBot
@@ -77,19 +78,23 @@ class Branding(commands.Cog, name="Admin-Branding"):
         """Root command for server branding customization."""
         if ctx.invoked_subcommand is None:
             p = self.bot.guild_mgr.get_prefix(ctx.guild.id)
+            e_brand = em(self.bot, "BRANDING", animated=True)
+            e_shield = em(self.bot, "ANTINUKE", animated=True)
+            e_lock = em(self.bot, "LOCK")
+            e_arrow = em(self.bot, "ARROW")
             embed = discord.Embed(
-                title="⛩️ KYOKA 3.0 — Server Branding Suite",
+                title=f"{e_brand} KYOKA 3.0 — Server Branding Suite",
                 description=(
                     f"Customize KYOKA's appearance and identity specifically for **{ctx.guild.name}**.\n\n"
                     f"**Available Commands:**\n"
-                    f"• `{p}botedit name <name>` — Set server display name & bot nickname\n"
-                    f"• `{p}botedit avatar <url or attachment>` — Set server bot avatar (only for this server)\n"
-                    f"• `{p}botedit banner <url or attachment>` — Set server bot banner (only for this server)\n"
-                    f"• `{p}botedit bio <text>` — Set server bot bio (only people in this server see it)\n"
-                    f"• `{p}botedit view` — View this server's current branding configuration\n"
-                    f"• `{p}botedit reset` — Reset server branding back to default KYOKA branding\n\n"
-                    f"🛡️ *Requires Manage Server or Administrator permissions.*\n"
-                    f"🔒 *Strict Server Isolation: All changes apply ONLY to this server. Other servers and DMs always see normal KYOKA branding.*"
+                    f"{e_arrow} `{p}botedit name <name>` — Set server display name & bot nickname\n"
+                    f"{e_arrow} `{p}botedit avatar <url or attachment>` — Set server bot avatar (only for this server)\n"
+                    f"{e_arrow} `{p}botedit banner <url or attachment>` — Set server bot banner (only for this server)\n"
+                    f"{e_arrow} `{p}botedit bio <text>` — Set server bot bio (only people in this server see it)\n"
+                    f"{e_arrow} `{p}botedit view` — View this server's current branding configuration\n"
+                    f"{e_arrow} `{p}botedit reset` — Reset server branding back to default KYOKA branding\n\n"
+                    f"{e_shield} *Requires Manage Server or Administrator permissions.*\n"
+                    f"{e_lock} *Strict Server Isolation: All changes apply ONLY to this server. Other servers and DMs always see normal KYOKA branding.*"
                 ),
                 color=0x7C3AED,
             )
@@ -104,23 +109,27 @@ class Branding(commands.Cog, name="Admin-Branding"):
     @commands.guild_only()
     async def setbot_name(self, ctx: CustomContext, *, name: Optional[str] = None) -> None:
         if name is not None and not name.strip():
-            await ctx.send_warning("❌ Name cannot be empty.")
+            await ctx.send_warning("Name cannot be empty.")
             return
 
         p = self.bot.guild_mgr.get_prefix(ctx.guild.id)
+        e_brand = em(self.bot, "BRANDING", animated=True)
+        e_lock = em(self.bot, "LOCK")
+        e_ok = em(self.bot, "SUCCESS", animated=True)
+        e_arrow = em(self.bot, "ARROW")
         if name is None:
             branding = await self.bot.branding_mgr.get_branding(ctx.guild.id)
             current_name = branding.get("display_name")
             embed = discord.Embed(
-                title=f"⛩️ KYOKA 3.0 • SERVER BOT NAME • {ctx.guild.name}",
+                title=f"{e_brand} KYOKA 3.0 • SERVER BOT NAME • {ctx.guild.name}",
                 description=(
                     f"**Current Server Display Name for `{ctx.guild.name}`:**\n"
                     f"> `{current_name}`\n\n"
-                    f"🔒 **Strict Server Isolation:**\n"
+                    f"{e_lock} **Strict Server Isolation:**\n"
                     f"> This name applies **ONLY** to `{ctx.guild.name}`. Members in other servers or DMs will not see this name.\n\n"
                     f"**How to Change:**\n"
-                    f"• `{p}botedit name <new name>`\n"
-                    f"• To restore default name: `{p}botedit reset`"
+                    f"{e_arrow} `{p}botedit name <new name>`\n"
+                    f"{e_arrow} To restore default name: `{p}botedit reset`"
                 ),
                 color=0x7C3AED,
             )
@@ -129,12 +138,12 @@ class Branding(commands.Cog, name="Admin-Branding"):
             return
 
         if not self._can_manage_branding(ctx):
-            await ctx.send_warning("❌ You need **Manage Server** or **Administrator** permissions to modify KYOKA's branding.")
+            await ctx.send_warning("You need **Manage Server** or **Administrator** permissions to modify KYOKA's branding.")
             return
 
         clean_name = name.strip()
         if len(clean_name) > 32:
-            await ctx.send_warning("❌ Name cannot exceed 32 characters (Discord nickname limit).")
+            await ctx.send_warning("Name cannot exceed 32 characters (Discord nickname limit).")
             return
 
         applied_nickname = False
@@ -159,20 +168,20 @@ class Branding(commands.Cog, name="Admin-Branding"):
             )
         except Exception as dbe:
             logger.error("Failed to save branding display_name: %s", dbe)
-            await ctx.send_warning(f"❌ Failed to persist branding to database: {dbe}")
+            await ctx.send_warning(f"Failed to persist branding to database: {dbe}")
             return
 
         # Audit log
         await audit(self.bot, ctx.author.id, "set-bot-name", ctx.guild.id, "success", f"name={clean_name[:50]}")
 
         embed = discord.Embed(
-            title="⛩️ KYOKA 3.0 • SERVER BOT NAME CONFIGURED",
+            title=f"{e_brand} KYOKA 3.0 • SERVER BOT NAME CONFIGURED",
             description=(
-                f"✅ **KYOKA's server display name for `{ctx.guild.name}` is now set to `{clean_name}`!**\n\n"
-                f"• **Target Server:** `{ctx.guild.name}` (`{ctx.guild.id}`)\n"
-                f"• **Configured By:** {ctx.author.mention}\n"
-                f"• **Live Discord Nickname:** `{'Updated Successfully' if applied_nickname else 'Preserved (Embeds Only)'}`\n"
-                f"• **Strict Isolation:** This name applies exclusively to `{ctx.guild.name}` and will not affect any other server."
+                f"{e_ok} **KYOKA's server display name for `{ctx.guild.name}` is now set to `{clean_name}`!**\n\n"
+                f"{e_arrow} **Target Server:** `{ctx.guild.name}` (`{ctx.guild.id}`)\n"
+                f"{e_arrow} **Configured By:** {ctx.author.mention}\n"
+                f"{e_arrow} **Live Discord Nickname:** `{'Updated Successfully' if applied_nickname else 'Preserved (Embeds Only)'}`\n"
+                f"{e_arrow} **Strict Isolation:** This name applies exclusively to `{ctx.guild.name}` and will not affect any other server."
             ),
             color=0x7C3AED,
             timestamp=discord.utils.utcnow(),
@@ -203,21 +212,25 @@ class Branding(commands.Cog, name="Admin-Branding"):
             target_url = image_url.strip()
 
         p = self.bot.guild_mgr.get_prefix(ctx.guild.id)
+        e_brand = em(self.bot, "BRANDING", animated=True)
+        e_lock = em(self.bot, "LOCK")
+        e_img = em(self.bot, "IMAGE")
+        e_arrow = em(self.bot, "ARROW")
         if not target_url:
             branding = await self.bot.branding_mgr.get_branding(ctx.guild.id)
             av_url = branding.get("avatar_url")
             is_custom = bool(branding.get("is_custom"))
             embed = discord.Embed(
-                title=f"⛩️ KYOKA 3.0 • SERVER BOT AVATAR • {ctx.guild.name}",
+                title=f"{e_brand} KYOKA 3.0 • SERVER BOT AVATAR • {ctx.guild.name}",
                 description=(
                     f"**Current Server Avatar for `{ctx.guild.name}`:**\n"
-                    f"> {'🎨 Custom Server Avatar Active' if is_custom else '⛩️ Default Global Avatar Active'}\n\n"
-                    f"🔒 **Strict Server Isolation:**\n"
+                    f"> {f'{e_img} Custom Server Avatar Active' if is_custom else f'{e_brand} Default Global Avatar Active'}\n\n"
+                    f"{e_lock} **Strict Server Isolation:**\n"
                     f"> This avatar applies **ONLY** to `{ctx.guild.name}`. Members in other servers or DMs will not see this avatar.\n\n"
                     f"**How to Change:**\n"
-                    f"• `{p}botedit avatar <image URL>` (or `{p}botedit avater <image URL>`)\n"
-                    f"• Upload an image file with comment `{p}botedit avatar`\n"
-                    f"• To restore default avatar: `{p}botedit reset`"
+                    f"{e_arrow} `{p}botedit avatar <image URL>` (or `{p}botedit avater <image URL>`)\n"
+                    f"{e_arrow} Upload an image file with comment `{p}botedit avatar`\n"
+                    f"{e_arrow} To restore default avatar: `{p}botedit reset`"
                 ),
                 color=0x7C3AED,
             )

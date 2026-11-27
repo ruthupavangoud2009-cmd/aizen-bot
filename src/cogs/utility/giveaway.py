@@ -19,6 +19,7 @@ from src.utils.containers import (
     edit_container_response,
     send_container_response,
 )
+from src.utils.emojis import em, resolve_select_emoji
 
 if TYPE_CHECKING:
     from src.core.bot import KyokaBot
@@ -344,9 +345,11 @@ class PersistentGiveawayView(discord.ui.View):
         if not breakdown:
             container.add_text(f"{dot} **Requirements:** No restrictions. Open to all members!\n")
         else:
+            e_ok = em(self.bot, "SUCCESS", animated=True)
+            e_err = em(self.bot, "ERROR")
             lines = []
             for b in breakdown:
-                icon = "✅" if b["passed"] else "❌"
+                icon = e_ok if b["passed"] else e_err
                 lines.append(f"{icon} **{b['label']}**\n> Status: `{b['reason']}`")
             container.add_text("\n\n".join(lines) + "\n")
 
@@ -1256,7 +1259,7 @@ class Giveaways(commands.Cog):
         if not new_winners:
             return await ctx.send("No participants available to reroll.")
         mentions = ", ".join(f"<@{w}>" for w in new_winners)
-        await ctx.send(f"🎉 New Winner(s) for **{data['prize']}**: {mentions}!")
+        await ctx.send(f"{em(self.bot, 'GIVEAWAY')} New Winner(s) for **{data['prize']}**: {mentions}!")
 
     @commands.command(name="glist")
     @commands.has_permissions(manage_messages=True)
@@ -1266,7 +1269,8 @@ class Giveaways(commands.Cog):
         active = self.bot.giveaway_mgr.get_active_giveaways_for_guild(ctx.guild.id)
         if not active:
             return await ctx.send("No active giveaways.")
-        lines = [f"• **{g['prize']}** in <#{g['channel_id']}> ({g['winner_count']} winners)" for g in active]
+        e_arrow = em(self.bot, "ARROW")
+        lines = [f"{e_arrow} **{g['prize']}** in <#{g['channel_id']}> ({g['winner_count']} winners)" for g in active]
         await ctx.send("\n".join(lines))
 
     @commands.command(name="gpause")
@@ -1282,7 +1286,7 @@ class Giveaways(commands.Cog):
         res = await self.bot.giveaway_mgr.pause_giveaway(mid, ctx.author.id)
         if not res:
             return await ctx.send("Could not pause giveaway. Verify it is active and not already paused.")
-        await ctx.send(f"⏸️ Paused giveaway **{res['prize']}**.")
+        await ctx.send(f"{em(self.bot, 'PAUSE')} Paused giveaway **{res['prize']}**.")
 
     @commands.command(name="gresume")
     @commands.has_permissions(manage_messages=True)
@@ -1297,7 +1301,7 @@ class Giveaways(commands.Cog):
         res = await self.bot.giveaway_mgr.resume_giveaway(mid, ctx.author.id)
         if not res:
             return await ctx.send("Could not resume giveaway. Verify it is paused.")
-        await ctx.send(f"▶️ Resumed giveaway **{res['prize']}**.")
+        await ctx.send(f"{em(self.bot, 'PLAY')} Resumed giveaway **{res['prize']}**.")
 
     @commands.command(name="gcancel")
     @commands.has_permissions(manage_messages=True)
@@ -1312,7 +1316,7 @@ class Giveaways(commands.Cog):
         res = await self.bot.giveaway_mgr.cancel_giveaway(mid, ctx.author.id, reason)
         if not res:
             return await ctx.send("Giveaway not found.")
-        await ctx.send(f"❌ Cancelled giveaway **{res['prize']}**.")
+        await ctx.send(f"{em(self.bot, 'ERROR')} Cancelled giveaway **{res['prize']}**.")
 
     @commands.command(name="ginfo")
     @commands.guild_only()
@@ -1356,7 +1360,9 @@ class Giveaways(commands.Cog):
             gw = self.bot.giveaway_mgr._row_to_giveaway_dict(gw_row)
         act_mgr = getattr(self.bot, "activity_mgr", None)
         passed, breakdown = await self.bot.giveaway_mgr.check_member_eligibility(gw, member, act_mgr)
-        lines = [f"{'✅' if b['passed'] else '❌'} {b['type']}: {b['reason']}" for b in breakdown]
+        e_ok = em(self.bot, "SUCCESS", animated=True)
+        e_err = em(self.bot, "ERROR")
+        lines = [f"{e_ok if b['passed'] else e_err} {b['type']}: {b['reason']}" for b in breakdown]
         res_str = "**Eligible**" if passed else "**Not Eligible**"
         await ctx.send(f"Eligibility for {member.mention}: {res_str}\n" + "\n".join(lines))
 

@@ -17,6 +17,7 @@ from discord.ext import commands
 
 from src.core.context import CustomContext
 from src.utils.containers import KyokaContainer, send_container_response
+from src.utils.emojis import em
 
 if TYPE_CHECKING:
     from src.core.bot import KyokaBot
@@ -120,16 +121,18 @@ class Jail(commands.Cog, name="Moderation-Jail"):
     async def cmd_help(self, ctx: CustomContext) -> None:
         """Display jail system manual."""
         p = ctx.clean_prefix
+        e_lock = em(self.bot, "LOCK")
+        e_arrow = em(self.bot, "ARROW")
         container = KyokaContainer(accent_color=None)
-        container.add_text("**⛓️ KYOKA Jail & Detention System**")
+        container.add_text(f"**{e_lock} KYOKA Jail & Detention System**")
         container.add_separator(divider=True)
         container.add_text(
-            f"• `{p}jail <@user> [duration] [reason]` — Strip roles and isolate user in jail\n"
-            f"• `{p}unjail <@user> [reason]` — Release user and restore all original roles\n"
-            f"• `{p}jail setup` — Automatically provision Jailed role and #jail channel\n"
-            f"• `{p}jail setrole <@role>` — Configure existing role as Jailed role\n"
-            f"• `{p}jail setchannel <#channel>` — Configure existing channel as jail\n"
-            f"• `{p}jail list` — View all currently jailed users in this server\n\n"
+            f"{e_arrow} `{p}jail <@user> [duration] [reason]` — Strip roles and isolate user in jail\n"
+            f"{e_arrow} `{p}unjail <@user> [reason]` — Release user and restore all original roles\n"
+            f"{e_arrow} `{p}jail setup` — Automatically provision Jailed role and #jail channel\n"
+            f"{e_arrow} `{p}jail setrole <@role>` — Configure existing role as Jailed role\n"
+            f"{e_arrow} `{p}jail setchannel <#channel>` — Configure existing channel as jail\n"
+            f"{e_arrow} `{p}jail list` — View all currently jailed users in this server\n\n"
             f"*Example: `{p}jail @Troll 30m Raiding and spamming`*"
         )
         container.add_separator(divider=True)
@@ -195,12 +198,14 @@ class Jail(commands.Cog, name="Moderation-Jail"):
                 except Exception:
                     pass
 
+        e_ok = em(self.bot, "SUCCESS", animated=True)
+        e_arrow = em(self.bot, "ARROW")
         container = KyokaContainer(accent_color=None)
-        container.add_text("**✅ Jail System Setup Complete**")
+        container.add_text(f"**{e_ok} Jail System Setup Complete**")
         container.add_separator(divider=True)
         container.add_text(
-            f"• **Jailed Role:** {jail_role.mention}\n"
-            f"• **Jail Channel:** {jail_ch.mention}\n\n"
+            f"{e_arrow} **Jailed Role:** {jail_role.mention}\n"
+            f"{e_arrow} **Jail Channel:** {jail_ch.mention}\n\n"
             f"> Offending members will be stripped of their normal roles and restricted to {jail_ch.mention}."
         )
         container.add_separator(divider=True)
@@ -227,7 +232,7 @@ class Jail(commands.Cog, name="Moderation-Jail"):
                 pass
 
         container = KyokaContainer(accent_color=None)
-        container.add_text(f"**⛓️ Currently Jailed Inmates • {guild.name}**")
+        container.add_text(f"**{em(self.bot, 'LOCK')} Currently Jailed Inmates • {guild.name}**")
         container.add_separator(divider=True)
 
         if not rows:
@@ -365,16 +370,18 @@ class Jail(commands.Cog, name="Moderation-Jail"):
 
             self._unjailed_tasks[task_key] = asyncio.create_task(_auto_unjail())
 
-        dur_text = f"**Duration:** `{str(duration)}`\n" if duration else ""
+        e_lock = em(self.bot, "LOCK")
+        e_arrow = em(self.bot, "ARROW")
+        dur_text = f"{e_arrow} **Duration:** `{str(duration)}`\n" if duration else ""
         container = KyokaContainer(accent_color=None)
-        container.add_text(f"**⛓️ Member Detained • {member.display_name}**")
+        container.add_text(f"**{e_lock} Member Detained • {member.display_name}**")
         container.add_separator(divider=True)
         container.add_text(
-            f"• **Inmate:** {member.mention} (`{member.id}`)\n"
-            f"• **Moderator:** {ctx.author.mention}\n"
+            f"{e_arrow} **Inmate:** {member.mention} (`{member.id}`)\n"
+            f"{e_arrow} **Moderator:** {ctx.author.mention}\n"
             f"{dur_text}"
-            f"• **Reason:** {reason}\n"
-            f"• **Roles Stripped:** `{len(stripped_ids)} role(s) archived`"
+            f"{e_arrow} **Reason:** {reason}\n"
+            f"{e_arrow} **Roles Stripped:** `{len(stripped_ids)} role(s) archived`"
         )
         container.add_separator(divider=True)
         container.add_text(f"-# Action executed by {ctx.author.display_name}")
@@ -448,7 +455,7 @@ class Jail(commands.Cog, name="Moderation-Jail"):
             self._unjailed_tasks.pop(task_key).cancel()
 
         container = KyokaContainer(accent_color=None)
-        container.add_text(f"**🕊️ Member Released • {member.display_name}**")
+        container.add_text(f"**{em(self.bot, 'UNLOCK')} Member Released • {member.display_name}**")
         container.add_separator(divider=True)
         container.add_text(
             f"• **Member:** {member.mention} (`{member.id}`)\n"

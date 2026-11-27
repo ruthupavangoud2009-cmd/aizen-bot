@@ -21,6 +21,7 @@ from discord.ext import commands
 from src.core.context import CustomContext
 from src.managers.economy_manager import EconomyManager
 from src.managers.hunting_manager import HuntingManager, CRAFTING_RECIPES
+from src.utils.emojis import em, resolve_select_emoji
 from src.utils.ui import AizenPalette
 
 if TYPE_CHECKING:
@@ -33,15 +34,18 @@ AIZEN_GOLD = 0xD4AF37
 class TradeConfirmView(discord.ui.View):
     """Interactive dual-confirmation trade view with duplicate-exploit prevention."""
 
-    def __init__(self, sender: discord.Member, receiver: discord.Member, offer_str: str, receive_str: str):
+    def __init__(self, sender: discord.Member, receiver: discord.Member, offer_str: str, receive_str: str, bot: Any = None):
         super().__init__(timeout=60)
         self.sender = sender
         self.receiver = receiver
         self.offer_str = offer_str
         self.receive_str = receive_str
+        self.bot = bot
         self.sender_accepted = False
         self.receiver_accepted = False
         self.is_cancelled = False
+        self.btn_accept.emoji = resolve_select_emoji(bot, "SUCCESS", fallback="✅")
+        self.btn_cancel.emoji = resolve_select_emoji(bot, "ERROR", fallback="✖️")
 
     @discord.ui.button(label="Accept Trade", style=discord.ButtonStyle.success, emoji="🤝")
     async def btn_accept(self, interaction: discord.Interaction, button: discord.ui.Button):
@@ -56,7 +60,7 @@ class TradeConfirmView(discord.ui.View):
         if self.sender_accepted and self.receiver_accepted:
             self.stop()
             embed = discord.Embed(
-                title="✅ Trade Executed Successfully!",
+                title=f"{em(self.bot, 'SUCCESS', animated=True)} Trade Executed Successfully!",
                 description=f"> Both **{self.sender.display_name}** and **{self.receiver.display_name}** confirmed the trade terms.",
                 color=0x22C55E
             )
@@ -64,7 +68,7 @@ class TradeConfirmView(discord.ui.View):
 
         waiting_on = self.receiver.display_name if self.sender_accepted else self.sender.display_name
         embed = discord.Embed(
-            title="⏳ Trade Pending Confirmation",
+            title=f"{em(self.bot, 'TIMER')} Trade Pending Confirmation",
             description=f"> One party has confirmed. Waiting for **{waiting_on}** to accept or decline.",
             color=AIZEN_GOLD
         )
@@ -78,7 +82,7 @@ class TradeConfirmView(discord.ui.View):
         self.is_cancelled = True
         self.stop()
         embed = discord.Embed(
-            title="🚫 Trade Cancelled",
+            title=f"{em(self.bot, 'ERROR')} Trade Cancelled",
             description=f"> Trade was declined by **{interaction.user.display_name}**. No assets were transferred.",
             color=0xEF4444
         )
@@ -110,6 +114,8 @@ class Hunting(commands.Cog):
 
         settings = await self.eco_mgr.get_guild_settings(guild_id)
         curr_emoji = settings.get("currency_emoji", "🪙")
+        if curr_emoji == "🪙":
+            curr_emoji = em(self.bot, "COINS", animated=True)
 
         # Award small hunting coins
         if res["coins"] > 0:
@@ -129,7 +135,9 @@ class Hunting(commands.Cog):
         color = rarity_colors.get(creature["rarity"], AIZEN_PURPLE)
 
         if res["caught"]:
-            rare_alert = " ⭐ **RARE ENCOUNTER BROADCAST!** ⭐\n" if res["is_rare"] else ""
+            e_star = em(self.bot, "STAR")
+            e_sword = em(self.bot, "MODERATION")
+            rare_alert = f" {e_star} **RARE ENCOUNTER BROADCAST!** {e_star}\n" if res["is_rare"] else ""
             embed = discord.Embed(
                 title=f"{creature['emoji']} Caught a {creature['name']}! ({creature['rarity']})",
                 description=(
@@ -137,7 +145,7 @@ class Hunting(commands.Cog):
                     f"> You ventured into the forest and captured a **{creature['name']}**!\n"
                     f"> Catch Probability: `{res['catch_rate']}%`\n"
                     f"> Scavenged Loot: **+{res['coins']:,}** {curr_emoji}\n\n"
-                    f"⚔️ **HP:** `{creature['base_hp']}` • **ATK:** `{creature['base_atk']}` • **DEF:** `{creature['base_def']}`\n"
+                    f"{e_sword} **HP:** `{creature['base_hp']}` • **ATK:** `{creature['base_atk']}` • **DEF:** `{creature['base_def']}`\n"
                     f"*{creature['description']}*"
                 ),
                 color=color,
@@ -145,7 +153,7 @@ class Hunting(commands.Cog):
             embed.set_footer(text=f"View your collected pets with {ctx.clean_prefix}zoo or {ctx.clean_prefix}pets!")
         else:
             embed = discord.Embed(
-                title=f"💨 The {creature['name']} Escaped!",
+                title=f"{em(self.bot, 'WARNING')} The {creature['name']} Escaped!",
                 description=(
                     f"> You spotted a wild {creature['emoji']} **{creature['name']}** ({creature['rarity']}), but it darted into the shadows!\n"
                     f"> However, you found **+{res['coins']:,}** {curr_emoji} dropped on the trail."
@@ -168,7 +176,7 @@ class Hunting(commands.Cog):
         categories = data["categories"]
 
         embed = discord.Embed(
-            title=f"🐾 {target.display_name}'s Sovereign Menagerie & Zoo",
+            title=f"{em(self.bot, 'PETS')} {target.display_name}'s Sovereign Menagerie & Zoo",
             description=(
                 f"> **Collection Progress:** `{data['completion_pct']}%` ({data['unique_count']}/{data['catalog_size']} Unique Species)\n"
                 f"> **Total Animals:** `{data['total_count']:,}` Captured\n"
@@ -201,7 +209,7 @@ class Hunting(commands.Cog):
         guild_id = ctx.guild.id if ctx.guild else 0
         pet = await self.hunting_mgr.get_pet(guild_id, ctx.author.id, name)
         if not pet:
-            return await ctx.send(f"❌ You don't own a creature matching **`{name}`**! Check `{ctx.clean_prefix}zoo`.")
+            return await ctx.send(f"{em(self.bot, 'ERROR')} You don't own a creature matching **`{name}`**! Check `{ctx.clean_prefix}zoo`.")
 
         lvl = pet.get("level", 1)
         hp = pet["base_hp"] + (lvl * 15)
@@ -213,12 +221,12 @@ class Hunting(commands.Cog):
             description=f"> Rarity: `{pet['rarity']}` • Quantity: `×{pet['count']}`\n> *{pet['description']}*\n",
             color=AIZEN_PURPLE,
         )
-        embed.add_field(name="❤️ Health (HP)", value=f"`{hp}`", inline=True)
-        embed.add_field(name="⚔️ Attack (ATK)", value=f"`{atk}`", inline=True)
-        embed.add_field(name="🛡️ Defense (DEF)", value=f"`{defense}`", inline=True)
-        embed.add_field(name="💖 Affection", value=f"`{pet['affection']}/100`", inline=True)
-        embed.add_field(name="⭐ Experience", value=f"`{pet['exp']}/{lvl * 50}` XP", inline=True)
-        embed.add_field(name="👑 Status", value="`Equipped`" if pet.get("equipped_pet") else "`Idle`", inline=True)
+        embed.add_field(name=f"{em(self.bot, 'HEART', animated=True)} Health (HP)", value=f"`{hp}`", inline=True)
+        embed.add_field(name=f"{em(self.bot, 'MODERATION')} Attack (ATK)", value=f"`{atk}`", inline=True)
+        embed.add_field(name=f"{em(self.bot, 'ANTINUKE', animated=True)} Defense (DEF)", value=f"`{defense}`", inline=True)
+        embed.add_field(name=f"{em(self.bot, 'HEART')} Affection", value=f"`{pet['affection']}/100`", inline=True)
+        embed.add_field(name=f"{em(self.bot, 'STAR')} Experience", value=f"`{pet['exp']}/{lvl * 50}` XP", inline=True)
+        embed.add_field(name=f"{em(self.bot, 'CROWN')} Status", value="`Equipped`" if pet.get("equipped_pet") else "`Idle`", inline=True)
         embed.set_footer(text=f"Feed your pet with ?feed {pet['creature_id']} to gain XP & Affection!")
         await ctx.send(embed=embed)
 
@@ -227,12 +235,12 @@ class Hunting(commands.Cog):
         guild_id = ctx.guild.id if ctx.guild else 0
         res = await self.hunting_mgr.feed_pet(guild_id, ctx.author.id, name)
         if "error" in res:
-            return await ctx.send(f"❌ {res['error']}")
+            return await ctx.send(f"{em(self.bot, 'ERROR')} {res['error']}")
 
-        lvl_str = f" ⭐ **LEVEL UP! Reached Level {res['level']}!**" if res["leveled_up"] else f" (Level {res['level']})"
+        lvl_str = f" {em(self.bot, 'STAR')} **LEVEL UP! Reached Level {res['level']}!**" if res["leveled_up"] else f" (Level {res['level']})"
         await ctx.send(
-            f"🍖 Fed **{res['pet_name']}** {res['emoji']} a bowl of gourmet kibble!{lvl_str}\n"
-            f"• Affection increased to **{res['affection']}/100**!"
+            f"{em(self.bot, 'PETS')} Fed **{res['pet_name']}** {res['emoji']} a bowl of gourmet kibble!{lvl_str}\n"
+            f"{em(self.bot, 'ARROW')} Affection increased to **{res['affection']}/100**!"
         )
 
     @commands.command(name="fishing", aliases=["fish"], description="Cast your fishing rod into mystical waters.")
@@ -295,14 +303,16 @@ class Hunting(commands.Cog):
 
         res = await self.eco_mgr.open_crate(guild_id, ctx.author.id, crate_id)
         if "error" in res:
-            return await ctx.send(f"📦 {res['error']}")
+            return await ctx.send(f"{em(self.bot, 'ARCHIVE')} {res['error']}")
 
-        item_str = f"\n• Unlocked Item: {res['item'].get('emoji', '📦')} **{res['item']['name']}**!" if res.get("item") else ""
+        if curr_emoji == "🪙":
+            curr_emoji = em(self.bot, "COINS", animated=True)
+        item_str = f"\n{em(self.bot, 'ARROW')} Unlocked Item: {res['item'].get('emoji', '📦')} **{res['item']['name']}**!" if res.get("item") else ""
         embed = discord.Embed(
-            title="🎁 Supply Crate Unsealed!",
+            title=f"{em(self.bot, 'REWARDS')} Supply Crate Unsealed!",
             description=(
                 f"> You unlocked the `{crate_id}` and discovered:\n"
-                f"• Currency Payout: **+{res['cash']:,}** {curr_emoji}{item_str}"
+                f"{em(self.bot, 'ARROW')} Currency Payout: **+{res['cash']:,}** {curr_emoji}{item_str}"
             ),
             color=AIZEN_GOLD,
         )
@@ -313,26 +323,30 @@ class Hunting(commands.Cog):
         guild_id = ctx.guild.id if ctx.guild else 0
         settings = await self.eco_mgr.get_guild_settings(guild_id)
         curr_emoji = settings.get("currency_emoji", "🪙")
+        if curr_emoji == "🪙":
+            curr_emoji = em(self.bot, "COINS", animated=True)
 
         if not recipe_id:
+            e_forge = em(self.bot, "UTILITY")
+            e_arrow = em(self.bot, "ARROW")
             embed = discord.Embed(
-                title="🔨 Sovereign Forge & Crafting Bench",
+                title=f"{e_forge} Sovereign Forge & Crafting Bench",
                 description="> Craft legendary gear using ores and currency.\n> Usage: `?craft <recipe_id>`\n",
                 color=AIZEN_PURPLE,
             )
             for r in CRAFTING_RECIPES:
                 embed.add_field(
-                    name=f"🛠️ {r['name']} (`{r['recipe_id']}`)",
-                    value=f"• Cost: **{r['cost']:,}** {curr_emoji}\n• *{r['description']}*",
+                    name=f"{e_forge} {r['name']} (`{r['recipe_id']}`)",
+                    value=f"{e_arrow} Cost: **{r['cost']:,}** {curr_emoji}\n{e_arrow} *{r['description']}*",
                     inline=False
                 )
             return await ctx.send(embed=embed)
 
         res = await self.hunting_mgr.craft_item(guild_id, ctx.author.id, recipe_id)
         if "error" in res:
-            return await ctx.send(f"❌ {res['error']}")
+            return await ctx.send(f"{em(self.bot, 'ERROR')} {res['error']}")
 
-        await ctx.send(f"✨ **Forging Complete!** You crafted **{res['recipe']['name']}**! Check `{ctx.clean_prefix}inventory`.")
+        await ctx.send(f"{em(self.bot, 'SPARKLE', animated=True)} **Forging Complete!** You crafted **{res['recipe']['name']}**! Check `{ctx.clean_prefix}inventory`.")
 
     @commands.command(name="explore", description="Explore unknown territories for random adventure encounters.")
     @commands.cooldown(1, 30, commands.BucketType.user)
@@ -400,7 +414,7 @@ class Hunting(commands.Cog):
         await self.eco_mgr.update_balance(guild_id, ctx.author.id, wallet_delta=bounty, tx_type="boss_slain", metadata=f"Slain {b_name}")
 
         embed = discord.Embed(
-            title=f"⚔️ World Boss Slain: {b_name}!",
+            title=f"{em(self.bot, 'MODERATION')} World Boss Slain: {b_name}!",
             description=(
                 f"> Your squad broke through the boss's Hierro and claimed victory!\n"
                 f"> Sovereign Bounty: **+{bounty:,}** {curr_emoji}"
@@ -418,9 +432,9 @@ class Hunting(commands.Cog):
         if member.bot or member.id == ctx.author.id:
             return await ctx.send("Invalid trade partner!")
 
-        view = TradeConfirmView(ctx.author, member, offer, for_item)
+        view = TradeConfirmView(ctx.author, member, offer, for_item, bot=self.bot)
         embed = discord.Embed(
-            title="🤝 Proposed Trade Agreement",
+            title=f"{em(self.bot, 'ROLES')} Proposed Trade Agreement",
             description=(
                 f"> **Initiator:** {ctx.author.mention} offering `{offer}`\n"
                 f"> **Recipient:** {member.mention} providing `{for_item}`\n\n"

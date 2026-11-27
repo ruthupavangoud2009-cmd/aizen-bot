@@ -13,7 +13,7 @@ from discord.ext import commands
 from src.core.context import CustomContext
 from src.utils.canvas import render_rank_card
 from src.utils.containers import KyokaContainer, send_container_response
-from src.utils.emojis import resolve_emoji
+from src.utils.emojis import em, resolve_emoji
 from src.utils.image_tools import download_image_bytes
 
 if TYPE_CHECKING:
@@ -225,7 +225,7 @@ class Leveling(commands.Cog, name="General-Leveling"):
         await level_mgr.set_guild_enabled(ctx.guild.id, False)
         container = KyokaContainer()
         container.add_section(
-            content=f"## 🛑 XP Progression Disabled • {ctx.guild.name}\n"
+            content=f"## {em(self.bot, 'STOP')} XP Progression Disabled • {ctx.guild.name}\n"
                     f"> Automatic XP tracking and notifications are now **Inactive**."
         )
         container.add_separator(divider=True)
@@ -276,11 +276,11 @@ class Leveling(commands.Cog, name="General-Leveling"):
             )
             container.add_separator(divider=True)
             container.add_text(
-                f"• **Status:** {'🟢 Active (Tracking XP)' if current['enabled'] else '🔴 Disabled (Default — no XP awarded)'}\n"
+                f"• **Status:** {f'{em(self.bot, "ONLINE")} Active (Tracking XP)' if current['enabled'] else f'{em(self.bot, "DND")} Disabled (Default — no XP awarded)'}\n"
                 f"• **Level-Up Notifications:** {'Enabled' if current['announce'] else 'Disabled'}\n"
                 f"• **Message Cooldown:** `{current['cooldown']} seconds`\n"
                 f"• **XP Range per Message:** `{current['min_xp']} - {current['max_xp']} XP`\n\n"
-                f"💡 **Quick Toggles:**\n"
+                f"{em(self.bot, 'INFO')} **Quick Toggles:**\n"
                 f"> Use `?levelenable` to turn on XP progression for this server.\n"
                 f"> Use `?leveldisable` to turn off XP progression (existing data stays safe)."
             )

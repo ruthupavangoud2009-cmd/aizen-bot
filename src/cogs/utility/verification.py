@@ -20,7 +20,7 @@ from discord.ext import commands
 from src.core.config import Config
 from src.core.context import CustomContext
 from src.utils.containers import KyokaContainer, send_container_response
-from src.utils.emojis import resolve_select_emoji
+from src.utils.emojis import em, resolve_select_emoji
 
 if TYPE_CHECKING:
     from src.core.bot import KyokaBot
@@ -51,7 +51,7 @@ class VerificationChallengeModal(discord.ui.Modal, title="Server Verification Ch
         val = str(self.answer_input.value).strip()
         if val != self.answer:
             await interaction.response.send_message(
-                "❌ Incorrect answer. Please click the button and try again.",
+                f"{em(self.cog.bot, 'ERROR')} Incorrect answer. Please click the button and try again.",
                 ephemeral=True,
             )
             return
@@ -65,6 +65,7 @@ class VerificationRulesView(discord.ui.View):
     def __init__(self, cog: Verification) -> None:
         super().__init__(timeout=120)
         self.cog = cog
+        self.agree.emoji = resolve_select_emoji(cog.bot, "SUCCESS", fallback="✅")
 
     @discord.ui.button(label="I Agree & Accept Rules", style=discord.ButtonStyle.success, emoji="✅")
     async def agree(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
@@ -108,7 +109,7 @@ class PersistentVerifyView(discord.ui.View):
         elif method == "rules":
             rules_view = VerificationRulesView(self.cog)
             return await interaction.response.send_message(
-                "📋 **Community Rules Agreement**\n\n"
+                f"{em(self.cog.bot, 'LIST')} **Community Rules Agreement**\n\n"
                 "1. Treat everyone with respect.\n"
                 "2. No spamming, advertising, or unsolicited DMs.\n"
                 "3. Follow Discord's Terms of Service and Community Guidelines.\n\n"
@@ -128,11 +129,13 @@ class PersistentVerifyView(discord.ui.View):
         row=0,
     )
     async def btn_help(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+        e_info = em(self.cog.bot, "INFO")
+        e_arrow = em(self.cog.bot, "ARROW")
         await interaction.response.send_message(
-            "ℹ️ **Having trouble verifying?**\n"
-            "• Ensure your internet connection is stable.\n"
-            "• Check that you do not have server direct messages blocked.\n"
-            "• Contact server moderators if issues persist.",
+            f"{e_info} **Having trouble verifying?**\n"
+            f"{e_arrow} Ensure your internet connection is stable.\n"
+            f"{e_arrow} Check that you do not have server direct messages blocked.\n"
+            f"{e_arrow} Contact server moderators if issues persist.",
             ephemeral=True,
         )
 
@@ -259,15 +262,15 @@ class Verification(commands.Cog):
             return await interaction.response.send_message("The verified role no longer exists. Please alert an administrator.", ephemeral=True)
 
         if verified_role in member.roles:
-            return await interaction.response.send_message("✅ You are already verified on this server!", ephemeral=True)
+            return await interaction.response.send_message(f"{em(self.bot, 'VERIFICATION', animated=True)} You are already verified on this server!", ephemeral=True)
 
         me = guild.me
         if not me or not me.guild_permissions.manage_roles:
-            return await interaction.response.send_message("❌ KYOKA lacks **Manage Roles** permission.", ephemeral=True)
+            return await interaction.response.send_message(f"{em(self.bot, 'ERROR')} KYOKA lacks **Manage Roles** permission.", ephemeral=True)
 
         if me.top_role <= verified_role:
             return await interaction.response.send_message(
-                f"❌ KYOKA's highest role must be above {verified_role.mention} in Server Settings -> Roles.",
+                f"{em(self.bot, 'ERROR')} KYOKA's highest role must be above {verified_role.mention} in Server Settings -> Roles.",
                 ephemeral=True,
             )
 
@@ -298,7 +301,7 @@ class Verification(commands.Cog):
             )
 
             await interaction.response.send_message(
-                f"✅ **Verification Complete!**\n> Welcome to **{guild.name}**, {member.mention}! You now have full access.",
+                f"{em(self.bot, 'VERIFICATION', animated=True)} **Verification Complete!**\n> Welcome to **{guild.name}**, {member.mention}! You now have full access.",
                 ephemeral=True,
             )
 
@@ -311,7 +314,7 @@ class Verification(commands.Cog):
                         container = KyokaContainer()
                         container.add_section(
                             content=(
-                                f"🛡️ **Member Verified**\n"
+                                f"{em(self.bot, 'VERIFICATION', animated=True)} **Member Verified**\n"
                                 f"> Member: {member.mention} `「{member.id}」`\n"
                                 f"> Method: `{method.title()}`\n"
                                 f"> Timestamp: <t:{int(time.time())}:R>"
@@ -323,13 +326,13 @@ class Verification(commands.Cog):
 
         except discord.Forbidden:
             await interaction.response.send_message(
-                "❌ Missing permissions to assign or remove roles. Please contact server staff.",
+                f"{em(self.bot, 'ERROR')} Missing permissions to assign or remove roles. Please contact server staff.",
                 ephemeral=True,
             )
         except Exception as e:
             logger.error(f"Error executing verification for {member.id} in {guild.id}: {e}")
             await interaction.response.send_message(
-                "❌ An error occurred during verification. Please try again later.",
+                f"{em(self.bot, 'ERROR')} An error occurred during verification. Please try again later.",
                 ephemeral=True,
             )
 

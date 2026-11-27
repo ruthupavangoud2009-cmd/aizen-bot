@@ -19,6 +19,7 @@ from discord.ext import commands
 logger = logging.getLogger("Kyoka.BloxFruitsAI")
 PURPLE = discord.Color.from_rgb(111, 67, 190)
 from src.ui.asset_manager import AssetManager
+from src.utils.emojis import em
 
 # ─────────────────────────────────────────────────────────────────────────────
 # BLOX FRUITS ENCYCLOPEDIA (OFFLINE 100% ACCURATE KNOWLEDGE BASE)
@@ -402,7 +403,7 @@ class BloxFruitsAI(commands.Cog):
                     )
 
             embed = discord.Embed(
-                title="⛩️ KYŌKA • BLOX FRUITS AI ASSISTANT",
+                title=f"{em(self.bot, 'BLOXFRUITS')} KYŌKA • BLOX FRUITS AI ASSISTANT",
                 description=answer_text[:2000],
                 color=PURPLE,
                 timestamp=discord.utils.utcnow()
@@ -433,22 +434,29 @@ class BloxFruitsAI(commands.Cog):
         if not matched:
             available = ", ".join(f"`{d['name']}`" for d in list(FRUITS_DATABASE.values())[:10])
             return await ctx.reply(
-                f"❌ Fruit `{fruit}` not found. Try one of these: {available}...",
+                f"{em(self.bot, 'ERROR')} Fruit `{fruit}` not found. Try one of these: {available}...",
                 mention_author=False
             )
 
+        e_bf = em(self.bot, "BLOXFRUITS")
+        e_tag = em(self.bot, "ROLES")
+        e_coin = em(self.bot, "COINS", animated=True)
+        e_star = em(self.bot, "STAR")
+        e_sparkle = em(self.bot, "SPARKLE", animated=True)
+        e_stats = em(self.bot, "STATS")
+        e_arrow = em(self.bot, "ARROW")
         embed = discord.Embed(
-            title=f"🍎 Blox Fruits • {matched['name']} Fruit",
+            title=f"{e_bf} Blox Fruits • {matched['name']} Fruit",
             description=f"> {matched['description']}",
             color=PURPLE,
             timestamp=discord.utils.utcnow()
         )
-        embed.add_field(name="🏷️ Classification", value=f"• **Type:** `{matched['type']}`\n• **Rarity:** `{matched['rarity']}`", inline=True)
-        embed.add_field(name="💰 Store Cost", value=f"• **Beli:** `{matched['beli']}`\n• **Robux:** `{matched['robux']}`", inline=True)
-        embed.add_field(name="⭐ Meta Ratings", value=f"• **PvP Tier:** `{matched['pvp_tier']}`\n• **Grinding:** `{matched['grind_tier']}`", inline=True)
-        embed.add_field(name="⚡ Moveset", value="\n".join(f"• {m}" for m in matched["moves"]), inline=False)
-        embed.add_field(name="📈 Trade Value Estimate", value=f"`~{matched['trade_value']:,} Trade Value Points`", inline=True)
-        embed.add_field(name="✨ Awakening Available", value="`Yes (Raid)`" if matched["awakenable"] else "`No`", inline=True)
+        embed.add_field(name=f"{e_tag} Classification", value=f"{e_arrow} **Type:** `{matched['type']}`\n{e_arrow} **Rarity:** `{matched['rarity']}`", inline=True)
+        embed.add_field(name=f"{e_coin} Store Cost", value=f"{e_arrow} **Beli:** `{matched['beli']}`\n{e_arrow} **Robux:** `{matched['robux']}`", inline=True)
+        embed.add_field(name=f"{e_star} Meta Ratings", value=f"{e_arrow} **PvP Tier:** `{matched['pvp_tier']}`\n{e_arrow} **Grinding:** `{matched['grind_tier']}`", inline=True)
+        embed.add_field(name=f"{e_sparkle} Moveset", value="\n".join(f"{e_arrow} {m}" for m in matched["moves"]), inline=False)
+        embed.add_field(name=f"{e_stats} Trade Value Estimate", value=f"`~{matched['trade_value']:,} Trade Value Points`", inline=True)
+        embed.add_field(name=f"{e_sparkle} Awakening Available", value="`Yes (Raid)`" if matched["awakenable"] else "`No`", inline=True)
 
         embed.set_footer(text="KYŌKA Blox Fruits Database • Current Game Meta")
         await ctx.reply(embed=embed, mention_author=False)
@@ -479,16 +487,21 @@ class BloxFruitsAI(commands.Cog):
 
         min_l, max_l, sea, island, enemies, tip = matched_step
 
+        e_stats = em(self.bot, "STATS")
+        e_globe = em(self.bot, "GLOBE")
+        e_mod = em(self.bot, "MODERATION")
+        e_info = em(self.bot, "INFO")
+        e_sparkle = em(self.bot, "SPARKLE", animated=True)
         embed = discord.Embed(
-            title=f"📈 Blox Fruits Leveling Guide • Level {level}",
+            title=f"{e_stats} Blox Fruits Leveling Guide • Level {level}",
             description=f"Optimal progression route for **Level {level}** (Range: `{min_l} - {max_l}`):",
             color=PURPLE,
             timestamp=discord.utils.utcnow()
         )
-        embed.add_field(name="🌊 Current Sea", value=f"`{sea}`", inline=True)
-        embed.add_field(name="🏝️ Recommended Island", value=f"**{island}**", inline=True)
-        embed.add_field(name="⚔️ Target Quest & NPCs", value=f"`{enemies}`", inline=False)
-        embed.add_field(name="💡 Pro Leveling Advice", value=f"> {tip}", inline=False)
+        embed.add_field(name=f"{e_globe} Current Sea", value=f"`{sea}`", inline=True)
+        embed.add_field(name=f"{em(self.bot, 'HOME')} Recommended Island", value=f"**{island}**", inline=True)
+        embed.add_field(name=f"{e_mod} Target Quest & NPCs", value=f"`{enemies}`", inline=False)
+        embed.add_field(name=f"{e_info} Pro Leveling Advice", value=f"> {tip}", inline=False)
 
         # General Leveling Tips
         if sea == "First Sea":
@@ -498,7 +511,7 @@ class BloxFruitsAI(commands.Cog):
         else:
             general_tip = "Use Buddha or Kitsune. Farm Bones at Haunted Castle for 2x EXP boosts, and unlock Cursed Dual Katana."
 
-        embed.add_field(name="✨ Key Strategy for This Sea", value=f"> {general_tip}", inline=False)
+        embed.add_field(name=f"{e_sparkle} Key Strategy for This Sea", value=f"> {general_tip}", inline=False)
         embed.set_footer(text=f"Requested by {ctx.author.display_name} • Max Level: 2600")
         await ctx.reply(embed=embed, mention_author=False)
 
@@ -526,7 +539,7 @@ class BloxFruitsAI(commands.Cog):
 
         if not fruits_offer or not fruits_target:
             return await ctx.reply(
-                "❌ Could not recognize fruits in your trade query.\n"
+                f"{em(self.bot, 'ERROR')} Could not recognize fruits in your trade query.\n"
                 "Example usage: `+tradehelp Kitsune for Dragon` or `+tradehelp Leopard for Dough Buddha`",
                 mention_author=False
             )
@@ -536,7 +549,7 @@ class BloxFruitsAI(commands.Cog):
         pct = (diff / max(1, val_offer)) * 100
 
         if pct >= 25:
-            verdict = "🟢 **MASSIVE WIN (Huge Profit)**"
+            verdict = f"{em(self.bot, 'ONLINE')} **MASSIVE WIN (Huge Profit)**"
             advice = "Accept immediately! You are receiving far higher community trade value."
             color = discord.Color.green()
         elif pct >= 5:

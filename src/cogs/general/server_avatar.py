@@ -18,6 +18,7 @@ from src.core.context import CustomContext
 from src.security.owner import is_primary_owner, is_owner_or_staff, audit
 from src.security.feature_access import require_premium, check_guild_feature_access
 from src.utils.containers import KyokaContainer, send_container_response
+from src.utils.emojis import em, resolve_select_emoji
 
 if TYPE_CHECKING:
     from src.core.bot import KyokaBot
@@ -40,11 +41,14 @@ class AvatarConfirmationView(discord.ui.View):
         self.target_url = target_url
         self.avatar_bytes = avatar_bytes
         self.confirmed: bool | None = None
+        bot_ref = getattr(ctx, "bot", None)
+        self.confirm_callback.emoji = resolve_select_emoji(bot_ref, "SUCCESS", fallback="✅")
+        self.cancel_callback.emoji = resolve_select_emoji(bot_ref, "ERROR", fallback="❌")
 
     async def interaction_check(self, interaction: discord.Interaction) -> bool:
         if interaction.user.id != self.ctx.author.id:
             await interaction.response.send_message(
-                "❌ Only the administrator who initiated this avatar update can confirm it.",
+                f"{em(self.ctx, 'ERROR')} Only the administrator who initiated this avatar update can confirm it.",
                 ephemeral=True,
             )
             return False
@@ -74,11 +78,14 @@ class AvatarResetConfirmationView(discord.ui.View):
         super().__init__(timeout=timeout)
         self.ctx = ctx
         self.confirmed: bool | None = None
+        bot_ref = getattr(ctx, "bot", None)
+        self.confirm_callback.emoji = resolve_select_emoji(bot_ref, "REFRESH", fallback="🔄")
+        self.cancel_callback.emoji = resolve_select_emoji(bot_ref, "ERROR", fallback="❌")
 
     async def interaction_check(self, interaction: discord.Interaction) -> bool:
         if interaction.user.id != self.ctx.author.id:
             await interaction.response.send_message(
-                "❌ Only the administrator who initiated this reset can confirm it.",
+                f"{em(self.ctx, 'ERROR')} Only the administrator who initiated this reset can confirm it.",
                 ephemeral=True,
             )
             return False
@@ -254,7 +261,7 @@ class ServerAvatar(commands.Cog, name="General-ServerAvatar"):
 
         # 3. Interactive Preview & Confirmation
         preview_embed = discord.Embed(
-            title="🖼️ Preview Custom Server Avatar",
+            title=f"{em(self.bot, 'IMAGE')} Preview Custom Server Avatar",
             description=(
                 f"**Target Server:** `{ctx.guild.name}` (`{ctx.guild.id}`)\n"
                 f"**Requested By:** {ctx.author.mention} (`{ctx.author.name}`)\n"
@@ -273,7 +280,7 @@ class ServerAvatar(commands.Cog, name="General-ServerAvatar"):
 
         if view.confirmed is None:
             timeout_embed = discord.Embed(
-                title="⏳ Avatar Update Timed Out",
+                title=f"{em(self.bot, 'TIMER')} Avatar Update Timed Out",
                 description="> No confirmation received within 60 seconds. Avatar was not changed.",
                 color=0x6B7280,
             )
@@ -285,7 +292,7 @@ class ServerAvatar(commands.Cog, name="General-ServerAvatar"):
 
         if view.confirmed is False:
             cancel_embed = discord.Embed(
-                title="❌ Avatar Update Cancelled",
+                title=f"{em(self.bot, 'ERROR')} Avatar Update Cancelled",
                 description="> Avatar update was cancelled by user. No changes were made.",
                 color=0xEF4444,
             )
@@ -356,14 +363,17 @@ class ServerAvatar(commands.Cog, name="General-ServerAvatar"):
         )
 
         p = self.bot.guild_mgr.get_prefix(ctx.guild.id)
+        e_brand = em(self.bot, "BRANDING", animated=True)
+        e_ok = em(self.bot, "SUCCESS", animated=True)
+        e_arrow = em(self.bot, "ARROW")
         success_embed = discord.Embed(
-            title="⛩️ KYOKA 3.0 • CUSTOM SERVER AVATAR ACTIVATED",
+            title=f"{e_brand} KYOKA 3.0 • CUSTOM SERVER AVATAR ACTIVATED",
             description=(
-                f"✅ **Kyoka's custom avatar for `{ctx.guild.name}` has been successfully configured!**\n\n"
-                f"• **Server:** `{ctx.guild.name}` (`{ctx.guild.id}`)\n"
-                f"• **Configured By:** {ctx.author.mention}\n"
-                f"• **Discord Profile API Applied:** `{'Yes (Live Member Avatar)' if applied_discord_api else 'Kyoka Visual Branding Engine'}`\n"
-                f"• **Reset Anytime:** Type `{p}resetbotavatar` to restore global Aizen branding.{api_notice}"
+                f"{e_ok} **Kyoka's custom avatar for `{ctx.guild.name}` has been successfully configured!**\n\n"
+                f"{e_arrow} **Server:** `{ctx.guild.name}` (`{ctx.guild.id}`)\n"
+                f"{e_arrow} **Configured By:** {ctx.author.mention}\n"
+                f"{e_arrow} **Discord Profile API Applied:** `{'Yes (Live Member Avatar)' if applied_discord_api else 'Kyoka Visual Branding Engine'}`\n"
+                f"{e_arrow} **Reset Anytime:** Type `{p}resetbotavatar` to restore global Aizen branding.{api_notice}"
             ),
             color=0x7C3AED,
             timestamp=discord.utils.utcnow(),

@@ -79,3 +79,9 @@ class KyokaTheme:
     def format_badge(label: str, style: str = "primary") -> str:
         """Format a clean markdown pill badge."""
         return f"`[{label}]`"
+
+    @staticmethod
+    def emoji(key: str, bot: object = None, *, fallback: str = "", animated: bool = False) -> str:
+        """Resolve a KYOKA custom/animated emoji from the active EmojiRegistry."""
+        from src.utils.emojis import em
+        return em(bot, key, fallback=fallback, animated=animated)

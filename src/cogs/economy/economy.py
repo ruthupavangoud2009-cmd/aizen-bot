@@ -21,7 +21,7 @@ from discord.ext import commands
 from src.core.context import CustomContext
 from src.managers.economy_manager import EconomyManager
 from src.security.owner import OWNER_ID
-from src.utils.emojis import resolve_emoji, resolve_select_emoji
+from src.utils.emojis import em, resolve_emoji, resolve_select_emoji
 from src.utils.ui import AizenPalette, AizenSymbols, KyokaEmbed
 
 if TYPE_CHECKING:
@@ -169,13 +169,13 @@ class Economy(commands.Cog):
     @commands.group(name="inf", invoke_without_command=True, help="Owner-only infinite balance controls.")
     async def inf(self, ctx: CustomContext) -> None:
         if ctx.author.id != OWNER_ID:
-            return await ctx.send("⛔ This command is restricted to the bot owner.")
+            return await ctx.send(f"{em(self.bot, 'LOCK')} This command is restricted to the bot owner.")
         await ctx.send(f"Owner controls: `{ctx.clean_prefix}inf cash [@member]`")
 
     @inf.command(name="cash", help="Set a member's wallet to the maximum safe virtual balance (owner only).")
     async def inf_cash(self, ctx: CustomContext, member: Optional[discord.Member] = None) -> None:
         if ctx.author.id != OWNER_ID:
-            return await ctx.send("⛔ This command is restricted to the bot owner.")
+            return await ctx.send(f"{em(self.bot, 'LOCK')} This command is restricted to the bot owner.")
         if ctx.guild is None:
             return await ctx.send("Use this command in a server.")
         target = member or ctx.author
@@ -183,7 +183,7 @@ class Economy(commands.Cog):
         profile = await self.eco.get_or_create_profile(ctx.guild.id, target.id)
         current_balance = int(profile.get("balance", 0))
         if current_balance >= target_balance:
-            return await ctx.send(f"💰 {target.mention} already has the maximum KYOKA wallet balance.")
+            return await ctx.send(f"{em(self.bot, 'COINS', animated=True)} {target.mention} already has the maximum KYOKA wallet balance.")
         delta = target_balance - current_balance
         try:
             await self.eco.update_balance(
@@ -191,9 +191,9 @@ class Economy(commands.Cog):
                 tx_type="owner_inf_cash", metadata=f"Owner-only infinite cash grant by {ctx.author.id}",
             )
         except Exception:
-            return await ctx.send("❌ Could not update the wallet. Check database health.")
+            return await ctx.send(f"{em(self.bot, 'ERROR')} Could not update the wallet. Check database health.")
         await ctx.send(
-            f"👑 **INFINITE CASH GRANTED**\n{target.mention} wallet set to **{target_balance:,}** 🪙."
+            f"{em(self.bot, 'CROWN')} **INFINITE CASH GRANTED**\n{target.mention} wallet set to **{target_balance:,}** {em(self.bot, 'COINS', animated=True)}."
         )
 
     @commands.hybrid_command(name="cash", aliases=["bal", "balance", "money"], description="View your wallet and bank balances.")
@@ -215,12 +215,12 @@ class Economy(commands.Cog):
             color=AIZEN_PURPLE,
         )
         embed.set_thumbnail(url=target.display_avatar.url)
-        embed.add_field(name="💵 Wallet Balance", value=f"`{wallet:,}` {curr_emoji} {curr_name}", inline=True)
-        embed.add_field(name="🏛️ Bank Vault", value=f"`{bank:,}` {curr_emoji} {curr_name}", inline=True)
-        embed.add_field(name="💎 Net Worth", value=f"`{net_worth:,}` {curr_emoji} {curr_name}", inline=True)
-        embed.add_field(name="🔥 Daily Streak", value=f"`{profile.get('daily_streak', 0)}` consecutive days", inline=True)
-        embed.add_field(name="📈 Total Earned", value=f"`{profile.get('total_earned', 0):,}` {curr_emoji}", inline=True)
-        embed.add_field(name="📉 Total Spent", value=f"`{profile.get('total_spent', 0):,}` {curr_emoji}", inline=True)
+        embed.add_field(name=f"{em(self.bot, 'WALLET')} Wallet Balance", value=f"`{wallet:,}` {curr_emoji} {curr_name}", inline=True)
+        embed.add_field(name=f"{em(self.bot, 'SERVER')} Bank Vault", value=f"`{bank:,}` {curr_emoji} {curr_name}", inline=True)
+        embed.add_field(name=f"{em(self.bot, 'PREMIUM', animated=True)} Net Worth", value=f"`{net_worth:,}` {curr_emoji} {curr_name}", inline=True)
+        embed.add_field(name=f"{em(self.bot, 'FIRE')} Daily Streak", value=f"`{profile.get('daily_streak', 0)}` consecutive days", inline=True)
+        embed.add_field(name=f"{em(self.bot, 'STATS')} Total Earned", value=f"`{profile.get('total_earned', 0):,}` {curr_emoji}", inline=True)
+        embed.add_field(name=f"{em(self.bot, 'SPENT', fallback='📉')} Total Spent", value=f"`{profile.get('total_spent', 0):,}` {curr_emoji}", inline=True)
 
         embed.set_footer(text=f"Server Currency: {curr_name} • Requested by {ctx.author.display_name}")
         await ctx.send(embed=embed)
@@ -238,20 +238,21 @@ class Economy(commands.Cog):
             hrs = rem // 3600
             mins = (rem % 3600) // 60
             secs = rem % 60
-            return await ctx.send(f"⏳ **Patience.** You already claimed your daily reward! Return in **{hrs}h {mins}m {secs}s**.")
+            return await ctx.send(f"{em(self.bot, 'TIMER')} **Patience.** You already claimed your daily reward! Return in **{hrs}h {mins}m {secs}s**.")
 
         streak = res["streak"]
         amt = res["amount"]
         new_bal = res["new_balance"]
 
         gift_em = resolve_emoji(self.bot, "REWARDS")
+        arrow = em(self.bot, "ARROW")
         embed = discord.Embed(
             title=f"{gift_em} Daily Allowance Granted!",
             description=(
                 f"> **Sosuke Aizen acknowledges your daily loyalty.**\n\n"
-                f"• Payout: **+{amt:,}** {curr_emoji} {curr_name}\n"
-                f"• Current Streak: **{streak} days** 🔥 *(+{(streak-1)*5}% bonus)*\n"
-                f"• New Wallet: **{new_bal:,}** {curr_emoji}\n"
+                f"{arrow} Payout: **+{amt:,}** {curr_emoji} {curr_name}\n"
+                f"{arrow} Current Streak: **{streak} days** {em(self.bot, 'FIRE')} *(+{(streak-1)*5}% bonus)*\n"
+                f"{arrow} New Wallet: **{new_bal:,}** {curr_emoji}\n"
             ),
             color=AIZEN_GOLD,
         )
@@ -271,10 +272,10 @@ class Economy(commands.Cog):
             days = rem // 86400
             hrs = (rem % 86400) // 3600
             mins = (rem % 3600) // 60
-            return await ctx.send(f"⏳ Weekly reward cooldown in effect. Return in **{days}d {hrs}h {mins}m**.")
+            return await ctx.send(f"{em(self.bot, 'TIMER')} Weekly reward cooldown in effect. Return in **{days}d {hrs}h {mins}m**.")
 
         embed = discord.Embed(
-            title=f"👑 Weekly Treasury Grant Received!",
+            title=f"{em(self.bot, 'CROWN')} Weekly Treasury Grant Received!",
             description=(
                 f"> Payout: **+{res['amount']:,}** {curr_emoji} {curr_name}\n"
                 f"> Weekly Streak: **{res['streak']} weeks**\n"
@@ -294,10 +295,10 @@ class Economy(commands.Cog):
         res = await self.eco.work(guild_id, ctx.author.id)
         if not res.get("success"):
             rem = res["remaining"]
-            return await ctx.send(f"⏳ You are resting between shifts! Return in **{rem // 60}m {rem % 60}s**.")
+            return await ctx.send(f"{em(self.bot, 'TIMER')} You are resting between shifts! Return in **{rem // 60}m {rem % 60}s**.")
 
         embed = discord.Embed(
-            title=f"💼 Shift Completed: {res['role']}",
+            title=f"{em(self.bot, 'COINS', animated=True)} Shift Completed: {res['role']}",
             description=f"> You {res['action']} and earned **+{res['amount']:,}** {curr_emoji} {curr_name}!\n> Wallet: **{res['new_balance']:,}** {curr_emoji}",
             color=AIZEN_PURPLE,
         )
@@ -313,17 +314,17 @@ class Economy(commands.Cog):
         res = await self.eco.crime(guild_id, ctx.author.id)
         if not res.get("success"):
             rem = res["remaining"]
-            return await ctx.send(f"⏳ The heat is still on you! Lay low for another **{rem // 60}m {rem % 60}s**.")
+            return await ctx.send(f"{em(self.bot, 'TIMER')} The heat is still on you! Lay low for another **{rem // 60}m {rem % 60}s**.")
 
         if res["outcome"] == "success":
             embed = discord.Embed(
-                title=f"🕶️ Criminal Operation Succeeded!",
+                title=f"{em(self.bot, 'SUCCESS', animated=True)} Criminal Operation Succeeded!",
                 description=f"> You {res['action']} and made away with **+{res['amount']:,}** {curr_emoji} {curr_name}!\n> Wallet: **{res['new_balance']:,}** {curr_emoji}",
                 color=0x22C55E,
             )
         else:
             embed = discord.Embed(
-                title=f"🚨 Busted by Authorities!",
+                title=f"{em(self.bot, 'ALERT')} Busted by Authorities!",
                 description=f"> You {res['action']} and got fined **-{res['fine']:,}** {curr_emoji} {curr_name}!\n> Wallet: **{res['new_balance']:,}** {curr_emoji}",
                 color=0xEF4444,
             )
@@ -338,9 +339,9 @@ class Economy(commands.Cog):
 
         res = await self.eco.beg(guild_id, ctx.author.id)
         if res["amount"] == 0:
-            return await ctx.send(f"💔 {res['donor']}")
+            return await ctx.send(f"{em(self.bot, 'HEART')} {res['donor']}")
 
-        await ctx.send(f"🪙 **{res['donor']}** handed you **+{res['amount']:,}** {curr_emoji} {curr_name}!")
+        await ctx.send(f"{em(self.bot, 'COINS', animated=True)} **{res['donor']}** handed you **+{res['amount']:,}** {curr_emoji} {curr_name}!")
 
     @commands.hybrid_command(name="deposit", aliases=["dep"], description="Deposit money from your wallet into the secure bank vault.")
     async def deposit(self, ctx: CustomContext, amount: str) -> None:
@@ -368,7 +369,7 @@ class Economy(commands.Cog):
         new_wallet, new_bank = await self.eco.update_balance(
             guild_id, ctx.author.id, wallet_delta=-amt, bank_delta=amt, tx_type="deposit", metadata="Vault Deposit"
         )
-        await ctx.send(f"🏛️ Successfully deposited **{amt:,}** {curr_emoji} into your bank!\n• Wallet: `{new_wallet:,}` • Bank: `{new_bank:,}`")
+        await ctx.send(f"{em(self.bot, 'SUCCESS', animated=True)} Successfully deposited **{amt:,}** {curr_emoji} into your bank!\n{em(self.bot, 'ARROW')} Wallet: `{new_wallet:,}` • Bank: `{new_bank:,}`")
 
     @commands.hybrid_command(name="withdraw", aliases=["with"], description="Withdraw money from your bank into your wallet.")
     async def withdraw(self, ctx: CustomContext, amount: str) -> None:
@@ -396,16 +397,16 @@ class Economy(commands.Cog):
         new_wallet, new_bank = await self.eco.update_balance(
             guild_id, ctx.author.id, wallet_delta=amt, bank_delta=-amt, tx_type="withdraw", metadata="Vault Withdrawal"
         )
-        await ctx.send(f"💵 Successfully withdrew **{amt:,}** {curr_emoji} from your bank!\n• Wallet: `{new_wallet:,}` • Bank: `{new_bank:,}`")
+        await ctx.send(f"{em(self.bot, 'WALLET')} Successfully withdrew **{amt:,}** {curr_emoji} from your bank!\n{em(self.bot, 'ARROW')} Wallet: `{new_wallet:,}` • Bank: `{new_bank:,}`")
 
     @commands.hybrid_command(name="pay", aliases=["give", "transfer"], description="Transfer money safely to another member.")
     async def pay(self, ctx: CustomContext, member: discord.Member, amount: int) -> None:
         if member.bot:
-            return await ctx.send("⛔ You cannot transfer money to bot accounts.")
+            return await ctx.send(f"{em(self.bot, 'LOCK')} You cannot transfer money to bot accounts.")
         if member.id == ctx.author.id:
-            return await ctx.send("⛔ You cannot transfer money to yourself.")
+            return await ctx.send(f"{em(self.bot, 'LOCK')} You cannot transfer money to yourself.")
         if amount <= 0:
-            return await ctx.send("⛔ Transfer amount must be positive.")
+            return await ctx.send(f"{em(self.bot, 'WARNING')} Transfer amount must be positive.")
 
         guild_id = ctx.guild.id if ctx.guild else 0
         settings = await self._get_settings(guild_id)
@@ -415,11 +416,11 @@ class Economy(commands.Cog):
         try:
             sender_bal, receiver_bal = await self.eco.transfer_funds(guild_id, ctx.author.id, member.id, amount)
             await ctx.send(
-                f"✅ **Transaction Complete!** Transferred **{amount:,}** {curr_emoji} {curr_name} to {member.mention}.\n"
-                f"• Your new wallet: **{sender_bal:,}** {curr_emoji}"
+                f"{em(self.bot, 'SUCCESS', animated=True)} **Transaction Complete!** Transferred **{amount:,}** {curr_emoji} {curr_name} to {member.mention}.\n"
+                f"{em(self.bot, 'ARROW')} Your new wallet: **{sender_bal:,}** {curr_emoji}"
             )
         except ValueError as err:
-            await ctx.send(f"❌ {err}")
+            await ctx.send(f"{em(self.bot, 'ERROR')} {err}")
 
     @commands.hybrid_command(name="rob", aliases=["mug", "pickpocket", "robuser"], description="Attempt to pickpocket another member's wallet.")
     async def rob(self, ctx: CustomContext, member: discord.Member) -> None:
@@ -435,12 +436,12 @@ class Economy(commands.Cog):
 
         res = await self.eco.rob(guild_id, ctx.author.id, member.id)
         if "error" in res:
-            return await ctx.send(f"⛔ {res['error']}")
+            return await ctx.send(f"{em(self.bot, 'LOCK')} {res['error']}")
 
         if res["success"]:
-            await ctx.send(f"🥷 **Clean getaway!** You snuck up on {member.mention} and pickpocketed **+{res['stolen']:,}** {curr_emoji} {curr_name}!")
+            await ctx.send(f"{em(self.bot, 'COINS', animated=True)} **Clean getaway!** You snuck up on {member.mention} and pickpocketed **+{res['stolen']:,}** {curr_emoji} {curr_name}!")
         else:
-            await ctx.send(f"🚨 **Busted!** {member.mention} caught you with your hands in their pockets! You were fined **-{res['fine']:,}** {curr_emoji}!")
+            await ctx.send(f"{em(self.bot, 'ALERT')} **Busted!** {member.mention} caught you with your hands in their pockets! You were fined **-{res['fine']:,}** {curr_emoji}!")
 
     async def build_rich_embed(self, guild_id: int, page: int, currency: str, emoji: str, total_pages: int) -> discord.Embed:
         rows, total = await self.eco.get_rich_leaderboard(guild_id, page=page, per_page=10)
@@ -501,11 +502,11 @@ class Economy(commands.Cog):
 
         res = await self.eco.buy_item(guild_id, ctx.author.id, item_id, quantity)
         if "error" in res:
-            return await ctx.send(f"❌ {res['error']}")
+            return await ctx.send(f"{em(self.bot, 'ERROR')} {res['error']}")
 
         it = res["item"]
         await ctx.send(
-            f"🛍️ **Purchase Confirmed!** You acquired **{res['quantity']}x {it['name']}** for **{res['total_cost']:,}** {curr_emoji} {curr_name}!\n"
+            f"{em(self.bot, 'SHOP')} **Purchase Confirmed!** You acquired **{res['quantity']}x {it['name']}** for **{res['total_cost']:,}** {curr_emoji} {curr_name}!\n"
             f"Use `{ctx.clean_prefix}inventory` to inspect your items."
         )
 
@@ -518,10 +519,10 @@ class Economy(commands.Cog):
 
         res = await self.eco.sell_item(guild_id, ctx.author.id, item_id, quantity)
         if "error" in res:
-            return await ctx.send(f"❌ {res['error']}")
+            return await ctx.send(f"{em(self.bot, 'ERROR')} {res['error']}")
 
         it = res["item"]
-        await ctx.send(f"💰 Sold **{res['quantity']}x {it['name']}** for **+{res['payout']:,}** {curr_emoji} {curr_name}!")
+        await ctx.send(f"{em(self.bot, 'COINS', animated=True)} Sold **{res['quantity']}x {it['name']}** for **+{res['payout']:,}** {curr_emoji} {curr_name}!")
 
     @commands.hybrid_command(name="inventory", aliases=["inv", "backpack"], description="View items, tools, and crates in your backpack.")
     async def inventory(self, ctx: CustomContext, member: Optional[discord.Member] = None) -> None:
@@ -578,7 +579,7 @@ class Economy(commands.Cog):
             new_bal = wallet - amount
             await self.eco.update_balance(guild_id, ctx.author.id, wallet_delta=-amount, tx_type="gamble", metadata="Lost gamble")
             embed = discord.Embed(
-                title="🎲 The Illusion Dissolves • You Lost",
+                title=f"{em(self.bot, 'ERROR')} The Illusion Dissolves • You Lost",
                 description=f"> You rolled **{roll}** and lost **-{amount:,}** {curr_emoji} {curr_name}!\n> Remaining: **{new_bal:,}** {curr_emoji}",
                 color=0xEF4444,
             )
@@ -587,7 +588,7 @@ class Economy(commands.Cog):
             new_bal = wallet + payout
             await self.eco.update_balance(guild_id, ctx.author.id, wallet_delta=payout, tx_type="gamble", metadata="Won gamble 2x")
             embed = discord.Embed(
-                title="🎲 Fortune Favors the Bold • You Won!",
+                title=f"{em(self.bot, 'SUCCESS', animated=True)} Fortune Favors the Bold • You Won!",
                 description=f"> You rolled **{roll}** and doubled your wager!\n> Won: **+{payout:,}** {curr_emoji} *(Total payout: {amount*2:,})*\n> Wallet: **{new_bal:,}** {curr_emoji}",
                 color=0x22C55E,
             )
@@ -596,7 +597,7 @@ class Economy(commands.Cog):
             new_bal = wallet + payout
             await self.eco.update_balance(guild_id, ctx.author.id, wallet_delta=payout, tx_type="gamble", metadata="Won gamble 3x")
             embed = discord.Embed(
-                title="✨ Super Critical Win! (3x Multiplier)",
+                title=f"{em(self.bot, 'SPARKLE', animated=True)} Super Critical Win! (3x Multiplier)",
                 description=f"> You rolled an impressive **{roll}**!\n> Won: **+{payout:,}** {curr_emoji}!\n> Wallet: **{new_bal:,}** {curr_emoji}",
                 color=AIZEN_GOLD,
             )
@@ -605,7 +606,7 @@ class Economy(commands.Cog):
             new_bal = wallet + payout
             await self.eco.update_balance(guild_id, ctx.author.id, wallet_delta=payout, tx_type="gamble", metadata="Won gamble 5x Jackpot")
             embed = discord.Embed(
-                title="🌟 JACKPOT TRIPLE 7s! (5x Multiplier)",
+                title=f"{em(self.bot, 'CROWN')} JACKPOT TRIPLE 7s! (5x Multiplier)",
                 description=f"> Legendary roll of **{roll}**!\n> Won: **+{payout:,}** {curr_emoji}!\n> Wallet: **{new_bal:,}** {curr_emoji}",
                 color=AIZEN_GOLD,
             )
@@ -622,15 +623,19 @@ class Economy(commands.Cog):
 
         q_list = await self.eco.get_or_create_daily_quests(guild_id, ctx.author.id)
         embed = discord.Embed(
-            title="📜 Daily Quests & Objectives",
+            title=f"{em(self.bot, 'QUESTS')} Daily Quests & Objectives",
             description="> Complete daily activities to earn bonus gold reserves!\n",
             color=AIZEN_PURPLE,
         )
+        e_ok = em(self.bot, "SUCCESS", animated=True)
+        e_gift = em(self.bot, "REWARDS")
+        e_timer = em(self.bot, "TIMER")
+        e_arrow = em(self.bot, "ARROW")
         for q in q_list:
-            status = "✅ Completed (Claimable)" if q["completed"] and not q["claimed"] else ("🎁 Claimed" if q["claimed"] else f"⏳ `{q['current_count']}/{q['target_count']}`")
+            status = f"{e_ok} Completed (Claimable)" if q["completed"] and not q["claimed"] else (f"{e_gift} Claimed" if q["claimed"] else f"{e_timer} `{q['current_count']}/{q['target_count']}`")
             embed.add_field(
                 name=f"Objective: {q['quest_type'].replace('_', ' ').title()}",
-                value=f"• Progress: {status}\n• Reward: **{q['reward_cash']:,}** {curr_emoji} {curr_name}\n• ID: `{q['id']}`",
+                value=f"{e_arrow} Progress: {status}\n{e_arrow} Reward: **{q['reward_cash']:,}** {curr_emoji} {curr_name}\n{e_arrow} ID: `{q['id']}`",
                 inline=False
             )
         embed.set_footer(text=f"Use ?claimquest <id> to claim completed rewards!")
@@ -645,8 +650,8 @@ class Economy(commands.Cog):
 
         res = await self.eco.claim_quest_reward(guild_id, ctx.author.id, quest_id)
         if "error" in res:
-            return await ctx.send(f"❌ {res['error']}")
-        await ctx.send(f"🎉 **Quest Completed!** Claimed **+{res['reward']:,}** {curr_emoji} {curr_name}!")
+            return await ctx.send(f"{em(self.bot, 'ERROR')} {res['error']}")
+        await ctx.send(f"{em(self.bot, 'GIVEAWAY')} **Quest Completed!** Claimed **+{res['reward']:,}** {curr_emoji} {curr_name}!")
 
     @commands.command(name="lottery", aliases=["lotto"], help="View or participate in the virtual server lottery jackpot.")
     async def lottery(self, ctx: CustomContext, tickets: int = 0) -> None:
@@ -659,7 +664,7 @@ class Economy(commands.Cog):
             lottery = await self.eco.get_active_lottery(guild_id)
             ends_ts = int(lottery["ends_at"].timestamp()) if hasattr(lottery["ends_at"], "timestamp") else int(dt.datetime.utcnow().timestamp() + 86400)
             embed = discord.Embed(
-                title=f"🎰 Kyoka Suigetsu Grand Lottery",
+                title=f"{em(self.bot, 'CASINO')} Kyoka Suigetsu Grand Lottery",
                 description=(
                     f"> Current Prize Pool: **{lottery.get('pot', 5000):,}** {curr_emoji} {curr_name}\n"
                     f"> Ticket Price: **{lottery.get('ticket_price', 100):,}** {curr_emoji}\n"
@@ -672,11 +677,11 @@ class Economy(commands.Cog):
 
         res = await self.eco.buy_lottery_tickets(guild_id, ctx.author.id, tickets)
         if "error" in res:
-            return await ctx.send(f"❌ {res['error']}")
+            return await ctx.send(f"{em(self.bot, 'ERROR')} {res['error']}")
 
         await ctx.send(
-            f"🎟️ Successfully purchased **{res['tickets']} lottery ticket(s)** for **{res['cost']:,}** {curr_emoji}!\n"
-            f"• Current Jackpot Pool: **{res['pot']:,}** {curr_emoji} {curr_name}!"
+            f"{em(self.bot, 'TICKET')} Successfully purchased **{res['tickets']} lottery ticket(s)** for **{res['cost']:,}** {curr_emoji}!\n"
+            f"{em(self.bot, 'ARROW')} Current Jackpot Pool: **{res['pot']:,}** {curr_emoji} {curr_name}!"
         )
 
     @commands.hybrid_command(name="achievements", aliases=["badges"], description="View unlocked economy achievements and milestones.")
@@ -687,20 +692,27 @@ class Economy(commands.Cog):
         net_worth = profile.get("balance", 0) + profile.get("bank", 0)
         streak = profile.get("daily_streak", 0)
 
+        e_coin = em(self.bot, "COINS", animated=True)
+        e_prem = em(self.bot, "PREMIUM", animated=True)
+        e_crown = em(self.bot, "CROWN")
+        e_fire = em(self.bot, "FIRE")
+        e_star = em(self.bot, "STAR")
+        e_sparkle = em(self.bot, "SPARKLE", animated=True)
+
         badges = []
-        if net_worth >= 10000: badges.append(("🪙 Novice Capitalist", "Accumulate over 10,000 net worth"))
-        if net_worth >= 100000: badges.append(("💎 High Roller", "Accumulate over 100,000 net worth"))
-        if net_worth >= 1000000: badges.append(("👑 Aizen's Sovereign", "Accumulate over 1,000,000 net worth"))
-        if streak >= 7: badges.append(("🔥 Weekly Devotee", "Maintain a 7-day daily streak"))
-        if streak >= 30: badges.append(("🌟 Dedicated Disciple", "Maintain a 30-day daily streak"))
+        if net_worth >= 10000: badges.append((f"{e_coin} Novice Capitalist", "Accumulate over 10,000 net worth"))
+        if net_worth >= 100000: badges.append((f"{e_prem} High Roller", "Accumulate over 100,000 net worth"))
+        if net_worth >= 1000000: badges.append((f"{e_crown} Aizen's Sovereign", "Accumulate over 1,000,000 net worth"))
+        if streak >= 7: badges.append((f"{e_fire} Weekly Devotee", "Maintain a 7-day daily streak"))
+        if streak >= 30: badges.append((f"{e_star} Dedicated Disciple", "Maintain a 30-day daily streak"))
 
         embed = discord.Embed(
-            title=f"🏆 {target.display_name}'s Achievements",
+            title=f"{em(self.bot, 'BADGE')} {target.display_name}'s Achievements",
             description=f"Unlocked **{len(badges)}/5** Milestones\n",
             color=AIZEN_PURPLE,
         )
         for b_name, b_desc in badges:
-            embed.add_field(name=f"✨ {b_name}", value=f"*{b_desc}*", inline=False)
+            embed.add_field(name=f"{e_sparkle} {b_name}", value=f"*{b_desc}*", inline=False)
         if not badges:
             embed.description += "\n*No achievements unlocked yet. Work, gamble, and claim daily rewards to unlock milestones!*"
         await ctx.send(embed=embed)
@@ -724,6 +736,7 @@ class Economy(commands.Cog):
         bal_em = resolve_emoji(self.bot, "BALANCE")
         inv_em = resolve_emoji(self.bot, "INVENTORY")
         srv_em = resolve_emoji(self.bot, "SERVER")
+        fire_em = resolve_emoji(self.bot, "FIRE")
         embed = discord.Embed(
             title=f"{wallet_em} {target.display_name}'s Executive Profile",
             color=AIZEN_PURPLE,
@@ -731,8 +744,8 @@ class Economy(commands.Cog):
         embed.set_thumbnail(url=target.display_avatar.url)
         embed.add_field(name=f"{bal_em} Net Worth", value=f"`{net_worth:,}` {curr_emoji}", inline=True)
         embed.add_field(name=f"{wallet_em} Wallet", value=f"`{wallet:,}` {curr_emoji}", inline=True)
-        embed.add_field(name="🏛️ Bank Vault", value=f"`{bank:,}` {curr_emoji}", inline=True)
-        embed.add_field(name="🔥 Daily Streak", value=f"`{profile.get('daily_streak', 0)}` Days", inline=True)
+        embed.add_field(name=f"{srv_em} Bank Vault", value=f"`{bank:,}` {curr_emoji}", inline=True)
+        embed.add_field(name=f"{fire_em} Daily Streak", value=f"`{profile.get('daily_streak', 0)}` Days", inline=True)
         embed.add_field(name=f"{inv_em} Inventory Stacks", value=f"`{len(inv)}` Items", inline=True)
         embed.add_field(name=f"{srv_em} Currency", value=f"{curr_emoji} {curr_name}", inline=True)
 

@@ -9,6 +9,7 @@ import discord
 from discord.ext import commands
 
 from src.utils.containers import KyokaContainer, send_container_response
+from src.utils.emojis import em
 
 if TYPE_CHECKING:
     from src.cogs.music.music import Music
@@ -423,60 +424,61 @@ async def execute_filter(cog: Music, ctx: commands.Context, filter_name: str) ->
             {"band": 3, "gain": 0.15},
             {"band": 4, "gain": 0.10},
         ])
-        filter_label = "🔊 Bass Boost (High Output)"
+        filter_label = f"{em(cog.bot, 'VOLUME_UP')} Bass Boost (High Output)"
         filter_desc = "Low-end frequencies boosted by +35% for deep sub-bass punch."
         player.active_filter = "bassboost"
 
     elif mode in ("nightcore", "nc"):
         filters.timescale.set(speed=1.25, pitch=1.25, rate=1.0)
-        filter_label = "⚡ Nightcore"
+        filter_label = f"{em(cog.bot, 'SPARKLE', animated=True)} Nightcore"
         filter_desc = "Speed and pitch increased by 1.25x for energetic high-tempo playback."
         player.active_filter = "nightcore"
 
     elif mode in ("vaporwave", "slowed", "slowed+reverb", "vw"):
         filters.timescale.set(speed=0.85, pitch=0.85, rate=1.0)
-        filter_label = "🌊 Vaporwave / Slowed"
+        filter_label = f"{em(cog.bot, 'MUSIC', animated=True)} Vaporwave / Slowed"
         filter_desc = "Speed and pitch lowered by 0.85x for aesthetic, relaxed vibes."
         player.active_filter = "vaporwave"
 
     elif mode in ("8d", "3d", "spatial", "rotation"):
         filters.rotation.set(rotation_hz=0.2)
-        filter_label = "🎧 8D Spatial Audio"
+        filter_label = f"{em(cog.bot, 'HEADPHONES')} 8D Spatial Audio"
         filter_desc = "Surround sound rotating around your headphones at 0.2Hz."
         player.active_filter = "8d"
 
     elif mode in ("karaoke", "vocal"):
         filters.karaoke.set(level=1.0, mono_level=1.0, filter_band=220.0, filter_width=100.0)
-        filter_label = "🎤 Karaoke Mode"
+        filter_label = f"{em(cog.bot, 'VOICE')} Karaoke Mode"
         filter_desc = "Center vocal frequencies suppressed for sing-along audio."
         player.active_filter = "karaoke"
 
     elif mode in ("tremolo", "vibrato"):
         filters.tremolo.set(frequency=4.0, depth=0.75)
-        filter_label = "〰️ Tremolo Pulse"
+        filter_label = f"{em(cog.bot, 'MUSIC')} Tremolo Pulse"
         filter_desc = "Pulsing audio amplitude modulation at 4Hz."
         player.active_filter = "tremolo"
 
     elif mode in ("reset", "off", "clear", "flat", "none"):
         filters.reset()
-        filter_label = "✨ Studio Flat (Reset)"
+        filter_label = f"{em(cog.bot, 'SUCCESS', animated=True)} Studio Flat (Reset)"
         filter_desc = "All audio DSP effects cleared. Bit-perfect lossless playback restored."
         player.active_filter = None
 
     else:
         # Help card
+        e_arrow = em(cog.bot, "ARROW")
         container = KyokaContainer(accent_color=None)
         container.add_section(
             content=(
-                "**🎛️ Audio DSP Filters & Effects**\n"
+                f"**{em(cog.bot, 'FILTER')} Audio DSP Filters & Effects**\n"
                 "> Select an audio preset to transform your sound stream:\n\n"
-                "• `?filter bassboost` — Heavy deep bass boost\n"
-                "• `?filter nightcore` — High-tempo 1.25x speed & pitch\n"
-                "• `?filter vaporwave` — Slowed aesthetic 0.85x tempo\n"
-                "• `?filter 8d` — Rotating 3D spatial surround sound\n"
-                "• `?filter karaoke` — Center channel vocal suppression\n"
-                "• `?filter tremolo` — Rapid amplitude pulsing effect\n"
-                "• `?filter reset` — Clear all effects and restore flat studio sound"
+                f"{e_arrow} `?filter bassboost` — Heavy deep bass boost\n"
+                f"{e_arrow} `?filter nightcore` — High-tempo 1.25x speed & pitch\n"
+                f"{e_arrow} `?filter vaporwave` — Slowed aesthetic 0.85x tempo\n"
+                f"{e_arrow} `?filter 8d` — Rotating 3D spatial surround sound\n"
+                f"{e_arrow} `?filter karaoke` — Center channel vocal suppression\n"
+                f"{e_arrow} `?filter tremolo` — Rapid amplitude pulsing effect\n"
+                f"{e_arrow} `?filter reset` — Clear all effects and restore flat studio sound"
             )
         )
         await send_container_response(ctx, container)

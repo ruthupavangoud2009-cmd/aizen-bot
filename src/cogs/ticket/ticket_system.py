@@ -19,7 +19,7 @@ from src.core.bot import KyokaBot
 from src.core.context import CustomContext
 from src.security.owner import OWNER_ID, is_owner_or_staff, is_primary_owner
 from src.utils.containers import KyokaContainer, send_container_response, edit_container_response, build_container_payload
-from src.utils.emojis import resolve_emoji, resolve_select_emoji
+from src.utils.emojis import em, resolve_emoji, resolve_select_emoji
 from src.utils.transcript import generate_html_transcript
 from src.cogs.utility.embed_builder import ContainerDraft
 
@@ -353,7 +353,7 @@ class ManageTopicsView(discord.ui.View):
 
         btn_add = discord.ui.Button(
             label="Add Topic",
-            emoji="➕",
+            emoji=resolve_select_emoji(self.wizard.bot, "ADD", fallback="➕"),
             style=discord.ButtonStyle.success,
             custom_id="manage_topic_btn_add",
             row=1,
@@ -363,7 +363,7 @@ class ManageTopicsView(discord.ui.View):
 
         btn_clear = discord.ui.Button(
             label="Clear All Topics",
-            emoji="🗑️",
+            emoji=resolve_select_emoji(self.wizard.bot, "DELETE", fallback="🗑️"),
             style=discord.ButtonStyle.danger,
             custom_id="manage_topic_btn_clear",
             row=1,
@@ -373,7 +373,7 @@ class ManageTopicsView(discord.ui.View):
 
         btn_done = discord.ui.Button(
             label="Done / Back to Wizard",
-            emoji="↩️",
+            emoji=resolve_select_emoji(self.wizard.bot, "BACK", fallback="◀️"),
             style=discord.ButtonStyle.primary,
             custom_id="manage_topic_btn_done",
             row=1,
@@ -398,7 +398,7 @@ class ManageTopicsView(discord.ui.View):
                 lines.append(f"{arrow} {t.get('emoji', '🎫')} **{t['name']}** — *{t.get('description', 'No description')}*")
             c.add_text("\n".join(lines))
         else:
-            c.add_text("✨ *No topics configured (Default is Clean / Direct Button). Click 'Add Topic' to add any custom topic you want.*")
+            c.add_text(f"{em(self.wizard.bot, 'SPARKLE', animated=True)} *No topics configured (Default is Clean / Direct Button). Click 'Add Topic' to add any custom topic you want.*")
         c.add_separator(divider=True)
         c.add_text("-# Use dropdown to delete a topic, click Add Topic to create one, or Clear All to start fresh.")
         return c
@@ -499,9 +499,13 @@ class TicketAISolvedPromptView(discord.ui.View):
         self.cog = cog
         self.ticket_data = ticket_data
         ticket_id = ticket_data.get("id", 0)
+        bot_ref = getattr(cog, "bot", None)
         self.btn_close.custom_id = f"ticket_ai_solved_close_{ticket_id}"
         self.btn_more.custom_id = f"ticket_ai_solved_more_{ticket_id}"
         self.btn_staff.custom_id = f"ticket_ai_solved_staff_{ticket_id}"
+        self.btn_close.emoji = resolve_select_emoji(bot_ref, "SUCCESS", fallback="✅")
+        self.btn_more.emoji = resolve_select_emoji(bot_ref, "INFO", fallback="💬")
+        self.btn_staff.emoji = resolve_select_emoji(bot_ref, "ALERT", fallback="🔔")
 
     @discord.ui.button(
         label="Close Ticket - Solved",
@@ -776,7 +780,7 @@ class TicketSetupWizard(discord.ui.View):
             # Ticket Topics / Categories Management Buttons
             btn_manage_topics = discord.ui.Button(
                 label=f"Topics ({len(self.custom_topics)})",
-                emoji="📑",
+                emoji=resolve_select_emoji(self.bot, "LIST", fallback="📑"),
                 style=discord.ButtonStyle.primary,
                 custom_id="wiz_btn_topics",
                 row=2,
@@ -786,7 +790,7 @@ class TicketSetupWizard(discord.ui.View):
 
             btn_add_topic = discord.ui.Button(
                 label="Add Custom Topic",
-                emoji="➕",
+                emoji=resolve_select_emoji(self.bot, "ADD", fallback="➕"),
                 style=discord.ButtonStyle.success,
                 custom_id="wiz_btn_add_topic",
                 row=2,
@@ -837,7 +841,7 @@ class TicketSetupWizard(discord.ui.View):
 
             btn_customize = discord.ui.Button(
                 label="Customize Ticket Button",
-                emoji="🎨",
+                emoji=resolve_select_emoji(self.bot, "EDIT", fallback="🎨"),
                 style=discord.ButtonStyle.primary,
                 custom_id="wiz_btn_customize_ticket_button",
                 row=1,
@@ -1040,7 +1044,7 @@ class TicketSetupWizard(discord.ui.View):
             if tmpl:
                 draft = ContainerDraft.from_dict(tmpl)
         else:
-            draft.title = "🎫 Kyoka Support Portal"
+            draft.title = f"{em(self.bot, 'TICKET')} Kyoka Support Portal"
             draft.description = (
                 "**Need assistance?**\n"
                 "> Select an inquiry category below or click **Create Ticket** to open a private channel with our staff team.\n"
@@ -1449,7 +1453,7 @@ class TicketSystem(commands.Cog):
             ai_intro = KyokaContainer(accent_color=0x7C3AED)
             ai_intro.add_section(
                 content=(
-                    f"🤖 **Kyoka AI Support Assistant is active!**\n"
+                    f"{em(self.bot, 'SPARKLE', animated=True)} **Kyoka AI Support Assistant is active!**\n"
                     f"> Hello {interaction.user.mention}! I'm your automated assistant for **{chosen_category}**.\n"
                     f"> Please explain what you need help with below. I will attempt to resolve your ticket immediately!\n"
                     f"> If my solution doesn't work, don't worry—you can click **Need Staff Help** at any time to ping our human staff team."
@@ -2260,7 +2264,7 @@ class TicketSystem(commands.Cog):
         c = KyokaContainer()
         c.add_section(
             content=(
-                f"📊 **Ticket System Analytics • {ctx.guild.name}**\n"
+                f"{em(self.bot, 'STATS')} **Ticket System Analytics • {ctx.guild.name}**\n"
                 f"> Total Tickets: `{tot}`\n"
                 f"> Currently Open: `{open_cnt}`\n"
                 f"> Unclaimed: `{unclaimed_cnt}`\n"
@@ -2308,7 +2312,7 @@ class TicketSystem(commands.Cog):
 
         container = KyokaContainer()
         container.add_section(
-            content=f"🎫 **Ticket Topics / Categories • {ctx.guild.name}**\n\n" + "\n".join(lines)
+            content=f"{em(self.bot, 'TICKET')} **Ticket Topics / Categories • {ctx.guild.name}**\n\n" + "\n".join(lines)
         )
         await send_container_response(ctx, container)
 

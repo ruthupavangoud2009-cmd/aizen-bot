@@ -8,6 +8,7 @@ from discord.ext import commands
 from src.core.config import Config, get_invite_url
 from src.core.context import CustomContext
 from src.utils.containers import KyokaContainer, send_container_response
+from src.utils.emojis import em, resolve_select_emoji
 
 if TYPE_CHECKING:
     from src.core.bot import KyokaBot
@@ -109,7 +110,7 @@ class PromoView(discord.ui.View):
                 label=f"Invite {Config.BOT_NAME}",
                 style=discord.ButtonStyle.link,
                 url=invite_url,
-                emoji="➕",
+                emoji=resolve_select_emoji(None, "ADD", fallback="➕"),
             )
         )
         self.add_item(
@@ -117,7 +118,7 @@ class PromoView(discord.ui.View):
                 label="Join Support Server",
                 style=discord.ButtonStyle.link,
                 url=support_url,
-                emoji="💬",
+                emoji=resolve_select_emoji(None, "SUPPORT", fallback="💬"),
             )
         )
         self.add_item(
@@ -125,7 +126,7 @@ class PromoView(discord.ui.View):
                 label="Official Website",
                 style=discord.ButtonStyle.link,
                 url=website_url,
-                emoji="🌐",
+                emoji=resolve_select_emoji(None, "GLOBE", fallback="🌐"),
             )
         )
 

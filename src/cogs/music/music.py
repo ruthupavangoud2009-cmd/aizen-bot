@@ -11,6 +11,7 @@ from discord.ext import commands
 
 from src.core.context import CustomContext
 from src.utils.containers import KyokaContainer, KyroContainer, send_container_response
+from src.utils.emojis import em, resolve_select_emoji
 from src.cogs.music._controller import MusicController
 from src.cogs.music._views import MusicControlView
 from src.cogs.music._analytics import MusicAnalytics
@@ -717,16 +718,16 @@ class Music(commands.Cog):
         player = self.controller.get_player(ctx.guild.id)
         if not player or not player.is_connected:
             container = KyokaContainer(accent_color=None)
-            container.add_text("⚠️ **Not connected to any voice channel.**")
+            container.add_text(f"{em(self.bot, 'WARNING')} **Not connected to any voice channel.**")
             return await send_container_response(ctx, container)
         if not getattr(player, "history", None):
             container = KyokaContainer(accent_color=None)
-            container.add_text("⏮️ **No previous tracks in history.**")
+            container.add_text(f"{em(self.bot, 'PREV')} **No previous tracks in history.**")
             return await send_container_response(ctx, container)
         prev_track = await player.previous()
         if prev_track:
             container = KyokaContainer(accent_color=None)
-            container.add_text(f"⏮️ **Playing previous track:** `{prev_track.title}`")
+            container.add_text(f"{em(self.bot, 'PREV')} **Playing previous track:** `{prev_track.title}`")
             await send_container_response(ctx, container)
 
     @commands.hybrid_command(
@@ -883,7 +884,7 @@ class Music(commands.Cog):
             return
         if not getattr(ctx.author, "voice", None) or not getattr(ctx.author.voice, "channel", None):
             container = KyokaContainer(accent_color=None)
-            container.add_text("⚠️ **Join a voice channel first, then try again.**")
+            container.add_text(f"{em(self.bot, 'WARNING')} **Join a voice channel first, then try again.**")
             await send_container_response(ctx, container)
             return
 
@@ -897,7 +898,7 @@ class Music(commands.Cog):
         if not pl_row:
             container = KyokaContainer(accent_color=None)
             container.add_text(
-                "💖 **You don't have any Favorites yet!**\n> Use `+like` while any song is playing to add it to your favorites."
+                f"{em(self.bot, 'HEART', animated=True)} **You don't have any Favorites yet!**\n> Use `+like` while any song is playing to add it to your favorites."
             )
             await send_container_response(ctx, container)
             return
@@ -909,7 +910,7 @@ class Music(commands.Cog):
         if not tracks:
             container = KyokaContainer(accent_color=None)
             container.add_text(
-                "💖 **Your Favorites playlist is empty!**\n> Use `+like` while any song is playing to add songs to your favorites."
+                f"{em(self.bot, 'HEART', animated=True)} **Your Favorites playlist is empty!**\n> Use `+like` while any song is playing to add songs to your favorites."
             )
             await send_container_response(ctx, container)
             return
@@ -947,7 +948,7 @@ class Music(commands.Cog):
         from src.security.owner import is_owner_or_staff
         has_perm = is_owner_or_staff(ctx.author.id) or (ctx.guild and ctx.author.guild_permissions.manage_guild)
         if not has_perm:
-            return await ctx.send("⛔ You need `Manage Server` permission (or Bot Staff) to toggle 24/7 mode.", delete_after=6)
+            return await ctx.send(f"{em(self.bot, 'LOCK')} You need `Manage Server` permission (or Bot Staff) to toggle 24/7 mode.", delete_after=6)
         await execute_stay(self, ctx)
 
     @commands.hybrid_command(
@@ -1139,7 +1140,7 @@ class Music(commands.Cog):
 
         # 4. Interactive view with controls
         view = discord.ui.View(timeout=180)
-        btn_skip = discord.ui.Button(label="Next Spooky Track", emoji="⏭️", style=discord.ButtonStyle.primary)
+        btn_skip = discord.ui.Button(label="Next Spooky Track", emoji=resolve_select_emoji(self.bot, "SKIP", fallback="⏭️"), style=discord.ButtonStyle.primary)
         async def skip_callback(interaction: discord.Interaction):
             if interaction.user.id != ctx.author.id:
                 return await interaction.response.send_message("Only the requester can switch tracks.", ephemeral=True)
@@ -1150,9 +1151,9 @@ class Music(commands.Cog):
         btn_skip.callback = skip_callback
         view.add_item(btn_skip)
 
-        btn_fav = discord.ui.Button(label="Like Track", emoji="❤️", style=discord.ButtonStyle.secondary)
+        btn_fav = discord.ui.Button(label="Like Track", emoji=resolve_select_emoji(self.bot, "HEART", fallback="❤️"), style=discord.ButtonStyle.secondary)
         async def fav_callback(interaction: discord.Interaction):
-            await interaction.response.send_message("❤️ Saved Halloween theme to your Liked Songs!", ephemeral=True)
+            await interaction.response.send_message(f"{em(self.bot, 'HEART', animated=True)} Saved Halloween theme to your Liked Songs!", ephemeral=True)
         btn_fav.callback = fav_callback
         view.add_item(btn_fav)
 
@@ -1225,7 +1226,7 @@ class Music(commands.Cog):
 
         if not is_owner_or_staff(ctx.author.id):
             c = KyokaContainer()
-            c.add_text("⛔ **Access Denied:** Only the bot owner and authorized staff can view music diagnostics.")
+            c.add_text(f"{em(self.bot, 'LOCK')} **Access Denied:** Only the bot owner and authorized staff can view music diagnostics.")
             await send_container_response(ctx, c, ephemeral=True)
             return
 
@@ -1280,10 +1281,10 @@ class Music(commands.Cog):
 
         storage_mode_str = "Persistent Volume (Safe)" if cache_stats.get("is_persistent") else "Ephemeral Container (Temp)"
         if cache_stats.get("warning"):
-            storage_mode_str += " ⚠️"
+            storage_mode_str += f" {em(self.bot, 'WARNING')}"
 
         container = KyokaContainer(accent_color=0x7C3AED)
-        container.add_text("## 🎵 KYOKA Ultra-Fast Music Engine Diagnostics")
+        container.add_text(f"## {em(self.bot, 'MUSIC', animated=True)} KYOKA Ultra-Fast Music Engine Diagnostics")
         container.add_separator(divider=True)
 
         body = (
@@ -1352,7 +1353,7 @@ class Music(commands.Cog):
                 exc_info=orig_err,
             )
             msg = (
-                f"⚠️ **Music System Notice:** `{type(orig_err).__name__}: {str(orig_err)[:150] or 'Playback subsystem encountered an issue'}`\n"
+                f"{em(self.bot, 'WARNING')} **Music System Notice:** `{type(orig_err).__name__}: {str(orig_err)[:150] or 'Playback subsystem encountered an issue'}`\n"
                 f"> *The audio engine has logged this event. Please retry in a few moments.*"
             )
             try:
